@@ -12,6 +12,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  Briefcase,
+  ClipboardCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -26,12 +28,15 @@ interface NavItem {
 const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
   { title: 'Clientes', path: '/clientes', icon: Users },
+  { title: 'Servicios', path: '/servicios', icon: Briefcase },
   { title: 'Campañas', path: '/campanas', icon: Target },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare },
+  { title: 'Mis Tareas', path: '/mis-tareas', icon: ClipboardCheck },
   { title: 'Reportes', path: '/reportes', icon: FileText },
   { title: 'Equipo', path: '/equipo', icon: UserCog },
   { title: 'Productos', path: '/productos', icon: Package },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign },
+  { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText },
 ];
 
 export function AppSidebar() {

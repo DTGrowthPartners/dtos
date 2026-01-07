@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useLocation } from 'react-router-dom';
-import { Bell, Search, User, ChevronRight, Moon, Sun } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Bell, Search, User, ChevronRight, Moon, Sun, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,12 +14,15 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { notifications } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { authService } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
 
 const pathNames: Record<string, string> = {
   '/': 'Dashboard',
   '/clientes': 'Gestión de Clientes',
   '/campanas': 'Campañas Meta Ads',
   '/tareas': 'Tareas & Proyectos',
+  '/mis-tareas': 'Mis Tareas',
   '/reportes': 'Reportes',
   '/equipo': 'Equipo',
   '/productos': 'Productos DT Cloud Hub',
@@ -28,43 +31,85 @@ const pathNames: Record<string, string> = {
 
 export function AppHeader() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [isDark, setIsDark] = useState(false);
   const currentPath = pathNames[location.pathname] || 'Dashboard';
+  const user = authService.getUser();
+  const isMisTareasView = location.pathname === '/mis-tareas';
 
   const toggleTheme = () => {
     setIsDark(!isDark);
     document.documentElement.classList.toggle('dark');
   };
 
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      toast({
+        title: 'Sesión cerrada',
+        description: 'Has cerrado sesión exitosamente',
+      });
+      navigate('/login');
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Error al cerrar sesión',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/60 px-6">
+    <header
+      className={cn(
+        "sticky top-0 z-30 flex h-16 items-center justify-between border-b backdrop-blur px-6",
+        isMisTareasView
+          ? "border-slate-800/50 bg-[rgb(2,6,23)] supports-[backdrop-filter]:bg-[rgb(2,6,23)]/95"
+          : "border-border bg-card dark:bg-slate-900/80 supports-[backdrop-filter]:bg-card/60"
+      )}
+    >
       {/* Breadcrumbs */}
       <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground">DT-OS</span>
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-        <span className="font-medium text-foreground">{currentPath}</span>
+        <span className={isMisTareasView ? "text-slate-400" : "text-muted-foreground"}>DT-OS</span>
+        <ChevronRight className={cn("h-4 w-4", isMisTareasView ? "text-slate-400" : "text-muted-foreground")} />
+        <span className={cn("font-medium", isMisTareasView ? "text-slate-200" : "text-foreground")}>{currentPath}</span>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-3">
         {/* Search */}
         <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className={cn("absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2", isMisTareasView ? "text-slate-500" : "text-muted-foreground")} />
           <Input
             placeholder="Buscar clientes, tareas, campañas..."
-            className="w-72 pl-9 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
+            className={cn(
+              "w-72 pl-9 border-0 focus-visible:ring-1 focus-visible:ring-primary",
+              isMisTareasView
+                ? "bg-slate-800/50 text-slate-200 placeholder:text-slate-500"
+                : "bg-muted/50"
+            )}
           />
         </div>
 
         {/* Theme Toggle */}
-        <Button variant="ghost" size="icon" onClick={toggleTheme} className="text-muted-foreground hover:text-foreground">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleTheme}
+          className={isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground"}
+        >
           {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </Button>
 
         {/* Notifications */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn("relative", isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground")}
+            >
               <Bell className="h-5 w-5" />
               <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive text-destructive-foreground">
                 {notifications.length}
@@ -106,8 +151,12 @@ export function AppHeader() {
                 <User className="h-4 w-4" />
               </div>
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium">Dairo</span>
-                <span className="text-xs text-muted-foreground">Admin</span>
+                <span className={cn("text-sm font-medium", isMisTareasView ? "text-slate-200" : "")}>
+                  {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
+                </span>
+                <span className={cn("text-xs", isMisTareasView ? "text-slate-400" : "text-muted-foreground")}>
+                  {user?.role || 'Usuario'}
+                </span>
               </div>
             </Button>
           </DropdownMenuTrigger>
@@ -117,7 +166,13 @@ export function AppHeader() {
             <DropdownMenuItem className="cursor-pointer">Perfil</DropdownMenuItem>
             <DropdownMenuItem className="cursor-pointer">Configuración</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer text-destructive">Cerrar sesión</DropdownMenuItem>
+            <DropdownMenuItem
+              className="cursor-pointer text-destructive focus:text-destructive"
+              onClick={handleLogout}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Cerrar sesión
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

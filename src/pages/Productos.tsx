@@ -1,15 +1,57 @@
-import { Layers, CreditCard, MessageSquare, Users, TrendingUp, Code } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Layers, CreditCard, MessageSquare, Users, TrendingUp, Code, Plus, Edit, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { products } from '@/data/mockData';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+interface Product {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  status: 'development' | 'beta' | 'live';
+  progress: number;
+  users?: number;
+}
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Layers,
   CreditCard,
   MessageSquare,
+  Users,
+  Code,
+  TrendingUp,
 };
+
+const iconOptions = [
+  { value: 'Layers', label: 'Layers' },
+  { value: 'CreditCard', label: 'Credit Card' },
+  { value: 'MessageSquare', label: 'Message Square' },
+  { value: 'Users', label: 'Users' },
+  { value: 'Code', label: 'Code' },
+  { value: 'TrendingUp', label: 'Trending Up' },
+];
 
 const statusConfig = {
   development: { label: 'En Desarrollo', className: 'bg-warning/10 text-warning border-warning/20' },
@@ -33,6 +75,115 @@ const roadmapStatusConfig = {
 };
 
 export default function Productos() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const { toast } = useToast();
+
+  const [formData, setFormData] = useState({
+    name: '',
+    description: '',
+    icon: 'Layers',
+    status: 'development' as 'development' | 'beta' | 'live',
+    progress: 0,
+    users: 0,
+  });
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    try {
+      const data = await apiClient.get<Product[]>('/api/products');
+      setProducts(data);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los productos',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      if (editingProduct) {
+        await apiClient.put(`/api/products/${editingProduct.id}`, formData);
+        toast({
+          title: 'Producto actualizado',
+          description: 'El producto se actualizó correctamente',
+        });
+      } else {
+        await apiClient.post('/api/products', formData);
+        toast({
+          title: 'Producto creado',
+          description: 'El producto se creó correctamente',
+        });
+      }
+
+      setIsDialogOpen(false);
+      resetForm();
+      fetchProducts();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Error al guardar el producto',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEdit = (product: Product) => {
+    setEditingProduct(product);
+    setFormData({
+      name: product.name,
+      description: product.description,
+      icon: product.icon,
+      status: product.status,
+      progress: product.progress,
+      users: product.users || 0,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('¿Estás seguro de eliminar este producto?')) return;
+
+    try {
+      await apiClient.delete(`/api/products/${id}`);
+      toast({
+        title: 'Producto eliminado',
+        description: 'El producto se eliminó correctamente',
+      });
+      fetchProducts();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el producto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      name: '',
+      description: '',
+      icon: 'Layers',
+      status: 'development',
+      progress: 0,
+      users: 0,
+    });
+    setEditingProduct(null);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -41,10 +192,22 @@ export default function Productos() {
           <h1 className="text-2xl font-bold text-foreground">Productos DT Cloud Hub</h1>
           <p className="text-muted-foreground">Estado de desarrollo y métricas de uso</p>
         </div>
-        <Button variant="outline" className="w-full md:w-auto">
-          <Code className="h-4 w-4 mr-2" />
-          Ver Documentación
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              resetForm();
+              setIsDialogOpen(true);
+            }}
+            className="w-full md:w-auto"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Producto
+          </Button>
+          <Button variant="outline" className="w-full md:w-auto">
+            <Code className="h-4 w-4 mr-2" />
+            Ver Documentación
+          </Button>
+        </div>
       </div>
 
       {/* Products Grid */}
@@ -82,9 +245,26 @@ export default function Productos() {
                 </div>
               )}
 
-              <Button variant="outline" size="sm" className="w-full mt-4">
-                Ver Detalles
-              </Button>
+              <div className="flex gap-2 mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => handleEdit(product)}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Editar
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 text-destructive hover:text-destructive"
+                  onClick={() => handleDelete(product.id)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar
+                </Button>
+              </div>
             </div>
           );
         })}
@@ -135,7 +315,9 @@ export default function Productos() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Usuarios Totales</p>
-              <p className="text-xl font-bold text-foreground">12</p>
+              <p className="text-xl font-bold text-foreground">
+                {products.reduce((acc, p) => acc + (p.users || 0), 0)}
+              </p>
             </div>
           </div>
         </div>
@@ -145,8 +327,10 @@ export default function Productos() {
               <Code className="h-5 w-5 text-success" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">APIs Activas</p>
-              <p className="text-xl font-bold text-foreground">3</p>
+              <p className="text-sm text-muted-foreground">Productos Activos</p>
+              <p className="text-xl font-bold text-foreground">
+                {products.filter(p => p.status === 'live').length}
+              </p>
             </div>
           </div>
         </div>
@@ -157,11 +341,131 @@ export default function Productos() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Productos en Desarrollo</p>
-              <p className="text-xl font-bold text-foreground">2</p>
+              <p className="text-xl font-bold text-foreground">
+                {products.filter(p => p.status === 'development').length}
+              </p>
             </div>
           </div>
         </div>
       </div>
+
+      {/* Dialog Form */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? 'Editar Producto' : 'Nuevo Producto'}</DialogTitle>
+            <DialogDescription>
+              {editingProduct
+                ? 'Actualiza la información del producto'
+                : 'Completa los datos del nuevo producto'}
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nombre *</Label>
+                <Input
+                  id="name"
+                  placeholder="Nombre del producto"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Descripción *</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Descripción del producto"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  required
+                  disabled={isLoading}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="icon">Icono</Label>
+                <Select
+                  value={formData.icon}
+                  onValueChange={(value) => setFormData({ ...formData, icon: value })}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {iconOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Estado</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) => setFormData({ ...formData, status: value as any })}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="development">En Desarrollo</SelectItem>
+                    <SelectItem value="beta">Beta</SelectItem>
+                    <SelectItem value="live">En Producción</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="progress">Progreso (%)</Label>
+                <Input
+                  id="progress"
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="0"
+                  value={formData.progress}
+                  onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) || 0 })}
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="users">Usuarios Activos</Label>
+                <Input
+                  id="users"
+                  type="number"
+                  min="0"
+                  placeholder="0"
+                  value={formData.users}
+                  onChange={(e) => setFormData({ ...formData, users: parseInt(e.target.value) || 0 })}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setIsDialogOpen(false);
+                  resetForm();
+                }}
+                disabled={isLoading}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? 'Guardando...' : editingProduct ? 'Actualizar' : 'Crear'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

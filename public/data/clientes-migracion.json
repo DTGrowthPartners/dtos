@@ -1,0 +1,116 @@
+{
+  "clientes": [
+    {
+      "name": "ACBFIT",
+      "email": "contacto@acbfit.com",
+      "nit": "901725973",
+      "phone": "",
+      "address": "Dg 31A #71 Local 02, Los Alpes, Cartagena"
+    },
+    {
+      "name": "Arismendy Andrade S.A.S",
+      "email": "contacto@arismendy.com",
+      "nit": "806014651-1",
+      "phone": "",
+      "address": "Cra 56 # 2A – 67 KM 2 Vía A Mamonal Br, Cartagena de Indias, Bolívar"
+    },
+    {
+      "name": "Autoexpress detailing SAS",
+      "email": "contacto@autoexpress.com",
+      "nit": "901794841-2",
+      "phone": "",
+      "address": "Cra 83 #26-18, Barrio San Fernando, Cartagena"
+    },
+    {
+      "name": "Bebidas & Licores 1A",
+      "email": "contacto@bebidas1a.com",
+      "nit": "000000000",
+      "phone": "",
+      "address": "Tv. 74 #31b-40, Los Alpes, Cartagena"
+    },
+    {
+      "name": "Caribe Fest",
+      "email": "contacto@caribefest.com",
+      "nit": "9018834468",
+      "phone": "",
+      "address": "Cartagena de Indias"
+    },
+    {
+      "name": "Equilibrio Clinic",
+      "email": "contacto@equilibrioclinic.com",
+      "nit": "9012506980",
+      "phone": "",
+      "address": "Cll 31 #62-57 Chipre, Cartagena"
+    },
+    {
+      "name": "Experiencia Cartagena S.A.S",
+      "email": "contacto@experienciacartagena.com",
+      "nit": "901719279-3",
+      "phone": "",
+      "address": "Cartagena de Indias"
+    },
+    {
+      "name": "Gustavo Rodriguez",
+      "email": "gustavo.rodriguez@email.com",
+      "nit": "200438443",
+      "phone": "",
+      "address": "Pie de la Popa"
+    },
+    {
+      "name": "Importaciones Cartagena",
+      "email": "contacto@importacionescartagena.com",
+      "nit": "0",
+      "phone": "",
+      "address": "Cartagena de Indias"
+    },
+    {
+      "name": "Pley Club Barranquilla",
+      "email": "contacto@pleyclubbarranquilla.com",
+      "nit": "9008073835-2",
+      "phone": "",
+      "address": "Cra. 46 #73-26, Nte. Centro Historico, Barranquilla"
+    },
+    {
+      "name": "Pley Club Cartagena",
+      "email": "contacto@pleyclubcartagena.com",
+      "nit": "9008073835",
+      "phone": "",
+      "address": "Tv. 48 #Diag 21 - 48 # 04. El bosque, Cartagena"
+    },
+    {
+      "name": "Roberto Casanova",
+      "email": "roberto.casanova@email.com",
+      "nit": "7984569",
+      "phone": "",
+      "address": "Four Seasons"
+    },
+    {
+      "name": "SAN AUTOS",
+      "email": "contacto@sanautos.com",
+      "nit": "806014651-1",
+      "phone": "",
+      "address": "BRR SAN FERNANDO SEC LOS CIRUELOS CR 83 26 18, Cartagena"
+    },
+    {
+      "name": "Tennis Cartagena",
+      "email": "contacto@tenniscartagena.com",
+      "nit": "0",
+      "phone": "",
+      "address": "Cl 31E #71G-113, Los Alpes, Cartagena de Indias"
+    },
+    {
+      "name": "HOTEL A & A SANTA ALEJANDRÍA S.A.S",
+      "email": "contacto@hotelsantaalejandria.com",
+      "nit": "9015169649",
+      "phone": "",
+      "address": "CR 77 C 48 91 BRR ESTADIO"
+    },
+    {
+      "name": "Inversiones Pandora SAS",
+      "email": "contacto@inversionespandora.com",
+      "nit": "900796740",
+      "phone": "",
+      "address": "Cl 9 N 48 N Cl De La Cruz"
+    }
+  ]
+}

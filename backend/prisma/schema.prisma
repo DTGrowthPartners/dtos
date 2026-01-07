@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  password      String? // Optional for Firebase users
+  firstName     String        @default("")
+  lastName      String        @default("")
+  roleId        String
+  role          Role          @relation(fields: [roleId], references: [id])
+  firebaseUid   String?       @unique // Firebase UID for Firebase Auth users
+  models        Model[]
+  clients       Client[]      @relation("ClientCreatedBy")
+  sharedClients ClientShare[] @relation("SharedClients")
+  services      Service[]     @relation("ServiceCreatedBy")
+  tasks         Task[]        @relation("TaskCreatedBy")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Role {
+  id            String      @id @default(cuid())
+  name          String
+  description   String?
+  permissions   String[]
+  users         User[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Model {
+  id          String         @id @default(cuid())
+  name        String
+  description String?
+  type        String
+  parameters  Json
+  createdBy   String
+  createdByUser User        @relation(fields: [createdBy], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Client {
+  id          String         @id @default(cuid())
+  name        String
+  email       String         @unique
+  nit         String?
+  phone       String?
+  address     String?
+  logo        String         @default("/img/logo.png")
+  status      String         @default("active")
+  createdBy   String
+  createdByUser User         @relation("ClientCreatedBy", fields: [createdBy], references: [id])
+  services    ClientService[]
+  sharedWith  ClientShare[]  @relation("ClientShares")
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model ClientShare {
+  id        String   @id @default(cuid())
+  clientId  String
+  userId    String
+  client    Client   @relation("ClientShares", fields: [clientId], references: [id], onDelete: Cascade)
+  user      User     @relation("SharedClients", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([clientId, userId])
+}
+
+model Service {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  currency    String    @default("USD")
+  duration    String?
+  icon        String    @default("Briefcase")
+  status      String    @default("active")
+  createdBy   String?
+  createdByUser User?   @relation("ServiceCreatedBy", fields: [createdBy], references: [id])
+  clients     ClientService[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ClientService {
+  id        String   @id @default(cuid())
+  clientId  String
+  serviceId String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  startDate DateTime @default(now())
+  endDate   DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, serviceId])
+}
+
+model Task {
+  id          String        @id @default(cuid())
+  title       String
+  description String?
+  status      String        @default("pending") // pending, in_progress, completed
+  priority    String        @default("medium") // low, medium, high
+  dueDate     DateTime?
+  position    Int           @default(0) // Para ordenar con drag and drop
+  color       String?       // Color personalizado para la tarjeta
+  images      String[]      // Array de URLs o Base64 strings de imágenes
+  createdBy   String
+  createdByUser User        @relation("TaskCreatedBy", fields: [createdBy], references: [id])
+  comments    TaskComment[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  text      String
+  author    String   // Nombre del autor del comentario
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  clientId        String
+  clientName      String
+  clientNit       String
+  totalAmount     Float
+  fecha           DateTime
+  concepto        String?
+  servicio        String?
+  observaciones   String?
+  filePath        String   // Ruta del PDF generado
+  createdBy       String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}

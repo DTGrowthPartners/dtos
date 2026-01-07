@@ -1,0 +1,510 @@
+/* 
+ * Paleta de Colores Premium SaaS - Dashboard Oscuro
+ * Estilo inspirado en Linear / Vercel
+ * 
+ * Variables CSS para la vista "Tarjetas"
+ */
+
+:root {
+  /* Backgrounds principales del tablero */
+  --dt-bg-board: linear-gradient(180deg, #0b0d11 0%, #0a0c10 100%);
+  --dt-bg-board-secondary: linear-gradient(180deg, #0f1217 0%, #0d1015 100%);
+  
+  /* Backgrounds de tarjeta */
+  --dt-bg-card: linear-gradient(180deg, #0f1217 0%, #0d1015 80%, #0c0f14 100%);
+  --dt-bg-card-hover: linear-gradient(180deg, #12161c 0%, #10141a 80%, #0f1319 100%);
+  --dt-bg-card-selected: linear-gradient(180deg, #151a22 0%, #131820 80%, #11161e 100%);
+  --dt-bg-card-completed: linear-gradient(180deg, #0e1217 0%, #0c1015 80%, #0b0f14 100%);
+  
+  /* Bordes de tarjeta */
+  --dt-border-card: rgba(255, 255, 255, 0.06);
+  --dt-border-card-hover: rgba(59, 130, 246, 0.3);
+  --dt-border-card-active: rgba(59, 130, 246, 0.6);
+  --dt-border-card-completed: rgba(34, 197, 94, 0.3);
+  
+  /* Textos */
+  --dt-text-primary: #e5e7eb;
+  --dt-text-secondary: #9ca3af;
+  --dt-text-muted: #6b7280;
+  --dt-text-meta: #4b5563;
+  
+  /* Estados de prioridad */
+  --dt-priority-high: #ef4444;
+  --dt-priority-high-bg: rgba(239, 68, 68, 0.15);
+  --dt-priority-high-border: rgba(239, 68, 68, 0.3);
+  
+  --dt-priority-medium: #f59e0b;
+  --dt-priority-medium-bg: rgba(245, 158, 11, 0.15);
+  --dt-priority-medium-border: rgba(245, 158, 11, 0.3);
+  
+  --dt-priority-low: #10b981;
+  --dt-priority-low-bg: rgba(16, 185, 129, 0.15);
+  --dt-priority-low-border: rgba(16, 185, 129, 0.3);
+  
+  --dt-priority-default: #6b7280;
+  --dt-priority-default-bg: rgba(107, 114, 128, 0.15);
+  --dt-priority-default-border: rgba(107, 114, 128, 0.3);
+  
+  /* Estados de tarea */
+  --dt-status-todo: #3b82f6;
+  --dt-status-todo-bg: rgba(59, 130, 246, 0.15);
+  --dt-status-todo-border: rgba(59, 130, 246, 0.3);
+  
+  --dt-status-in-progress: #f59e0b;
+  --dt-status-in-progress-bg: rgba(245, 158, 11, 0.15);
+  --dt-status-in-progress-border: rgba(245, 158, 11, 0.3);
+  
+  --dt-status-done: #10b981;
+  --dt-status-done-bg: rgba(16, 185, 129, 0.15);
+  --dt-status-done-border: rgba(16, 185, 129, 0.3);
+  
+  --dt-status-overdue: #ef4444;
+  --dt-status-overdue-bg: rgba(239, 68, 68, 0.15);
+  --dt-status-overdue-border: rgba(239, 68, 68, 0.3);
+  
+  /* Iconos */
+  --dt-icon-active: #e5e7eb;
+  --dt-icon-inactive: #6b7280;
+  --dt-icon-hover: #93c5fd;
+  
+  /* Botones y elementos interactivos */
+  --dt-btn-primary-bg: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  --dt-btn-primary-hover: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  --dt-btn-primary-active: linear-gradient(180deg, #1e40af 0%, #1e3a8a 100%);
+  --dt-btn-primary-border: rgba(255, 255, 255, 0.1);
+  
+  --dt-btn-secondary-bg: rgba(255, 255, 255, 0.05);
+  --dt-btn-secondary-hover: rgba(255, 255, 255, 0.1);
+  --dt-btn-secondary-active: rgba(255, 255, 255, 0.15);
+  --dt-btn-secondary-border: rgba(255, 255, 255, 0.1);
+  
+  --dt-btn-ghost-bg: rgba(255, 255, 255, 0.02);
+  --dt-btn-ghost-hover: rgba(255, 255, 255, 0.08);
+  --dt-btn-ghost-active: rgba(255, 255, 255, 0.12);
+  
+  --dt-btn-danger-bg: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+  --dt-btn-danger-hover: linear-gradient(180deg, #f87171 0%, #ef4444 100%);
+  --dt-btn-danger-active: linear-gradient(180deg, #b91c1c 0%, #991b1b 100%);
+  --dt-btn-danger-border: rgba(255, 255, 255, 0.1);
+  
+  /* Badges y chips */
+  --dt-badge-bg: rgba(255, 255, 255, 0.05);
+  --dt-badge-border: rgba(255, 255, 255, 0.1);
+  --dt-badge-text: #e5e7eb;
+  
+  --dt-badge-warning-bg: rgba(245, 158, 11, 0.15);
+  --dt-badge-warning-border: rgba(245, 158, 11, 0.3);
+  --dt-badge-warning-text: #fde68a;
+  
+  --dt-badge-success-bg: rgba(16, 185, 129, 0.15);
+  --dt-badge-success-border: rgba(16, 185, 129, 0.3);
+  --dt-badge-success-text: #a7f3d0;
+  
+  --dt-badge-danger-bg: rgba(239, 68, 68, 0.15);
+  --dt-badge-danger-border: rgba(239, 68, 68, 0.3);
+  --dt-badge-danger-text: #fecaca;
+  
+  /* Superficies y efectos */
+  --dt-surface-glass: rgba(255, 255, 255, 0.02);
+  --dt-surface-glass-hover: rgba(255, 255, 255, 0.05);
+  --dt-surface-glass-active: rgba(255, 255, 255, 0.08);
+  
+  /* Sombras premium */
+  --dt-shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  --dt-shadow-card-hover: 0 20px 40px -10px rgba(0, 0, 0, 0.4), 0 15px 20px -15px rgba(0, 0, 0, 0.3);
+  --dt-shadow-card-active: 0 25px 50px -12px rgba(59, 130, 246, 0.3), 0 20px 25px -20px rgba(0, 0, 0, 0.4);
+  
+  /* Transiciones premium */
+  --dt-transition-fast: 150ms ease-out;
+  --dt-transition-normal: 250ms ease-out;
+  --dt-transition-slow: 350ms ease-out;
+}
+
+/* Clases reutilizables para tarjetas */
+.dt-card {
+  background: var(--dt-bg-card);
+  border: 1px solid var(--dt-border-card);
+  color: var(--dt-text-primary);
+  box-shadow: var(--dt-shadow-card);
+  transition: all var(--dt-transition-normal);
+  position: relative;
+  overflow: hidden;
+}
+
+.dt-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+.dt-card:hover {
+  background: var(--dt-bg-card-hover);
+  border-color: var(--dt-border-card-hover);
+  box-shadow: var(--dt-shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.dt-card--active {
+  background: var(--dt-bg-card-selected);
+  border-color: var(--dt-border-card-active);
+  box-shadow: var(--dt-shadow-card-active);
+}
+
+.dt-card--completed {
+  background: var(--dt-bg-card-completed);
+  border-color: var(--dt-border-card-completed);
+  opacity: 0.9;
+}
+
+/* Badges y estados */
+.dt-badge {
+  background: var(--dt-badge-bg);
+  border: 1px solid var(--dt-badge-border);
+  color: var(--dt-badge-text);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--dt-transition-fast);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dt-badge:hover {
+  background: var(--dt-badge-bg);
+  border-color: var(--dt-badge-border);
+  transform: translateY(-1px);
+}
+
+.dt-badge--warning {
+  background: var(--dt-badge-warning-bg);
+  border-color: var(--dt-badge-warning-border);
+  color: var(--dt-badge-warning-text);
+}
+
+.dt-badge--success {
+  background: var(--dt-badge-success-bg);
+  border-color: var(--dt-badge-success-border);
+  color: var(--dt-badge-success-text);
+}
+
+.dt-badge--danger {
+  background: var(--dt-badge-danger-bg);
+  border-color: var(--dt-badge-danger-border);
+  color: var(--dt-badge-danger-text);
+}
+
+/* Botones premium */
+.dt-btn-icon {
+  background: var(--dt-btn-ghost-bg);
+  border: 1px solid var(--dt-btn-secondary-border);
+  color: var(--dt-text-secondary);
+  padding: 8px;
+  border-radius: 8px;
+  transition: all var(--dt-transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.dt-btn-icon:hover {
+  background: var(--dt-btn-ghost-hover);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--dt-icon-hover);
+  transform: translateY(-1px);
+}
+
+.dt-btn-icon:active {
+  background: var(--dt-btn-ghost-active);
+  transform: translateY(0);
+}
+
+.dt-btn-icon--primary {
+  background: var(--dt-btn-primary-bg);
+  border-color: var(--dt-btn-primary-border);
+  color: white;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+.dt-btn-icon--primary:hover {
+  background: var(--dt-btn-primary-hover);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.4);
+}
+
+.dt-btn-icon--primary:active {
+  background: var(--dt-btn-primary-active);
+  transform: translateY(1px);
+}
+
+.dt-btn-icon--danger {
+  background: var(--dt-btn-danger-bg);
+  border-color: var(--dt-btn-danger-border);
+  color: white;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+}
+
+.dt-btn-icon--danger:hover {
+  background: var(--dt-btn-danger-hover);
+  box-shadow: 0 6px 16px rgba(239, 68, 68, 0.4);
+}
+
+.dt-btn-icon--danger:active {
+  background: var(--dt-btn-danger-active);
+  transform: translateY(1px);
+}
+
+/* Estados de prioridad */
+.dt-priority-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dt-priority-badge--high {
+  background: var(--dt-priority-high-bg);
+  border-color: var(--dt-priority-high-border);
+  color: #fecaca;
+}
+
+.dt-priority-badge--medium {
+  background: var(--dt-priority-medium-bg);
+  border-color: var(--dt-priority-medium-border);
+  color: #fde68a;
+}
+
+.dt-priority-badge--low {
+  background: var(--dt-priority-low-bg);
+  border-color: var(--dt-priority-low-border);
+  color: #a7f3d0;
+}
+
+.dt-priority-badge--default {
+  background: var(--dt-priority-default-bg);
+  border-color: var(--dt-priority-default-border);
+  color: #cbd5e1;
+}
+
+/* Estados de tarea */
+.dt-status-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 4px;
+  border: 1px solid;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dt-status-badge--todo {
+  background: var(--dt-status-todo-bg);
+  border-color: var(--dt-status-todo-border);
+  color: #93c5fd;
+}
+
+.dt-status-badge--in-progress {
+  background: var(--dt-status-in-progress-bg);
+  border-color: var(--dt-status-in-progress-border);
+  color: #fde68a;
+}
+
+.dt-status-badge--done {
+  background: var(--dt-status-done-bg);
+  border-color: var(--dt-status-done-border);
+  color: #a7f3d0;
+}
+
+.dt-status-badge--overdue {
+  background: var(--dt-status-overdue-bg);
+  border-color: var(--dt-status-overdue-border);
+  color: #fecaca;
+}
+
+/* Pills de tiempo */
+.dt-time-pill {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--dt-text-meta);
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all var(--dt-transition-fast);
+}
+
+.dt-time-pill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--dt-text-secondary);
+}
+
+/* Textos */
+.dt-text-primary {
+  color: var(--dt-text-primary);
+}
+
+.dt-text-secondary {
+  color: var(--dt-text-secondary);
+}
+
+.dt-text-muted {
+  color: var(--dt-text-muted);
+}
+
+.dt-text-meta {
+  color: var(--dt-text-meta);
+}
+
+/* Superficies premium */
+.dt-surface {
+  background: var(--dt-surface-glass);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  transition: all var(--dt-transition-normal);
+}
+
+.dt-surface:hover {
+  background: var(--dt-surface-glass-hover);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.dt-surface:active {
+  background: var(--dt-surface-glass-active);
+  transform: translateY(1px);
+}
+
+/* Efectos premium */
+.dt-glass-effect {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dt-glow-effect {
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
+}
+
+.dt-glow-effect:hover {
+  box-shadow: 0 0 30px rgba(59, 130, 246, 0.2);
+}
+
+/* Columnas del tablero */
+.dt-column {
+  background: var(--dt-bg-board-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 16px;
+  min-width: 320px;
+  transition: all var(--dt-transition-normal);
+}
+
+.dt-column:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
+.dt-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.dt-column-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--dt-text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dt-column-count {
+  font-size: 12px;
+  color: var(--dt-text-meta);
+  background: rgba(255, 255, 255, 0.03);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Proyectos */
+.dt-project-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Asignación de usuario */
+.dt-user-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Comentarios */
+.dt-comment-indicator {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #93c5fd;
+  padding: 6px;
+  border-radius: 8px;
+  transition: all var(--dt-transition-fast);
+}
+
+.dt-comment-indicator:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+.dt-comment-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #ef4444;
+  color: white;
+  font-size: 8px;
+  font-weight: 800;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}

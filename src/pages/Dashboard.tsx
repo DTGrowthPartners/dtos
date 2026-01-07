@@ -6,8 +6,10 @@ import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { CampaignOverview } from '@/components/dashboard/CampaignOverview';
 import { clients, tasks, campaigns, financeData, notifications } from '@/data/mockData';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { authService } from '@/lib/auth';
 
 export default function Dashboard() {
+  const user = authService.getUser();
   const activeClients = clients.filter((c) => c.status === 'active').length;
   const pendingTasks = tasks.filter((t) => t.status !== 'completed').length;
   const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
@@ -21,7 +23,9 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Page Title */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Bienvenido, Dairo</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Bienvenido, {user ? user.firstName : 'Usuario'}
+        </h1>
         <p className="text-muted-foreground">Aquí tienes un resumen de las operaciones de hoy</p>
       </div>
 
