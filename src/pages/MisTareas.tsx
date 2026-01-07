@@ -121,10 +121,10 @@ export default function MisTareas() {
     <div className="dt-dense-container space-y-4 animate-fade-in h-full flex flex-col dark flex-1 p-0 overflow-auto -m-6" style={{ background: 'var(--dt-bg-board)' }}>
       <div className="flex-1 p-[2em] overflow-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex flex-col gap-3">
         <div className="flex-1">
           <h1 className="text-xl font-bold dt-text-primary">Mis Tareas</h1>
-          <p className="text-sm dt-text-secondary">
+          <p className="text-sm dt-text-secondary break-words">
             Tareas asignadas a ti en{' '}
             <a
               href={getTaskExternalUrl()}
@@ -137,7 +137,7 @@ export default function MisTareas() {
             </a>
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2">
             <User className="h-4 w-4 dt-text-secondary" />
             <Select value={userName} onValueChange={setUserName}>
@@ -155,23 +155,25 @@ export default function MisTareas() {
           </div>
           <button
             onClick={cycleViewMode}
-            className="dt-btn-icon dt-btn-icon--primary"
+            className="dt-btn-icon dt-btn-icon--primary whitespace-nowrap"
           >
             {['simple', 'card'].includes(viewMode) ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
-            Vista: {getViewModeLabel()}
+            <span className="hidden sm:inline">Vista: {getViewModeLabel()}</span>
+            <span className="sm:hidden">{getViewModeLabel()}</span>
           </button>
           <button
             onClick={() => window.open(getTaskExternalUrl(), '_blank')}
-            className="dt-btn-icon dt-btn-icon--primary"
+            className="dt-btn-icon dt-btn-icon--primary whitespace-nowrap"
           >
             <ExternalLink className="h-4 w-4 mr-2" />
-            Abrir App de Tareas
+            <span className="hidden sm:inline">Abrir App de Tareas</span>
+            <span className="sm:hidden">App Tareas</span>
           </button>
         </div>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-6">
         {Object.entries(STATUS_MAP).map(([status, config]) => {
           const count = getTasksByStatus(status as keyof typeof STATUS_MAP).length;
           const Icon = config.icon;
@@ -183,7 +185,7 @@ export default function MisTareas() {
                 </div>
                 <div>
                   <p className="dt-summary-count">{count}</p>
-                  <p className="dt-summary-label">{config.label}</p>
+                  <p className="dt-summary-label break-words">{config.label}</p>
                 </div>
               </div>
             </div>
@@ -224,13 +226,13 @@ export default function MisTareas() {
                     <div className="flex-1 min-w-0">
                       {/* Header */}
                       <div className="flex items-start gap-2 mb-1">
-                        <div className={`p-1 rounded-md ${status?.color || 'bg-gray-100'}`}>
+                        <div className={`p-1 rounded-md ${status?.color || 'bg-gray-100'} flex-shrink-0`}>
                           <StatusIcon className="h-3 w-3" />
                         </div>
-                        <div className="flex-1">
-                          <h3 className="dt-task-title">{task.title}</h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="dt-task-title break-words">{task.title}</h3>
                           {task.description && (
-                            <p className="dt-task-description line-clamp-2">
+                            <p className="dt-task-description line-clamp-2 break-words">
                               {task.description}
                             </p>
                           )}
@@ -303,7 +305,7 @@ export default function MisTareas() {
                 return (
                   <div
                     key={column.status}
-                    className="flex-1 min-w-[320px] flex flex-col dt-column"
+                    className="flex-1 min-w-[280px] sm:min-w-[320px] flex flex-col dt-column"
                   >
                     {/* Column Header */}
                     <div className="dt-column-header">

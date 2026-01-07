@@ -309,11 +309,11 @@ const CuentasCobro = () => {
           <CardHeader>
             <CardTitle>Información General</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-2">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="cliente_id">Cliente</Label>
               <Select onValueChange={handleClientChange} value={invoiceData.cliente_id}>
-                <SelectTrigger>
+                <SelectTrigger className="w-full">
                   <SelectValue placeholder="Selecciona un cliente" />
                 </SelectTrigger>
                 <SelectContent>
@@ -327,23 +327,23 @@ const CuentasCobro = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="identificacion">Identificación (NIT/CC)</Label>
-              <Input id="identificacion" name="identificacion" value={invoiceData.identificacion} readOnly disabled />
+              <Input id="identificacion" name="identificacion" value={invoiceData.identificacion} readOnly disabled className="w-full" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="fecha">Fecha</Label>
-              <Input id="fecha" name="fecha" type="date" value={invoiceData.fecha} onChange={handleInputChange} />
+              <Input id="fecha" name="fecha" type="date" value={invoiceData.fecha} onChange={handleInputChange} className="w-full" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="servicio_proyecto">Servicio / Proyecto</Label>
-              <Input id="servicio_proyecto" name="servicio_proyecto" value={invoiceData.servicio_proyecto} onChange={handleInputChange} placeholder="Ej: Mantenimiento Web" />
+              <Input id="servicio_proyecto" name="servicio_proyecto" value={invoiceData.servicio_proyecto} onChange={handleInputChange} placeholder="Ej: Mantenimiento Web" className="w-full" />
             </div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="concepto">Observaciones</Label>
-              <Textarea id="concepto" name="concepto" value={invoiceData.concepto} onChange={handleInputChange} rows={2} />
+              <Textarea id="concepto" name="concepto" value={invoiceData.concepto} onChange={handleInputChange} rows={2} className="w-full" />
             </div>
-            <div className="space-y-2 md:col-span-2">
+            <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="observaciones">Concepto General</Label>
-              <Textarea id="observaciones" name="observaciones" value={invoiceData.observaciones} onChange={handleInputChange} rows={3} />
+              <Textarea id="observaciones" name="observaciones" value={invoiceData.observaciones} onChange={handleInputChange} rows={3} className="w-full" />
             </div>
           </CardContent>
         </Card>
@@ -365,9 +365,9 @@ const CuentasCobro = () => {
           <CardContent>
             <div className="space-y-4">
               {serviceItems.map((item, index) => (
-                <div key={item.id} className="flex flex-col md:flex-row items-center gap-4 p-4 border rounded-lg">
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-4 flex-grow w-full">
-                    <div className="space-y-2">
+                <div key={item.id} className="flex flex-col gap-4 p-4 border rounded-lg">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+                    <div className="space-y-2 sm:col-span-2 lg:col-span-1">
                       <Label>Seleccionar Servicio</Label>
                       <Select onValueChange={(serviceId) => {
                         const service = services.find(s => s.id === serviceId);
@@ -376,7 +376,7 @@ const CuentasCobro = () => {
                           handleServiceItemChange(item.id, 'precio_unitario', service.price);
                         }
                       }}>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Elegir servicio..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -388,12 +388,13 @@ const CuentasCobro = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2 sm:col-span-2">
                       <Label>Descripción</Label>
                       <Input
                         placeholder="Descripción del servicio"
                         value={item.descripcion}
                         onChange={(e) => handleServiceItemChange(item.id, 'descripcion', e.target.value)}
+                        className="w-full"
                       />
                     </div>
                     <div className="space-y-2">
@@ -403,6 +404,7 @@ const CuentasCobro = () => {
                         placeholder="1"
                         value={item.cantidad}
                         onChange={(e) => handleServiceItemChange(item.id, 'cantidad', Number(e.target.value))}
+                        className="w-full min-w-[80px]"
                       />
                     </div>
                     <div className="space-y-2">
@@ -412,6 +414,7 @@ const CuentasCobro = () => {
                         placeholder="0"
                         value={item.precio_unitario}
                         onChange={(e) => handleServiceItemChange(item.id, 'precio_unitario', Number(e.target.value))}
+                        className="w-full min-w-[100px]"
                       />
                     </div>
                     <div className="space-y-2">
@@ -420,18 +423,22 @@ const CuentasCobro = () => {
                         value={new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(calculateTotal(item))}
                         readOnly
                         disabled
+                        className="w-full min-w-[120px]"
                       />
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    onClick={() => removeServiceItem(item.id)}
-                    className="mt-4 md:mt-0"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => removeServiceItem(item.id)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -440,13 +447,13 @@ const CuentasCobro = () => {
               Añadir Ítem
             </Button>
           </CardContent>
-          <CardFooter className="flex justify-end font-bold text-xl pr-6">
+          <CardFooter className="flex justify-end font-bold text-lg sm:text-xl pr-6 break-words">
             Total General: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(grandTotal)}
           </CardFooter>
         </Card>
 
         <div className="mt-6 flex justify-end">
-          <Button type="submit" disabled={isLoading}>
+          <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
             {isLoading ? 'Generando...' : 'Generar Cuenta de Cobro'}
           </Button>
         </div>
@@ -479,76 +486,78 @@ const CuentasCobro = () => {
               No hay cuentas de cobro generadas
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
-                      className="h-6 w-6 p-0"
-                    >
-                      {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
-                        <CheckSquare className="h-4 w-4" />
-                      ) : (
-                        <Square className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </TableHead>
-                  <TableHead>N° Cuenta</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell>
-                      <input
-                        type="checkbox"
-                        checked={selectedInvoices.has(invoice.id)}
-                        onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
-                        className="h-4 w-4"
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      #{invoice.invoiceNumber.substring(0, 12)}...
-                    </TableCell>
-                    <TableCell>
-                      {new Date(invoice.fecha).toLocaleDateString('es-CO')}
-                    </TableCell>
-                    <TableCell>{invoice.clientName}</TableCell>
-                    <TableCell className="text-right">
-                      {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleView(invoice.id, invoice.invoiceNumber)}
-                          title="Ver PDF"
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(invoice.id)}
-                          className="text-destructive hover:text-destructive"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <div className="table-responsive">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[50px]">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
+                        className="h-6 w-6 p-0"
+                      >
+                        {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
+                          <CheckSquare className="h-4 w-4" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </TableHead>
+                    <TableHead className="min-w-[150px]">N° Cuenta</TableHead>
+                    <TableHead className="min-w-[100px]">Fecha</TableHead>
+                    <TableHead className="min-w-[150px]">Cliente</TableHead>
+                    <TableHead className="text-right min-w-[120px]">Valor</TableHead>
+                    <TableHead className="text-right min-w-[100px]">Acciones</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {invoices.map((invoice) => (
+                    <TableRow key={invoice.id}>
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoices.has(invoice.id)}
+                          onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
+                          className="h-4 w-4"
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <span className="break-words">#{invoice.invoiceNumber.substring(0, 12)}...</span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="whitespace-nowrap">{new Date(invoice.fecha).toLocaleDateString('es-CO')}</span>
+                      </TableCell>
+                      <TableCell className="break-words">{invoice.clientName}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(invoice.id, invoice.invoiceNumber)}
+                            title="Ver PDF"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(invoice.id)}
+                            className="text-destructive hover:text-destructive"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>

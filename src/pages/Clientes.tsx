@@ -209,9 +209,9 @@ export default function Clientes() {
       case '1':
         return 'grid-cols-1';
       case '2':
-        return 'md:grid-cols-2';
+        return 'grid-cols-1 sm:grid-cols-2';
       case '3':
-        return 'md:grid-cols-2 lg:grid-cols-3';
+        return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
       case 'list':
       default:
         return '';
@@ -249,17 +249,17 @@ export default function Clientes() {
       </div>
 
       {/* Search and View Controls */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-4">
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar por nombre o email..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 w-full"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={showHidden ? "default" : "outline"}
             size="sm"
@@ -289,75 +289,77 @@ export default function Clientes() {
       {/* List View */}
       {viewMode === 'list' ? (
         <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]"></TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>NIT/RUT</TableHead>
-                <TableHead>Teléfono</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClients.map((client) => {
-                const isHidden = hiddenClients.has(client.id);
-                return (
-                  <TableRow key={client.id} className={isHidden ? 'opacity-50' : ''}>
-                    <TableCell>
-                      <img
-                        src={client.logo}
-                        alt={client.name}
-                        className="h-8 w-8 rounded object-contain bg-muted p-1"
-                        onError={(e) => {
-                          e.currentTarget.src = '/img/logo.png';
-                        }}
-                      />
-                    </TableCell>
-                    <TableCell className="font-medium">{client.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{client.email}</TableCell>
-                    <TableCell className="text-muted-foreground">{client.nit || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2 py-1 rounded-full ${client.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                        {client.status === 'active' ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleClientVisibility(client.id)}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(client)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(client.id)}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="table-responsive">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="min-w-[150px]">Cliente</TableHead>
+                  <TableHead className="min-w-[180px]">Email</TableHead>
+                  <TableHead className="min-w-[120px]">NIT/RUT</TableHead>
+                  <TableHead className="min-w-[120px]">Teléfono</TableHead>
+                  <TableHead className="min-w-[100px]">Estado</TableHead>
+                  <TableHead className="text-right min-w-[120px]">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredClients.map((client) => {
+                  const isHidden = hiddenClients.has(client.id);
+                  return (
+                    <TableRow key={client.id} className={isHidden ? 'opacity-50' : ''}>
+                      <TableCell>
+                        <img
+                          src={client.logo}
+                          alt={client.name}
+                          className="h-8 w-8 rounded object-contain bg-muted p-1"
+                          onError={(e) => {
+                            e.currentTarget.src = '/img/logo.png';
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell className="text-muted-foreground">{client.email}</TableCell>
+                      <TableCell className="text-muted-foreground">{client.nit || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${client.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {client.status === 'active' ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleClientVisibility(client.id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(client)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(client.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       ) : (
         /* Cards Grid */
@@ -396,27 +398,27 @@ export default function Clientes() {
                 </CardHeader>
                 <CardContent className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Mail className="h-4 w-4" />
-                    <span className="truncate">{client.email}</span>
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate break-words">{client.email}</span>
                   </div>
                   {client.phone && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="h-4 w-4" />
-                      <span>{client.phone}</span>
+                      <Phone className="h-4 w-4 flex-shrink-0" />
+                      <span className="break-words">{client.phone}</span>
                     </div>
                   )}
                   {client.address && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      <span className="truncate">{client.address}</span>
+                      <MapPin className="h-4 w-4 flex-shrink-0" />
+                      <span className="truncate break-words">{client.address}</span>
                     </div>
                   )}
                 </CardContent>
-                <CardFooter className="flex gap-2 pt-4 border-t">
+                <CardFooter className="flex flex-wrap gap-2 pt-4 border-t">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="flex-1 min-w-[100px]"
                     onClick={() => handleEdit(client)}
                   >
                     <Edit className="h-4 w-4 mr-2" />
@@ -425,7 +427,7 @@ export default function Clientes() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 text-destructive hover:text-destructive"
+                    className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
                     onClick={() => handleDelete(client.id)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />

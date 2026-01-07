@@ -196,9 +196,9 @@ export default function Servicios() {
       case '1':
         return 'grid-cols-1';
       case '2':
-        return 'md:grid-cols-2';
+        return 'grid-cols-1 sm:grid-cols-2';
       case '3':
-        return 'md:grid-cols-2 lg:grid-cols-3';
+        return 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
       case 'list':
       default:
         return '';
@@ -237,17 +237,17 @@ export default function Servicios() {
       </div>
 
       {/* Search and View Controls */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-4">
+        <div className="relative w-full">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Buscar servicio..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 w-full"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant={showHidden ? "default" : "outline"}
             size="sm"
@@ -277,76 +277,78 @@ export default function Servicios() {
       {/* List View */}
       {viewMode === 'list' ? (
         <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[50px]"></TableHead>
-                <TableHead>Servicio</TableHead>
-                <TableHead>Descripción</TableHead>
-                <TableHead>Precio</TableHead>
-                <TableHead>Duración</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead className="text-right">Acciones</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredServices.map((service) => {
-                const isHidden = hiddenServices.has(service.id);
-                return (
-                  <TableRow key={service.id} className={isHidden ? 'opacity-50' : ''}>
-                    <TableCell>
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                        {getIcon(service.icon)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium">{service.name}</TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
-                      {service.description || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-semibold text-success">
-                        {formatPrice(service.price, service.currency)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{service.duration || '-'}</TableCell>
-                    <TableCell>
-                      <span className={`text-xs px-2 py-1 rounded-full ${service.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                        {service.status === 'active' ? 'Activo' : 'Inactivo'}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => toggleServiceVisibility(service.id)}
-                          className="h-8 w-8 p-0"
-                        >
-                          {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(service)}
-                          className="h-8 w-8 p-0"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDelete(service.id)}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="table-responsive">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]"></TableHead>
+                  <TableHead className="min-w-[150px]">Servicio</TableHead>
+                  <TableHead className="min-w-[200px]">Descripción</TableHead>
+                  <TableHead className="min-w-[120px]">Precio</TableHead>
+                  <TableHead className="min-w-[100px]">Duración</TableHead>
+                  <TableHead className="min-w-[100px]">Estado</TableHead>
+                  <TableHead className="text-right min-w-[120px]">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredServices.map((service) => {
+                  const isHidden = hiddenServices.has(service.id);
+                  return (
+                    <TableRow key={service.id} className={isHidden ? 'opacity-50' : ''}>
+                      <TableCell>
+                        <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                          {getIcon(service.icon)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium">{service.name}</TableCell>
+                      <TableCell className="text-muted-foreground max-w-xs truncate">
+                        {service.description || '-'}
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-semibold text-success whitespace-nowrap">
+                          {formatPrice(service.price, service.currency)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{service.duration || '-'}</TableCell>
+                      <TableCell>
+                        <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${service.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                          {service.status === 'active' ? 'Activo' : 'Inactivo'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleServiceVisibility(service.id)}
+                            className="h-8 w-8 p-0"
+                          >
+                            {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(service)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(service.id)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       ) : (
         /* Cards Grid */
@@ -380,27 +382,27 @@ export default function Servicios() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {service.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2">
+                    <p className="text-sm text-muted-foreground line-clamp-2 break-words">
                       {service.description}
                     </p>
                   )}
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="font-semibold text-success text-lg">
+                    <span className="font-semibold text-success text-lg break-words">
                       {formatPrice(service.price, service.currency)}
                     </span>
                   </div>
                   {service.duration && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      <span>{service.duration}</span>
+                      <Clock className="h-4 w-4 flex-shrink-0" />
+                      <span className="break-words">{service.duration}</span>
                     </div>
                   )}
                 </CardContent>
-                <CardFooter className="flex gap-2 pt-4 border-t">
+                <CardFooter className="flex flex-wrap gap-2 pt-4 border-t">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="flex-1 min-w-[100px]"
                     onClick={() => handleEdit(service)}
                   >
                     <Edit className="h-4 w-4 mr-2" />
@@ -409,7 +411,7 @@ export default function Servicios() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 text-destructive hover:text-destructive"
+                    className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
                     onClick={() => handleDelete(service.id)}
                   >
                     <Trash2 className="h-4 w-4 mr-2" />

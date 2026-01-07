@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { SidebarProvider } from "@/contexts/SidebarContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
@@ -24,31 +25,33 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/clientes" element={<Clientes />} />
-            <Route path="/servicios" element={<Servicios />} />
-            <Route path="/campanas" element={<Campanas />} />
-            <Route path="/tareas" element={<Tareas />} />
-            <Route path="/mis-tareas" element={<MisTareas />} />
-            <Route path="/reportes" element={<Reportes />} />
-            <Route path="/equipo" element={<Equipo />} />
-            <Route path="/productos" element={<Productos />} />
-            <Route path="/finanzas" element={<Finanzas />} />
-            <Route path="/cuentas-cobro" element={<CuentasCobro />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <SidebarProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/clientes" element={<Clientes />} />
+              <Route path="/servicios" element={<Servicios />} />
+              <Route path="/campanas" element={<Campanas />} />
+              <Route path="/tareas" element={<Tareas />} />
+              <Route path="/mis-tareas" element={<MisTareas />} />
+              <Route path="/reportes" element={<Reportes />} />
+              <Route path="/equipo" element={<Equipo />} />
+              <Route path="/productos" element={<Productos />} />
+              <Route path="/finanzas" element={<Finanzas />} />
+              <Route path="/cuentas-cobro" element={<CuentasCobro />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </SidebarProvider>
   </QueryClientProvider>
 );
 
