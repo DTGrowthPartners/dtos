@@ -33,7 +33,7 @@ class InvoiceService {
       ];
 
       // Spawn the Python process
-      const pythonProcess = spawn('python', [scriptPath, ...scriptArgs]);
+      const pythonProcess = spawn('python3', [scriptPath, ...scriptArgs]);
 
       let pdfPath = '';
       let errorOutput = '';
