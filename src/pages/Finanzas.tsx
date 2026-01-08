@@ -67,6 +67,46 @@ export default function Finanzas() {
 
   const { toast } = useToast();
 
+  // Helper function to normalize dates to YYYY-MM-DD format for comparison
+  const normalizeDate = (dateStr: string): string => {
+    if (!dateStr) return '';
+
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      return dateStr;
+    }
+
+    // Try parsing different date formats
+    // Format: DD/MM/YYYY or D/M/YYYY
+    const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const [, day, month, year] = ddmmyyyyMatch;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    // Format: MM/DD/YYYY or M/D/YYYY
+    const mmddyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mmddyyyyMatch) {
+      const [, month, day, year] = mmddyyyyMatch;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    // Try to parse as a general date
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+    } catch (e) {
+      console.warn('Could not parse date:', dateStr);
+    }
+
+    return dateStr;
+  };
+
   useEffect(() => {
     fetchFinanceData();
   }, []);
@@ -109,9 +149,12 @@ export default function Finanzas() {
       if (filterType === 'gastos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
-      // Date range filter
-      if (filterDateFrom && t.fecha < filterDateFrom) return false;
-      if (filterDateTo && t.fecha > filterDateTo) return false;
+      // Date range filter with normalization
+      if (filterDateFrom || filterDateTo) {
+        const normalizedTransactionDate = normalizeDate(t.fecha);
+        if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
+        if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
+      }
 
       // Search filter
       if (ingresosSearchTerm) {
@@ -133,9 +176,12 @@ export default function Finanzas() {
       if (filterType === 'ingresos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
-      // Date range filter
-      if (filterDateFrom && t.fecha < filterDateFrom) return false;
-      if (filterDateTo && t.fecha > filterDateTo) return false;
+      // Date range filter with normalization
+      if (filterDateFrom || filterDateTo) {
+        const normalizedTransactionDate = normalizeDate(t.fecha);
+        if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
+        if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
+      }
 
       // Search filter
       if (gastosSearchTerm) {
