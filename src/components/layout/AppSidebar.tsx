@@ -136,8 +136,8 @@ export function AppSidebar() {
           })}
         </nav>
 
-        {/* Collapse Button - Always visible, fixed at bottom */}
-        <div className="absolute bottom-4 left-0 right-0 px-3">
+        {/* Collapse Button - Desktop only (hidden on mobile) */}
+        <div className="hidden lg:block absolute bottom-4 left-0 right-0 px-3">
           <Button
             variant="ghost"
             size="sm"
