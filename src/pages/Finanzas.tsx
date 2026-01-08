@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -56,6 +57,12 @@ export default function Finanzas() {
   const [filterType, setFilterType] = useState<'todas' | 'ingresos' | 'gastos'>('todas');
   const [showFilters, setShowFilters] = useState(false);
 
+  // Table filters and collapse states
+  const [showIngresosTable, setShowIngresosTable] = useState(false);
+  const [showGastosTable, setShowGastosTable] = useState(false);
+  const [ingresosSearchTerm, setIngresosSearchTerm] = useState('');
+  const [gastosSearchTerm, setGastosSearchTerm] = useState('');
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -85,31 +92,7 @@ export default function Finanzas() {
     }
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          <p className="text-sm text-muted-foreground">Cargando datos financieros...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const currentMonth = financeData[financeData.length - 1] || { month: '', income: 0, expenses: 0 };
-  const previousMonth = financeData[financeData.length - 2] || { month: '', income: 0, expenses: 0 };
-
-  const incomeGrowth = previousMonth.income > 0
-    ? ((currentMonth.income - previousMonth.income) / previousMonth.income) * 100
-    : 0;
-  const expensesGrowth = previousMonth.expenses > 0
-    ? ((currentMonth.expenses - previousMonth.expenses) / previousMonth.expenses) * 100
-    : 0;
-
-  const netProfit = totalIncome - totalExpenses;
-  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
-
-  // Get all unique categories
+  // Get all unique categories (must be before any conditional returns)
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
     [...ingresos, ...gastos].forEach(t => {
@@ -118,22 +101,46 @@ export default function Finanzas() {
     return ['todas', ...Array.from(cats)];
   }, [ingresos, gastos]);
 
-  // Filter transactions
+  // Filter transactions with search
   const filteredIngresos = useMemo(() => {
     return ingresos.filter(t => {
       if (filterType === 'gastos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+
+      // Search filter
+      if (ingresosSearchTerm) {
+        const searchLower = ingresosSearchTerm.toLowerCase();
+        return (
+          t.descripcion.toLowerCase().includes(searchLower) ||
+          t.categoria.toLowerCase().includes(searchLower) ||
+          t.entidad.toLowerCase().includes(searchLower) ||
+          t.fecha.includes(searchLower)
+        );
+      }
+
       return true;
     });
-  }, [ingresos, filterCategory, filterType]);
+  }, [ingresos, filterCategory, filterType, ingresosSearchTerm]);
 
   const filteredGastos = useMemo(() => {
     return gastos.filter(t => {
       if (filterType === 'ingresos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+
+      // Search filter
+      if (gastosSearchTerm) {
+        const searchLower = gastosSearchTerm.toLowerCase();
+        return (
+          t.descripcion.toLowerCase().includes(searchLower) ||
+          t.categoria.toLowerCase().includes(searchLower) ||
+          t.entidad.toLowerCase().includes(searchLower) ||
+          t.fecha.includes(searchLower)
+        );
+      }
+
       return true;
     });
-  }, [gastos, filterCategory, filterType]);
+  }, [gastos, filterCategory, filterType, gastosSearchTerm]);
 
   // Calculate filtered totals
   const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
@@ -183,6 +190,32 @@ export default function Finanzas() {
   };
 
   const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas';
+
+  // Calculations that depend on data
+  const currentMonth = financeData[financeData.length - 1] || { month: '', income: 0, expenses: 0 };
+  const previousMonth = financeData[financeData.length - 2] || { month: '', income: 0, expenses: 0 };
+
+  const incomeGrowth = previousMonth.income > 0
+    ? ((currentMonth.income - previousMonth.income) / previousMonth.income) * 100
+    : 0;
+  const expensesGrowth = previousMonth.expenses > 0
+    ? ((currentMonth.expenses - previousMonth.expenses) / previousMonth.expenses) * 100
+    : 0;
+
+  const netProfit = totalIncome - totalExpenses;
+  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+
+  // Loading state check AFTER all hooks
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center gap-4">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          <p className="text-sm text-muted-foreground">Cargando datos financieros...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -523,18 +556,40 @@ export default function Finanzas() {
       {/* Tablas de Transacciones */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Tabla de Ingresos */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-foreground">Ingresos (Entradas)</h3>
-              <p className="text-sm text-muted-foreground">
-                {hasActiveFilters ? `${filteredIngresos.length} de ${ingresos.length}` : `${ingresos.length}`} transacciones
-              </p>
+        <div className="rounded-xl border border-border bg-card">
+          <button
+            onClick={() => setShowIngresosTable(!showIngresosTable)}
+            className="w-full p-6 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+                <TrendingUp className="h-5 w-5 text-success" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-semibold text-foreground">Ingresos (Entradas)</h3>
+                <p className="text-sm text-muted-foreground">
+                  {filteredIngresos.length} transacciones • €{filteredTotalIncome.toLocaleString()}
+                </p>
+              </div>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-              <TrendingUp className="h-5 w-5 text-success" />
-            </div>
-          </div>
+            {showIngresosTable ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+          </button>
+
+          {showIngresosTable && (
+            <div className="px-6 pb-6 space-y-4 border-t border-border">
+              {/* Search Filter */}
+              <div className="pt-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar por descripción, categoría, entidad o fecha..."
+                    value={ingresosSearchTerm}
+                    onChange={(e) => setIngresosSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
           <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
             <div className="min-w-[600px]">
               <table className="w-full text-sm">
@@ -574,21 +629,45 @@ export default function Finanzas() {
               </table>
             </div>
           </div>
+            </div>
+          )}
         </div>
 
         {/* Tabla de Gastos */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-foreground">Gastos (Salidas)</h3>
-              <p className="text-sm text-muted-foreground">
-                {hasActiveFilters ? `${filteredGastos.length} de ${gastos.length}` : `${gastos.length}`} transacciones
-              </p>
+        <div className="rounded-xl border border-border bg-card">
+          <button
+            onClick={() => setShowGastosTable(!showGastosTable)}
+            className="w-full p-6 flex items-center justify-between hover:bg-muted/50 transition-colors rounded-t-xl"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
+                <TrendingDown className="h-5 w-5 text-destructive" />
+              </div>
+              <div className="text-left">
+                <h3 className="font-semibold text-foreground">Gastos (Salidas)</h3>
+                <p className="text-sm text-muted-foreground">
+                  {filteredGastos.length} transacciones • €{filteredTotalExpenses.toLocaleString()}
+                </p>
+              </div>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
-              <TrendingDown className="h-5 w-5 text-destructive" />
-            </div>
-          </div>
+            {showGastosTable ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+          </button>
+
+          {showGastosTable && (
+            <div className="px-6 pb-6 space-y-4 border-t border-border">
+              {/* Search Filter */}
+              <div className="pt-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="text"
+                    placeholder="Buscar por descripción, categoría, entidad o fecha..."
+                    value={gastosSearchTerm}
+                    onChange={(e) => setGastosSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
           <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
             <div className="min-w-[600px]">
               <table className="w-full text-sm">
@@ -628,6 +707,8 @@ export default function Finanzas() {
               </table>
             </div>
           </div>
+            </div>
+          )}
         </div>
       </div>
 
