@@ -309,9 +309,9 @@ export default function Finanzas() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Total:</span>
-                    <span className="font-medium text-success">€{filteredTotalIncome.toLocaleString()}</span>
+                    <span className="font-medium text-success">${filteredTotalIncome.toLocaleString()}</span>
                     <span className="text-muted-foreground">/</span>
-                    <span className="font-medium text-destructive">€{filteredTotalExpenses.toLocaleString()}</span>
+                    <span className="font-medium text-destructive">${filteredTotalExpenses.toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -326,7 +326,7 @@ export default function Finanzas() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Ingresos Totales</p>
-              <p className="text-2xl font-bold text-foreground mt-1">€{totalIncome.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground mt-1">${totalIncome.toLocaleString()}</p>
               {incomeGrowth !== 0 && (
                 <div className={cn('flex items-center gap-1 mt-2 text-sm', incomeGrowth >= 0 ? 'text-success' : 'text-destructive')}>
                   {incomeGrowth >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
@@ -344,7 +344,7 @@ export default function Finanzas() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Gastos Totales</p>
-              <p className="text-2xl font-bold text-foreground mt-1">€{totalExpenses.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground mt-1">${totalExpenses.toLocaleString()}</p>
               {expensesGrowth !== 0 && (
                 <div className={cn('flex items-center gap-1 mt-2 text-sm', expensesGrowth <= 0 ? 'text-success' : 'text-destructive')}>
                   {expensesGrowth >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
@@ -362,7 +362,7 @@ export default function Finanzas() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Beneficio Neto</p>
-              <p className="text-2xl font-bold text-foreground mt-1">€{netProfit.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground mt-1">${netProfit.toLocaleString()}</p>
               <p className="text-sm text-muted-foreground mt-2">{profitMargin.toFixed(1)}% margen</p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -415,7 +415,7 @@ export default function Finanzas() {
                   fontSize={12}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
+                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
                   contentStyle={{
@@ -423,7 +423,7 @@ export default function Finanzas() {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [`€${value.toLocaleString()}`, '']}
+                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                 />
                 <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
@@ -460,7 +460,7 @@ export default function Finanzas() {
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
                       }}
-                      formatter={(value: number) => [`€${value.toLocaleString()}`, '']}
+                      formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -472,7 +472,7 @@ export default function Finanzas() {
                       <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                       <span className="text-muted-foreground truncate">{cat.name}</span>
                     </div>
-                    <span className="font-medium text-foreground whitespace-nowrap ml-2">€{cat.value.toLocaleString()}</span>
+                    <span className="font-medium text-foreground whitespace-nowrap ml-2">${cat.value.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -502,7 +502,7 @@ export default function Finanzas() {
                       <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
                       <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
                     </div>
-                    <span className="text-sm font-bold text-success ml-2 whitespace-nowrap">€{item.importe.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-success ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -517,7 +517,7 @@ export default function Finanzas() {
                       <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
                       <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
                     </div>
-                    <span className="text-sm font-bold text-destructive ml-2 whitespace-nowrap">€{item.importe.toLocaleString()}</span>
+                    <span className="text-sm font-bold text-destructive ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
                   </div>
                 ))}
               </div>
@@ -534,7 +534,7 @@ export default function Finanzas() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={entityStats.slice(0, 6)} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`} />
+                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
                 <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={80} />
                 <Tooltip
                   contentStyle={{
@@ -542,7 +542,7 @@ export default function Finanzas() {
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => `€${value.toLocaleString()}`}
+                  formatter={(value: number) => `$${value.toLocaleString()}`}
                 />
                 <Legend />
                 <Bar dataKey="ingresos" fill="hsl(var(--success))" name="Ingresos" radius={[0, 4, 4, 0]} />
@@ -568,7 +568,7 @@ export default function Finanzas() {
               <div className="text-left">
                 <h3 className="font-semibold text-foreground">Ingresos (Entradas)</h3>
                 <p className="text-sm text-muted-foreground">
-                  {filteredIngresos.length} transacciones • €{filteredTotalIncome.toLocaleString()}
+                  {filteredIngresos.length} transacciones • ${filteredTotalIncome.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -615,7 +615,7 @@ export default function Finanzas() {
                         </td>
                         <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
                         <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
-                        <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">€{ingreso.importe.toLocaleString()}</td>
+                        <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
                       </tr>
                     ))
                   ) : (
@@ -646,7 +646,7 @@ export default function Finanzas() {
               <div className="text-left">
                 <h3 className="font-semibold text-foreground">Gastos (Salidas)</h3>
                 <p className="text-sm text-muted-foreground">
-                  {filteredGastos.length} transacciones • €{filteredTotalExpenses.toLocaleString()}
+                  {filteredGastos.length} transacciones • ${filteredTotalExpenses.toLocaleString()}
                 </p>
               </div>
             </div>
@@ -693,7 +693,7 @@ export default function Finanzas() {
                         </td>
                         <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
                         <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
-                        <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">€{gasto.importe.toLocaleString()}</td>
+                        <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
                       </tr>
                     ))
                   ) : (
