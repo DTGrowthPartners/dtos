@@ -55,6 +55,8 @@ export default function Finanzas() {
   // Filters
   const [filterCategory, setFilterCategory] = useState<string>('todas');
   const [filterType, setFilterType] = useState<'todas' | 'ingresos' | 'gastos'>('todas');
+  const [filterDateFrom, setFilterDateFrom] = useState<string>('');
+  const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
 
   // Table filters and collapse states
@@ -101,11 +103,15 @@ export default function Finanzas() {
     return ['todas', ...Array.from(cats)];
   }, [ingresos, gastos]);
 
-  // Filter transactions with search
+  // Filter transactions with search and date range
   const filteredIngresos = useMemo(() => {
     return ingresos.filter(t => {
       if (filterType === 'gastos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+
+      // Date range filter
+      if (filterDateFrom && t.fecha < filterDateFrom) return false;
+      if (filterDateTo && t.fecha > filterDateTo) return false;
 
       // Search filter
       if (ingresosSearchTerm) {
@@ -120,12 +126,16 @@ export default function Finanzas() {
 
       return true;
     });
-  }, [ingresos, filterCategory, filterType, ingresosSearchTerm]);
+  }, [ingresos, filterCategory, filterType, filterDateFrom, filterDateTo, ingresosSearchTerm]);
 
   const filteredGastos = useMemo(() => {
     return gastos.filter(t => {
       if (filterType === 'ingresos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+
+      // Date range filter
+      if (filterDateFrom && t.fecha < filterDateFrom) return false;
+      if (filterDateTo && t.fecha > filterDateTo) return false;
 
       // Search filter
       if (gastosSearchTerm) {
@@ -140,7 +150,7 @@ export default function Finanzas() {
 
       return true;
     });
-  }, [gastos, filterCategory, filterType, gastosSearchTerm]);
+  }, [gastos, filterCategory, filterType, filterDateFrom, filterDateTo, gastosSearchTerm]);
 
   // Calculate filtered totals
   const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
@@ -187,9 +197,11 @@ export default function Finanzas() {
   const clearFilters = () => {
     setFilterCategory('todas');
     setFilterType('todas');
+    setFilterDateFrom('');
+    setFilterDateTo('');
   };
 
-  const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas';
+  const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas' || filterDateFrom !== '' || filterDateTo !== '';
 
   // Calculations that depend on data
   const currentMonth = financeData[financeData.length - 1] || { month: '', income: 0, expenses: 0 };
@@ -255,8 +267,8 @@ export default function Finanzas() {
         {/* Filter Panel */}
         {showFilters && (
           <div className="rounded-xl border border-border bg-card p-4 animate-in slide-in-from-top-2">
-            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-              <div className="flex-1 w-full sm:w-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+              <div className="w-full">
                 <label className="text-sm font-medium text-foreground mb-2 block">Tipo</label>
                 <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
                   <SelectTrigger className="w-full">
@@ -270,7 +282,7 @@ export default function Finanzas() {
                 </Select>
               </div>
 
-              <div className="flex-1 w-full sm:w-auto">
+              <div className="w-full">
                 <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
                 <Select value={filterCategory} onValueChange={setFilterCategory}>
                   <SelectTrigger className="w-full">
@@ -286,16 +298,25 @@ export default function Finanzas() {
                 </Select>
               </div>
 
-              {hasActiveFilters && (
-                <Button
-                  variant="ghost"
-                  onClick={clearFilters}
-                  className="mt-0 sm:mt-6"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Limpiar
-                </Button>
-              )}
+              <div className="w-full">
+                <label className="text-sm font-medium text-foreground mb-2 block">Fecha Desde</label>
+                <Input
+                  type="date"
+                  value={filterDateFrom}
+                  onChange={(e) => setFilterDateFrom(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              <div className="w-full">
+                <label className="text-sm font-medium text-foreground mb-2 block">Fecha Hasta</label>
+                <Input
+                  type="date"
+                  value={filterDateTo}
+                  onChange={(e) => setFilterDateTo(e.target.value)}
+                  className="w-full"
+                />
+              </div>
             </div>
 
             {hasActiveFilters && (
@@ -313,6 +334,16 @@ export default function Finanzas() {
                     <span className="text-muted-foreground">/</span>
                     <span className="font-medium text-destructive">${filteredTotalExpenses.toLocaleString()}</span>
                   </div>
+                </div>
+                <div className="flex justify-end mt-2">
+                  <Button
+                    variant="ghost"
+                    onClick={clearFilters}
+                    size="sm"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Limpiar filtros
+                  </Button>
                 </div>
               </div>
             )}
