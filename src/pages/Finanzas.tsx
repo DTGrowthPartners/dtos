@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { useState, useEffect, useMemo } from 'react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface FinanceData {
   month: string;
@@ -43,6 +50,12 @@ export default function Finanzas() {
   const [ingresos, setIngresos] = useState<Transaction[]>([]);
   const [gastos, setGastos] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Filters
+  const [filterCategory, setFilterCategory] = useState<string>('todas');
+  const [filterType, setFilterType] = useState<'todas' | 'ingresos' | 'gastos'>('todas');
+  const [showFilters, setShowFilters] = useState(false);
+
   const { toast } = useToast();
 
   useEffect(() => {
@@ -93,32 +106,185 @@ export default function Finanzas() {
     ? ((currentMonth.expenses - previousMonth.expenses) / previousMonth.expenses) * 100
     : 0;
 
-  const netProfit = currentMonth.income - currentMonth.expenses;
-  const profitMargin = currentMonth.income > 0 ? (netProfit / currentMonth.income) * 100 : 0;
+  const netProfit = totalIncome - totalExpenses;
+  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+
+  // Get all unique categories
+  const allCategories = useMemo(() => {
+    const cats = new Set<string>();
+    [...ingresos, ...gastos].forEach(t => {
+      if (t.categoria) cats.add(t.categoria);
+    });
+    return ['todas', ...Array.from(cats)];
+  }, [ingresos, gastos]);
+
+  // Filter transactions
+  const filteredIngresos = useMemo(() => {
+    return ingresos.filter(t => {
+      if (filterType === 'gastos') return false;
+      if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+      return true;
+    });
+  }, [ingresos, filterCategory, filterType]);
+
+  const filteredGastos = useMemo(() => {
+    return gastos.filter(t => {
+      if (filterType === 'ingresos') return false;
+      if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
+      return true;
+    });
+  }, [gastos, filterCategory, filterType]);
+
+  // Calculate filtered totals
+  const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
+  const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
+
+  // Top 5 expenses and income
+  const topExpenses = useMemo(() => {
+    return [...gastos]
+      .sort((a, b) => b.importe - a.importe)
+      .slice(0, 5);
+  }, [gastos]);
+
+  const topIncome = useMemo(() => {
+    return [...ingresos]
+      .sort((a, b) => b.importe - a.importe)
+      .slice(0, 5);
+  }, [ingresos]);
+
+  // Group by entity
+  const entityStats = useMemo(() => {
+    const stats = new Map<string, { income: number; expenses: number }>();
+
+    ingresos.forEach(t => {
+      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+      stats.set(t.entidad, { ...current, income: current.income + t.importe });
+    });
+
+    gastos.forEach(t => {
+      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+      stats.set(t.entidad, { ...current, expenses: current.expenses + t.importe });
+    });
+
+    return Array.from(stats.entries())
+      .map(([name, data]) => ({
+        name,
+        ingresos: data.income,
+        gastos: data.expenses,
+        balance: data.income - data.expenses
+      }))
+      .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
+      .slice(0, 10);
+  }, [ingresos, gastos]);
+
+  const clearFilters = () => {
+    setFilterCategory('todas');
+    setFilterType('todas');
+  };
+
+  const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas';
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
-          <p className="text-muted-foreground">Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
+            <p className="text-muted-foreground text-sm">Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              className="w-full sm:w-auto"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filtros
+              {hasActiveFilters && <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span>}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={fetchFinanceData}
+              disabled={isLoading}
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+              Actualizar
+            </Button>
+            <Button className="w-full sm:w-auto">
+              <Calendar className="h-4 w-4 mr-2" />
+              Exportar
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={fetchFinanceData}
-            disabled={isLoading}
-            className="w-full sm:w-auto"
-          >
-            <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-            Actualizar
-          </Button>
-          <Button className="w-full sm:w-auto">
-            <Calendar className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
+
+        {/* Filter Panel */}
+        {showFilters && (
+          <div className="rounded-xl border border-border bg-card p-4 animate-in slide-in-from-top-2">
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+              <div className="flex-1 w-full sm:w-auto">
+                <label className="text-sm font-medium text-foreground mb-2 block">Tipo</label>
+                <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Seleccionar tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todas">Todas las transacciones</SelectItem>
+                    <SelectItem value="ingresos">Solo ingresos</SelectItem>
+                    <SelectItem value="gastos">Solo gastos</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-1 w-full sm:w-auto">
+                <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Seleccionar categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allCategories.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {cat === 'todas' ? 'Todas las categorías' : cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                  className="mt-0 sm:mt-6"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Limpiar
+                </Button>
+              )}
+            </div>
+
+            {hasActiveFilters && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Resultados:</span>
+                    <span className="font-medium text-foreground">
+                      {filteredIngresos.length + filteredGastos.length} transacciones
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Total:</span>
+                    <span className="font-medium text-success">€{filteredTotalIncome.toLocaleString()}</span>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="font-medium text-destructive">€{filteredTotalExpenses.toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}
@@ -286,6 +452,74 @@ export default function Finanzas() {
         </div>
       </div>
 
+      {/* Additional Charts Row */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Top Transactions */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-2">Top 5 Transacciones</h3>
+          <p className="text-sm text-muted-foreground mb-4">Mayores montos</p>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs font-medium text-success mb-2">INGRESOS</p>
+              <div className="space-y-2">
+                {topIncome.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
+                      <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                    </div>
+                    <span className="text-sm font-bold text-success ml-2 whitespace-nowrap">€{item.importe.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-medium text-destructive mb-2">GASTOS</p>
+              <div className="space-y-2">
+                {topExpenses.slice(0, 3).map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
+                      <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                    </div>
+                    <span className="text-sm font-bold text-destructive ml-2 whitespace-nowrap">€{item.importe.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Balance by Entity */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-2">Balance por Entidad</h3>
+          <p className="text-sm text-muted-foreground mb-4">Top 6 entidades</p>
+
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={entityStats.slice(0, 6)} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`} />
+                <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={80} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--card))',
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '8px',
+                  }}
+                  formatter={(value: number) => `€${value.toLocaleString()}`}
+                />
+                <Legend />
+                <Bar dataKey="ingresos" fill="hsl(var(--success))" name="Ingresos" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="gastos" fill="hsl(var(--destructive))" name="Gastos" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+
       {/* Tablas de Transacciones */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Tabla de Ingresos */}
@@ -293,43 +527,52 @@ export default function Finanzas() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-foreground">Ingresos (Entradas)</h3>
-              <p className="text-sm text-muted-foreground">{ingresos.length} transacciones</p>
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters ? `${filteredIngresos.length} de ${ingresos.length}` : `${ingresos.length}`} transacciones
+              </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
               <TrendingUp className="h-5 w-5 text-success" />
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Fecha</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Categoría</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Entidad</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Importe</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ingresos.length > 0 ? (
-                  ingresos.map((ingreso, index) => (
-                    <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-2 text-foreground whitespace-nowrap">{ingreso.fecha}</td>
-                      <td className="py-3 px-2 text-foreground">{ingreso.descripcion}</td>
-                      <td className="py-3 px-2 text-muted-foreground">{ingreso.categoria}</td>
-                      <td className="py-3 px-2 text-muted-foreground">{ingreso.entidad}</td>
-                      <td className="py-3 px-2 text-right font-medium text-success">€{ingreso.importe.toLocaleString()}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                      No hay ingresos registrados
-                    </td>
+          <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+            <div className="min-w-[600px]">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
+                    <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredIngresos.length > 0 ? (
+                    filteredIngresos.map((ingreso, index) => (
+                      <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
+                        <td className="py-3 px-2 text-foreground">
+                          <div className="max-w-[200px] sm:max-w-none">
+                            <p className="truncate">{ingreso.descripcion}</p>
+                            <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
+                        <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
+                        <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">€{ingreso.importe.toLocaleString()}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        {hasActiveFilters ? 'No hay ingresos con los filtros aplicados' : 'No hay ingresos registrados'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
@@ -338,43 +581,52 @@ export default function Finanzas() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-foreground">Gastos (Salidas)</h3>
-              <p className="text-sm text-muted-foreground">{gastos.length} transacciones</p>
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters ? `${filteredGastos.length} de ${gastos.length}` : `${gastos.length}`} transacciones
+              </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
               <TrendingDown className="h-5 w-5 text-destructive" />
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Fecha</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Categoría</th>
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Entidad</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Importe</th>
-                </tr>
-              </thead>
-              <tbody>
-                {gastos.length > 0 ? (
-                  gastos.map((gasto, index) => (
-                    <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-2 text-foreground whitespace-nowrap">{gasto.fecha}</td>
-                      <td className="py-3 px-2 text-foreground">{gasto.descripcion}</td>
-                      <td className="py-3 px-2 text-muted-foreground">{gasto.categoria}</td>
-                      <td className="py-3 px-2 text-muted-foreground">{gasto.entidad}</td>
-                      <td className="py-3 px-2 text-right font-medium text-destructive">€{gasto.importe.toLocaleString()}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                      No hay gastos registrados
-                    </td>
+          <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+            <div className="min-w-[600px]">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
+                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
+                    <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredGastos.length > 0 ? (
+                    filteredGastos.map((gasto, index) => (
+                      <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                        <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
+                        <td className="py-3 px-2 text-foreground">
+                          <div className="max-w-[200px] sm:max-w-none">
+                            <p className="truncate">{gasto.descripcion}</p>
+                            <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
+                        <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
+                        <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">€{gasto.importe.toLocaleString()}</td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        {hasActiveFilters ? 'No hay gastos con los filtros aplicados' : 'No hay gastos registrados'}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>
