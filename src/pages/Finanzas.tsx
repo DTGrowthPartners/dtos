@@ -18,11 +18,21 @@ interface ExpenseCategory {
   color: string;
 }
 
+interface Transaction {
+  fecha: string;
+  importe: number;
+  descripcion: string;
+  categoria: string;
+  entidad: string;
+}
+
 interface FinanceResponse {
   financeByMonth: FinanceData[];
   expenseCategories: ExpenseCategory[];
   totalIncome: number;
   totalExpenses: number;
+  ingresos: Transaction[];
+  gastos: Transaction[];
 }
 
 export default function Finanzas() {
@@ -30,6 +40,8 @@ export default function Finanzas() {
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
+  const [ingresos, setIngresos] = useState<Transaction[]>([]);
+  const [gastos, setGastos] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
 
@@ -46,6 +58,8 @@ export default function Finanzas() {
       setExpenseCategories(data.expenseCategories);
       setTotalIncome(data.totalIncome);
       setTotalExpenses(data.totalExpenses);
+      setIngresos(data.ingresos || []);
+      setGastos(data.gastos || []);
     } catch (error) {
       console.error('Error fetching finance data:', error);
       toast({
@@ -269,6 +283,99 @@ export default function Finanzas() {
               No hay categorías de gastos
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Tablas de Transacciones */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Tabla de Ingresos */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold text-foreground">Ingresos (Entradas)</h3>
+              <p className="text-sm text-muted-foreground">{ingresos.length} transacciones</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+              <TrendingUp className="h-5 w-5 text-success" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Fecha</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Categoría</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Entidad</th>
+                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ingresos.length > 0 ? (
+                  ingresos.map((ingreso, index) => (
+                    <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                      <td className="py-3 px-2 text-foreground whitespace-nowrap">{ingreso.fecha}</td>
+                      <td className="py-3 px-2 text-foreground">{ingreso.descripcion}</td>
+                      <td className="py-3 px-2 text-muted-foreground">{ingreso.categoria}</td>
+                      <td className="py-3 px-2 text-muted-foreground">{ingreso.entidad}</td>
+                      <td className="py-3 px-2 text-right font-medium text-success">€{ingreso.importe.toLocaleString()}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No hay ingresos registrados
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Tabla de Gastos */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="font-semibold text-foreground">Gastos (Salidas)</h3>
+              <p className="text-sm text-muted-foreground">{gastos.length} transacciones</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
+              <TrendingDown className="h-5 w-5 text-destructive" />
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Fecha</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Categoría</th>
+                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Entidad</th>
+                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Importe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gastos.length > 0 ? (
+                  gastos.map((gasto, index) => (
+                    <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                      <td className="py-3 px-2 text-foreground whitespace-nowrap">{gasto.fecha}</td>
+                      <td className="py-3 px-2 text-foreground">{gasto.descripcion}</td>
+                      <td className="py-3 px-2 text-muted-foreground">{gasto.categoria}</td>
+                      <td className="py-3 px-2 text-muted-foreground">{gasto.entidad}</td>
+                      <td className="py-3 px-2 text-right font-medium text-destructive">€{gasto.importe.toLocaleString()}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                      No hay gastos registrados
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
