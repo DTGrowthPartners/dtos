@@ -9,6 +9,7 @@ import clientRoutes from './routes/clients.routes';
 import serviceRoutes from './routes/services.routes';
 import taskRoutes from './routes/tasks.routes';
 import invoiceRoutes from './routes/invoice.router';
+import financeRoutes from './routes/finance.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -39,6 +40,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/finance', financeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
