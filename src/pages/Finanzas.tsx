@@ -76,18 +76,31 @@ export default function Finanzas() {
       return dateStr;
     }
 
-    // Try parsing different date formats
-    // Format: DD/MM/YYYY or D/M/YYYY
-    const ddmmyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (ddmmyyyyMatch) {
-      const [, day, month, year] = ddmmyyyyMatch;
-      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    // Try parsing DD/MM/YYYY format (most common in Spanish-speaking countries)
+    const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (slashMatch) {
+      const [, part1, part2, year] = slashMatch;
+      const num1 = parseInt(part1);
+      const num2 = parseInt(part2);
+
+      // If first part is > 12, it must be day (DD/MM/YYYY format)
+      if (num1 > 12) {
+        return `${year}-${part2.padStart(2, '0')}-${part1.padStart(2, '0')}`;
+      }
+      // If second part is > 12, it must be DD/MM/YYYY format
+      else if (num2 > 12) {
+        return `${year}-${part1.padStart(2, '0')}-${part2.padStart(2, '0')}`;
+      }
+      // Ambiguous case - assume DD/MM/YYYY format (common in Spanish/Latin America)
+      else {
+        return `${year}-${part2.padStart(2, '0')}-${part1.padStart(2, '0')}`;
+      }
     }
 
-    // Format: MM/DD/YYYY or M/D/YYYY
-    const mmddyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (mmddyyyyMatch) {
-      const [, month, day, year] = mmddyyyyMatch;
+    // Try parsing YYYY/MM/DD format
+    const yearFirstMatch = dateStr.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (yearFirstMatch) {
+      const [, year, month, day] = yearFirstMatch;
       return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
     }
 
@@ -152,6 +165,19 @@ export default function Finanzas() {
       // Date range filter with normalization
       if (filterDateFrom || filterDateTo) {
         const normalizedTransactionDate = normalizeDate(t.fecha);
+
+        // Debug logging
+        if (filterDateFrom && filterDateTo) {
+          console.log('Filtering:', {
+            originalDate: t.fecha,
+            normalizedDate: normalizedTransactionDate,
+            filterFrom: filterDateFrom,
+            filterTo: filterDateTo,
+            fromCheck: normalizedTransactionDate >= filterDateFrom,
+            toCheck: normalizedTransactionDate <= filterDateTo,
+          });
+        }
+
         if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
         if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
       }
@@ -179,6 +205,19 @@ export default function Finanzas() {
       // Date range filter with normalization
       if (filterDateFrom || filterDateTo) {
         const normalizedTransactionDate = normalizeDate(t.fecha);
+
+        // Debug logging
+        if (filterDateFrom && filterDateTo) {
+          console.log('Filtering Gastos:', {
+            originalDate: t.fecha,
+            normalizedDate: normalizedTransactionDate,
+            filterFrom: filterDateFrom,
+            filterTo: filterDateTo,
+            fromCheck: normalizedTransactionDate >= filterDateFrom,
+            toCheck: normalizedTransactionDate <= filterDateTo,
+          });
+        }
+
         if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
         if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
       }
