@@ -113,8 +113,28 @@ export class GoogleSheetsService {
 
   private parseAmount(value: any): number {
     if (typeof value === 'number') return value;
-    const cleaned = String(value).replace(/[^0-9.-]/g, '');
-    return parseFloat(cleaned) || 0;
+
+    let strValue = String(value).trim();
+
+    // Remove currency symbols and spaces
+    strValue = strValue.replace(/[$€COP\s]/gi, '');
+
+    // Detect format: Spanish/Colombian (1.234.567,89) vs US (1,234,567.89)
+    const hasCommaDecimal = /,\d{1,2}$/.test(strValue); // Ends with comma + 1-2 digits
+    const hasDotThousands = /\.\d{3}/.test(strValue); // Has dot followed by 3 digits
+
+    if (hasCommaDecimal || hasDotThousands) {
+      // Spanish/Colombian format: 1.234.567,89
+      // Remove dots (thousand separators), replace comma with dot (decimal)
+      strValue = strValue.replace(/\./g, '').replace(',', '.');
+    } else {
+      // US format or simple number: just remove commas
+      strValue = strValue.replace(/,/g, '');
+    }
+
+    const result = parseFloat(strValue) || 0;
+    console.log(`parseAmount: "${value}" -> ${result}`);
+    return result;
   }
 
   private generateMonthlyData(totalIncome: number, totalExpenses: number): FinanceData[] {

@@ -57,7 +57,111 @@ export default function Finanzas() {
   const [filterType, setFilterType] = useState<'todas' | 'ingresos' | 'gastos'>('todas');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
+  const [filterDatePreset, setFilterDatePreset] = useState<string>('todas');
   const [showFilters, setShowFilters] = useState(false);
+
+  // Date preset options (Shopify style)
+  const datePresets = [
+    { value: 'todas', label: 'Todas las fechas' },
+    { value: 'today', label: 'Hoy' },
+    { value: 'yesterday', label: 'Ayer' },
+    { value: 'last7days', label: 'Últimos 7 días' },
+    { value: 'last30days', label: 'Últimos 30 días' },
+    { value: 'thisMonth', label: 'Este mes' },
+    { value: 'lastMonth', label: 'Mes anterior' },
+    { value: 'thisQuarter', label: 'Este trimestre' },
+    { value: 'lastQuarter', label: 'Trimestre anterior' },
+    { value: 'thisYear', label: 'Este año' },
+    { value: 'lastYear', label: 'Año anterior' },
+    { value: 'custom', label: 'Personalizado' },
+  ];
+
+  // Apply date preset
+  const applyDatePreset = (preset: string) => {
+    setFilterDatePreset(preset);
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    switch (preset) {
+      case 'todas':
+        setFilterDateFrom('');
+        setFilterDateTo('');
+        break;
+      case 'today':
+        setFilterDateFrom(todayStr);
+        setFilterDateTo(todayStr);
+        break;
+      case 'yesterday': {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        setFilterDateFrom(yesterdayStr);
+        setFilterDateTo(yesterdayStr);
+        break;
+      }
+      case 'last7days': {
+        const last7 = new Date(today);
+        last7.setDate(last7.getDate() - 7);
+        setFilterDateFrom(last7.toISOString().split('T')[0]);
+        setFilterDateTo(todayStr);
+        break;
+      }
+      case 'last30days': {
+        const last30 = new Date(today);
+        last30.setDate(last30.getDate() - 30);
+        setFilterDateFrom(last30.toISOString().split('T')[0]);
+        setFilterDateTo(todayStr);
+        break;
+      }
+      case 'thisMonth': {
+        const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        setFilterDateFrom(firstDayMonth.toISOString().split('T')[0]);
+        setFilterDateTo(todayStr);
+        break;
+      }
+      case 'lastMonth': {
+        const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        setFilterDateFrom(firstDayLastMonth.toISOString().split('T')[0]);
+        setFilterDateTo(lastDayLastMonth.toISOString().split('T')[0]);
+        break;
+      }
+      case 'thisQuarter': {
+        const quarter = Math.floor(today.getMonth() / 3);
+        const firstDayQuarter = new Date(today.getFullYear(), quarter * 3, 1);
+        setFilterDateFrom(firstDayQuarter.toISOString().split('T')[0]);
+        setFilterDateTo(todayStr);
+        break;
+      }
+      case 'lastQuarter': {
+        const currentQuarter = Math.floor(today.getMonth() / 3);
+        const lastQuarter = currentQuarter - 1;
+        const year = lastQuarter < 0 ? today.getFullYear() - 1 : today.getFullYear();
+        const adjustedQuarter = lastQuarter < 0 ? 3 : lastQuarter;
+        const firstDayLastQuarter = new Date(year, adjustedQuarter * 3, 1);
+        const lastDayLastQuarter = new Date(year, adjustedQuarter * 3 + 3, 0);
+        setFilterDateFrom(firstDayLastQuarter.toISOString().split('T')[0]);
+        setFilterDateTo(lastDayLastQuarter.toISOString().split('T')[0]);
+        break;
+      }
+      case 'thisYear': {
+        const firstDayYear = new Date(today.getFullYear(), 0, 1);
+        setFilterDateFrom(firstDayYear.toISOString().split('T')[0]);
+        setFilterDateTo(todayStr);
+        break;
+      }
+      case 'lastYear': {
+        const firstDayLastYear = new Date(today.getFullYear() - 1, 0, 1);
+        const lastDayLastYear = new Date(today.getFullYear() - 1, 11, 31);
+        setFilterDateFrom(firstDayLastYear.toISOString().split('T')[0]);
+        setFilterDateTo(lastDayLastYear.toISOString().split('T')[0]);
+        break;
+      }
+      case 'custom':
+        // Keep current dates for custom
+        break;
+    }
+  };
 
   // Table filters and collapse states
   const [showIngresosTable, setShowIngresosTable] = useState(false);
@@ -165,19 +269,6 @@ export default function Finanzas() {
       // Date range filter with normalization
       if (filterDateFrom || filterDateTo) {
         const normalizedTransactionDate = normalizeDate(t.fecha);
-
-        // Debug logging
-        if (filterDateFrom && filterDateTo) {
-          console.log('Filtering:', {
-            originalDate: t.fecha,
-            normalizedDate: normalizedTransactionDate,
-            filterFrom: filterDateFrom,
-            filterTo: filterDateTo,
-            fromCheck: normalizedTransactionDate >= filterDateFrom,
-            toCheck: normalizedTransactionDate <= filterDateTo,
-          });
-        }
-
         if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
         if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
       }
@@ -205,19 +296,6 @@ export default function Finanzas() {
       // Date range filter with normalization
       if (filterDateFrom || filterDateTo) {
         const normalizedTransactionDate = normalizeDate(t.fecha);
-
-        // Debug logging
-        if (filterDateFrom && filterDateTo) {
-          console.log('Filtering Gastos:', {
-            originalDate: t.fecha,
-            normalizedDate: normalizedTransactionDate,
-            filterFrom: filterDateFrom,
-            filterTo: filterDateTo,
-            fromCheck: normalizedTransactionDate >= filterDateFrom,
-            toCheck: normalizedTransactionDate <= filterDateTo,
-          });
-        }
-
         if (filterDateFrom && normalizedTransactionDate < filterDateFrom) return false;
         if (filterDateTo && normalizedTransactionDate > filterDateTo) return false;
       }
@@ -284,9 +362,10 @@ export default function Finanzas() {
     setFilterType('todas');
     setFilterDateFrom('');
     setFilterDateTo('');
+    setFilterDatePreset('todas');
   };
 
-  const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas' || filterDateFrom !== '' || filterDateTo !== '';
+  const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas' || filterDatePreset !== 'todas';
 
   // Calculations that depend on data
   const currentMonth = financeData[financeData.length - 1] || { month: '', income: 0, expenses: 0 };
@@ -352,7 +431,7 @@ export default function Finanzas() {
         {/* Filter Panel */}
         {showFilters && (
           <div className="rounded-xl border border-border bg-card p-4 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
               <div className="w-full">
                 <label className="text-sm font-medium text-foreground mb-2 block">Tipo</label>
                 <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
@@ -384,25 +463,54 @@ export default function Finanzas() {
               </div>
 
               <div className="w-full">
-                <label className="text-sm font-medium text-foreground mb-2 block">Fecha Desde</label>
-                <Input
-                  type="date"
-                  value={filterDateFrom}
-                  onChange={(e) => setFilterDateFrom(e.target.value)}
-                  className="w-full"
-                />
-              </div>
-
-              <div className="w-full">
-                <label className="text-sm font-medium text-foreground mb-2 block">Fecha Hasta</label>
-                <Input
-                  type="date"
-                  value={filterDateTo}
-                  onChange={(e) => setFilterDateTo(e.target.value)}
-                  className="w-full"
-                />
+                <label className="text-sm font-medium text-foreground mb-2 block">Período</label>
+                <Select value={filterDatePreset} onValueChange={applyDatePreset}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Seleccionar período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {datePresets.map((preset) => (
+                      <SelectItem key={preset.value} value={preset.value}>
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {/* Custom date range inputs - only show when "Personalizado" is selected */}
+            {filterDatePreset === 'custom' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-border">
+                <div className="w-full">
+                  <label className="text-sm font-medium text-foreground mb-2 block">Fecha Desde</label>
+                  <Input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+
+                <div className="w-full">
+                  <label className="text-sm font-medium text-foreground mb-2 block">Fecha Hasta</label>
+                  <Input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Show selected date range info */}
+            {filterDatePreset !== 'todas' && filterDateFrom && filterDateTo && (
+              <div className="mt-3 text-sm text-muted-foreground">
+                <Calendar className="h-4 w-4 inline mr-1" />
+                {filterDateFrom} → {filterDateTo}
+              </div>
+            )}
 
             {hasActiveFilters && (
               <div className="mt-4 pt-4 border-t border-border">
