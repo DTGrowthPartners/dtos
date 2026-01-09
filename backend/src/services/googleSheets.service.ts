@@ -141,24 +141,44 @@ export class GoogleSheetsService {
 
     let strValue = String(value).trim();
 
-    // Remove currency symbols and spaces
+    // Remove currency symbols, spaces, and any non-numeric characters except . and ,
     strValue = strValue.replace(/[$€COP\s]/gi, '');
 
-    // Detect format: Spanish/Colombian (1.234.567,89) vs US (1,234,567.89)
-    const hasCommaDecimal = /,\d{1,2}$/.test(strValue); // Ends with comma + 1-2 digits
-    const hasDotThousands = /\.\d{3}/.test(strValue); // Has dot followed by 3 digits
+    console.log(`parseAmount input: "${value}" -> cleaned: "${strValue}"`);
 
-    if (hasCommaDecimal || hasDotThousands) {
-      // Spanish/Colombian format: 1.234.567,89
-      // Remove dots (thousand separators), replace comma with dot (decimal)
-      strValue = strValue.replace(/\./g, '').replace(',', '.');
-    } else {
-      // US format or simple number: just remove commas
-      strValue = strValue.replace(/,/g, '');
+    // Check if it's Colombian format: uses dots as thousand separators
+    // Examples: "1.000.000" or "1.000.000,50"
+    // Pattern: has dots NOT followed by only 1-2 digits at the end (those would be decimals)
+
+    // Count dots and check their positions
+    const dots = (strValue.match(/\./g) || []).length;
+    const hasComma = strValue.includes(',');
+
+    if (dots > 0) {
+      // If there's a comma, it's definitely Colombian format (dots = thousands, comma = decimal)
+      // Example: "1.234.567,89"
+      if (hasComma) {
+        strValue = strValue.replace(/\./g, '').replace(',', '.');
+      } else {
+        // No comma - check if dots are thousand separators
+        // In "1.000.000", dots are followed by exactly 3 digits
+        // In "1.50", dot is decimal
+        const isThousandSeparator = /\.\d{3}(?:\.|$)/.test(strValue) || /^\d{1,3}(\.\d{3})+$/.test(strValue);
+
+        if (isThousandSeparator) {
+          // Colombian format without decimals: "1.000.000" -> "1000000"
+          strValue = strValue.replace(/\./g, '');
+        }
+        // else: it's a decimal like "1.50", keep as is
+      }
+    } else if (hasComma) {
+      // No dots, but has comma - comma is decimal separator
+      // Example: "1000,50" -> "1000.50"
+      strValue = strValue.replace(',', '.');
     }
 
     const result = parseFloat(strValue) || 0;
-    console.log(`parseAmount: "${value}" -> ${result}`);
+    console.log(`parseAmount result: ${result}`);
     return result;
   }
 
