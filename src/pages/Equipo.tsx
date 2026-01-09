@@ -1,28 +1,265 @@
-import { Mail, CheckSquare, Circle, Settings } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Progress } from '@/components/ui/progress';
-import { teamMembers, tasks } from '@/data/mockData';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
+import { authService } from '@/lib/auth';
+import { useToast } from '@/hooks/use-toast';
 
-const roleConfig = {
+interface Role {
+  id: string;
+  name: string;
+  permissions: string[];
+}
+
+interface User {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  roleId: string;
+  firebaseUid?: string;
+  createdAt: string;
+  updatedAt?: string;
+  role: {
+    id: string;
+    name: string;
+    permissions?: string[];
+  };
+}
+
+const roleConfig: Record<string, { label: string; className: string }> = {
   admin: { label: 'Administrador', className: 'bg-primary/10 text-primary border-primary/20' },
   manager: { label: 'Manager', className: 'bg-chart-4/10 text-chart-4 border-chart-4/20' },
+  user: { label: 'Usuario', className: 'bg-success/10 text-success border-success/20' },
   specialist: { label: 'Especialista', className: 'bg-success/10 text-success border-success/20' },
   designer: { label: 'Diseñador', className: 'bg-warning/10 text-warning border-warning/20' },
 };
 
-const statusConfig = {
-  available: { label: 'Disponible', color: 'bg-success' },
-  busy: { label: 'Ocupado', color: 'bg-warning' },
-  away: { label: 'Ausente', color: 'bg-muted-foreground' },
-};
-
 export default function Equipo() {
-  const getTasksForMember = (name: string) => tasks.filter((t) => t.assignee === name);
-  const getCompletedTasks = (name: string) => getTasksForMember(name).filter((t) => t.status === 'completed').length;
-  const getPendingTasks = (name: string) => getTasksForMember(name).filter((t) => t.status !== 'completed').length;
+  const { toast } = useToast();
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Modal states
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Form states
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    firstName: '',
+    lastName: '',
+    roleId: '',
+  });
+
+  useEffect(() => {
+    const currentUser = authService.getUser();
+    setIsAdmin(currentUser?.role === 'admin');
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [usersData, rolesData] = await Promise.all([
+        apiClient.get<User[]>('/api/users'),
+        apiClient.get<Role[]>('/api/users/roles'),
+      ]);
+      setUsers(usersData);
+      setRoles(rolesData);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los usuarios',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      email: '',
+      password: '',
+      firstName: '',
+      lastName: '',
+      roleId: '',
+    });
+  };
+
+  const handleCreate = async () => {
+    if (!formData.email || !formData.firstName || !formData.lastName || !formData.roleId) {
+      toast({
+        title: 'Error',
+        description: 'Todos los campos son requeridos',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await apiClient.post('/api/users', formData);
+      toast({
+        title: 'Usuario creado',
+        description: 'El usuario ha sido creado exitosamente',
+      });
+      setShowCreateModal(false);
+      resetForm();
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo crear el usuario',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!selectedUser) return;
+
+    if (!formData.firstName || !formData.lastName || !formData.roleId) {
+      toast({
+        title: 'Error',
+        description: 'Nombre, apellido y rol son requeridos',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      const updateData: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        roleId: formData.roleId,
+      };
+
+      if (formData.email && formData.email !== selectedUser.email) {
+        updateData.email = formData.email;
+      }
+
+      if (formData.password) {
+        updateData.password = formData.password;
+      }
+
+      await apiClient.put(`/api/users/${selectedUser.id}`, updateData);
+      toast({
+        title: 'Usuario actualizado',
+        description: 'El usuario ha sido actualizado exitosamente',
+      });
+      setShowEditModal(false);
+      setSelectedUser(null);
+      resetForm();
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo actualizar el usuario',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedUser) return;
+
+    try {
+      setIsSaving(true);
+      await apiClient.delete(`/api/users/${selectedUser.id}`);
+      toast({
+        title: 'Usuario eliminado',
+        description: 'El usuario ha sido eliminado exitosamente',
+      });
+      setShowDeleteDialog(false);
+      setSelectedUser(null);
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo eliminar el usuario',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setFormData({
+      email: user.email,
+      password: '',
+      firstName: user.firstName,
+      lastName: user.lastName,
+      roleId: user.roleId,
+    });
+    setShowEditModal(true);
+  };
+
+  const openDeleteDialog = (user: User) => {
+    setSelectedUser(user);
+    setShowDeleteDialog(true);
+  };
+
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName?.charAt(0) || ''}${lastName?.charAt(0) || ''}`.toUpperCase() || 'U';
+  };
+
+  const getRoleDisplay = (roleName: string) => {
+    return roleConfig[roleName] || { label: roleName, className: 'bg-muted text-muted-foreground' };
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -30,100 +267,310 @@ export default function Equipo() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Equipo</h1>
-          <p className="text-muted-foreground">Gestiona los miembros del equipo y su carga de trabajo</p>
+          <p className="text-muted-foreground">Gestiona los miembros del equipo</p>
         </div>
-        <Button className="w-full md:w-auto">
-          <Settings className="h-4 w-4 mr-2" />
-          Configuración
-        </Button>
+        {isAdmin && (
+          <Button onClick={() => setShowCreateModal(true)} className="w-full md:w-auto">
+            <UserPlus className="h-4 w-4 mr-2" />
+            Nuevo Usuario
+          </Button>
+        )}
       </div>
 
       {/* Team Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <div className="stat-card">
-          <p className="text-sm text-muted-foreground">Miembros Activos</p>
-          <p className="text-3xl font-bold text-foreground mt-2">{teamMembers.length}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Usuarios</p>
+              <p className="text-2xl font-bold text-foreground">{users.length}</p>
+            </div>
+          </div>
         </div>
         <div className="stat-card">
-          <p className="text-sm text-muted-foreground">Tareas Totales</p>
-          <p className="text-3xl font-bold text-foreground mt-2">{tasks.length}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+              <Users className="h-5 w-5 text-success" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Administradores</p>
+              <p className="text-2xl font-bold text-foreground">
+                {users.filter((u) => u.role.name === 'admin').length}
+              </p>
+            </div>
+          </div>
         </div>
         <div className="stat-card">
-          <p className="text-sm text-muted-foreground">En Progreso</p>
-          <p className="text-3xl font-bold text-foreground mt-2">{tasks.filter((t) => t.status === 'in_progress').length}</p>
-        </div>
-        <div className="stat-card">
-          <p className="text-sm text-muted-foreground">Completadas</p>
-          <p className="text-3xl font-bold text-success mt-2">{tasks.filter((t) => t.status === 'completed').length}</p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-chart-4/10">
+              <Users className="h-5 w-5 text-chart-4" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Usuarios</p>
+              <p className="text-2xl font-bold text-foreground">
+                {users.filter((u) => u.role.name !== 'admin').length}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Team Members */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {teamMembers.map((member) => {
-          const role = roleConfig[member.role];
-          const status = statusConfig[member.status];
-          const memberTasks = getTasksForMember(member.name);
-          const completedCount = getCompletedTasks(member.name);
-          const pendingCount = getPendingTasks(member.name);
-          const completionRate = memberTasks.length > 0 ? (completedCount / memberTasks.length) * 100 : 0;
+      {/* Team Members Grid */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {users.map((user) => {
+          const roleDisplay = getRoleDisplay(user.role.name);
 
           return (
-            <div key={member.id} className="rounded-xl border border-border bg-card p-6 hover:shadow-md transition-shadow">
+            <div
+              key={user.id}
+              className="rounded-xl border border-border bg-card p-6 hover:shadow-md transition-shadow"
+            >
               <div className="flex items-start gap-4">
-                <div className="relative">
-                  <Avatar className="h-14 w-14">
-                    <AvatarFallback className="text-lg bg-primary/10 text-primary font-semibold">
-                      {member.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className={cn('absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-card', status.color)} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{member.name}</h3>
-                      <Badge variant="outline" className={cn('text-xs mt-1', role.className)}>
-                        {role.label}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                      <Circle className={cn('h-2 w-2 fill-current', status.color.replace('bg-', 'text-'))} />
-                      <span>{status.label}</span>
-                    </div>
-                  </div>
+                <Avatar className="h-14 w-14">
+                  <AvatarFallback className="text-lg bg-primary/10 text-primary font-semibold">
+                    {getInitials(user.firstName, user.lastName)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-foreground truncate">
+                    {user.firstName} {user.lastName}
+                  </h3>
+                  <Badge variant="outline" className={cn('text-xs mt-1', roleDisplay.className)}>
+                    {roleDisplay.label}
+                  </Badge>
                   <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                    <Mail className="h-4 w-4" />
-                    <span>{member.email}</span>
+                    <Mail className="h-4 w-4 flex-shrink-0" />
+                    <span className="truncate">{user.email}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-6 pt-4 border-t border-border">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-muted-foreground">Carga de trabajo</span>
-                  <span className="text-sm font-medium text-foreground">{pendingCount} tareas pendientes</span>
+              {isAdmin && (
+                <div className="mt-4 pt-4 border-t border-border flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => openEditModal(user)}
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Editar
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => openDeleteDialog(user)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Progress value={completionRate} className="h-2" />
-                <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
-                  <span>{completedCount} completadas</span>
-                  <span>{completionRate.toFixed(0)}% completado</span>
-                </div>
-              </div>
-
-              <div className="mt-4 flex gap-2">
-                <Button variant="outline" size="sm" className="flex-1">
-                  <CheckSquare className="h-4 w-4 mr-2" />
-                  Ver Tareas
-                </Button>
-                <Button variant="ghost" size="sm">
-                  Perfil
-                </Button>
-              </div>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Create User Modal */}
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo Usuario</DialogTitle>
+            <DialogDescription>Crea una nueva cuenta de usuario</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="create-firstName">Nombre</Label>
+                <Input
+                  id="create-firstName"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  placeholder="Nombre"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-lastName">Apellido</Label>
+                <Input
+                  id="create-lastName"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  placeholder="Apellido"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-email">Correo electronico</Label>
+              <Input
+                id="create-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-password">Contraseña</Label>
+              <Input
+                id="create-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Contraseña"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-role">Rol</Label>
+              <Select
+                value={formData.roleId}
+                onValueChange={(value) => setFormData({ ...formData, roleId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {getRoleDisplay(role.name).label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreate} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Crear Usuario
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Usuario</DialogTitle>
+            <DialogDescription>Modifica los datos del usuario</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-firstName">Nombre</Label>
+                <Input
+                  id="edit-firstName"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  placeholder="Nombre"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-lastName">Apellido</Label>
+                <Input
+                  id="edit-lastName"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                  placeholder="Apellido"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-email">Correo electronico</Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-password">Nueva Contraseña (opcional)</Label>
+              <Input
+                id="edit-password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Dejar vacio para mantener"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-role">Rol</Label>
+              <Select
+                value={formData.roleId}
+                onValueChange={(value) => setFormData({ ...formData, roleId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona un rol" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {getRoleDisplay(role.name).label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEdit} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar Cambios'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar usuario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta accion no se puede deshacer. Se eliminara permanentemente la cuenta de{' '}
+              <strong>
+                {selectedUser?.firstName} {selectedUser?.lastName}
+              </strong>
+              .
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isSaving ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

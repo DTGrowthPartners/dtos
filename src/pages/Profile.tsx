@@ -66,7 +66,7 @@ export default function Profile() {
     try {
       setIsSaving(true);
 
-      const updatedUser = await apiClient.put<{ user: typeof user }>('/api/users/profile', {
+      const updatedUser = await apiClient.put<{ user: typeof user }>('/api/users/profile/me', {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         photoUrl: photoUrl,
