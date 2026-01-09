@@ -13,7 +13,7 @@ router.use(authMiddleware);
 // Update own profile (any authenticated user) - must be before /:id routes
 router.put('/profile/me', async (req, res) => {
   try {
-    const userId = req.user?.id;
+    const userId = req.user?.userId;
     const { firstName, lastName } = req.body;
 
     if (!userId) {
@@ -264,7 +264,7 @@ router.delete('/:id', roleMiddleware(['admin']), async (req, res) => {
     const currentUser = req.user;
 
     // Prevent self-deletion
-    if (currentUser?.id === id) {
+    if (currentUser?.userId === id) {
       return res.status(400).json({ message: 'No puedes eliminar tu propia cuenta' });
     }
 
