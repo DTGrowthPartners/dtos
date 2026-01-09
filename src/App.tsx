@@ -17,6 +17,7 @@ import Equipo from "@/pages/Equipo";
 import Productos from "@/pages/Productos";
 import Finanzas from "@/pages/Finanzas";
 import CuentasCobro from "@/pages/CuentasCobro";
+import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import NotFound from "@/pages/NotFound";
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="/productos" element={<Productos />} />
               <Route path="/finanzas" element={<Finanzas />} />
               <Route path="/cuentas-cobro" element={<CuentasCobro />} />
+              <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

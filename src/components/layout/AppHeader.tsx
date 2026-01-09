@@ -27,6 +27,7 @@ const pathNames: Record<string, string> = {
   '/equipo': 'Equipo',
   '/productos': 'Productos DT Cloud Hub',
   '/finanzas': 'Finanzas',
+  '/perfil': 'Mi Perfil',
 };
 
 export function AppHeader() {
@@ -163,8 +164,10 @@ export function AppHeader() {
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>Mi Cuenta</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">Perfil</DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer">Configuración</DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer" onClick={() => navigate('/perfil')}>
+              <User className="mr-2 h-4 w-4" />
+              Perfil
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               className="cursor-pointer text-destructive focus:text-destructive"

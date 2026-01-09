@@ -33,7 +33,7 @@ const navItems: NavItem[] = [
   { title: 'Clientes', path: '/clientes', icon: Users },
   { title: 'Servicios', path: '/servicios', icon: Briefcase },
   { title: 'Campañas', path: '/campanas', icon: Target },
-  { title: 'Tareas', path: '/tareas', icon: CheckSquare },
+  // { title: 'Tareas', path: '/tareas', icon: CheckSquare }, // Temporalmente oculto
   { title: 'Mis Tareas', path: '/mis-tareas', icon: ClipboardCheck },
   { title: 'Reportes', path: '/reportes', icon: FileText },
   { title: 'Equipo', path: '/equipo', icon: UserCog },

@@ -1,22 +1,73 @@
+import { useState, useEffect } from 'react';
 import { DollarSign, Users, CheckSquare, Target, AlertTriangle } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { TasksToday } from '@/components/dashboard/TasksToday';
 import { QuickAccess } from '@/components/dashboard/QuickAccess';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { CampaignOverview } from '@/components/dashboard/CampaignOverview';
-import { clients, tasks, campaigns, financeData, notifications } from '@/data/mockData';
+import { campaigns, notifications } from '@/data/mockData';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { authService } from '@/lib/auth';
+import { apiClient } from '@/lib/api';
+
+interface Client {
+  id: string;
+  name: string;
+  status: string;
+}
+
+interface Task {
+  id: string;
+  status: string;
+}
+
+interface FinanceData {
+  totalIncome: number;
+  totalExpenses: number;
+}
 
 export default function Dashboard() {
   const user = authService.getUser();
-  const activeClients = clients.filter((c) => c.status === 'active').length;
-  const pendingTasks = tasks.filter((t) => t.status !== 'completed').length;
-  const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
-  const currentMonthIncome = financeData[financeData.length - 1].income;
-  const previousMonthIncome = financeData[financeData.length - 2].income;
-  const incomeGrowth = ((currentMonthIncome - previousMonthIncome) / previousMonthIncome) * 100;
+  const [activeClients, setActiveClients] = useState(0);
+  const [totalClients, setTotalClients] = useState(0);
+  const [pendingTasks, setPendingTasks] = useState(0);
+  const [monthlyIncome, setMonthlyIncome] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        setIsLoading(true);
+
+        // Fetch all data in parallel
+        const [clientsData, tasksData, financeData] = await Promise.all([
+          apiClient.get<Client[]>('/api/clients').catch(() => []),
+          apiClient.get<Task[]>('/api/tasks').catch(() => []),
+          apiClient.get<FinanceData>('/api/finance/data').catch(() => ({ totalIncome: 0, totalExpenses: 0 })),
+        ]);
+
+        // Process clients
+        const active = clientsData.filter((c) => c.status === 'active').length;
+        setActiveClients(active);
+        setTotalClients(clientsData.length);
+
+        // Process tasks
+        const pending = tasksData.filter((t) => t.status !== 'completed').length;
+        setPendingTasks(pending);
+
+        // Process finance
+        setMonthlyIncome(financeData.totalIncome || 0);
+      } catch (error) {
+        console.error('Error fetching dashboard data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
   const urgentNotifications = notifications.filter((n) => n.type === 'alert');
 
   return (
@@ -44,21 +95,20 @@ export default function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Ingresos del Mes"
-          value={`€${currentMonthIncome.toLocaleString()}`}
+          value={isLoading ? '...' : `$${monthlyIncome.toLocaleString()}`}
           icon={DollarSign}
-          trend={{ value: incomeGrowth, isPositive: incomeGrowth > 0 }}
           variant="primary"
         />
         <StatCard
           title="Clientes Activos"
-          value={activeClients}
-          subtitle={`de ${clients.length} totales`}
+          value={isLoading ? '...' : activeClients}
+          subtitle={`de ${totalClients} totales`}
           icon={Users}
           variant="success"
         />
         <StatCard
           title="Tareas Pendientes"
-          value={pendingTasks}
+          value={isLoading ? '...' : pendingTasks}
           subtitle="para esta semana"
           icon={CheckSquare}
           variant="warning"

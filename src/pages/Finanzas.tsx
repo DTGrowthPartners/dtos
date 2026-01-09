@@ -59,7 +59,7 @@ export default function Finanzas() {
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterDatePreset, setFilterDatePreset] = useState<string>('todas');
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
 
   // Date preset options (Shopify style)
   const datePresets = [
@@ -379,8 +379,11 @@ export default function Finanzas() {
     ? ((currentMonth.expenses - previousMonth.expenses) / previousMonth.expenses) * 100
     : 0;
 
-  const netProfit = totalIncome - totalExpenses;
-  const profitMargin = totalIncome > 0 ? (netProfit / totalIncome) * 100 : 0;
+  // Use filtered totals for display
+  const displayIncome = hasActiveFilters ? filteredTotalIncome : totalIncome;
+  const displayExpenses = hasActiveFilters ? filteredTotalExpenses : totalExpenses;
+  const netProfit = displayIncome - displayExpenses;
+  const profitMargin = displayIncome > 0 ? (netProfit / displayIncome) * 100 : 0;
 
   // Loading state check AFTER all hooks
   if (isLoading) {
@@ -421,10 +424,6 @@ export default function Finanzas() {
             >
               <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
               Actualizar
-            </Button>
-            <Button className="w-full sm:w-auto">
-              <Calendar className="h-4 w-4 mr-2" />
-              Exportar
             </Button>
           </div>
         </div>
@@ -514,35 +513,75 @@ export default function Finanzas() {
             )}
 
             {hasActiveFilters && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="flex flex-wrap gap-4 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Resultados:</span>
-                    <span className="font-medium text-foreground">
-                      {filteredIngresos.length + filteredGastos.length} transacciones
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Total:</span>
-                    <span className="font-medium text-success">${filteredTotalIncome.toLocaleString()}</span>
-                    <span className="text-muted-foreground">/</span>
-                    <span className="font-medium text-destructive">${filteredTotalExpenses.toLocaleString()}</span>
-                  </div>
-                </div>
-                <div className="flex justify-end mt-2">
-                  <Button
-                    variant="ghost"
-                    onClick={clearFilters}
-                    size="sm"
-                  >
-                    <X className="h-4 w-4 mr-2" />
-                    Limpiar filtros
-                  </Button>
-                </div>
+              <div className="mt-4 pt-4 border-t border-border flex justify-end">
+                <Button
+                  variant="ghost"
+                  onClick={clearFilters}
+                  size="sm"
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Limpiar filtros
+                </Button>
               </div>
             )}
           </div>
         )}
+      </div>
+
+      {/* Quick Filter Buttons */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <button
+          onClick={() => applyDatePreset('today')}
+          className={cn(
+            "p-4 rounded-xl border transition-all hover:shadow-md",
+            filterDatePreset === 'today'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
+          <p className="text-lg font-bold text-foreground mt-1">
+            {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+          </p>
+        </button>
+        <button
+          onClick={() => applyDatePreset('last7days')}
+          className={cn(
+            "p-4 rounded-xl border transition-all hover:shadow-md",
+            filterDatePreset === 'last7days'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Esta Semana</p>
+          <p className="text-lg font-bold text-foreground mt-1">7 dias</p>
+        </button>
+        <button
+          onClick={() => applyDatePreset('thisMonth')}
+          className={cn(
+            "p-4 rounded-xl border transition-all hover:shadow-md",
+            filterDatePreset === 'thisMonth'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Mes</p>
+          <p className="text-lg font-bold text-foreground mt-1">
+            {new Date().toLocaleDateString('es-ES', { month: 'short' })}
+          </p>
+        </button>
+        <button
+          onClick={() => applyDatePreset('thisYear')}
+          className={cn(
+            "p-4 rounded-xl border transition-all hover:shadow-md",
+            filterDatePreset === 'thisYear'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Ano</p>
+          <p className="text-lg font-bold text-foreground mt-1">{new Date().getFullYear()}</p>
+        </button>
       </div>
 
       {/* Stats Grid */}
@@ -550,13 +589,14 @@ export default function Finanzas() {
         <div className="stat-card">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Ingresos Totales</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${totalIncome.toLocaleString()}</p>
-              {incomeGrowth !== 0 && (
-                <div className={cn('flex items-center gap-1 mt-2 text-sm', incomeGrowth >= 0 ? 'text-success' : 'text-destructive')}>
-                  {incomeGrowth >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                  <span>{Math.abs(incomeGrowth).toFixed(1)}%</span>
-                </div>
+              <p className="text-sm text-muted-foreground">
+                Ingresos {hasActiveFilters ? '(Filtrado)' : 'Totales'}
+              </p>
+              <p className="text-2xl font-bold text-foreground mt-1">${displayIncome.toLocaleString()}</p>
+              {hasActiveFilters && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total: ${totalIncome.toLocaleString()}
+                </p>
               )}
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
@@ -568,13 +608,14 @@ export default function Finanzas() {
         <div className="stat-card">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Gastos Totales</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${totalExpenses.toLocaleString()}</p>
-              {expensesGrowth !== 0 && (
-                <div className={cn('flex items-center gap-1 mt-2 text-sm', expensesGrowth <= 0 ? 'text-success' : 'text-destructive')}>
-                  {expensesGrowth >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
-                  <span>{Math.abs(expensesGrowth).toFixed(1)}%</span>
-                </div>
+              <p className="text-sm text-muted-foreground">
+                Gastos {hasActiveFilters ? '(Filtrado)' : 'Totales'}
+              </p>
+              <p className="text-2xl font-bold text-foreground mt-1">${displayExpenses.toLocaleString()}</p>
+              {hasActiveFilters && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Total: ${totalExpenses.toLocaleString()}
+                </p>
               )}
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
@@ -586,9 +627,15 @@ export default function Finanzas() {
         <div className="stat-card">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Beneficio Neto</p>
-              <p className="text-2xl font-bold text-foreground mt-1">${netProfit.toLocaleString()}</p>
-              <p className="text-sm text-muted-foreground mt-2">{profitMargin.toFixed(1)}% margen</p>
+              <p className="text-sm text-muted-foreground">
+                Beneficio Neto {hasActiveFilters ? '(Filtrado)' : ''}
+              </p>
+              <p className={cn("text-2xl font-bold mt-1", netProfit >= 0 ? "text-success" : "text-destructive")}>
+                ${netProfit.toLocaleString()}
+              </p>
+              <p className={cn("text-sm mt-2", profitMargin >= 0 ? "text-success" : "text-destructive")}>
+                {profitMargin.toFixed(1)}% margen
+              </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
               <DollarSign className="h-5 w-5 text-primary" />
@@ -599,9 +646,19 @@ export default function Finanzas() {
         <div className="stat-card">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-sm text-muted-foreground">Categorías</p>
-              <p className="text-2xl font-bold text-foreground mt-1">{expenseCategories.length}</p>
-              <p className="text-sm text-muted-foreground mt-2">de gastos</p>
+              <p className="text-sm text-muted-foreground">Transacciones</p>
+              <p className="text-2xl font-bold text-foreground mt-1">
+                {hasActiveFilters
+                  ? filteredIngresos.length + filteredGastos.length
+                  : ingresos.length + gastos.length
+                }
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                {hasActiveFilters
+                  ? `${filteredIngresos.length} ing. / ${filteredGastos.length} gas.`
+                  : `${ingresos.length} ing. / ${gastos.length} gas.`
+                }
+              </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
               <CreditCard className="h-5 w-5 text-warning" />
