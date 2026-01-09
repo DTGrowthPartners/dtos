@@ -31,6 +31,7 @@ interface Transaction {
   importe: number;
   descripcion: string;
   categoria: string;
+  cuenta: string;
   entidad: string;
 }
 

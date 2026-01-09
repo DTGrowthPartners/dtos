@@ -9,6 +9,7 @@ interface TransactionRow {
   importe: number;
   descripcion: string;
   categoria: string;
+  cuenta: string;
   entidad: string;
 }
 
@@ -45,41 +46,45 @@ export class GoogleSheetsService {
   }> {
     try {
 
-      // Leer hoja de Entradas (Ingresos)
+      // Leer hoja de Entradas (Ingresos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:E',
+        range: 'Entradas!A2:F',
       });
 
-      // Leer hoja de Salidas (Gastos)
+      // Leer hoja de Salidas (Gastos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
       const expensesResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A2:E',
+        range: 'Salidas!A2:F',
       });
 
       const incomeRows = incomeResponse.data.values || [];
       const expensesRows = expensesResponse.data.values || [];
 
       // Parsear ingresos
+      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad
       const ingresos: TransactionRow[] = incomeRows
-        .filter((row: any[]) => row[1]) // check importe
+        .filter((row: any[]) => row[1]) // check importe exists
         .map((row: any[]) => ({
-          fecha: String(row[0] || ''),
+          fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
           categoria: String(row[3] || ''),
-          entidad: String(row[4] || ''),
+          cuenta: String(row[4] || ''),
+          entidad: String(row[5] || ''),
         }));
 
       // Parsear gastos
+      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad
       const gastos: TransactionRow[] = expensesRows
-        .filter((row: any[]) => row[1]) // check importe
+        .filter((row: any[]) => row[1]) // check importe exists
         .map((row: any[]) => ({
-          fecha: String(row[0] || ''),
+          fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
           categoria: String(row[3] || ''),
-          entidad: String(row[4] || ''),
+          cuenta: String(row[4] || ''),
+          entidad: String(row[5] || ''),
         }));
 
       const totalIncome = ingresos.reduce((sum, item) => sum + item.importe, 0);
@@ -109,6 +114,26 @@ export class GoogleSheetsService {
       console.error('Error fetching Google Sheets data:', error);
       throw new Error('No se pudieron cargar los datos de Google Sheets');
     }
+  }
+
+  private parseDate(value: string | number | null | undefined): string {
+    if (!value) return '';
+
+    let dateStr = String(value).trim();
+
+    // If it contains time (e.g., "25/09/2025 12:21:00"), remove the time part
+    if (dateStr.includes(' ')) {
+      dateStr = dateStr.split(' ')[0];
+    }
+
+    // Convert DD/MM/YYYY to YYYY-MM-DD for proper sorting and filtering
+    const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      const [, day, month, year] = match;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+
+    return dateStr;
   }
 
   private parseAmount(value: any): number {
