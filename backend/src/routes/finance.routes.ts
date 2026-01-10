@@ -8,4 +8,8 @@ router.get('/data', authMiddleware, (req, res) =>
   financeController.getFinanceData(req, res)
 );
 
+router.post('/expense', authMiddleware, (req, res) =>
+  financeController.addExpense(req, res)
+);
+
 export default router;

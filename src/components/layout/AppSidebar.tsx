@@ -16,6 +16,7 @@ import {
   ClipboardCheck,
   Menu,
   X,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { title: 'Equipo', path: '/equipo', icon: UserCog },
   { title: 'Productos', path: '/productos', icon: Package },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign },
+  { title: 'Proveedores', path: '/proveedores', icon: Building2 },
   { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText },
 ];
 

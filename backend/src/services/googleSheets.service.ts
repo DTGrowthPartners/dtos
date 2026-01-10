@@ -30,7 +30,7 @@ export class GoogleSheetsService {
   private async initAuth() {
     this.auth = new google.auth.GoogleAuth({
       keyFile: CREDENTIALS_PATH,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'], // Full access for read/write
     });
 
     this.sheets = google.sheets({ version: 'v4', auth: this.auth });
@@ -243,6 +243,45 @@ export class GoogleSheetsService {
         color: colors[index % colors.length],
       }))
       .sort((a, b) => b.value - a.value);
+  }
+
+  async addExpense(expense: {
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+  }): Promise<void> {
+    try {
+      // Convert YYYY-MM-DD to DD/MM/YYYY for Google Sheets
+      const [year, month, day] = expense.fecha.split('-');
+      const formattedDate = `${day}/${month}/${year}`;
+
+      const values = [[
+        formattedDate,
+        expense.importe,
+        expense.descripcion,
+        expense.categoria,
+        expense.cuenta,
+        expense.entidad,
+      ]];
+
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Salidas!A:F',
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: {
+          values,
+        },
+      });
+
+      console.log('Expense added successfully:', expense);
+    } catch (error) {
+      console.error('Error adding expense to Google Sheets:', error);
+      throw new Error('No se pudo agregar el gasto a Google Sheets');
+    }
   }
 }
 

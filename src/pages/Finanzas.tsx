@@ -320,6 +320,68 @@ export default function Finanzas() {
   const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
   const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
 
+  // Helper to filter transactions by date range
+  const filterByDateRange = (transactions: Transaction[], from: string, to: string) => {
+    return transactions.filter(t => {
+      const date = normalizeDate(t.fecha);
+      return date >= from && date <= to;
+    });
+  };
+
+  // Calculate period totals for quick filters
+  const periodTotals = useMemo(() => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+
+    // This week (last 7 days)
+    const last7 = new Date(today);
+    last7.setDate(last7.getDate() - 7);
+    const last7Str = last7.toISOString().split('T')[0];
+
+    // This month
+    const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const firstDayMonthStr = firstDayMonth.toISOString().split('T')[0];
+
+    // This year
+    const firstDayYear = new Date(today.getFullYear(), 0, 1);
+    const firstDayYearStr = firstDayYear.toISOString().split('T')[0];
+
+    // Today
+    const todayIngresos = filterByDateRange(ingresos, todayStr, todayStr);
+    const todayGastos = filterByDateRange(gastos, todayStr, todayStr);
+
+    // This week
+    const weekIngresos = filterByDateRange(ingresos, last7Str, todayStr);
+    const weekGastos = filterByDateRange(gastos, last7Str, todayStr);
+
+    // This month
+    const monthIngresos = filterByDateRange(ingresos, firstDayMonthStr, todayStr);
+    const monthGastos = filterByDateRange(gastos, firstDayMonthStr, todayStr);
+
+    // This year
+    const yearIngresos = filterByDateRange(ingresos, firstDayYearStr, todayStr);
+    const yearGastos = filterByDateRange(gastos, firstDayYearStr, todayStr);
+
+    return {
+      today: {
+        income: todayIngresos.reduce((sum, t) => sum + t.importe, 0),
+        expenses: todayGastos.reduce((sum, t) => sum + t.importe, 0),
+      },
+      week: {
+        income: weekIngresos.reduce((sum, t) => sum + t.importe, 0),
+        expenses: weekGastos.reduce((sum, t) => sum + t.importe, 0),
+      },
+      month: {
+        income: monthIngresos.reduce((sum, t) => sum + t.importe, 0),
+        expenses: monthGastos.reduce((sum, t) => sum + t.importe, 0),
+      },
+      year: {
+        income: yearIngresos.reduce((sum, t) => sum + t.importe, 0),
+        expenses: yearGastos.reduce((sum, t) => sum + t.importe, 0),
+      },
+    };
+  }, [ingresos, gastos]);
+
   // Top 5 expenses and income
   const topExpenses = useMemo(() => {
     return [...gastos]
@@ -529,58 +591,105 @@ export default function Finanzas() {
       </div>
 
       {/* Quick Filter Buttons */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Hoy */}
         <button
           onClick={() => applyDatePreset('today')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md",
+            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'today'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
-          <p className="text-lg font-bold text-foreground mt-1">
-            {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+          <p className="text-sm font-semibold text-foreground mt-1 capitalize">
+            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
           </p>
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Ingresos</span>
+              <span className="text-xs font-medium text-success">${periodTotals.today.income.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Gastos</span>
+              <span className="text-xs font-medium text-destructive">${periodTotals.today.expenses.toLocaleString()}</span>
+            </div>
+          </div>
         </button>
+
+        {/* Esta Semana */}
         <button
           onClick={() => applyDatePreset('last7days')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md",
+            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'last7days'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Esta Semana</p>
-          <p className="text-lg font-bold text-foreground mt-1">7 dias</p>
+          <p className="text-sm font-semibold text-foreground mt-1">Últimos 7 días</p>
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Ingresos</span>
+              <span className="text-xs font-medium text-success">${periodTotals.week.income.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Gastos</span>
+              <span className="text-xs font-medium text-destructive">${periodTotals.week.expenses.toLocaleString()}</span>
+            </div>
+          </div>
         </button>
+
+        {/* Este Mes */}
         <button
           onClick={() => applyDatePreset('thisMonth')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md",
+            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'thisMonth'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Mes</p>
-          <p className="text-lg font-bold text-foreground mt-1">
-            {new Date().toLocaleDateString('es-ES', { month: 'short' })}
+          <p className="text-sm font-semibold text-foreground mt-1 capitalize">
+            {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
           </p>
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Ingresos</span>
+              <span className="text-xs font-medium text-success">${periodTotals.month.income.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Gastos</span>
+              <span className="text-xs font-medium text-destructive">${periodTotals.month.expenses.toLocaleString()}</span>
+            </div>
+          </div>
         </button>
+
+        {/* Este Año */}
         <button
           onClick={() => applyDatePreset('thisYear')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md",
+            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'thisYear'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Ano</p>
-          <p className="text-lg font-bold text-foreground mt-1">{new Date().getFullYear()}</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Año</p>
+          <p className="text-sm font-semibold text-foreground mt-1">{new Date().getFullYear()}</p>
+          <div className="mt-3 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Ingresos</span>
+              <span className="text-xs font-medium text-success">${periodTotals.year.income.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">Gastos</span>
+              <span className="text-xs font-medium text-destructive">${periodTotals.year.expenses.toLocaleString()}</span>
+            </div>
+          </div>
         </button>
       </div>
 

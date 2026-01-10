@@ -17,6 +17,7 @@ import Equipo from "@/pages/Equipo";
 import Productos from "@/pages/Productos";
 import Finanzas from "@/pages/Finanzas";
 import CuentasCobro from "@/pages/CuentasCobro";
+import Proveedores from "@/pages/Proveedores";
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="/equipo" element={<Equipo />} />
               <Route path="/productos" element={<Productos />} />
               <Route path="/finanzas" element={<Finanzas />} />
+              <Route path="/proveedores" element={<Proveedores />} />
               <Route path="/cuentas-cobro" element={<CuentasCobro />} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
