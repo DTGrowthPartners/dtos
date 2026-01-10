@@ -47,15 +47,18 @@ export class GoogleSheetsService {
     try {
 
       // Leer hoja de Entradas (Ingresos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
+      // Usamos UNFORMATTED_VALUE para obtener fechas como números seriales y valores sin formato
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: 'Entradas!A2:F',
+        valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       // Leer hoja de Salidas (Gastos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
       const expensesResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: 'Salidas!A2:F',
+        valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const incomeRows = incomeResponse.data.values || [];
@@ -125,6 +128,23 @@ export class GoogleSheetsService {
   private parseDate(value: string | number | null | undefined): string {
     if (!value) return '';
 
+    // If it's a number, it's a Google Sheets serial date number
+    // Google Sheets uses December 30, 1899 as day 0 (Excel compatibility)
+    if (typeof value === 'number') {
+      // Google Sheets serial date to JavaScript Date
+      // Serial number 1 = January 1, 1900
+      // But there's a bug in Excel/Sheets where they think 1900 was a leap year
+      // So we need to account for that
+      const baseDate = new Date(1899, 11, 30); // December 30, 1899
+      const resultDate = new Date(baseDate.getTime() + value * 24 * 60 * 60 * 1000);
+
+      const year = resultDate.getFullYear();
+      const month = String(resultDate.getMonth() + 1).padStart(2, '0');
+      const day = String(resultDate.getDate()).padStart(2, '0');
+
+      return `${year}-${month}-${day}`;
+    }
+
     let dateStr = String(value).trim();
 
     // If it contains time (e.g., "25/09/2025 12:21:00"), remove the time part
@@ -143,49 +163,33 @@ export class GoogleSheetsService {
   }
 
   private parseAmount(value: any): number {
-    if (typeof value === 'number') return value;
+    // With UNFORMATTED_VALUE, numbers come directly as numbers
+    if (typeof value === 'number') return Math.abs(value); // Use abs to handle negative values if any
 
+    // Fallback for string values
     let strValue = String(value).trim();
 
     // Remove currency symbols, spaces, and any non-numeric characters except . and ,
     strValue = strValue.replace(/[$€COP\s]/gi, '');
 
-    console.log(`parseAmount input: "${value}" -> cleaned: "${strValue}"`);
-
     // Check if it's Colombian format: uses dots as thousand separators
-    // Examples: "1.000.000" or "1.000.000,50"
-    // Pattern: has dots NOT followed by only 1-2 digits at the end (those would be decimals)
-
-    // Count dots and check their positions
     const dots = (strValue.match(/\./g) || []).length;
     const hasComma = strValue.includes(',');
 
     if (dots > 0) {
-      // If there's a comma, it's definitely Colombian format (dots = thousands, comma = decimal)
-      // Example: "1.234.567,89"
       if (hasComma) {
         strValue = strValue.replace(/\./g, '').replace(',', '.');
       } else {
-        // No comma - check if dots are thousand separators
-        // In "1.000.000", dots are followed by exactly 3 digits
-        // In "1.50", dot is decimal
         const isThousandSeparator = /\.\d{3}(?:\.|$)/.test(strValue) || /^\d{1,3}(\.\d{3})+$/.test(strValue);
-
         if (isThousandSeparator) {
-          // Colombian format without decimals: "1.000.000" -> "1000000"
           strValue = strValue.replace(/\./g, '');
         }
-        // else: it's a decimal like "1.50", keep as is
       }
     } else if (hasComma) {
-      // No dots, but has comma - comma is decimal separator
-      // Example: "1000,50" -> "1000.50"
       strValue = strValue.replace(',', '.');
     }
 
-    const result = parseFloat(strValue) || 0;
-    console.log(`parseAmount result: ${result}`);
-    return result;
+    return Math.abs(parseFloat(strValue) || 0);
   }
 
   private generateMonthlyData(totalIncome: number, totalExpenses: number): FinanceData[] {
