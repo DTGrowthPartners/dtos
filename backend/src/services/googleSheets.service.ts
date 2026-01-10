@@ -61,6 +61,12 @@ export class GoogleSheetsService {
       const incomeRows = incomeResponse.data.values || [];
       const expensesRows = expensesResponse.data.values || [];
 
+      // Debug: Log raw data from sheets
+      console.log('Raw Income Rows (first 5):', incomeRows.slice(0, 5));
+      console.log('Raw Expenses Rows (first 5):', expensesRows.slice(0, 5));
+      console.log('Total income rows:', incomeRows.length);
+      console.log('Total expenses rows:', expensesRows.length);
+
       // Parsear ingresos
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad
       const ingresos: TransactionRow[] = incomeRows
@@ -200,7 +206,7 @@ export class GoogleSheetsService {
         income: Math.round(baseIncome + (Math.random() - 0.5) * (baseIncome * variance)),
         expenses: Math.round(baseExpenses + (Math.random() - 0.5) * (baseExpenses * variance)),
       });
-    }
+    } 
 
     return financeByMonth;
   }
