@@ -245,6 +245,19 @@ export class GoogleSheetsService {
       .sort((a, b) => b.value - a.value);
   }
 
+  // Convert JavaScript Date to Excel/Google Sheets serial number
+  private dateToSerialNumber(date: Date): number {
+    // Excel/Google Sheets uses December 30, 1899 as day 0
+    // JavaScript Date epoch is January 1, 1970
+    const excelEpoch = new Date(1899, 11, 30);
+    const msPerDay = 24 * 60 * 60 * 1000;
+
+    // Calculate days since Excel epoch, including fractional part for time
+    const days = (date.getTime() - excelEpoch.getTime()) / msPerDay;
+
+    return days;
+  }
+
   async addExpense(expense: {
     fecha: string;
     importe: number;
@@ -254,12 +267,16 @@ export class GoogleSheetsService {
     entidad: string;
   }): Promise<void> {
     try {
-      // Convert YYYY-MM-DD to DD/MM/YYYY for Google Sheets
-      const [year, month, day] = expense.fecha.split('-');
-      const formattedDate = `${day}/${month}/${year}`;
+      // Parse YYYY-MM-DD and create date with current time
+      const [year, month, day] = expense.fecha.split('-').map(Number);
+      const now = new Date();
+      const fechaConHora = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+
+      // Convert to Excel serial number for proper formatting in Google Sheets
+      const serialDate = this.dateToSerialNumber(fechaConHora);
 
       const values = [[
-        formattedDate,
+        serialDate,
         expense.importe,
         expense.descripcion,
         expense.categoria,
@@ -270,14 +287,14 @@ export class GoogleSheetsService {
       await this.sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
         range: 'Salidas!A:F',
-        valueInputOption: 'USER_ENTERED',
+        valueInputOption: 'RAW', // Use RAW to send the number as-is
         insertDataOption: 'INSERT_ROWS',
         requestBody: {
           values,
         },
       });
 
-      console.log('Expense added successfully:', expense);
+      console.log('Expense added successfully:', expense, 'Serial date:', serialDate);
     } catch (error) {
       console.error('Error adding expense to Google Sheets:', error);
       throw new Error('No se pudo agregar el gasto a Google Sheets');
