@@ -275,6 +275,42 @@ export class GoogleSheetsService {
       // Convert to Excel serial number for proper formatting in Google Sheets
       const serialDate = this.dateToSerialNumber(fechaConHora);
 
+      // First, get the sheet ID for "Salidas"
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const salidasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Salidas'
+      );
+
+      if (!salidasSheet) {
+        throw new Error('No se encontró la hoja "Salidas"');
+      }
+
+      const sheetId = salidasSheet.properties?.sheetId;
+
+      // Insert a new row at position 2 (after header row 1)
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [
+            {
+              insertDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: 'ROWS',
+                  startIndex: 1, // After row 1 (header)
+                  endIndex: 2,   // Insert 1 row
+                },
+                inheritFromBefore: false,
+              },
+            },
+          ],
+        },
+      });
+
+      // Now update the newly inserted row (row 2) with data
       const values = [[
         serialDate,
         expense.importe,
@@ -284,17 +320,16 @@ export class GoogleSheetsService {
         expense.entidad,
       ]];
 
-      await this.sheets.spreadsheets.values.append({
+      await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A:F',
-        valueInputOption: 'RAW', // Use RAW to send the number as-is
-        insertDataOption: 'INSERT_ROWS',
+        range: 'Salidas!A2:F2',
+        valueInputOption: 'RAW',
         requestBody: {
           values,
         },
       });
 
-      console.log('Expense added successfully:', expense, 'Serial date:', serialDate);
+      console.log('Expense added successfully at row 2:', expense, 'Serial date:', serialDate);
     } catch (error) {
       console.error('Error adding expense to Google Sheets:', error);
       throw new Error('No se pudo agregar el gasto a Google Sheets');
