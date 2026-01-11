@@ -112,6 +112,19 @@ export default function Proveedores() {
     categoria: '',
   });
 
+  // Estado para editar proveedor
+  const [showEditProveedorModal, setShowEditProveedorModal] = useState(false);
+  const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
+  const [editProveedorForm, setEditProveedorForm] = useState({
+    nombre: '',
+    descripcion: '',
+    categoria: '',
+  });
+
+  // Estado para eliminar proveedor
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [proveedorToDelete, setProveedorToDelete] = useState<Proveedor | null>(null);
+
   const openAddExpense = (proveedor: Proveedor) => {
     setSelectedProveedor(proveedor);
     setExpenseForm({
@@ -205,6 +218,69 @@ export default function Proveedores() {
       title: 'Proveedor agregado',
       description: `${newProveedor.nombre} ha sido agregado a la lista`,
     });
+  };
+
+  const openEditProveedor = (proveedor: Proveedor) => {
+    setEditingProveedor(proveedor);
+    setEditProveedorForm({
+      nombre: proveedor.nombre,
+      descripcion: proveedor.descripcion,
+      categoria: proveedor.categoria,
+    });
+    setShowEditProveedorModal(true);
+  };
+
+  const handleEditProveedor = () => {
+    if (!editingProveedor) return;
+
+    if (!editProveedorForm.nombre || !editProveedorForm.categoria) {
+      toast({
+        title: 'Error',
+        description: 'Ingresa el nombre y la categoría del proveedor',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setProveedores(prev =>
+      prev.map(p =>
+        p.id === editingProveedor.id
+          ? {
+              ...p,
+              nombre: editProveedorForm.nombre,
+              descripcion: editProveedorForm.descripcion || editProveedorForm.nombre,
+              categoria: editProveedorForm.categoria,
+            }
+          : p
+      )
+    );
+
+    setShowEditProveedorModal(false);
+    setEditingProveedor(null);
+
+    toast({
+      title: 'Proveedor actualizado',
+      description: `${editProveedorForm.nombre} ha sido actualizado`,
+    });
+  };
+
+  const openDeleteConfirm = (proveedor: Proveedor) => {
+    setProveedorToDelete(proveedor);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDeleteProveedor = () => {
+    if (!proveedorToDelete) return;
+
+    setProveedores(prev => prev.filter(p => p.id !== proveedorToDelete.id));
+    setShowDeleteConfirm(false);
+
+    toast({
+      title: 'Proveedor eliminado',
+      description: `${proveedorToDelete.nombre} ha sido eliminado`,
+    });
+
+    setProveedorToDelete(null);
   };
 
   const getCategoryColor = (categoria: string) => {
@@ -322,15 +398,34 @@ export default function Proveedores() {
                       <h3 className="font-semibold text-foreground truncate">{proveedor.nombre}</h3>
                       <p className="text-sm text-muted-foreground truncate">{proveedor.descripcion}</p>
                     </div>
-                    <span
-                      className={cn(
-                        'text-xs px-2 py-1 rounded-full border font-medium ml-2 whitespace-nowrap',
-                        getCategoryColor(proveedor.categoria)
-                      )}
-                    >
-                      {proveedor.categoria.split(' / ')[0]}
-                    </span>
+                    <div className="flex items-center gap-1 ml-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => openEditProveedor(proveedor)}
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                        onClick={() => openDeleteConfirm(proveedor)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
+
+                  <span
+                    className={cn(
+                      'inline-block text-xs px-2 py-1 rounded-full border font-medium mb-3',
+                      getCategoryColor(proveedor.categoria)
+                    )}
+                  >
+                    {proveedor.categoria.split(' / ')[0]}
+                  </span>
 
                   {proveedor.ultimoPago && (
                     <div className="mb-3 p-2 rounded-lg bg-muted/50">
@@ -508,6 +603,100 @@ export default function Proveedores() {
             <Button onClick={handleAddProveedor}>
               <Plus className="h-4 w-4 mr-2" />
               Agregar Proveedor
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Editar Proveedor */}
+      <Dialog open={showEditProveedorModal} onOpenChange={setShowEditProveedorModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5 text-primary" />
+              Editar Proveedor
+            </DialogTitle>
+            <DialogDescription>Modifica los datos del proveedor</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-proveedor-nombre">Nombre</Label>
+              <Input
+                id="edit-proveedor-nombre"
+                value={editProveedorForm.nombre}
+                onChange={(e) => setEditProveedorForm({ ...editProveedorForm, nombre: e.target.value })}
+                placeholder="Ej: Netflix, Uber, etc."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-proveedor-descripcion">Descripción</Label>
+              <Input
+                id="edit-proveedor-descripcion"
+                value={editProveedorForm.descripcion}
+                onChange={(e) => setEditProveedorForm({ ...editProveedorForm, descripcion: e.target.value })}
+                placeholder="Descripción breve del gasto"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-proveedor-categoria">Categoría</Label>
+              <Select
+                value={editProveedorForm.categoria}
+                onValueChange={(value) => setEditProveedorForm({ ...editProveedorForm, categoria: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categorias.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {getCategoryIcon(cat)} {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditProveedorModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEditProveedor}>
+              <Pencil className="h-4 w-4 mr-2" />
+              Guardar Cambios
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Confirmar Eliminación */}
+      <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Eliminar Proveedor
+            </DialogTitle>
+            <DialogDescription>
+              {proveedorToDelete && (
+                <>
+                  ¿Estás seguro de que deseas eliminar a <span className="font-semibold text-foreground">{proveedorToDelete.nombre}</span>?
+                  Esta acción no se puede deshacer.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProveedor}>
+              <Trash2 className="h-4 w-4 mr-2" />
+              Eliminar
             </Button>
           </DialogFooter>
         </DialogContent>
