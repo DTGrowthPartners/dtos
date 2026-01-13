@@ -22,8 +22,8 @@ import {
   Hash,
   ChevronRight,
   ChevronLeft,
-  PanelLeftClose,
-  PanelLeft,
+  Archive,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -59,7 +59,12 @@ import {
   moveTaskToDeleted,
   copyTaskToCompleted,
   addTaskComment,
-  importTasksFromExport,
+  loadCompletedTasks,
+  loadDeletedTasks,
+  restoreCompletedTask,
+  restoreDeletedTask,
+  permanentlyDeleteCompletedTask,
+  permanentlyDeleteTask,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -89,6 +94,7 @@ const STATUS_ICONS = {
 };
 
 type ViewMode = 'card' | 'list' | 'compact';
+type TaskView = 'active' | 'archived' | 'deleted';
 
 export default function Tareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -106,6 +112,9 @@ export default function Tareas() {
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [taskView, setTaskView] = useState<TaskView>('active');
+  const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
+  const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
   const { toast } = useToast();
   const { user } = useAuthStore();
 
@@ -145,8 +154,6 @@ export default function Tareas() {
 
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const importFileInputRef = useRef<HTMLInputElement>(null);
-  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -155,11 +162,15 @@ export default function Tareas() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [tasksData, projectsData] = await Promise.all([
+      const [tasksData, projectsData, archivedData, deletedData] = await Promise.all([
         loadTasks(),
         loadProjects(),
+        loadCompletedTasks(),
+        loadDeletedTasks(),
       ]);
       setTasks(tasksData);
+      setArchivedTasks(archivedData);
+      setDeletedTasks(deletedData);
       // Use loaded projects or default if none exist
       setProjects(projectsData.length > 0 ? projectsData : DEFAULT_PROJECTS);
     } catch (error) {
@@ -527,40 +538,81 @@ export default function Tareas() {
     }
   };
 
-  // Import tasks from JSON file
-  const handleImportTasks = async (file: File) => {
-    setIsImporting(true);
+  // Restore archived task
+  const handleRestoreArchived = async (taskId: string) => {
     try {
-      const text = await file.text();
-      const exportData = JSON.parse(text);
-
-      // Use first project as default or create one
-      let defaultProjectId = projects.length > 0 ? projects[0].id : '';
-      if (!defaultProjectId) {
-        defaultProjectId = await createProject({ name: 'Importado', color: 'bg-slate-500' });
-        setProjects([...projects, { id: defaultProjectId, name: 'Importado', color: 'bg-slate-500' }]);
-      }
-
-      const result = await importTasksFromExport(exportData, defaultProjectId);
-
+      await restoreCompletedTask(taskId);
       toast({
-        title: 'Importación completada',
-        description: `Se importaron ${result.imported} tareas. ${result.errors > 0 ? `${result.errors} errores.` : ''}`,
+        title: 'Tarea restaurada',
+        description: 'La tarea se movió a tareas activas',
       });
-
       fetchData();
     } catch (error) {
-      console.error('Error importing tasks:', error);
+      console.error('Error restoring task:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo importar el archivo. Verifica que sea un JSON válido.',
+        description: 'No se pudo restaurar la tarea',
         variant: 'destructive',
       });
-    } finally {
-      setIsImporting(false);
-      if (importFileInputRef.current) {
-        importFileInputRef.current.value = '';
-      }
+    }
+  };
+
+  // Restore deleted task
+  const handleRestoreDeleted = async (taskId: string) => {
+    try {
+      await restoreDeletedTask(taskId);
+      toast({
+        title: 'Tarea restaurada',
+        description: 'La tarea se movió a tareas activas',
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error restoring task:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo restaurar la tarea',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Permanently delete archived task
+  const handlePermanentDeleteArchived = async (taskId: string) => {
+    if (!confirm('¿Estás seguro de eliminar permanentemente esta tarea? Esta acción no se puede deshacer.')) return;
+    try {
+      await permanentlyDeleteCompletedTask(taskId);
+      toast({
+        title: 'Tarea eliminada',
+        description: 'La tarea se eliminó permanentemente',
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar la tarea',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Permanently delete task from trash
+  const handlePermanentDeleteTrash = async (taskId: string) => {
+    if (!confirm('¿Estás seguro de eliminar permanentemente esta tarea? Esta acción no se puede deshacer.')) return;
+    try {
+      await permanentlyDeleteTask(taskId);
+      toast({
+        title: 'Tarea eliminada',
+        description: 'La tarea se eliminó permanentemente',
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar la tarea',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -627,6 +679,28 @@ export default function Tareas() {
     <div className="animate-fade-in h-full flex gap-4">
       {/* Left Sidebar - Projects (Collapsable) */}
       <div className={`flex-shrink-0 flex flex-col gap-3 transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
+        {/* Collapse Toggle - At the top */}
+        <Tooltip delayDuration={0}>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className={`w-full h-8 text-muted-foreground hover:text-foreground ${sidebarCollapsed ? 'px-0' : ''}`}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <>
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  <span className="text-xs">Colapsar</span>
+                </>
+              )}
+            </Button>
+          </TooltipTrigger>
+          {sidebarCollapsed && <TooltipContent side="right">Expandir</TooltipContent>}
+        </Tooltip>
+
         {/* User Info */}
         <div className="rounded-lg border bg-card p-3">
           {sidebarCollapsed ? (
@@ -814,20 +888,102 @@ export default function Tareas() {
           </div>
         )}
 
-        {/* Actions */}
-        <div className="space-y-2">
-          <input
-            ref={importFileInputRef}
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleImportTasks(file);
-            }}
-          />
+        {/* Task Views (Active, Archived, Deleted) */}
+        <div className="rounded-lg border bg-card p-3">
           {sidebarCollapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTaskView('active')}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                      taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Activas ({tasks.length})</TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTaskView('archived')}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                      taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <Archive className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Archivadas ({archivedTasks.length})</TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTaskView('deleted')}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                      taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Eliminadas ({deletedTasks.length})</TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
             <>
+              <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
+                <List className="h-4 w-4" />
+                Vistas
+              </h3>
+              <div className="space-y-1">
+                <button
+                  onClick={() => setTaskView('active')}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3 w-3" />
+                    <span>Activas</span>
+                  </div>
+                  <span className="text-xs opacity-70">{tasks.length}</span>
+                </button>
+                <button
+                  onClick={() => setTaskView('archived')}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Archive className="h-3 w-3" />
+                    <span>Archivadas</span>
+                  </div>
+                  <span className="text-xs opacity-70">{archivedTasks.length}</span>
+                </button>
+                <button
+                  onClick={() => setTaskView('deleted')}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Trash2 className="h-3 w-3" />
+                    <span>Eliminadas</span>
+                  </div>
+                  <span className="text-xs opacity-70">{deletedTasks.length}</span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* New Task Button */}
+        {taskView === 'active' && (
+          <div className="space-y-2">
+            {sidebarCollapsed ? (
               <Tooltip delayDuration={0}>
                 <TooltipTrigger asChild>
                   <Button
@@ -843,23 +999,7 @@ export default function Tareas() {
                 </TooltipTrigger>
                 <TooltipContent side="right">Nueva tarea</TooltipContent>
               </Tooltip>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    size="icon"
-                    onClick={() => importFileInputRef.current?.click()}
-                    disabled={isImporting}
-                  >
-                    <Upload className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Importar JSON</TooltipContent>
-              </Tooltip>
-            </>
-          ) : (
-            <>
+            ) : (
               <Button
                 className="w-full h-8 text-xs"
                 onClick={() => {
@@ -870,35 +1010,9 @@ export default function Tareas() {
                 <Plus className="h-3 w-3 mr-1" />
                 Nueva Tarea
               </Button>
-              <Button
-                variant="outline"
-                className="w-full h-8 text-xs"
-                onClick={() => importFileInputRef.current?.click()}
-                disabled={isImporting}
-              >
-                <Upload className="h-3 w-3 mr-1" />
-                {isImporting ? 'Importando...' : 'Importar'}
-              </Button>
-            </>
-          )}
-        </div>
-
-        {/* Collapse Toggle */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="w-full h-8 text-muted-foreground hover:text-foreground"
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <>
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              <span className="text-xs">Colapsar</span>
-            </>
-          )}
-        </Button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -906,29 +1020,44 @@ export default function Tareas() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Mis Tareas</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              {taskView === 'active' && 'Mis Tareas'}
+              {taskView === 'archived' && 'Tareas Archivadas'}
+              {taskView === 'deleted' && 'Tareas Eliminadas'}
+            </h1>
             <p className="text-sm text-muted-foreground">
-              {filterProject !== 'all' ? projects.find(p => p.id === filterProject)?.name : 'Todos los proyectos'}
-              {' · '}{filteredTasks.length} tareas
+              {taskView === 'active' && (
+                <>
+                  {filterProject !== 'all' ? projects.find(p => p.id === filterProject)?.name : 'Todos los proyectos'}
+                  {' · '}{filteredTasks.length} tareas
+                </>
+              )}
+              {taskView === 'archived' && `${archivedTasks.length} tareas completadas`}
+              {taskView === 'deleted' && `${deletedTasks.length} tareas en papelera`}
             </p>
           </div>
           <div className="flex gap-2">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Buscar..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-[200px]"
-              />
-            </div>
-            <Button variant="outline" size="icon" onClick={cycleViewMode}>
-              {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
-            </Button>
+            {taskView === 'active' && (
+              <>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9 w-[200px]"
+                  />
+                </div>
+                <Button variant="outline" size="icon" onClick={cycleViewMode}>
+                  {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+                </Button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Kanban Board */}
+        {/* Active Tasks - Kanban Board */}
+        {taskView === 'active' && (
         <div className="flex-1 overflow-x-auto">
           <div className="flex gap-4 h-full pb-4">
           {DEFAULT_COLUMNS.map((column) => {
@@ -1216,6 +1345,161 @@ export default function Tareas() {
           })}
           </div>
         </div>
+        )}
+
+        {/* Archived Tasks View */}
+        {taskView === 'archived' && (
+          <div className="flex-1 overflow-y-auto">
+            {archivedTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <Archive className="h-12 w-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium">No hay tareas archivadas</p>
+                <p className="text-sm">Las tareas completadas aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {archivedTasks.map((task) => {
+                  const project = getProject(task.projectId);
+                  const assignee = getTeamMember(task.assignee);
+                  return (
+                    <Card key={task.id} className="p-4">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-semibold text-sm line-through text-muted-foreground">
+                          {task.title}
+                        </h3>
+                        <div className="flex gap-1">
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleRestoreArchived(task.id)}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Restaurar</TooltipContent>
+                          </Tooltip>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                onClick={() => handlePermanentDeleteArchived(task.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Eliminar permanentemente</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                          {task.description}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {project && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
+                            {project.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                        <span>
+                          Completada: {task.completedAt ? new Date(task.completedAt).toLocaleDateString('es-ES') : 'N/A'}
+                        </span>
+                        <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                          {assignee?.initials}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Deleted Tasks View */}
+        {taskView === 'deleted' && (
+          <div className="flex-1 overflow-y-auto">
+            {deletedTasks.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+                <Trash2 className="h-12 w-12 mb-4 opacity-50" />
+                <p className="text-lg font-medium">La papelera está vacía</p>
+                <p className="text-sm">Las tareas eliminadas aparecerán aquí</p>
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                {deletedTasks.map((task) => {
+                  const project = getProject(task.projectId);
+                  const assignee = getTeamMember(task.assignee);
+                  return (
+                    <Card key={task.id} className="p-4 border-destructive/30">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="font-semibold text-sm text-muted-foreground">
+                          {task.title}
+                        </h3>
+                        <div className="flex gap-1">
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleRestoreDeleted(task.id)}
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Restaurar</TooltipContent>
+                          </Tooltip>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-destructive"
+                                onClick={() => handlePermanentDeleteTrash(task.id)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Eliminar permanentemente</TooltipContent>
+                          </Tooltip>
+                        </div>
+                      </div>
+                      {task.description && (
+                        <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                          {task.description}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {project && (
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
+                            {project.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t text-xs text-muted-foreground">
+                        <span>
+                          Eliminada: {task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('es-ES') : 'N/A'}
+                        </span>
+                        <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                          {assignee?.initials}
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Task Dialog */}

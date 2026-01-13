@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Building2, DollarSign, Calendar, FileText, Tag, Wallet, Send, X, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Building2, DollarSign, Tag, Send, Pencil, Trash2, Loader2, Mail, Phone, MapPin, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,60 +23,21 @@ import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
-interface Proveedor {
+interface Tercero {
   id: string;
+  tipo: 'cliente' | 'proveedor' | 'empleado' | 'freelancer';
   nombre: string;
-  descripcion: string;
-  categoria: string;
-  ultimoPago?: number;
-  ultimaFecha?: string;
+  nit?: string;
+  email?: string;
+  telefono?: string;
+  direccion?: string;
+  categoria?: string;
+  cuentaBancaria?: string;
+  salarioBase?: number;
+  cargo?: string;
+  estado: 'activo' | 'inactivo';
+  createdAt: string;
 }
-
-// Proveedores predefinidos
-const proveedoresPredefinidos: Proveedor[] = [
-  {
-    id: '1',
-    nombre: 'ChatGPT / OpenAI',
-    descripcion: 'Suscripción OpenAI',
-    categoria: 'Software / Suscripciones',
-  },
-  {
-    id: '2',
-    nombre: 'Claude / Anthropic',
-    descripcion: 'Suscripción Anthropic',
-    categoria: 'Software / Suscripciones',
-  },
-  {
-    id: '3',
-    nombre: 'Almuerzos',
-    descripcion: 'Gastos de alimentación',
-    categoria: 'Alimentación',
-  },
-  {
-    id: '4',
-    nombre: 'Meta Ads',
-    descripcion: 'Publicidad en Facebook/Instagram',
-    categoria: 'Marketing',
-  },
-  {
-    id: '5',
-    nombre: 'Google Ads',
-    descripcion: 'Publicidad en Google',
-    categoria: 'Marketing',
-  },
-  {
-    id: '6',
-    nombre: 'Hosting / Servidores',
-    descripcion: 'Servicios de hosting y servidores',
-    categoria: 'Infraestructura',
-  },
-  {
-    id: '7',
-    nombre: 'Dominio',
-    descripcion: 'Renovación de dominios',
-    categoria: 'Infraestructura',
-  },
-];
 
 const categorias = [
   'Software / Suscripciones',
@@ -86,15 +47,17 @@ const categorias = [
   'Transporte',
   'Oficina',
   'Servicios Profesionales',
+  'Freelancer',
   'Otros',
 ];
 
 export default function Proveedores() {
   const { toast } = useToast();
-  const [proveedores, setProveedores] = useState<Proveedor[]>(proveedoresPredefinidos);
+  const [proveedores, setProveedores] = useState<Tercero[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
   const [showNewProveedorModal, setShowNewProveedorModal] = useState(false);
-  const [selectedProveedor, setSelectedProveedor] = useState<Proveedor | null>(null);
+  const [selectedProveedor, setSelectedProveedor] = useState<Tercero | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Form para agregar gasto
@@ -108,29 +71,59 @@ export default function Proveedores() {
   // Form para nuevo proveedor
   const [proveedorForm, setProveedorForm] = useState({
     nombre: '',
-    descripcion: '',
+    nit: '',
+    email: '',
+    telefono: '',
+    direccion: '',
     categoria: '',
+    cuentaBancaria: '',
   });
 
   // Estado para editar proveedor
   const [showEditProveedorModal, setShowEditProveedorModal] = useState(false);
-  const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
+  const [editingProveedor, setEditingProveedor] = useState<Tercero | null>(null);
   const [editProveedorForm, setEditProveedorForm] = useState({
     nombre: '',
-    descripcion: '',
+    nit: '',
+    email: '',
+    telefono: '',
+    direccion: '',
     categoria: '',
+    cuentaBancaria: '',
   });
 
   // Estado para eliminar proveedor
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [proveedorToDelete, setProveedorToDelete] = useState<Proveedor | null>(null);
+  const [proveedorToDelete, setProveedorToDelete] = useState<Tercero | null>(null);
 
-  const openAddExpense = (proveedor: Proveedor) => {
+  // Cargar proveedores desde la API
+  useEffect(() => {
+    loadProveedores();
+  }, []);
+
+  const loadProveedores = async () => {
+    try {
+      setIsLoading(true);
+      const data = await apiClient.get<Tercero[]>('/api/finance/terceros?tipo=proveedor');
+      setProveedores(data);
+    } catch (error: any) {
+      console.error('Error loading proveedores:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los proveedores',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openAddExpense = (proveedor: Tercero) => {
     setSelectedProveedor(proveedor);
     setExpenseForm({
       fecha: new Date().toISOString().split('T')[0],
       importe: '',
-      descripcion: proveedor.descripcion,
+      descripcion: proveedor.categoria || '',
       notas: '',
     });
     setShowAddExpenseModal(true);
@@ -155,24 +148,15 @@ export default function Proveedores() {
         fecha: expenseForm.fecha,
         importe: parseFloat(expenseForm.importe.replace(/[,.]/g, '')),
         descripcion: `${selectedProveedor.nombre} - ${expenseForm.descripcion}${expenseForm.notas ? ` (${expenseForm.notas})` : ''}`,
-        categoria: selectedProveedor.categoria,
+        categoria: selectedProveedor.categoria || 'Otros',
         cuenta: '',
-        entidad: 'DT Growth Partners',
+        entidad: selectedProveedor.nombre,
       });
 
       toast({
         title: 'Gasto registrado',
         description: `Se agregó el gasto de ${selectedProveedor.nombre} correctamente`,
       });
-
-      // Actualizar último pago del proveedor
-      setProveedores(prev =>
-        prev.map(p =>
-          p.id === selectedProveedor.id
-            ? { ...p, ultimoPago: parseFloat(expenseForm.importe), ultimaFecha: expenseForm.fecha }
-            : p
-        )
-      );
 
       setShowAddExpenseModal(false);
       setSelectedProveedor(null);
@@ -193,7 +177,7 @@ export default function Proveedores() {
     }
   };
 
-  const handleAddProveedor = () => {
+  const handleAddProveedor = async () => {
     if (!proveedorForm.nombre || !proveedorForm.categoria) {
       toast({
         title: 'Error',
@@ -203,34 +187,54 @@ export default function Proveedores() {
       return;
     }
 
-    const newProveedor: Proveedor = {
-      id: Date.now().toString(),
-      nombre: proveedorForm.nombre,
-      descripcion: proveedorForm.descripcion || proveedorForm.nombre,
-      categoria: proveedorForm.categoria,
-    };
+    try {
+      setIsSaving(true);
 
-    setProveedores(prev => [...prev, newProveedor]);
-    setShowNewProveedorModal(false);
-    setProveedorForm({ nombre: '', descripcion: '', categoria: '' });
+      await apiClient.post('/api/finance/terceros', {
+        tipo: 'proveedor',
+        nombre: proveedorForm.nombre,
+        nit: proveedorForm.nit || undefined,
+        email: proveedorForm.email || undefined,
+        telefono: proveedorForm.telefono || undefined,
+        direccion: proveedorForm.direccion || undefined,
+        categoria: proveedorForm.categoria,
+        cuentaBancaria: proveedorForm.cuentaBancaria || undefined,
+      });
 
-    toast({
-      title: 'Proveedor agregado',
-      description: `${newProveedor.nombre} ha sido agregado a la lista`,
-    });
+      toast({
+        title: 'Proveedor agregado',
+        description: `${proveedorForm.nombre} ha sido agregado correctamente`,
+      });
+
+      setShowNewProveedorModal(false);
+      setProveedorForm({ nombre: '', nit: '', email: '', telefono: '', direccion: '', categoria: '', cuentaBancaria: '' });
+      loadProveedores();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo agregar el proveedor',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const openEditProveedor = (proveedor: Proveedor) => {
+  const openEditProveedor = (proveedor: Tercero) => {
     setEditingProveedor(proveedor);
     setEditProveedorForm({
       nombre: proveedor.nombre,
-      descripcion: proveedor.descripcion,
-      categoria: proveedor.categoria,
+      nit: proveedor.nit || '',
+      email: proveedor.email || '',
+      telefono: proveedor.telefono || '',
+      direccion: proveedor.direccion || '',
+      categoria: proveedor.categoria || '',
+      cuentaBancaria: proveedor.cuentaBancaria || '',
     });
     setShowEditProveedorModal(true);
   };
 
-  const handleEditProveedor = () => {
+  const handleEditProveedor = async () => {
     if (!editingProveedor) return;
 
     if (!editProveedorForm.nombre || !editProveedorForm.categoria) {
@@ -242,45 +246,68 @@ export default function Proveedores() {
       return;
     }
 
-    setProveedores(prev =>
-      prev.map(p =>
-        p.id === editingProveedor.id
-          ? {
-              ...p,
-              nombre: editProveedorForm.nombre,
-              descripcion: editProveedorForm.descripcion || editProveedorForm.nombre,
-              categoria: editProveedorForm.categoria,
-            }
-          : p
-      )
-    );
+    try {
+      setIsSaving(true);
 
-    setShowEditProveedorModal(false);
-    setEditingProveedor(null);
+      await apiClient.put(`/api/finance/terceros/${editingProveedor.id}`, {
+        nombre: editProveedorForm.nombre,
+        nit: editProveedorForm.nit || undefined,
+        email: editProveedorForm.email || undefined,
+        telefono: editProveedorForm.telefono || undefined,
+        direccion: editProveedorForm.direccion || undefined,
+        categoria: editProveedorForm.categoria,
+        cuentaBancaria: editProveedorForm.cuentaBancaria || undefined,
+      });
 
-    toast({
-      title: 'Proveedor actualizado',
-      description: `${editProveedorForm.nombre} ha sido actualizado`,
-    });
+      toast({
+        title: 'Proveedor actualizado',
+        description: `${editProveedorForm.nombre} ha sido actualizado`,
+      });
+
+      setShowEditProveedorModal(false);
+      setEditingProveedor(null);
+      loadProveedores();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo actualizar el proveedor',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const openDeleteConfirm = (proveedor: Proveedor) => {
+  const openDeleteConfirm = (proveedor: Tercero) => {
     setProveedorToDelete(proveedor);
     setShowDeleteConfirm(true);
   };
 
-  const handleDeleteProveedor = () => {
+  const handleDeleteProveedor = async () => {
     if (!proveedorToDelete) return;
 
-    setProveedores(prev => prev.filter(p => p.id !== proveedorToDelete.id));
-    setShowDeleteConfirm(false);
+    try {
+      setIsSaving(true);
 
-    toast({
-      title: 'Proveedor eliminado',
-      description: `${proveedorToDelete.nombre} ha sido eliminado`,
-    });
+      await apiClient.delete(`/api/finance/terceros/${proveedorToDelete.id}`);
 
-    setProveedorToDelete(null);
+      toast({
+        title: 'Proveedor eliminado',
+        description: `${proveedorToDelete.nombre} ha sido eliminado`,
+      });
+
+      setShowDeleteConfirm(false);
+      setProveedorToDelete(null);
+      loadProveedores();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'No se pudo eliminar el proveedor',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const getCategoryColor = (categoria: string) => {
@@ -292,6 +319,7 @@ export default function Proveedores() {
       'Transporte': 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
       'Oficina': 'bg-gray-500/10 text-gray-600 border-gray-500/20',
       'Servicios Profesionales': 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20',
+      'Freelancer': 'bg-pink-500/10 text-pink-600 border-pink-500/20',
       'Otros': 'bg-slate-500/10 text-slate-600 border-slate-500/20',
     };
     return colors[categoria] || colors['Otros'];
@@ -313,6 +341,8 @@ export default function Proveedores() {
         return '🏢';
       case 'Servicios Profesionales':
         return '👔';
+      case 'Freelancer':
+        return '👨‍💻';
       default:
         return '📦';
     }
@@ -320,11 +350,19 @@ export default function Proveedores() {
 
   // Agrupar proveedores por categoría
   const proveedoresPorCategoria = proveedores.reduce((acc, proveedor) => {
-    const cat = proveedor.categoria;
+    const cat = proveedor.categoria || 'Otros';
     if (!acc[cat]) acc[cat] = [];
     acc[cat].push(proveedor);
     return acc;
-  }, {} as Record<string, Proveedor[]>);
+  }, {} as Record<string, Tercero[]>);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -378,78 +416,111 @@ export default function Proveedores() {
       </div>
 
       {/* Proveedores por Categoría */}
-      <div className="space-y-6">
-        {Object.entries(proveedoresPorCategoria).map(([categoria, provs]) => (
-          <div key={categoria} className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xl">{getCategoryIcon(categoria)}</span>
-              <h2 className="text-lg font-semibold text-foreground">{categoria}</h2>
-              <span className="text-sm text-muted-foreground">({provs.length})</span>
-            </div>
+      {proveedores.length === 0 ? (
+        <div className="text-center py-12">
+          <Building2 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">No hay proveedores</h3>
+          <p className="text-muted-foreground mb-4">Agrega tu primer proveedor para comenzar</p>
+          <Button onClick={() => setShowNewProveedorModal(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Agregar Proveedor
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {Object.entries(proveedoresPorCategoria).map(([categoria, provs]) => (
+            <div key={categoria} className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{getCategoryIcon(categoria)}</span>
+                <h2 className="text-lg font-semibold text-foreground">{categoria}</h2>
+                <span className="text-sm text-muted-foreground">({provs.length})</span>
+              </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {provs.map((proveedor) => (
-                <div
-                  key={proveedor.id}
-                  className="group rounded-xl border border-border bg-card p-5 hover:shadow-lg transition-all duration-200 hover:border-primary/30"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-foreground truncate">{proveedor.nombre}</h3>
-                      <p className="text-sm text-muted-foreground truncate">{proveedor.descripcion}</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {provs.map((proveedor) => (
+                  <div
+                    key={proveedor.id}
+                    className="group rounded-xl border border-border bg-card p-5 hover:shadow-lg transition-all duration-200 hover:border-primary/30"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-foreground truncate">{proveedor.nombre}</h3>
+                        {proveedor.nit && (
+                          <p className="text-xs text-muted-foreground">NIT: {proveedor.nit}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 ml-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => openEditProveedor(proveedor)}
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
+                          onClick={() => openDeleteConfirm(proveedor)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 ml-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => openEditProveedor(proveedor)}
-                      >
-                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                        onClick={() => openDeleteConfirm(proveedor)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+
+                    <span
+                      className={cn(
+                        'inline-block text-xs px-2 py-1 rounded-full border font-medium mb-3',
+                        getCategoryColor(proveedor.categoria || 'Otros')
+                      )}
+                    >
+                      {(proveedor.categoria || 'Otros').split(' / ')[0]}
+                    </span>
+
+                    {/* Contact info */}
+                    <div className="space-y-1 mb-3 text-xs text-muted-foreground">
+                      {proveedor.email && (
+                        <div className="flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          <span className="truncate">{proveedor.email}</span>
+                        </div>
+                      )}
+                      {proveedor.telefono && (
+                        <div className="flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          <span>{proveedor.telefono}</span>
+                        </div>
+                      )}
+                      {proveedor.direccion && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          <span className="truncate">{proveedor.direccion}</span>
+                        </div>
+                      )}
+                      {proveedor.cuentaBancaria && (
+                        <div className="flex items-center gap-1">
+                          <CreditCard className="h-3 w-3" />
+                          <span className="truncate">{proveedor.cuentaBancaria}</span>
+                        </div>
+                      )}
                     </div>
+
+                    <Button
+                      onClick={() => openAddExpense(proveedor)}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      <DollarSign className="h-4 w-4 mr-2" />
+                      Registrar Pago
+                    </Button>
                   </div>
-
-                  <span
-                    className={cn(
-                      'inline-block text-xs px-2 py-1 rounded-full border font-medium mb-3',
-                      getCategoryColor(proveedor.categoria)
-                    )}
-                  >
-                    {proveedor.categoria.split(' / ')[0]}
-                  </span>
-
-                  {proveedor.ultimoPago && (
-                    <div className="mb-3 p-2 rounded-lg bg-muted/50">
-                      <p className="text-xs text-muted-foreground">Último pago</p>
-                      <p className="text-sm font-medium text-foreground">
-                        ${proveedor.ultimoPago.toLocaleString()} - {proveedor.ultimaFecha}
-                      </p>
-                    </div>
-                  )}
-
-                  <Button
-                    onClick={() => openAddExpense(proveedor)}
-                    className="w-full"
-                    variant="outline"
-                  >
-                    <DollarSign className="h-4 w-4 mr-2" />
-                    Registrar Pago
-                  </Button>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Modal Agregar Gasto */}
       <Dialog open={showAddExpenseModal} onOpenChange={setShowAddExpenseModal}>
@@ -486,7 +557,6 @@ export default function Proveedores() {
                   type="text"
                   value={expenseForm.importe}
                   onChange={(e) => {
-                    // Solo permitir números
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     setExpenseForm({ ...expenseForm, importe: value });
                   }}
@@ -530,7 +600,7 @@ export default function Proveedores() {
             <Button onClick={handleAddExpense} disabled={isSaving}>
               {isSaving ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-foreground mr-2" />
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Guardando...
                 </>
               ) : (
@@ -546,7 +616,7 @@ export default function Proveedores() {
 
       {/* Modal Nuevo Proveedor */}
       <Dialog open={showNewProveedorModal} onOpenChange={setShowNewProveedorModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-primary" />
@@ -556,43 +626,87 @@ export default function Proveedores() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="proveedor-nombre">Nombre</Label>
-              <Input
-                id="proveedor-nombre"
-                value={proveedorForm.nombre}
-                onChange={(e) => setProveedorForm({ ...proveedorForm, nombre: e.target.value })}
-                placeholder="Ej: Netflix, Uber, etc."
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-nombre">Nombre *</Label>
+                <Input
+                  id="proveedor-nombre"
+                  value={proveedorForm.nombre}
+                  onChange={(e) => setProveedorForm({ ...proveedorForm, nombre: e.target.value })}
+                  placeholder="Ej: Netflix, Uber, etc."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-nit">NIT / Documento</Label>
+                <Input
+                  id="proveedor-nit"
+                  value={proveedorForm.nit}
+                  onChange={(e) => setProveedorForm({ ...proveedorForm, nit: e.target.value })}
+                  placeholder="123456789-0"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-email">Email</Label>
+                <Input
+                  id="proveedor-email"
+                  type="email"
+                  value={proveedorForm.email}
+                  onChange={(e) => setProveedorForm({ ...proveedorForm, email: e.target.value })}
+                  placeholder="contacto@ejemplo.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-telefono">Teléfono</Label>
+                <Input
+                  id="proveedor-telefono"
+                  value={proveedorForm.telefono}
+                  onChange={(e) => setProveedorForm({ ...proveedorForm, telefono: e.target.value })}
+                  placeholder="+57 300 123 4567"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="proveedor-descripcion">Descripción</Label>
+              <Label htmlFor="proveedor-direccion">Dirección</Label>
               <Input
-                id="proveedor-descripcion"
-                value={proveedorForm.descripcion}
-                onChange={(e) => setProveedorForm({ ...proveedorForm, descripcion: e.target.value })}
-                placeholder="Descripción breve del gasto"
+                id="proveedor-direccion"
+                value={proveedorForm.direccion}
+                onChange={(e) => setProveedorForm({ ...proveedorForm, direccion: e.target.value })}
+                placeholder="Calle 123 # 45-67"
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="proveedor-categoria">Categoría</Label>
-              <Select
-                value={proveedorForm.categoria}
-                onValueChange={(value) => setProveedorForm({ ...proveedorForm, categoria: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {getCategoryIcon(cat)} {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-categoria">Categoría *</Label>
+                <Select
+                  value={proveedorForm.categoria}
+                  onValueChange={(value) => setProveedorForm({ ...proveedorForm, categoria: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {getCategoryIcon(cat)} {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="proveedor-cuenta">Cuenta Bancaria</Label>
+                <Input
+                  id="proveedor-cuenta"
+                  value={proveedorForm.cuentaBancaria}
+                  onChange={(e) => setProveedorForm({ ...proveedorForm, cuentaBancaria: e.target.value })}
+                  placeholder="Banco - # Cuenta"
+                />
+              </div>
             </div>
           </div>
 
@@ -600,9 +714,18 @@ export default function Proveedores() {
             <Button variant="outline" onClick={() => setShowNewProveedorModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleAddProveedor}>
-              <Plus className="h-4 w-4 mr-2" />
-              Agregar Proveedor
+            <Button onClick={handleAddProveedor} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Agregar Proveedor
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -610,7 +733,7 @@ export default function Proveedores() {
 
       {/* Modal Editar Proveedor */}
       <Dialog open={showEditProveedorModal} onOpenChange={setShowEditProveedorModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Pencil className="h-5 w-5 text-primary" />
@@ -620,43 +743,81 @@ export default function Proveedores() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="edit-proveedor-nombre">Nombre</Label>
-              <Input
-                id="edit-proveedor-nombre"
-                value={editProveedorForm.nombre}
-                onChange={(e) => setEditProveedorForm({ ...editProveedorForm, nombre: e.target.value })}
-                placeholder="Ej: Netflix, Uber, etc."
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-nombre">Nombre *</Label>
+                <Input
+                  id="edit-proveedor-nombre"
+                  value={editProveedorForm.nombre}
+                  onChange={(e) => setEditProveedorForm({ ...editProveedorForm, nombre: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-nit">NIT / Documento</Label>
+                <Input
+                  id="edit-proveedor-nit"
+                  value={editProveedorForm.nit}
+                  onChange={(e) => setEditProveedorForm({ ...editProveedorForm, nit: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-email">Email</Label>
+                <Input
+                  id="edit-proveedor-email"
+                  type="email"
+                  value={editProveedorForm.email}
+                  onChange={(e) => setEditProveedorForm({ ...editProveedorForm, email: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-telefono">Teléfono</Label>
+                <Input
+                  id="edit-proveedor-telefono"
+                  value={editProveedorForm.telefono}
+                  onChange={(e) => setEditProveedorForm({ ...editProveedorForm, telefono: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-proveedor-descripcion">Descripción</Label>
+              <Label htmlFor="edit-proveedor-direccion">Dirección</Label>
               <Input
-                id="edit-proveedor-descripcion"
-                value={editProveedorForm.descripcion}
-                onChange={(e) => setEditProveedorForm({ ...editProveedorForm, descripcion: e.target.value })}
-                placeholder="Descripción breve del gasto"
+                id="edit-proveedor-direccion"
+                value={editProveedorForm.direccion}
+                onChange={(e) => setEditProveedorForm({ ...editProveedorForm, direccion: e.target.value })}
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="edit-proveedor-categoria">Categoría</Label>
-              <Select
-                value={editProveedorForm.categoria}
-                onValueChange={(value) => setEditProveedorForm({ ...editProveedorForm, categoria: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecciona una categoría" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat}>
-                      {getCategoryIcon(cat)} {cat}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-categoria">Categoría *</Label>
+                <Select
+                  value={editProveedorForm.categoria}
+                  onValueChange={(value) => setEditProveedorForm({ ...editProveedorForm, categoria: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categorias.map((cat) => (
+                      <SelectItem key={cat} value={cat}>
+                        {getCategoryIcon(cat)} {cat}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-proveedor-cuenta">Cuenta Bancaria</Label>
+                <Input
+                  id="edit-proveedor-cuenta"
+                  value={editProveedorForm.cuentaBancaria}
+                  onChange={(e) => setEditProveedorForm({ ...editProveedorForm, cuentaBancaria: e.target.value })}
+                />
+              </div>
             </div>
           </div>
 
@@ -664,9 +825,18 @@ export default function Proveedores() {
             <Button variant="outline" onClick={() => setShowEditProveedorModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleEditProveedor}>
-              <Pencil className="h-4 w-4 mr-2" />
-              Guardar Cambios
+            <Button onClick={handleEditProveedor} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Guardar Cambios
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -684,7 +854,7 @@ export default function Proveedores() {
               {proveedorToDelete && (
                 <>
                   ¿Estás seguro de que deseas eliminar a <span className="font-semibold text-foreground">{proveedorToDelete.nombre}</span>?
-                  Esta acción no se puede deshacer.
+                  El proveedor será desactivado y no aparecerá en la lista.
                 </>
               )}
             </DialogDescription>
@@ -694,9 +864,18 @@ export default function Proveedores() {
             <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
               Cancelar
             </Button>
-            <Button variant="destructive" onClick={handleDeleteProveedor}>
-              <Trash2 className="h-4 w-4 mr-2" />
-              Eliminar
+            <Button variant="destructive" onClick={handleDeleteProveedor} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

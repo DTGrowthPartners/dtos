@@ -11,12 +11,44 @@ interface TransactionRow {
   categoria: string;
   cuenta: string;
   entidad: string;
+  terceroId?: string;
 }
 
 interface FinanceData {
   month: string;
   income: number;
   expenses: number;
+}
+
+// Terceros (Third Parties) - Clients, Providers, Employees, Freelancers
+export interface Tercero {
+  id: string;
+  tipo: 'cliente' | 'proveedor' | 'empleado' | 'freelancer';
+  nombre: string;
+  nit?: string;
+  email?: string;
+  telefono?: string;
+  direccion?: string;
+  categoria?: string; // For providers: expense category
+  cuentaBancaria?: string;
+  salarioBase?: number; // For employees
+  cargo?: string; // For employees
+  estado: 'activo' | 'inactivo';
+  createdAt: string;
+}
+
+// Nómina (Payroll) records
+export interface NominaRecord {
+  id: string;
+  fecha: string;
+  terceroId: string;
+  terceroNombre?: string;
+  concepto: 'salario' | 'prima' | 'bonificacion' | 'vacaciones' | 'liquidacion' | 'otro';
+  salarioBase: number;
+  deducciones: number;
+  bonificaciones: number;
+  totalPagado: number;
+  notas?: string;
 }
 
 export class GoogleSheetsService {
@@ -333,6 +365,317 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error adding expense to Google Sheets:', error);
       throw new Error('No se pudo agregar el gasto a Google Sheets');
+    }
+  }
+
+  // ==================== TERCEROS (Third Parties) ====================
+
+  async getTerceros(): Promise<Tercero[]> {
+    try {
+      // Columnas: A=ID, B=Tipo, C=Nombre, D=NIT, E=Email, F=Teléfono, G=Dirección, H=Categoría, I=CuentaBancaria, J=SalarioBase, K=Cargo, L=Estado, M=CreatedAt
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Terceros!A2:M',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const rows = response.data.values || [];
+
+      return rows
+        .filter((row: any[]) => row[0]) // Has ID
+        .map((row: any[]) => ({
+          id: String(row[0]),
+          tipo: String(row[1] || 'proveedor') as Tercero['tipo'],
+          nombre: String(row[2] || ''),
+          nit: row[3] ? String(row[3]) : undefined,
+          email: row[4] ? String(row[4]) : undefined,
+          telefono: row[5] ? String(row[5]) : undefined,
+          direccion: row[6] ? String(row[6]) : undefined,
+          categoria: row[7] ? String(row[7]) : undefined,
+          cuentaBancaria: row[8] ? String(row[8]) : undefined,
+          salarioBase: row[9] ? Number(row[9]) : undefined,
+          cargo: row[10] ? String(row[10]) : undefined,
+          estado: (row[11] || 'activo') as Tercero['estado'],
+          createdAt: this.parseDate(row[12]) || new Date().toISOString().split('T')[0],
+        }));
+    } catch (error: any) {
+      // If sheet doesn't exist, return empty array
+      if (error.message?.includes('Unable to parse range')) {
+        console.log('Terceros sheet does not exist yet, returning empty array');
+        return [];
+      }
+      console.error('Error fetching Terceros:', error);
+      throw new Error('No se pudieron cargar los terceros');
+    }
+  }
+
+  async addTercero(tercero: Omit<Tercero, 'id' | 'createdAt'>): Promise<string> {
+    try {
+      // Generate unique ID
+      const id = `T${Date.now()}`;
+      const createdAt = this.dateToSerialNumber(new Date());
+
+      // Ensure sheet exists
+      await this.ensureSheetExists('Terceros', [
+        'ID', 'Tipo', 'Nombre', 'NIT', 'Email', 'Teléfono', 'Dirección',
+        'Categoría', 'CuentaBancaria', 'SalarioBase', 'Cargo', 'Estado', 'CreatedAt'
+      ]);
+
+      // Append new row
+      const values = [[
+        id,
+        tercero.tipo,
+        tercero.nombre,
+        tercero.nit || '',
+        tercero.email || '',
+        tercero.telefono || '',
+        tercero.direccion || '',
+        tercero.categoria || '',
+        tercero.cuentaBancaria || '',
+        tercero.salarioBase || '',
+        tercero.cargo || '',
+        tercero.estado,
+        createdAt,
+      ]];
+
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Terceros!A:M',
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Tercero added:', id, tercero.nombre);
+      return id;
+    } catch (error) {
+      console.error('Error adding Tercero:', error);
+      throw new Error('No se pudo agregar el tercero');
+    }
+  }
+
+  async updateTercero(id: string, tercero: Partial<Tercero>): Promise<void> {
+    try {
+      // Find row by ID
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Terceros!A:A',
+      });
+
+      const rows = response.data.values || [];
+      const rowIndex = rows.findIndex((row: any[]) => String(row[0]) === id);
+
+      if (rowIndex === -1) {
+        throw new Error('Tercero no encontrado');
+      }
+
+      // Get current row data
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const current = currentRow.data.values?.[0] || [];
+
+      // Update with new values
+      const values = [[
+        id,
+        tercero.tipo ?? current[1],
+        tercero.nombre ?? current[2],
+        tercero.nit ?? current[3] ?? '',
+        tercero.email ?? current[4] ?? '',
+        tercero.telefono ?? current[5] ?? '',
+        tercero.direccion ?? current[6] ?? '',
+        tercero.categoria ?? current[7] ?? '',
+        tercero.cuentaBancaria ?? current[8] ?? '',
+        tercero.salarioBase ?? current[9] ?? '',
+        tercero.cargo ?? current[10] ?? '',
+        tercero.estado ?? current[11],
+        current[12], // Keep original createdAt
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Tercero updated:', id);
+    } catch (error) {
+      console.error('Error updating Tercero:', error);
+      throw new Error('No se pudo actualizar el tercero');
+    }
+  }
+
+  async deleteTercero(id: string): Promise<void> {
+    try {
+      // Soft delete - just change status to inactive
+      await this.updateTercero(id, { estado: 'inactivo' });
+      console.log('Tercero deactivated:', id);
+    } catch (error) {
+      console.error('Error deleting Tercero:', error);
+      throw new Error('No se pudo eliminar el tercero');
+    }
+  }
+
+  // ==================== NÓMINA (Payroll) ====================
+
+  async getNomina(): Promise<NominaRecord[]> {
+    try {
+      // Columnas: A=ID, B=Fecha, C=TerceroId, D=TerceroNombre, E=Concepto, F=SalarioBase, G=Deducciones, H=Bonificaciones, I=TotalPagado, J=Notas
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Nomina!A2:J',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const rows = response.data.values || [];
+
+      return rows
+        .filter((row: any[]) => row[0]) // Has ID
+        .map((row: any[]) => ({
+          id: String(row[0]),
+          fecha: this.parseDate(row[1]),
+          terceroId: String(row[2] || ''),
+          terceroNombre: row[3] ? String(row[3]) : undefined,
+          concepto: (row[4] || 'salario') as NominaRecord['concepto'],
+          salarioBase: Number(row[5]) || 0,
+          deducciones: Number(row[6]) || 0,
+          bonificaciones: Number(row[7]) || 0,
+          totalPagado: Number(row[8]) || 0,
+          notas: row[9] ? String(row[9]) : undefined,
+        }));
+    } catch (error: any) {
+      if (error.message?.includes('Unable to parse range')) {
+        console.log('Nomina sheet does not exist yet, returning empty array');
+        return [];
+      }
+      console.error('Error fetching Nomina:', error);
+      throw new Error('No se pudo cargar la nómina');
+    }
+  }
+
+  async addNominaRecord(record: Omit<NominaRecord, 'id'>): Promise<string> {
+    try {
+      const id = `N${Date.now()}`;
+
+      // Parse date
+      const [year, month, day] = record.fecha.split('-').map(Number);
+      const fechaSerial = this.dateToSerialNumber(new Date(year, month - 1, day));
+
+      // Ensure sheet exists
+      await this.ensureSheetExists('Nomina', [
+        'ID', 'Fecha', 'TerceroId', 'TerceroNombre', 'Concepto',
+        'SalarioBase', 'Deducciones', 'Bonificaciones', 'TotalPagado', 'Notas'
+      ]);
+
+      const values = [[
+        id,
+        fechaSerial,
+        record.terceroId,
+        record.terceroNombre || '',
+        record.concepto,
+        record.salarioBase,
+        record.deducciones,
+        record.bonificaciones,
+        record.totalPagado,
+        record.notas || '',
+      ]];
+
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Nomina!A:J',
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      // Also add as expense in Salidas
+      await this.addExpense({
+        fecha: record.fecha,
+        importe: record.totalPagado,
+        descripcion: `Nómina: ${record.terceroNombre || record.terceroId} - ${record.concepto}`,
+        categoria: 'Nómina',
+        cuenta: 'Principal',
+        entidad: record.terceroNombre || record.terceroId,
+      });
+
+      console.log('Nomina record added:', id);
+      return id;
+    } catch (error) {
+      console.error('Error adding Nomina record:', error);
+      throw new Error('No se pudo agregar el registro de nómina');
+    }
+  }
+
+  // Helper to ensure a sheet exists with headers
+  private async ensureSheetExists(sheetName: string, headers: string[]): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const existingSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string } }) => sheet.properties?.title === sheetName
+      );
+
+      if (!existingSheet) {
+        // Create new sheet
+        await this.sheets.spreadsheets.batchUpdate({
+          spreadsheetId: SPREADSHEET_ID,
+          requestBody: {
+            requests: [{
+              addSheet: {
+                properties: { title: sheetName },
+              },
+            }],
+          },
+        });
+
+        // Add headers
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: SPREADSHEET_ID,
+          range: `${sheetName}!A1:${String.fromCharCode(64 + headers.length)}1`,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: [headers],
+          },
+        });
+
+        console.log(`Sheet "${sheetName}" created with headers`);
+      }
+    } catch (error) {
+      console.error(`Error ensuring sheet ${sheetName} exists:`, error);
+    }
+  }
+
+  // Get expense summary by tercero
+  async getExpensesByTercero(): Promise<Array<{ terceroId: string; nombre: string; total: number; count: number }>> {
+    try {
+      const { gastos } = await this.getFinanceData();
+      const terceros = await this.getTerceros();
+
+      const terceroMap = new Map(terceros.map(t => [t.nombre.toLowerCase(), t]));
+      const summary = new Map<string, { nombre: string; total: number; count: number }>();
+
+      gastos.forEach(gasto => {
+        const entidad = gasto.entidad.toLowerCase();
+        const tercero = terceroMap.get(entidad);
+        const key = tercero?.id || entidad;
+        const nombre = tercero?.nombre || gasto.entidad;
+
+        const current = summary.get(key) || { nombre, total: 0, count: 0 };
+        current.total += gasto.importe;
+        current.count += 1;
+        summary.set(key, current);
+      });
+
+      return Array.from(summary.entries())
+        .map(([terceroId, data]) => ({ terceroId, ...data }))
+        .sort((a, b) => b.total - a.total);
+    } catch (error) {
+      console.error('Error getting expenses by tercero:', error);
+      return [];
     }
   }
 }
