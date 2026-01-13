@@ -67,6 +67,7 @@ import {
   type TaskType,
   type TeamMemberName,
 } from '@/types/taskTypes';
+import { useAuthStore } from '@/lib/auth';
 
 const PRIORITY_COLORS = {
   LOW: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -98,6 +99,10 @@ export default function Tareas() {
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const { toast } = useToast();
+  const { user } = useAuthStore();
+
+  // Get the logged user's name (firstName matches team member name)
+  const loggedUserName = user?.firstName as TeamMemberName | undefined;
 
   // Image and Comments modals
   const [imageModalOpen, setImageModalOpen] = useState(false);
@@ -339,8 +344,8 @@ export default function Tareas() {
       description: '',
       status: TaskStatus.TODO,
       priority: Priority.MEDIUM,
-      assignee: 'Stiven',
-      creator: 'Dairo',
+      assignee: loggedUserName || 'Stiven',
+      creator: loggedUserName || 'Dairo',
       projectId: '',
       type: '',
       dueDate: '',
@@ -552,8 +557,15 @@ export default function Tareas() {
     return TEAM_MEMBERS.find((m) => m.name === name);
   };
 
-  // Filter tasks
+  // Filter tasks - only show tasks where user is creator or assignee
   const filteredTasks = tasks.filter((task) => {
+    // First filter by logged user (must be creator or assignee)
+    const isUserTask = loggedUserName
+      ? (task.assignee === loggedUserName || task.creator === loggedUserName)
+      : true; // If no user logged, show all (fallback)
+
+    if (!isUserTask) return false;
+
     const matchesSearch =
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase());
@@ -588,7 +600,7 @@ export default function Tareas() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Gestión de Tareas</h1>
-          <p className="text-muted-foreground">Tablero Kanban con drag and drop</p>
+          <p className="text-muted-foreground">Mis tareas</p>
         </div>
         <div className="flex gap-2">
           <input
@@ -694,7 +706,7 @@ export default function Tareas() {
             return (
               <div
                 key={column.id}
-                className="flex-1 min-w-[320px] flex flex-col bg-muted/50 rounded-lg p-4"
+                className="w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-4"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, column.status)}
               >
