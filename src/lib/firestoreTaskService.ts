@@ -244,3 +244,119 @@ export const addTaskComment = async (
     comments: arrayUnion(comment)
   });
 };
+
+// ============= IMPORT FROM EXTERNAL APP =============
+
+interface ExternalTask {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  dueDate: string | null;
+  position: number;
+  color: string | null;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  images: string[] | null;
+}
+
+interface ExportData {
+  exportDate: string;
+  version: string;
+  source: string;
+  tasks: ExternalTask[];
+  comments: unknown[];
+}
+
+// Map external status to internal status
+const mapStatus = (status: string): string => {
+  switch (status.toLowerCase()) {
+    case 'pending':
+      return 'TODO';
+    case 'in_progress':
+      return 'IN_PROGRESS';
+    case 'completed':
+      return 'DONE';
+    default:
+      return 'TODO';
+  }
+};
+
+// Map external priority to internal priority
+const mapPriority = (priority: string): 'LOW' | 'MEDIUM' | 'HIGH' => {
+  switch (priority.toLowerCase()) {
+    case 'high':
+      return 'HIGH';
+    case 'medium':
+      return 'MEDIUM';
+    case 'low':
+      return 'LOW';
+    default:
+      return 'MEDIUM';
+  }
+};
+
+// Infer task type from title/description
+const inferTaskType = (title: string, description: string): string | undefined => {
+  const text = `${title} ${description}`.toLowerCase();
+  if (text.includes('diseño') || text.includes('design') || text.includes('mockup') || text.includes('ui')) {
+    return 'Diseño';
+  }
+  if (text.includes('video') || text.includes('multimedia')) {
+    return 'Video / Multimedia';
+  }
+  if (text.includes('contenido') || text.includes('content')) {
+    return 'Contenido Orgánico';
+  }
+  if (text.includes('ads') || text.includes('publicidad') || text.includes('campaign')) {
+    return 'Publicidad / Ads';
+  }
+  if (text.includes('estrategia') || text.includes('strategy')) {
+    return 'Estrategia';
+  }
+  if (text.includes('copy') || text.includes('texto')) {
+    return 'Copywriting';
+  }
+  if (text.includes('revision') || text.includes('review') || text.includes('qa') || text.includes('calidad')) {
+    return 'Revisión / Control de Calidad';
+  }
+  if (text.includes('cliente') || text.includes('reunion') || text.includes('meeting')) {
+    return 'Cliente / Reuniones';
+  }
+  return undefined;
+};
+
+export const importTasksFromExport = async (exportData: ExportData, defaultProjectId: string): Promise<{ imported: number; errors: number }> => {
+  let imported = 0;
+  let errors = 0;
+
+  for (const externalTask of exportData.tasks) {
+    try {
+      const taskData = {
+        title: externalTask.title,
+        description: externalTask.description || '',
+        status: mapStatus(externalTask.status),
+        priority: mapPriority(externalTask.priority),
+        assignee: 'Stiven' as const, // Default assignee
+        creator: 'Dairo' as const,   // Default creator
+        projectId: defaultProjectId,
+        type: inferTaskType(externalTask.title, externalTask.description || ''),
+        createdAt: new Date(externalTask.createdAt).getTime(),
+        dueDate: externalTask.dueDate ? new Date(externalTask.dueDate).getTime() : undefined,
+        images: externalTask.images || [],
+        originalExternalId: externalTask.id, // Keep reference to original ID
+      };
+
+      const payload = sanitizePayload(taskData);
+      await addDoc(collection(db, TASKS_COLLECTION), payload);
+      imported++;
+    } catch (error) {
+      console.error('Error importing task:', externalTask.title, error);
+      errors++;
+    }
+  }
+
+  return { imported, errors };
+};

@@ -52,6 +52,7 @@ import {
   moveTaskToDeleted,
   copyTaskToCompleted,
   addTaskComment,
+  importTasksFromExport,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -124,6 +125,8 @@ export default function Tareas() {
 
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -504,6 +507,43 @@ export default function Tareas() {
     }
   };
 
+  // Import tasks from JSON file
+  const handleImportTasks = async (file: File) => {
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const exportData = JSON.parse(text);
+
+      // Use first project as default or create one
+      let defaultProjectId = projects.length > 0 ? projects[0].id : '';
+      if (!defaultProjectId) {
+        defaultProjectId = await createProject({ name: 'Importado', color: 'bg-slate-500' });
+        setProjects([...projects, { id: defaultProjectId, name: 'Importado', color: 'bg-slate-500' }]);
+      }
+
+      const result = await importTasksFromExport(exportData, defaultProjectId);
+
+      toast({
+        title: 'Importación completada',
+        description: `Se importaron ${result.imported} tareas. ${result.errors > 0 ? `${result.errors} errores.` : ''}`,
+      });
+
+      fetchData();
+    } catch (error) {
+      console.error('Error importing tasks:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo importar el archivo. Verifica que sea un JSON válido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsImporting(false);
+      if (importFileInputRef.current) {
+        importFileInputRef.current.value = '';
+      }
+    }
+  };
+
   const getProject = (projectId: string) => {
     return projects.find((p) => p.id === projectId);
   };
@@ -551,6 +591,24 @@ export default function Tareas() {
           <p className="text-muted-foreground">Tablero Kanban con drag and drop</p>
         </div>
         <div className="flex gap-2">
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleImportTasks(file);
+            }}
+          />
+          <Button
+            variant="outline"
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={isImporting}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            {isImporting ? 'Importando...' : 'Importar'}
+          </Button>
           <Button variant="outline" onClick={cycleViewMode}>
             {viewMode === 'card' ? <Grid3X3 className="h-4 w-4 mr-2" /> : <List className="h-4 w-4 mr-2" />}
             {viewMode === 'card' ? 'Tarjetas' : viewMode === 'list' ? 'Lista' : 'Compacto'}
