@@ -13,8 +13,8 @@ export default function Profile() {
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl || null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photoUrl || null);
   const [isSaving, setIsSaving] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);

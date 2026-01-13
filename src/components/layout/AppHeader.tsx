@@ -148,8 +148,12 @@ export function AppHeader() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 px-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                <User className="h-4 w-4" />
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground overflow-hidden">
+                {user?.photoUrl ? (
+                  <img src={user.photoUrl} alt="Foto de perfil" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="h-4 w-4" />
+                )}
               </div>
               <div className="hidden md:flex flex-col items-start">
                 <span className={cn("text-sm font-medium", isMisTareasView ? "text-slate-200" : "")}>
