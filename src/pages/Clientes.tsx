@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -137,6 +137,27 @@ export default function Clientes() {
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el cliente',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleToggleStatus = async (client: Client) => {
+    const newStatus = client.status === 'active' ? 'inactive' : 'active';
+    try {
+      await apiClient.put(`/api/clients/${client.id}`, {
+        ...client,
+        status: newStatus,
+      });
+      toast({
+        title: 'Estado actualizado',
+        description: `${client.name} ahora está ${newStatus === 'active' ? 'activo' : 'inactivo'}`,
+      });
+      fetchClients();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el estado',
         variant: 'destructive',
       });
     }
@@ -322,9 +343,15 @@ export default function Clientes() {
                       <TableCell className="text-muted-foreground">{client.nit || '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
                       <TableCell>
-                        <span className={`text-xs px-2 py-1 rounded-full whitespace-nowrap ${client.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleStatus(client)}
+                          className={`h-7 px-2 text-xs rounded-full ${client.status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                        >
+                          <Power className="h-3 w-3 mr-1" />
                           {client.status === 'active' ? 'Activo' : 'Inactivo'}
-                        </span>
+                        </Button>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
@@ -381,9 +408,15 @@ export default function Clientes() {
                       />
                       <div>
                         <h3 className="font-semibold text-lg">{client.name}</h3>
-                        <span className="text-xs text-muted-foreground">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleToggleStatus(client)}
+                          className={`h-5 px-2 text-xs rounded-full ${client.status === 'active' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'}`}
+                        >
+                          <Power className="h-3 w-3 mr-1" />
                           {client.status === 'active' ? 'Activo' : 'Inactivo'}
-                        </span>
+                        </Button>
                       </div>
                     </div>
                     <Button

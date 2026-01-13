@@ -22,7 +22,7 @@ export function CampaignOverview() {
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1 text-muted-foreground">
             <DollarSign className="h-4 w-4" />
-            <span>€{totalSpent.toLocaleString()} gastado</span>
+            <span>${totalSpent.toLocaleString()} gastado</span>
           </div>
           <div className="flex items-center gap-1 text-success">
             <TrendingUp className="h-4 w-4" />
@@ -53,12 +53,12 @@ export function CampaignOverview() {
               <div className="flex items-center gap-4 text-sm">
                 <div>
                   <span className="text-muted-foreground">Inversión: </span>
-                  <span className="font-medium text-foreground">€{campaign.spent.toLocaleString()}</span>
-                  <span className="text-muted-foreground"> / €{campaign.budget.toLocaleString()}</span>
+                  <span className="font-medium text-foreground">${campaign.spent.toLocaleString()}</span>
+                  <span className="text-muted-foreground"> / ${campaign.budget.toLocaleString()}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">CPA: </span>
-                  <span className="font-medium text-foreground">€{campaign.cpa.toFixed(2)}</span>
+                  <span className="font-medium text-foreground">${campaign.cpa.toFixed(2)}</span>
                 </div>
                 <div>
                   <span className="text-muted-foreground">ROAS: </span>

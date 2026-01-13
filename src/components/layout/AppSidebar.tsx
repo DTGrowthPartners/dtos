@@ -3,11 +3,11 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  Target,
-  CheckSquare,
+  // Target, // Temporalmente no usado
+  // CheckSquare, // Temporalmente no usado
   FileText,
   UserCog,
-  Package,
+  // Package, // Temporalmente no usado
   DollarSign,
   ChevronLeft,
   ChevronRight,
@@ -33,12 +33,12 @@ const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
   { title: 'Clientes', path: '/clientes', icon: Users },
   { title: 'Servicios', path: '/servicios', icon: Briefcase },
-  { title: 'Campañas', path: '/campanas', icon: Target },
+  // { title: 'Campañas', path: '/campanas', icon: Target }, // Temporalmente oculto
   // { title: 'Tareas', path: '/tareas', icon: CheckSquare }, // Temporalmente oculto
   { title: 'Mis Tareas', path: '/mis-tareas', icon: ClipboardCheck },
-  { title: 'Reportes', path: '/reportes', icon: FileText },
+  // { title: 'Reportes', path: '/reportes', icon: FileText }, // Temporalmente oculto
   { title: 'Equipo', path: '/equipo', icon: UserCog },
-  { title: 'Productos', path: '/productos', icon: Package },
+  // { title: 'Productos', path: '/productos', icon: Package }, // Temporalmente oculto
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign },
   { title: 'Proveedores', path: '/proveedores', icon: Building2 },
   { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText },

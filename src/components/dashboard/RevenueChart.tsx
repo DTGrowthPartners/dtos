@@ -41,7 +41,7 @@ export function RevenueChart() {
               fontSize={12}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
+              tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
             />
             <Tooltip
               contentStyle={{
@@ -50,7 +50,7 @@ export function RevenueChart() {
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
               }}
-              formatter={(value: number) => [`€${value.toLocaleString()}`, '']}
+              formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
               labelStyle={{ color: 'hsl(var(--foreground))' }}
             />
             <Area
