@@ -18,6 +18,9 @@ import {
   User,
   FolderOpen,
   Filter,
+  LayoutGrid,
+  Hash,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -605,15 +608,142 @@ export default function Tareas() {
     );
   }
 
+  // Helper to count tasks by project
+  const getTaskCountByProject = (projectId: string) => {
+    return tasks.filter(t => {
+      const isUserTask = loggedUserName
+        ? (t.assignee === loggedUserName || t.creator === loggedUserName)
+        : true;
+      return isUserTask && t.projectId === projectId;
+    }).length;
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in h-full flex flex-col">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Gestión de Tareas</h1>
-          <p className="text-muted-foreground">Mis tareas</p>
+    <div className="animate-fade-in h-full flex gap-6">
+      {/* Left Sidebar - Projects */}
+      <div className="w-64 flex-shrink-0 flex flex-col gap-4">
+        {/* User Info */}
+        <div className="rounded-lg border bg-card p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
+              {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+            </div>
+            <div>
+              <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
+              <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-2 rounded bg-blue-50 dark:bg-blue-950">
+              <p className="text-lg font-bold text-blue-600">{getTasksByColumn('TODO').length}</p>
+              <p className="text-[10px] text-muted-foreground">Pendiente</p>
+            </div>
+            <div className="p-2 rounded bg-amber-50 dark:bg-amber-950">
+              <p className="text-lg font-bold text-amber-600">{getTasksByColumn('IN_PROGRESS').length}</p>
+              <p className="text-[10px] text-muted-foreground">En curso</p>
+            </div>
+            <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950">
+              <p className="text-lg font-bold text-emerald-600">{getTasksByColumn('DONE').length}</p>
+              <p className="text-[10px] text-muted-foreground">Hecho</p>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
+
+        {/* Projects List */}
+        <div className="rounded-lg border bg-card p-4 flex-1 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold flex items-center gap-2">
+              <FolderOpen className="h-4 w-4" />
+              Proyectos
+            </h3>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={() => setIsProjectDialogOpen(true)}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="space-y-1 overflow-y-auto flex-1">
+            <button
+              onClick={() => setFilterProject('all')}
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors ${
+                filterProject === 'all'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'hover:bg-muted'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4" />
+                <span>Todos</span>
+              </div>
+              <span className="text-xs opacity-70">{filteredTasks.length}</span>
+            </button>
+            {projects.map((project) => {
+              const count = getTaskCountByProject(project.id);
+              return (
+                <button
+                  key={project.id}
+                  onClick={() => setFilterProject(project.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors ${
+                    filterProject === project.id
+                      ? 'bg-primary text-primary-foreground'
+                      : 'hover:bg-muted'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div className={`w-3 h-3 rounded-full ${project.color}`}></div>
+                    <span className="truncate">{project.name}</span>
+                  </div>
+                  <span className="text-xs opacity-70">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Quick Filters */}
+        <div className="rounded-lg border bg-card p-4">
+          <h3 className="font-semibold mb-3 flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            Filtros rápidos
+          </h3>
+          <div className="space-y-2">
+            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+              <SelectTrigger className="w-full h-9">
+                <User className="h-3 w-3 mr-2" />
+                <SelectValue placeholder="Asignado" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                {TEAM_MEMBERS.map((member) => (
+                  <SelectItem key={member.name} value={member.name}>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
+                      {member.name}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterPriority} onValueChange={setFilterPriority}>
+              <SelectTrigger className="w-full h-9">
+                <Hash className="h-3 w-3 mr-2" />
+                <SelectValue placeholder="Prioridad" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="HIGH">Alta</SelectItem>
+                <SelectItem value="MEDIUM">Media</SelectItem>
+                <SelectItem value="LOW">Baja</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="space-y-2">
           <input
             ref={importFileInputRef}
             type="file"
@@ -625,18 +755,7 @@ export default function Tareas() {
             }}
           />
           <Button
-            variant="outline"
-            onClick={() => importFileInputRef.current?.click()}
-            disabled={isImporting}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            {isImporting ? 'Importando...' : 'Importar'}
-          </Button>
-          <Button variant="outline" onClick={cycleViewMode}>
-            {viewMode === 'card' ? <Grid3X3 className="h-4 w-4 mr-2" /> : <List className="h-4 w-4 mr-2" />}
-            {viewMode === 'card' ? 'Tarjetas' : viewMode === 'list' ? 'Lista' : 'Compacto'}
-          </Button>
-          <Button
+            className="w-full"
             onClick={() => {
               resetForm();
               setIsDialogOpen(true);
@@ -645,71 +764,48 @@ export default function Tareas() {
             <Plus className="h-4 w-4 mr-2" />
             Nueva Tarea
           </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={isImporting}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            {isImporting ? 'Importando...' : 'Importar JSON'}
+          </Button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar tareas..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col min-w-0 gap-4">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Mis Tareas</h1>
+            <p className="text-sm text-muted-foreground">
+              {filterProject !== 'all' ? projects.find(p => p.id === filterProject)?.name : 'Todos los proyectos'}
+              {' · '}{filteredTasks.length} tareas
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-[200px]"
+              />
+            </div>
+            <Button variant="outline" size="icon" onClick={cycleViewMode}>
+              {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
-        <Select value={filterProject} onValueChange={setFilterProject}>
-          <SelectTrigger className="w-[180px]">
-            <FolderOpen className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Proyecto" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos los proyectos</SelectItem>
-            {projects.map((project) => (
-              <SelectItem key={project.id} value={project.id}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${project.color}`}></div>
-                  {project.name}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-          <SelectTrigger className="w-[160px]">
-            <User className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Asignado" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos</SelectItem>
-            {TEAM_MEMBERS.map((member) => (
-              <SelectItem key={member.name} value={member.name}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${member.color}`}></div>
-                  {member.name}
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterPriority} onValueChange={setFilterPriority}>
-          <SelectTrigger className="w-[140px]">
-            <Filter className="h-4 w-4 mr-2" />
-            <SelectValue placeholder="Prioridad" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="HIGH">Alta</SelectItem>
-            <SelectItem value="MEDIUM">Media</SelectItem>
-            <SelectItem value="LOW">Baja</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
 
-      {/* Kanban Board */}
-      <div className="flex-1 overflow-x-auto">
-        <div className="flex gap-4 h-full min-w-max pb-4">
+        {/* Kanban Board */}
+        <div className="flex-1 overflow-x-auto">
+          <div className="flex gap-4 h-full pb-4">
           {DEFAULT_COLUMNS.map((column) => {
             const columnTasks = getTasksByColumn(column.status);
             const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
@@ -993,6 +1089,7 @@ export default function Tareas() {
               </div>
             );
           })}
+          </div>
         </div>
       </div>
 
