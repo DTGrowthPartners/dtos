@@ -21,8 +21,12 @@ import {
   LayoutGrid,
   Hash,
   ChevronRight,
+  ChevronLeft,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -101,6 +105,7 @@ export default function Tareas() {
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { toast } = useToast();
   const { user } = useAuthStore();
 
@@ -619,128 +624,195 @@ export default function Tareas() {
   };
 
   return (
-    <div className="animate-fade-in h-full flex gap-6">
-      {/* Left Sidebar - Projects */}
-      <div className="w-64 flex-shrink-0 flex flex-col gap-4">
+    <div className="animate-fade-in h-full flex gap-4">
+      {/* Left Sidebar - Projects (Collapsable) */}
+      <div className={`flex-shrink-0 flex flex-col gap-3 transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
         {/* User Info */}
-        <div className="rounded-lg border bg-card p-4">
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
-              {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
-            </div>
-            <div>
-              <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
-              <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="p-2 rounded bg-blue-50 dark:bg-blue-950">
-              <p className="text-lg font-bold text-blue-600">{getTasksByColumn('TODO').length}</p>
-              <p className="text-[10px] text-muted-foreground">Pendiente</p>
-            </div>
-            <div className="p-2 rounded bg-amber-50 dark:bg-amber-950">
-              <p className="text-lg font-bold text-amber-600">{getTasksByColumn('IN_PROGRESS').length}</p>
-              <p className="text-[10px] text-muted-foreground">En curso</p>
-            </div>
-            <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950">
-              <p className="text-lg font-bold text-emerald-600">{getTasksByColumn('DONE').length}</p>
-              <p className="text-[10px] text-muted-foreground">Hecho</p>
-            </div>
-          </div>
+        <div className="rounded-lg border bg-card p-3">
+          {sidebarCollapsed ? (
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <div className={`w-8 h-8 mx-auto rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white text-xs font-semibold cursor-default`}>
+                  {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
+                <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
+                  {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                </div>
+                <div>
+                  <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
+                  <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-2 rounded bg-blue-50 dark:bg-blue-950">
+                  <p className="text-lg font-bold text-blue-600">{getTasksByColumn('TODO').length}</p>
+                  <p className="text-[10px] text-muted-foreground">Pendiente</p>
+                </div>
+                <div className="p-2 rounded bg-amber-50 dark:bg-amber-950">
+                  <p className="text-lg font-bold text-amber-600">{getTasksByColumn('IN_PROGRESS').length}</p>
+                  <p className="text-[10px] text-muted-foreground">En curso</p>
+                </div>
+                <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950">
+                  <p className="text-lg font-bold text-emerald-600">{getTasksByColumn('DONE').length}</p>
+                  <p className="text-[10px] text-muted-foreground">Hecho</p>
+                </div>
+              </div>
+            </>
+          )}
         </div>
 
         {/* Projects List */}
-        <div className="rounded-lg border bg-card p-4 flex-1 overflow-hidden flex flex-col">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold flex items-center gap-2">
-              <FolderOpen className="h-4 w-4" />
-              Proyectos
-            </h3>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => setIsProjectDialogOpen(true)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          <div className="space-y-1 overflow-y-auto flex-1">
-            <button
-              onClick={() => setFilterProject('all')}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors ${
-                filterProject === 'all'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <LayoutGrid className="h-4 w-4" />
-                <span>Todos</span>
+        <div className="rounded-lg border bg-card p-3 flex-1 overflow-hidden flex flex-col">
+          {sidebarCollapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setFilterProject('all')}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                      filterProject === 'all' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
+                  >
+                    <LayoutGrid className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Todos ({filteredTasks.length})</TooltipContent>
+              </Tooltip>
+              {projects.map((project) => {
+                const count = getTaskCountByProject(project.id);
+                return (
+                  <Tooltip key={project.id} delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => setFilterProject(project.id)}
+                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                          filterProject === project.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                        }`}
+                      >
+                        <div className={`w-4 h-4 rounded-full ${project.color}`}></div>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">{project.name} ({count})</TooltipContent>
+                  </Tooltip>
+                );
+              })}
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setIsProjectDialogOpen(true)}
+                    className="w-8 h-8 rounded-md flex items-center justify-center hover:bg-muted transition-colors border-2 border-dashed"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Nuevo proyecto</TooltipContent>
+              </Tooltip>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold flex items-center gap-2 text-sm">
+                  <FolderOpen className="h-4 w-4" />
+                  Proyectos
+                </h3>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setIsProjectDialogOpen(true)}
+                >
+                  <Plus className="h-3 w-3" />
+                </Button>
               </div>
-              <span className="text-xs opacity-70">{filteredTasks.length}</span>
-            </button>
-            {projects.map((project) => {
-              const count = getTaskCountByProject(project.id);
-              return (
+              <div className="space-y-1 overflow-y-auto flex-1">
                 <button
-                  key={project.id}
-                  onClick={() => setFilterProject(project.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-sm transition-colors ${
-                    filterProject === project.id
+                  onClick={() => setFilterProject('all')}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    filterProject === 'all'
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-muted'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <div className={`w-3 h-3 rounded-full ${project.color}`}></div>
-                    <span className="truncate">{project.name}</span>
+                    <LayoutGrid className="h-3 w-3" />
+                    <span>Todos</span>
                   </div>
-                  <span className="text-xs opacity-70">{count}</span>
+                  <span className="text-xs opacity-70">{filteredTasks.length}</span>
                 </button>
-              );
-            })}
-          </div>
+                {projects.map((project) => {
+                  const count = getTaskCountByProject(project.id);
+                  return (
+                    <button
+                      key={project.id}
+                      onClick={() => setFilterProject(project.id)}
+                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                        filterProject === project.id
+                          ? 'bg-primary text-primary-foreground'
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${project.color}`}></div>
+                        <span className="truncate">{project.name}</span>
+                      </div>
+                      <span className="text-xs opacity-70">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Quick Filters */}
-        <div className="rounded-lg border bg-card p-4">
-          <h3 className="font-semibold mb-3 flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Filtros rápidos
-          </h3>
-          <div className="space-y-2">
-            <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-              <SelectTrigger className="w-full h-9">
-                <User className="h-3 w-3 mr-2" />
-                <SelectValue placeholder="Asignado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                {TEAM_MEMBERS.map((member) => (
-                  <SelectItem key={member.name} value={member.name}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
-                      {member.name}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterPriority} onValueChange={setFilterPriority}>
-              <SelectTrigger className="w-full h-9">
-                <Hash className="h-3 w-3 mr-2" />
-                <SelectValue placeholder="Prioridad" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="HIGH">Alta</SelectItem>
-                <SelectItem value="MEDIUM">Media</SelectItem>
-                <SelectItem value="LOW">Baja</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Quick Filters - Hidden when collapsed */}
+        {!sidebarCollapsed && (
+          <div className="rounded-lg border bg-card p-3">
+            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
+              <Filter className="h-4 w-4" />
+              Filtros
+            </h3>
+            <div className="space-y-2">
+              <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <User className="h-3 w-3 mr-1" />
+                  <SelectValue placeholder="Asignado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {TEAM_MEMBERS.map((member) => (
+                    <SelectItem key={member.name} value={member.name}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
+                        {member.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <Hash className="h-3 w-3 mr-1" />
+                  <SelectValue placeholder="Prioridad" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="HIGH">Alta</SelectItem>
+                  <SelectItem value="MEDIUM">Media</SelectItem>
+                  <SelectItem value="LOW">Baja</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Actions */}
         <div className="space-y-2">
@@ -754,26 +826,79 @@ export default function Tareas() {
               if (file) handleImportTasks(file);
             }}
           />
-          <Button
-            className="w-full"
-            onClick={() => {
-              resetForm();
-              setIsDialogOpen(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nueva Tarea
-          </Button>
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => importFileInputRef.current?.click()}
-            disabled={isImporting}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            {isImporting ? 'Importando...' : 'Importar JSON'}
-          </Button>
+          {sidebarCollapsed ? (
+            <>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button
+                    className="w-full"
+                    size="icon"
+                    onClick={() => {
+                      resetForm();
+                      setIsDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Nueva tarea</TooltipContent>
+              </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    size="icon"
+                    onClick={() => importFileInputRef.current?.click()}
+                    disabled={isImporting}
+                  >
+                    <Upload className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Importar JSON</TooltipContent>
+              </Tooltip>
+            </>
+          ) : (
+            <>
+              <Button
+                className="w-full h-8 text-xs"
+                onClick={() => {
+                  resetForm();
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="h-3 w-3 mr-1" />
+                Nueva Tarea
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-8 text-xs"
+                onClick={() => importFileInputRef.current?.click()}
+                disabled={isImporting}
+              >
+                <Upload className="h-3 w-3 mr-1" />
+                {isImporting ? 'Importando...' : 'Importar'}
+              </Button>
+            </>
+          )}
         </div>
+
+        {/* Collapse Toggle */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          className="w-full h-8 text-muted-foreground hover:text-foreground"
+        >
+          {sidebarCollapsed ? (
+            <ChevronRight className="h-4 w-4" />
+          ) : (
+            <>
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              <span className="text-xs">Colapsar</span>
+            </>
+          )}
+        </Button>
       </div>
 
       {/* Main Content */}
