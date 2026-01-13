@@ -146,7 +146,11 @@ export default function Clientes() {
     const newStatus = client.status === 'active' ? 'inactive' : 'active';
     try {
       await apiClient.put(`/api/clients/${client.id}`, {
-        ...client,
+        name: client.name,
+        email: client.email,
+        nit: client.nit,
+        phone: client.phone,
+        address: client.address,
         status: newStatus,
       });
       toast({

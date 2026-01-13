@@ -112,12 +112,10 @@ export class ClientService {
     return client;
   }
 
-  async update(id: string, updateClientDto: UpdateClientDto, userId: string) {
-    const client = await prisma.client.findFirst({
-      where: {
-        id,
-        createdBy: userId,
-      },
+  async update(id: string, updateClientDto: UpdateClientDto, _userId: string) {
+    // Cualquier usuario autenticado puede actualizar clientes
+    const client = await prisma.client.findUnique({
+      where: { id },
     });
 
     if (!client) {
