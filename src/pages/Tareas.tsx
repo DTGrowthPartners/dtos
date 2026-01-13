@@ -101,8 +101,15 @@ export default function Tareas() {
   const { toast } = useToast();
   const { user } = useAuthStore();
 
-  // Get the logged user's name (firstName matches team member name)
-  const loggedUserName = user?.firstName as TeamMemberName | undefined;
+  // Map user firstName to team member name (case-insensitive matching)
+  const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
+    if (!firstName) return undefined;
+    const normalizedName = firstName.toLowerCase().trim();
+    const member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
+    return member?.name;
+  };
+
+  const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
 
   // Image and Comments modals
   const [imageModalOpen, setImageModalOpen] = useState(false);
@@ -557,12 +564,16 @@ export default function Tareas() {
     return TEAM_MEMBERS.find((m) => m.name === name);
   };
 
+  // Debug: Log user info to console
+  console.log('User:', user?.firstName, '-> Mapped to:', loggedUserName);
+
   // Filter tasks - only show tasks where user is creator or assignee
   const filteredTasks = tasks.filter((task) => {
     // First filter by logged user (must be creator or assignee)
+    // If loggedUserName is undefined (no match found), show all tasks as fallback
     const isUserTask = loggedUserName
       ? (task.assignee === loggedUserName || task.creator === loggedUserName)
-      : true; // If no user logged, show all (fallback)
+      : true; // If no match or no user logged, show all (fallback)
 
     if (!isUserTask) return false;
 
