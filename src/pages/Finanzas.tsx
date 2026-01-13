@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { TercerosModal } from '@/components/modals/TercerosModal';
+import { NominaModal } from '@/components/modals/NominaModal';
 
 interface FinanceData {
   month: string;
@@ -60,6 +62,21 @@ export default function Finanzas() {
   const [filterDateTo, setFilterDateTo] = useState<string>('');
   const [filterDatePreset, setFilterDatePreset] = useState<string>('todas');
   const [showFilters, setShowFilters] = useState(true);
+
+  // Modals
+  const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [showTercerosModal, setShowTercerosModal] = useState(false);
+  const [showNominaModal, setShowNominaModal] = useState(false);
+
+  // Form states
+  const [expenseForm, setExpenseForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    importe: '',
+    descripcion: '',
+    categoria: '',
+    cuenta: '',
+    entidad: '',
+  });
 
   // Date preset options (Shopify style)
   const datePresets = [
@@ -459,6 +476,26 @@ export default function Finanzas() {
     );
   }
 
+  // Handle form submissions
+  const handleAddExpense = async () => {
+    try {
+      await apiClient.post('/api/finance/expense', expenseForm);
+      toast({
+        title: 'Éxito',
+        description: 'Gasto agregado correctamente',
+      });
+      setShowAddExpenseModal(false);
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error adding expense:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo agregar el gasto',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -487,6 +524,30 @@ export default function Finanzas() {
               <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
               Actualizar
             </Button>
+            <Button
+              variant="default"
+              onClick={() => setShowAddExpenseModal(true)}
+              className="w-full sm:w-auto"
+            >
+              <DollarSign className="h-4 w-4 mr-2" />
+              Agregar Gasto
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => setShowTercerosModal(true)}
+              className="w-full sm:w-auto"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Terceros
+            </Button>
+            <Button
+              variant="default"
+              onClick={() => setShowNominaModal(true)}
+              className="w-full sm:w-auto"
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Nómina
+            </Button>
           </div>
         </div>
 
@@ -496,7 +557,7 @@ export default function Finanzas() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
               <div className="w-full">
                 <label className="text-sm font-medium text-foreground mb-2 block">Tipo</label>
-                <Select value={filterType} onValueChange={(value: any) => setFilterType(value)}>
+                <Select value={filterType} onValueChange={(value: 'todas' | 'ingresos' | 'gastos') => setFilterType(value)}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Seleccionar tipo" />
                   </SelectTrigger>
@@ -981,45 +1042,45 @@ export default function Finanzas() {
                   />
                 </div>
               </div>
-          <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-            <div className="min-w-[600px]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
-                    <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredIngresos.length > 0 ? (
-                    filteredIngresos.map((ingreso, index) => (
-                      <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                        <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
-                        <td className="py-3 px-2 text-foreground">
-                          <div className="max-w-[200px] sm:max-w-none">
-                            <p className="truncate">{ingreso.descripcion}</p>
-                            <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
-                        <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
-                        <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
+              <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+                <div className="min-w-[600px]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
+                        <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                        {hasActiveFilters ? 'No hay ingresos con los filtros aplicados' : 'No hay ingresos registrados'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {filteredIngresos.length > 0 ? (
+                        filteredIngresos.map((ingreso, index) => (
+                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
+                            <td className="py-3 px-2 text-foreground">
+                              <div className="max-w-[200px] sm:max-w-none">
+                                <p className="truncate">{ingreso.descripcion}</p>
+                                <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
+                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
+                            <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                            {hasActiveFilters ? 'No hay ingresos con los filtros aplicados' : 'No hay ingresos registrados'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1059,45 +1120,45 @@ export default function Finanzas() {
                   />
                 </div>
               </div>
-          <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
-            <div className="min-w-[600px]">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
-                    <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
-                    <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGastos.length > 0 ? (
-                    filteredGastos.map((gasto, index) => (
-                      <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                        <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
-                        <td className="py-3 px-2 text-foreground">
-                          <div className="max-w-[200px] sm:max-w-none">
-                            <p className="truncate">{gasto.descripcion}</p>
-                            <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
-                        <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
-                        <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
+              <div className="overflow-x-auto -mx-6 px-6 sm:mx-0 sm:px-0">
+                <div className="min-w-[600px]">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Fecha</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground">Descripción</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
+                        <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
+                        <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                        {hasActiveFilters ? 'No hay gastos con los filtros aplicados' : 'No hay gastos registrados'}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    </thead>
+                    <tbody>
+                      {filteredGastos.length > 0 ? (
+                        filteredGastos.map((gasto, index) => (
+                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
+                            <td className="py-3 px-2 text-foreground">
+                              <div className="max-w-[200px] sm:max-w-none">
+                                <p className="truncate">{gasto.descripcion}</p>
+                                <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
+                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
+                            <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                            {hasActiveFilters ? 'No hay gastos con los filtros aplicados' : 'No hay gastos registrados'}
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1119,6 +1180,97 @@ export default function Finanzas() {
           </div>
         </div>
       </div>
+
+      {/* Add Expense Modal */}
+      {showAddExpenseModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground">Agregar Gasto</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowAddExpenseModal(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Fecha</label>
+                <Input
+                  type="date"
+                  value={expenseForm.fecha}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, fecha: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Importe</label>
+                <Input
+                  type="number"
+                  value={expenseForm.importe}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, importe: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Descripción</label>
+                <Input
+                  value={expenseForm.descripcion}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, descripcion: e.target.value })}
+                  placeholder="Descripción del gasto"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
+                <Input
+                  value={expenseForm.categoria}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, categoria: e.target.value })}
+                  placeholder="Ej: Alquiler, Servicios, Nómina"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Cuenta</label>
+                <Input
+                  value={expenseForm.cuenta}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, cuenta: e.target.value })}
+                  placeholder="Ej: Principal, Ahorros"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Entidad</label>
+                <Input
+                  value={expenseForm.entidad}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, entidad: e.target.value })}
+                  placeholder="Ej: Proveedor X, Empleado Y"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddExpenseModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleAddExpense}>
+                <DollarSign className="h-4 w-4 mr-2" />
+                Agregar Gasto
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Terceros Modal */}
+      {showTercerosModal && (
+        <TercerosModal onClose={() => setShowTercerosModal(false)} />
+      )}
+
+      {/* Nómina Modal */}
+      {showNominaModal && (
+        <NominaModal onClose={() => setShowNominaModal(false)} />
+      )}
     </div>
   );
 }
