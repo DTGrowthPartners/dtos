@@ -10,6 +10,7 @@ router.use(authMiddleware);
 router.post('/generate', invoiceController.generate);
 router.get('/', invoiceController.list);
 router.get('/:id/download', invoiceController.download);
+router.patch('/:id/status', invoiceController.updateStatus);
 router.delete('/:id', invoiceController.delete);
 
 export default router;

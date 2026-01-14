@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, Download, FileText, CheckSquare, Square } from 'lucide-react';
+import { PlusCircle, Trash2, FileText, CheckSquare, Square, Search, Check, ChevronsUpDown, Send, CircleCheck, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
-import { saveAs } from 'file-saver';
 import {
   Table,
   TableBody,
@@ -17,6 +16,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
 // --- Data Interfaces ---
 interface Client {
@@ -59,8 +73,16 @@ interface Invoice {
   fecha: string;
   concepto: string | null;
   servicio: string | null;
+  status: 'pendiente' | 'enviada' | 'pagada';
+  paidAt: string | null;
   createdAt: string;
 }
+
+const INVOICE_STATUS = {
+  pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-800', icon: Send },
+  pagada: { label: 'Pagada', color: 'bg-green-100 text-green-800', icon: CircleCheck },
+} as const;
 
 const CuentasCobro = () => {
   const { toast } = useToast();
@@ -69,6 +91,8 @@ const CuentasCobro = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
+  const [clientSearchOpen, setClientSearchOpen] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
 
   const [invoiceData, setInvoiceData] = useState({
     cliente_id: '',
@@ -114,6 +138,16 @@ const CuentasCobro = () => {
     setInvoiceData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Filter clients based on search query
+  const filteredClients = useMemo(() => {
+    if (!clientSearchQuery) return clients;
+    const query = clientSearchQuery.toLowerCase();
+    return clients.filter(client =>
+      client.name.toLowerCase().includes(query) ||
+      (client.nit && client.nit.toLowerCase().includes(query))
+    );
+  }, [clients, clientSearchQuery]);
+
   const handleClientChange = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
     if (client) {
@@ -122,6 +156,26 @@ const CuentasCobro = () => {
         cliente_id: clientId,
         nombre_cliente: client.name,
         identificacion: client.nit || '',
+      });
+      setClientSearchOpen(false);
+    }
+  };
+
+  const handleStatusChange = async (invoiceId: string, newStatus: 'pendiente' | 'enviada' | 'pagada') => {
+    try {
+      await apiClient.patch(`/api/invoices/${invoiceId}/status`, { status: newStatus });
+      toast({
+        title: 'Estado actualizado',
+        description: newStatus === 'pagada'
+          ? 'La cuenta se marcó como pagada y se registró el ingreso en Finanzas.'
+          : `Estado cambiado a "${INVOICE_STATUS[newStatus].label}"`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el estado.',
+        variant: 'destructive',
       });
     }
   };
@@ -312,18 +366,55 @@ const CuentasCobro = () => {
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="cliente_id">Cliente</Label>
-              <Select onValueChange={handleClientChange} value={invoiceData.cliente_id}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Selecciona un cliente" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clients.map((client) => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={clientSearchOpen} onOpenChange={setClientSearchOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={clientSearchOpen}
+                    className="w-full justify-between"
+                  >
+                    {invoiceData.cliente_id
+                      ? clients.find(c => c.id === invoiceData.cliente_id)?.name
+                      : "Buscar cliente..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-full p-0" align="start">
+                  <Command>
+                    <CommandInput
+                      placeholder="Buscar por nombre o NIT..."
+                      value={clientSearchQuery}
+                      onValueChange={setClientSearchQuery}
+                    />
+                    <CommandList>
+                      <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                      <CommandGroup>
+                        {filteredClients.map((client) => (
+                          <CommandItem
+                            key={client.id}
+                            value={client.id}
+                            onSelect={() => handleClientChange(client.id)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                invoiceData.cliente_id === client.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{client.name}</span>
+                              {client.nit && (
+                                <span className="text-xs text-muted-foreground">NIT: {client.nit}</span>
+                              )}
+                            </div>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-2">
               <Label htmlFor="identificacion">Identificación (NIT/CC)</Label>
@@ -508,6 +599,7 @@ const CuentasCobro = () => {
                     <TableHead className="min-w-[100px]">Fecha</TableHead>
                     <TableHead className="min-w-[150px]">Cliente</TableHead>
                     <TableHead className="text-right min-w-[120px]">Valor</TableHead>
+                    <TableHead className="min-w-[130px]">Estado</TableHead>
                     <TableHead className="text-right min-w-[100px]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -531,6 +623,47 @@ const CuentasCobro = () => {
                       <TableCell className="break-words">{invoice.clientName}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          value={invoice.status || 'pendiente'}
+                          onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'pagada')}
+                        >
+                          <SelectTrigger className="w-[120px] h-8">
+                            <SelectValue>
+                              {(() => {
+                                const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                                const StatusIcon = status.icon;
+                                return (
+                                  <Badge className={cn("gap-1", status.color)}>
+                                    <StatusIcon className="h-3 w-3" />
+                                    {status.label}
+                                  </Badge>
+                                );
+                              })()}
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pendiente">
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-3 w-3 text-yellow-600" />
+                                Pendiente
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="enviada">
+                              <div className="flex items-center gap-2">
+                                <Send className="h-3 w-3 text-blue-600" />
+                                Enviada
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="pagada">
+                              <div className="flex items-center gap-2">
+                                <CircleCheck className="h-3 w-3 text-green-600" />
+                                Pagada
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">

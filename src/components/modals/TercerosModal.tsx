@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { X, Users, Plus, Edit, Trash, Search } from 'lucide-react';
-import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface Tercero {
@@ -22,9 +21,106 @@ interface Tercero {
   createdAt: string;
 }
 
+// Datos de prueba
+const mockTerceros: Tercero[] = [
+  {
+    id: '1',
+    tipo: 'proveedor',
+    nombre: 'AWS Colombia',
+    nit: '900123456-1',
+    email: 'aws@colombia.com',
+    telefono: '3001234567',
+    direccion: 'Bogotá, Colombia',
+    categoria: 'Cloud Services',
+    cuentaBancaria: 'Bancolombia 1234567890',
+    estado: 'activo',
+    createdAt: '2024-01-15',
+  },
+  {
+    id: '2',
+    tipo: 'proveedor',
+    nombre: 'Google Workspace',
+    nit: '900234567-2',
+    email: 'workspace@google.com',
+    categoria: 'Software',
+    estado: 'activo',
+    createdAt: '2024-02-01',
+  },
+  {
+    id: '3',
+    tipo: 'empleado',
+    nombre: 'Carlos Martínez',
+    nit: '1098765432',
+    email: 'carlos@dtgrowth.com',
+    telefono: '3109876543',
+    cargo: 'Desarrollador Senior',
+    salarioBase: 5500000,
+    cuentaBancaria: 'Davivienda 9876543210',
+    estado: 'activo',
+    createdAt: '2024-01-10',
+  },
+  {
+    id: '4',
+    tipo: 'empleado',
+    nombre: 'María García',
+    nit: '1087654321',
+    email: 'maria@dtgrowth.com',
+    telefono: '3201234567',
+    cargo: 'Diseñadora UX/UI',
+    salarioBase: 4500000,
+    cuentaBancaria: 'Nequi 3201234567',
+    estado: 'activo',
+    createdAt: '2024-02-15',
+  },
+  {
+    id: '5',
+    tipo: 'empleado',
+    nombre: 'Juan Rodríguez',
+    nit: '1076543210',
+    email: 'juan@dtgrowth.com',
+    telefono: '3156789012',
+    cargo: 'Project Manager',
+    salarioBase: 6000000,
+    cuentaBancaria: 'BBVA 5678901234',
+    estado: 'activo',
+    createdAt: '2024-01-20',
+  },
+  {
+    id: '6',
+    tipo: 'freelancer',
+    nombre: 'Ana López',
+    nit: '1065432109',
+    email: 'ana.freelance@gmail.com',
+    telefono: '3187654321',
+    categoria: 'Marketing Digital',
+    estado: 'activo',
+    createdAt: '2024-03-01',
+  },
+  {
+    id: '7',
+    tipo: 'cliente',
+    nombre: 'Tech Solutions SAS',
+    nit: '900345678-3',
+    email: 'contacto@techsolutions.co',
+    telefono: '6012345678',
+    direccion: 'Medellín, Colombia',
+    estado: 'activo',
+    createdAt: '2024-01-05',
+  },
+  {
+    id: '8',
+    tipo: 'proveedor',
+    nombre: 'Figma Inc',
+    email: 'billing@figma.com',
+    categoria: 'Software Diseño',
+    estado: 'activo',
+    createdAt: '2024-02-20',
+  },
+];
+
 export function TercerosModal({ onClose }: { onClose: () => void }) {
-  const [terceros, setTerceros] = useState<Tercero[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [terceros, setTerceros] = useState<Tercero[]>(mockTerceros);
+  const [isLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTercero, setEditingTercero] = useState<Tercero | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,74 +155,45 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
     estado: 'activo',
   });
 
-  useEffect(() => {
-    fetchTerceros();
-  }, []);
-
-  const fetchTerceros = async () => {
-    try {
-      setIsLoading(true);
-      const response = await apiClient.get('/api/finance/terceros');
-      setTerceros(response.data);
-    } catch (error) {
-      console.error('Error fetching terceros:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los terceros',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (editingTercero) {
-        await apiClient.put(`/api/finance/terceros/${editingTercero.id}`, formData);
-        toast({
-          title: 'Éxito',
-          description: 'Tercero actualizado correctamente',
-        });
-      } else {
-        await apiClient.post('/api/finance/terceros', formData);
-        toast({
-          title: 'Éxito',
-          description: 'Tercero agregado correctamente',
-        });
-      }
-      setShowForm(false);
-      setEditingTercero(null);
-      fetchTerceros();
-      resetForm();
-    } catch (error) {
-      console.error('Error saving tercero:', error);
+    if (editingTercero) {
+      // Actualizar tercero existente
+      setTerceros(prev => prev.map(t =>
+        t.id === editingTercero.id
+          ? { ...t, ...formData, salarioBase: formData.salarioBase ? parseFloat(formData.salarioBase) : undefined }
+          : t
+      ));
       toast({
-        title: 'Error',
-        description: 'No se pudo guardar el tercero',
-        variant: 'destructive',
+        title: 'Éxito',
+        description: 'Tercero actualizado correctamente',
+      });
+    } else {
+      // Agregar nuevo tercero
+      const newTercero: Tercero = {
+        id: Date.now().toString(),
+        ...formData,
+        salarioBase: formData.salarioBase ? parseFloat(formData.salarioBase) : undefined,
+        createdAt: new Date().toISOString().split('T')[0],
+      };
+      setTerceros(prev => [...prev, newTercero]);
+      toast({
+        title: 'Éxito',
+        description: 'Tercero agregado correctamente',
       });
     }
+    setShowForm(false);
+    setEditingTercero(null);
+    resetForm();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (confirm('¿Estás seguro de que deseas eliminar este tercero?')) {
-      try {
-        await apiClient.delete(`/api/finance/terceros/${id}`);
-        toast({
-          title: 'Éxito',
-          description: 'Tercero eliminado correctamente',
-        });
-        fetchTerceros();
-      } catch (error) {
-        console.error('Error deleting tercero:', error);
-        toast({
-          title: 'Error',
-          description: 'No se pudo eliminar el tercero',
-          variant: 'destructive',
-        });
-      }
+      setTerceros(prev => prev.filter(t => t.id !== id));
+      toast({
+        title: 'Éxito',
+        description: 'Tercero eliminado correctamente',
+      });
     }
   };
 

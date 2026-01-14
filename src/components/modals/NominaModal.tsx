@@ -1,9 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { X, FileText, Plus, Edit, Trash, Search } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { X, FileText, Plus, Edit, Search } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface NominaRecord {
@@ -25,10 +24,93 @@ interface Tercero {
   tipo: string;
 }
 
+// Datos de prueba - Empleados
+const mockEmpleados: Tercero[] = [
+  { id: '3', nombre: 'Carlos Martínez', tipo: 'empleado' },
+  { id: '4', nombre: 'María García', tipo: 'empleado' },
+  { id: '5', nombre: 'Juan Rodríguez', tipo: 'empleado' },
+];
+
+// Datos de prueba - Registros de nómina
+const mockNominaRecords: NominaRecord[] = [
+  {
+    id: '1',
+    fecha: '2024-12-30',
+    terceroId: '3',
+    terceroNombre: 'Carlos Martínez',
+    concepto: 'salario',
+    salarioBase: 5500000,
+    deducciones: 440000,
+    bonificaciones: 0,
+    totalPagado: 5060000,
+    notas: 'Pago salario diciembre 2024',
+  },
+  {
+    id: '2',
+    fecha: '2024-12-30',
+    terceroId: '4',
+    terceroNombre: 'María García',
+    concepto: 'salario',
+    salarioBase: 4500000,
+    deducciones: 360000,
+    bonificaciones: 200000,
+    totalPagado: 4340000,
+    notas: 'Pago salario diciembre + bono',
+  },
+  {
+    id: '3',
+    fecha: '2024-12-30',
+    terceroId: '5',
+    terceroNombre: 'Juan Rodríguez',
+    concepto: 'salario',
+    salarioBase: 6000000,
+    deducciones: 480000,
+    bonificaciones: 0,
+    totalPagado: 5520000,
+    notas: 'Pago salario diciembre 2024',
+  },
+  {
+    id: '4',
+    fecha: '2024-12-15',
+    terceroId: '3',
+    terceroNombre: 'Carlos Martínez',
+    concepto: 'prima',
+    salarioBase: 5500000,
+    deducciones: 0,
+    bonificaciones: 0,
+    totalPagado: 2750000,
+    notas: 'Prima de navidad 2024',
+  },
+  {
+    id: '5',
+    fecha: '2024-12-15',
+    terceroId: '4',
+    terceroNombre: 'María García',
+    concepto: 'prima',
+    salarioBase: 4500000,
+    deducciones: 0,
+    bonificaciones: 0,
+    totalPagado: 2250000,
+    notas: 'Prima de navidad 2024',
+  },
+  {
+    id: '6',
+    fecha: '2024-11-30',
+    terceroId: '3',
+    terceroNombre: 'Carlos Martínez',
+    concepto: 'salario',
+    salarioBase: 5500000,
+    deducciones: 440000,
+    bonificaciones: 500000,
+    totalPagado: 5560000,
+    notas: 'Pago salario noviembre + bono proyecto',
+  },
+];
+
 export function NominaModal({ onClose }: { onClose: () => void }) {
-  const [nominaRecords, setNominaRecords] = useState<NominaRecord[]>([]);
-  const [terceros, setTerceros] = useState<Tercero[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [nominaRecords, setNominaRecords] = useState<NominaRecord[]>(mockNominaRecords);
+  const [terceros] = useState<Tercero[]>(mockEmpleados);
+  const [isLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRecord, setEditingRecord] = useState<NominaRecord | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -55,68 +137,37 @@ export function NominaModal({ onClose }: { onClose: () => void }) {
     notas: '',
   });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      setIsLoading(true);
-      const [nominaResponse, tercerosResponse] = await Promise.all([
-        apiClient.get('/api/finance/nomina'),
-        apiClient.get('/api/finance/terceros?tipo=empleado')
-      ]);
-      setNominaRecords(nominaResponse.data);
-      setTerceros(tercerosResponse.data);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los datos de nómina',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const payload = {
-        ...formData,
-        salarioBase: parseFloat(formData.salarioBase) || 0,
-        deducciones: parseFloat(formData.deducciones) || 0,
-        bonificaciones: parseFloat(formData.bonificaciones) || 0,
-        totalPagado: parseFloat(formData.totalPagado) || 0,
-        terceroNombre: terceros.find(t => t.id === formData.terceroId)?.nombre,
-      };
+    const payload: NominaRecord = {
+      id: editingRecord?.id || Date.now().toString(),
+      fecha: formData.fecha,
+      terceroId: formData.terceroId,
+      terceroNombre: terceros.find(t => t.id === formData.terceroId)?.nombre,
+      concepto: formData.concepto,
+      salarioBase: parseFloat(formData.salarioBase) || 0,
+      deducciones: parseFloat(formData.deducciones) || 0,
+      bonificaciones: parseFloat(formData.bonificaciones) || 0,
+      totalPagado: parseFloat(formData.totalPagado) || 0,
+      notas: formData.notas,
+    };
 
-      if (editingRecord) {
-        await apiClient.put(`/api/finance/nomina/${editingRecord.id}`, payload);
-        toast({
-          title: 'Éxito',
-          description: 'Registro de nómina actualizado correctamente',
-        });
-      } else {
-        await apiClient.post('/api/finance/nomina', payload);
-        toast({
-          title: 'Éxito',
-          description: 'Registro de nómina agregado correctamente',
-        });
-      }
-      setShowForm(false);
-      setEditingRecord(null);
-      fetchData();
-      resetForm();
-    } catch (error) {
-      console.error('Error saving nomina record:', error);
+    if (editingRecord) {
+      setNominaRecords(prev => prev.map(r => r.id === editingRecord.id ? payload : r));
       toast({
-        title: 'Error',
-        description: 'No se pudo guardar el registro de nómina',
-        variant: 'destructive',
+        title: 'Éxito',
+        description: 'Registro de nómina actualizado correctamente',
+      });
+    } else {
+      setNominaRecords(prev => [payload, ...prev]);
+      toast({
+        title: 'Éxito',
+        description: 'Registro de nómina agregado correctamente',
       });
     }
+    setShowForm(false);
+    setEditingRecord(null);
+    resetForm();
   };
 
   const resetForm = () => {

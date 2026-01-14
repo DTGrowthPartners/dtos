@@ -150,6 +150,8 @@ model Invoice {
   servicio        String?
   observaciones   String?
   filePath        String   // Ruta del PDF generado
+  status          String   @default("pendiente") // pendiente, enviada, pagada
+  paidAt          DateTime?
   createdBy       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

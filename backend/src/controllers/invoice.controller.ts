@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { invoiceService } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { PrismaClient } from '@prisma/client';
+import { googleSheetsService } from '../services/googleSheets.service';
 import fs from 'fs';
 import path from 'path';
 
@@ -163,6 +164,54 @@ class InvoiceController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${path.basename(absolutePath)}`);
       res.sendFile(absolutePath);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public updateStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+
+      if (!['pendiente', 'enviada', 'pagada'].includes(status)) {
+        res.status(400).json({ message: 'Estado inválido. Debe ser: pendiente, enviada o pagada' });
+        return;
+      }
+
+      const invoice = await prisma.invoice.findUnique({
+        where: { id },
+      });
+
+      if (!invoice) {
+        res.status(404).json({ message: 'Invoice not found' });
+        return;
+      }
+
+      // If marking as paid, register income in Finanzas
+      const updateData: any = { status };
+
+      if (status === 'pagada' && invoice.status !== 'pagada') {
+        updateData.paidAt = new Date();
+
+        // Add income to Google Sheets
+        const today = new Date().toISOString().split('T')[0];
+        await googleSheetsService.addIncome({
+          fecha: today,
+          importe: invoice.totalAmount,
+          descripcion: `Pago cuenta de cobro #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
+          categoria: 'Servicios',
+          cuenta: 'Principal',
+          entidad: invoice.clientName,
+        });
+      }
+
+      const updatedInvoice = await prisma.invoice.update({
+        where: { id },
+        data: updateData,
+      });
+
+      res.json(updatedInvoice);
     } catch (error) {
       next(error);
     }
