@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -227,6 +227,7 @@ export default function CRM() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLostDialogOpen, setIsLostDialogOpen] = useState(false);
   const [isWonDialogOpen, setIsWonDialogOpen] = useState(false);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
   const { toast } = useToast();
@@ -261,6 +262,13 @@ export default function CRM() {
   const [wonFormData, setWonFormData] = useState({
     finalValue: '',
     notes: '',
+  });
+
+  const [taskFormData, setTaskFormData] = useState({
+    title: '',
+    description: '',
+    priority: 'medium',
+    dueDate: '',
   });
 
   useEffect(() => {
@@ -413,6 +421,40 @@ export default function CRM() {
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el deal',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleCreateTask = async () => {
+    if (!selectedDeal || !taskFormData.title) return;
+    try {
+      // Create task with deal context in title/description
+      const taskPayload = {
+        title: taskFormData.title,
+        description: `[CRM - ${selectedDeal.name}${selectedDeal.company ? ` / ${selectedDeal.company}` : ''}]\n${taskFormData.description || ''}`.trim(),
+        priority: taskFormData.priority,
+        dueDate: taskFormData.dueDate || undefined,
+        status: 'pending',
+      };
+
+      await apiClient.post('/api/tasks', taskPayload);
+
+      // Log activity on the deal
+      await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+        type: 'note',
+        title: 'Tarea creada',
+        description: taskFormData.title,
+      });
+
+      toast({ title: 'Tarea creada', description: 'La tarea se agrego correctamente' });
+      setIsTaskDialogOpen(false);
+      setTaskFormData({ title: '', description: '', priority: 'medium', dueDate: '' });
+      loadDealDetail(selectedDeal.id);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo crear la tarea',
         variant: 'destructive',
       });
     }
@@ -884,6 +926,24 @@ export default function CRM() {
 
                 <Separator />
 
+                {/* Quick Actions */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm">Acciones Rapidas</h4>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsTaskDialogOpen(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <CheckSquare className="h-4 w-4" />
+                      Crear Tarea
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+
                 {/* Activity Timeline */}
                 <div className="space-y-3">
                   <h4 className="font-medium text-sm">Actividad Reciente</h4>
@@ -1258,6 +1318,72 @@ export default function CRM() {
             </Button>
             <Button className="bg-green-500 hover:bg-green-600" onClick={handleMarkAsWon} disabled={!wonFormData.finalValue}>
               Confirmar Ganado
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Task Dialog */}
+      <Dialog open={isTaskDialogOpen} onOpenChange={setIsTaskDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Crear Tarea</DialogTitle>
+            <DialogDescription>
+              {selectedDeal && `Crear una tarea relacionada con ${selectedDeal.name}`}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Titulo *</Label>
+              <Input
+                placeholder="Ej: Enviar propuesta, Llamar para seguimiento..."
+                value={taskFormData.title}
+                onChange={(e) => setTaskFormData({ ...taskFormData, title: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripcion</Label>
+              <Textarea
+                placeholder="Detalles adicionales de la tarea..."
+                value={taskFormData.description}
+                onChange={(e) => setTaskFormData({ ...taskFormData, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Prioridad</Label>
+                <Select
+                  value={taskFormData.priority}
+                  onValueChange={(value) => setTaskFormData({ ...taskFormData, priority: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Baja</SelectItem>
+                    <SelectItem value="medium">Media</SelectItem>
+                    <SelectItem value="high">Alta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha limite</Label>
+                <Input
+                  type="date"
+                  value={taskFormData.dueDate}
+                  onChange={(e) => setTaskFormData({ ...taskFormData, dueDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIsTaskDialogOpen(false); setTaskFormData({ title: '', description: '', priority: 'medium', dueDate: '' }); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateTask} disabled={!taskFormData.title}>
+              <CheckSquare className="h-4 w-4 mr-2" />
+              Crear Tarea
             </Button>
           </DialogFooter>
         </DialogContent>
