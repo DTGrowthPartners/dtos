@@ -14,7 +14,7 @@ router.use(authMiddleware);
 router.put('/profile/me', async (req, res) => {
   try {
     const userId = req.user?.userId;
-    const { firstName, lastName, photoUrl } = req.body;
+    const { firstName, lastName, phone, photoUrl } = req.body;
 
     if (!userId) {
       return res.status(401).json({ message: 'No autenticado' });
@@ -25,6 +25,7 @@ router.put('/profile/me', async (req, res) => {
       data: {
         firstName: firstName || undefined,
         lastName: lastName || undefined,
+        phone: phone || undefined,
         photoUrl: photoUrl !== undefined ? photoUrl : undefined,
       },
       select: {
@@ -32,6 +33,7 @@ router.put('/profile/me', async (req, res) => {
         email: true,
         firstName: true,
         lastName: true,
+        phone: true,
         photoUrl: true,
         roleId: true,
         role: {
@@ -48,6 +50,7 @@ router.put('/profile/me', async (req, res) => {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        phone: user.phone,
         photoUrl: user.photoUrl,
         role: user.role.name,
       },

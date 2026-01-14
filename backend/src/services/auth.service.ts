@@ -216,6 +216,7 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        phone: user.phone,
         photoUrl: user.photoUrl,
         role: user.role.name,
       },

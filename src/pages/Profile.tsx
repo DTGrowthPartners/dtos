@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Camera, Save, Mail, Shield, Download, QrCode } from 'lucide-react';
+import { User, Camera, Save, Mail, Shield, Download, QrCode, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,7 @@ export default function Profile() {
 
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
+  const [phone, setPhone] = useState(user?.phone || '3007189383');
   const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl || null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photoUrl || null);
   const [isSaving, setIsSaving] = useState(false);
@@ -29,6 +30,7 @@ export default function Profile() {
 VERSION:3.0
 N:${lastName};${firstName}
 FN:${firstName} ${lastName}
+TEL;TYPE=CELL:+57${phone}
 EMAIL:${user?.email || ''}
 ORG:DT Growth Partners
 END:VCARD`;
@@ -48,10 +50,10 @@ END:VCARD`;
       }
     };
 
-    if (firstName || lastName || user?.email) {
+    if (firstName || lastName || user?.email || phone) {
       generateQR();
     }
-  }, [firstName, lastName, user?.email]);
+  }, [firstName, lastName, phone, user?.email]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,6 +105,7 @@ END:VCARD`;
       const updatedUser = await apiClient.put<{ user: typeof user }>('/api/users/profile/me', {
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        phone: phone.trim(),
         photoUrl: photoUrl,
       });
 
@@ -215,6 +218,22 @@ END:VCARD`;
                 />
               </div>
             </div>
+          </div>
+
+          {/* Phone field */}
+          <div className="space-y-2">
+            <Label htmlFor="phone">Telefono</Label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="phone"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="3007189383"
+                className="pl-10"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">Este numero aparecera en tu codigo QR</p>
           </div>
 
           {/* Read-only fields */}
