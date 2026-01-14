@@ -21,6 +21,12 @@ model User {
   sharedClients ClientShare[] @relation("SharedClients")
   services      Service[]     @relation("ServiceCreatedBy")
   tasks         Task[]        @relation("TaskCreatedBy")
+  // CRM Relations
+  ownedDeals         Deal[]         @relation("DealOwner")
+  createdDeals       Deal[]         @relation("DealCreatedBy")
+  dealActivities     DealActivity[] @relation("ActivityPerformedBy")
+  assignedReminders  DealReminder[] @relation("ReminderAssignedTo")
+  createdReminders   DealReminder[] @relation("ReminderCreatedBy")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -87,6 +93,7 @@ model Service {
   createdBy   String?
   createdByUser User?   @relation("ServiceCreatedBy", fields: [createdBy], references: [id])
   clients     ClientService[]
+  deals       Deal[]    // CRM: Deals interesados en este servicio
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -146,4 +153,110 @@ model Invoice {
   createdBy       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ==================== CRM / Pipeline de Ventas ====================
+
+model DealStage {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  position  Int
+  color     String   @default("#6B7280")
+  isWon     Boolean  @default(false)
+  isLost    Boolean  @default(false)
+  deals     Deal[]
+  fromActivities DealActivity[] @relation("ActivityFromStage")
+  toActivities   DealActivity[] @relation("ActivityToStage")
+  createdAt DateTime @default(now())
+}
+
+model Deal {
+  id                String    @id @default(cuid())
+  name              String    // Nombre del contacto
+  company           String?   // Empresa/Negocio
+  phone             String?   // Número WhatsApp
+  phoneCountryCode  String    @default("+57")
+  email             String?
+
+  // Pipeline
+  stageId           String
+  stage             DealStage @relation(fields: [stageId], references: [id])
+
+  // Valor
+  estimatedValue    Float?    // Valor estimado mensual
+  currency          String    @default("COP")
+
+  // Servicio de interés
+  serviceId         String?
+  service           Service?  @relation(fields: [serviceId], references: [id])
+  serviceNotes      String?   // Notas sobre personalización
+
+  // Fuente y contexto
+  source            String?   // referido, pauta, web, etc
+  sourceDetail      String?   // Quién refirió, qué campaña
+
+  // Asignación
+  ownerId           String?
+  owner             User?     @relation("DealOwner", fields: [ownerId], references: [id])
+
+  // Fechas importantes
+  firstContactAt       DateTime?
+  meetingScheduledAt   DateTime?
+  proposalSentAt       DateTime?
+  expectedCloseDate    DateTime?
+  closedAt             DateTime?
+
+  // Razón de pérdida (si aplica)
+  lostReason        String?
+  lostNotes         String?
+
+  // Metadata
+  notes             String?
+  activities        DealActivity[]
+  reminders         DealReminder[]
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  createdBy         String
+  createdByUser     User      @relation("DealCreatedBy", fields: [createdBy], references: [id])
+}
+
+model DealActivity {
+  id          String     @id @default(cuid())
+  dealId      String
+  deal        Deal       @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  // Tipo de actividad: call, whatsapp, email, meeting, note, stage_change
+  type        String
+  title       String?
+  description String?
+
+  // Para cambios de etapa
+  fromStageId String?
+  fromStage   DealStage? @relation("ActivityFromStage", fields: [fromStageId], references: [id])
+  toStageId   String?
+  toStage     DealStage? @relation("ActivityToStage", fields: [toStageId], references: [id])
+
+  performedBy   String
+  performedByUser User   @relation("ActivityPerformedBy", fields: [performedBy], references: [id])
+  performedAt   DateTime @default(now())
+}
+
+model DealReminder {
+  id          String    @id @default(cuid())
+  dealId      String
+  deal        Deal      @relation(fields: [dealId], references: [id], onDelete: Cascade)
+
+  title       String
+  remindAt    DateTime
+
+  isCompleted Boolean   @default(false)
+  completedAt DateTime?
+
+  assignedTo    String?
+  assignedToUser User?  @relation("ReminderAssignedTo", fields: [assignedTo], references: [id])
+  createdBy     String
+  createdByUser User    @relation("ReminderCreatedBy", fields: [createdBy], references: [id])
+  createdAt     DateTime @default(now())
 }

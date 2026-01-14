@@ -13,7 +13,8 @@ import {
   Briefcase,
   Menu,
   X,
-  Building2,
+  Target,
+  // Building2, // Temporalmente oculto
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -28,12 +29,13 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { title: 'CRM', path: '/crm', icon: Target },
   { title: 'Clientes', path: '/clientes', icon: Users },
   { title: 'Servicios', path: '/servicios', icon: Briefcase },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare },
   { title: 'Equipo', path: '/equipo', icon: UserCog },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign },
-  { title: 'Proveedores', path: '/proveedores', icon: Building2 },
+  // { title: 'Proveedores', path: '/proveedores', icon: Building2 }, // Temporalmente oculto
   { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText },
 ];
 

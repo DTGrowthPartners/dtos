@@ -10,6 +10,7 @@ import serviceRoutes from './routes/services.routes';
 import taskRoutes from './routes/tasks.routes';
 import invoiceRoutes from './routes/invoice.router';
 import financeRoutes from './routes/finance.routes';
+import crmRoutes from './routes/crm.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -41,6 +42,7 @@ app.use('/api/services', serviceRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/invoices', invoiceRoutes);
 app.use('/api/finance', financeRoutes);
+app.use('/api/crm', crmRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
