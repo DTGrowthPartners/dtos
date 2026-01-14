@@ -29,6 +29,8 @@ export interface TokenResponse {
     email: string;
     firstName: string;
     lastName: string;
+    phone?: string;
+    photoUrl?: string;
     role: string;
   };
 }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { roleMiddleware } from '../middlewares/roles.middleware';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 
 const router = Router();
 const prisma = new PrismaClient();
