@@ -82,9 +82,11 @@ export const changeStage = async (req: Request, res: Response) => {
     const userId = (req as any).user.userId;
     const { dealId } = req.params;
     const data: ChangeStageDto = req.body;
+    console.log('Change stage request:', { dealId, data, userId });
     const deal = await crmService.changeStage(dealId, data, userId);
     res.json(deal);
   } catch (error: any) {
+    console.error('Change stage error:', error);
     if (error.message === 'Deal not found' || error.message === 'Stage not found') {
       return res.status(404).json({ error: error.message });
     }
