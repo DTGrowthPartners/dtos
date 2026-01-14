@@ -13,6 +13,7 @@ model User {
   password      String? // Optional for Firebase users
   firstName     String        @default("")
   lastName      String        @default("")
+  photoUrl      String?       // Profile photo (base64 or URL)
   roleId        String
   role          Role          @relation(fields: [roleId], references: [id])
   firebaseUid   String?       @unique // Firebase UID for Firebase Auth users

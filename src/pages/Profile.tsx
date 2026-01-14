@@ -1,11 +1,12 @@
-import { useState, useRef } from 'react';
-import { User, Camera, Save, Mail, Shield } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { User, Camera, Save, Mail, Shield, Download, QrCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
+import QRCode from 'qrcode';
 
 export default function Profile() {
   const { user, setUser } = useAuthStore();
@@ -16,8 +17,41 @@ export default function Profile() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl || null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photoUrl || null);
   const [isSaving, setIsSaving] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Generate QR code with vCard data
+  useEffect(() => {
+    const generateQR = async () => {
+      const vCard = `BEGIN:VCARD
+VERSION:3.0
+N:${lastName};${firstName}
+FN:${firstName} ${lastName}
+EMAIL:${user?.email || ''}
+ORG:DT Growth Partners
+END:VCARD`;
+
+      try {
+        const dataUrl = await QRCode.toDataURL(vCard, {
+          width: 200,
+          margin: 2,
+          color: {
+            dark: '#1a1a2e',
+            light: '#ffffff',
+          },
+        });
+        setQrDataUrl(dataUrl);
+      } catch (error) {
+        console.error('Error generating QR:', error);
+      }
+    };
+
+    if (firstName || lastName || user?.email) {
+      generateQR();
+    }
+  }, [firstName, lastName, user?.email]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -90,6 +124,15 @@ export default function Profile() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleDownloadQR = () => {
+    if (!qrDataUrl) return;
+
+    const link = document.createElement('a');
+    link.download = `contacto-${firstName}-${lastName}.png`.toLowerCase().replace(/\s+/g, '-');
+    link.href = qrDataUrl;
+    link.click();
   };
 
   const getInitials = () => {
@@ -216,6 +259,45 @@ export default function Profile() {
               )}
               {isSaving ? 'Guardando...' : 'Guardar'}
             </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* QR Code Card */}
+      <div className="rounded-xl border border-border bg-card p-6">
+        <div className="flex items-start gap-4 mb-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
+            <QrCode className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-foreground mb-1">Codigo QR de Contacto</h3>
+            <p className="text-sm text-muted-foreground">
+              Escanea este codigo con cualquier telefono para agregar tu informacion de contacto automaticamente
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center gap-6">
+          {/* QR Code Display */}
+          <div className="p-4 bg-white rounded-xl shadow-sm border">
+            {qrDataUrl ? (
+              <img src={qrDataUrl} alt="QR Code" className="w-48 h-48" />
+            ) : (
+              <div className="w-48 h-48 flex items-center justify-center text-muted-foreground">
+                Generando...
+              </div>
+            )}
+          </div>
+
+          {/* Download Button */}
+          <div className="flex flex-col gap-3">
+            <Button onClick={handleDownloadQR} disabled={!qrDataUrl} variant="outline" className="gap-2">
+              <Download className="h-4 w-4" />
+              Descargar QR (PNG)
+            </Button>
+            <p className="text-xs text-muted-foreground text-center sm:text-left">
+              Formato vCard compatible con<br />iOS y Android
+            </p>
           </div>
         </div>
       </div>

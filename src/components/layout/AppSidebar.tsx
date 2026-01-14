@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useAuthStore } from '@/lib/auth';
 
 interface NavItem {
   title: string;
@@ -42,6 +43,13 @@ const navItems: NavItem[] = [
 export function AppSidebar() {
   const { collapsed, mobileOpen, setCollapsed, setMobileOpen } = useSidebar();
   const location = useLocation();
+  const { user } = useAuthStore();
+
+  const getInitials = () => {
+    const first = user?.firstName?.charAt(0) || '';
+    const last = user?.lastName?.charAt(0) || '';
+    return (first + last).toUpperCase() || 'U';
+  };
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -84,12 +92,23 @@ export function AppSidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        {/* Logo */}
+        {/* Logo + User Photo */}
         <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
           <div className={cn('flex items-center gap-3', collapsed && 'justify-center w-full lg:w-auto')}>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary flex-shrink-0">
-              <Layers className="h-5 w-5 text-primary-foreground" />
-            </div>
+            {/* User Photo / Avatar */}
+            <NavLink to="/perfil" className="flex-shrink-0">
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border-2 border-primary/30 hover:border-primary transition-colors">
+                {user?.photoUrl ? (
+                  <img
+                    src={user.photoUrl}
+                    alt="Foto de perfil"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-sm font-bold text-primary">{getInitials()}</span>
+                )}
+              </div>
+            </NavLink>
             {!collapsed && (
               <div className="flex flex-col">
                 <span className="text-base font-bold text-sidebar-foreground">DT-OS</span>

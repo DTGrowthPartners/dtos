@@ -55,13 +55,13 @@ export class AuthService {
 
     return this.generateTokens(user);
   }
-  
+
   async firebaseRegister(firebaseDto: FirebaseRegisterDto) {
     const { idToken, email, firstName, lastName } = firebaseDto;
 
     // Verify Firebase ID token
     const decodedToken = await admin.auth().verifyIdToken(idToken);
-    
+
     if (decodedToken.email !== email) {
       throw new Error('Email mismatch');
     }
@@ -106,7 +106,7 @@ export class AuthService {
 
     return this.generateTokens(user);
   }
-  
+
   async firebaseLogin(firebaseDto: FirebaseLoginDto) {
     const { idToken } = firebaseDto;
 
@@ -166,10 +166,10 @@ export class AuthService {
 
     return this.generateTokens(user);
   }
-  
+
   async login(loginDto: LoginDto): Promise<TokenResponse> {
     const { email, password } = loginDto;
-    
+
     // Find user
     const user = await prisma.user.findUnique({
       where: { email },
@@ -177,7 +177,7 @@ export class AuthService {
         role: true,
       },
     });
-    
+
     if (!user) {
       throw new Error('Invalid credentials');
     }
@@ -193,10 +193,10 @@ export class AuthService {
     if (!isPasswordValid) {
       throw new Error('Invalid credentials');
     }
-    
+
     return this.generateTokens(user);
   }
-  
+
   private generateTokens(user: any): TokenResponse {
     const payload = {
       userId: user.id,
@@ -204,10 +204,10 @@ export class AuthService {
       role: user.role.name,
       permissions: user.role.permissions || [],
     };
-    
+
     const token = generateToken(payload);
     const refreshToken = generateRefreshToken(payload);
-    
+
     return {
       token,
       refreshToken,
@@ -216,6 +216,7 @@ export class AuthService {
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
+        photoUrl: user.photoUrl,
         role: user.role.name,
       },
     };
