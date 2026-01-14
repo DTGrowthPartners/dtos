@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,20 +44,20 @@ import { apiClient } from '@/lib/api';
 // Source Icons
 const ShopifyIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 256 292" className={className} preserveAspectRatio="xMidYMid">
-    <path d="M223.774 57.34c-.201-1.46-1.48-2.268-2.537-2.357-1.055-.088-23.383-1.743-23.383-1.743s-15.507-15.395-17.209-17.099c-1.703-1.703-5.029-1.185-6.32-.805-.19.056-3.388 1.043-8.678 2.68-5.18-14.906-14.322-28.604-30.405-28.604-.444 0-.901.018-1.358.044C129.31 3.407 123.644.779 118.75.779c-37.465 0-55.364 46.835-60.976 70.635-14.558 4.511-24.9 7.718-26.221 8.133-8.126 2.549-8.383 2.805-9.45 10.462C21.3 95.806.038 260.235.038 260.235l165.678 31.042 89.77-19.42S223.973 58.8 223.775 57.34zM156.49 40.848l-14.019 4.339c.005-.988.01-1.96.01-3.023 0-9.264-1.286-16.723-3.349-22.636 8.287 1.04 13.806 10.469 17.358 21.32zm-27.638-19.483c2.304 5.773 3.802 14.058 3.802 25.238 0 .572-.005 1.095-.01 1.624-9.117 2.824-19.024 5.89-28.953 8.966 5.575-21.516 16.025-31.908 25.161-35.828zm-11.131-10.537c1.617 0 3.246.549 4.805 1.622-12.007 5.65-24.877 19.88-30.312 48.297l-22.886 7.088C75.694 46.16 90.81 10.828 117.72 10.828z" fill="#95BF46"/>
-    <path d="M221.237 54.983c-1.055-.088-23.383-1.743-23.383-1.743s-15.507-15.395-17.209-17.099c-.637-.634-1.496-.959-2.394-1.099l-12.527 256.233 89.762-19.418S223.972 58.8 223.774 57.34c-.201-1.46-1.48-2.268-2.537-2.357" fill="#5E8E3E"/>
-    <path d="M135.242 104.585l-11.069 32.926s-9.698-5.176-21.586-5.176c-17.428 0-18.305 10.937-18.305 13.693 0 15.038 39.2 20.8 39.2 56.024 0 27.713-17.577 45.558-41.277 45.558-28.44 0-42.984-17.7-42.984-17.7l7.615-25.16s14.95 12.835 27.565 12.835c8.243 0 11.596-6.49 11.596-11.232 0-19.616-32.16-20.491-32.16-52.724 0-27.129 19.472-53.382 58.778-53.382 15.145 0 22.627 4.338 22.627 4.338" fill="#FFF"/>
+    <path d="M223.774 57.34c-.201-1.46-1.48-2.268-2.537-2.357-1.055-.088-23.383-1.743-23.383-1.743s-15.507-15.395-17.209-17.099c-1.703-1.703-5.029-1.185-6.32-.805-.19.056-3.388 1.043-8.678 2.68-5.18-14.906-14.322-28.604-30.405-28.604-.444 0-.901.018-1.358.044C129.31 3.407 123.644.779 118.75.779c-37.465 0-55.364 46.835-60.976 70.635-14.558 4.511-24.9 7.718-26.221 8.133-8.126 2.549-8.383 2.805-9.45 10.462C21.3 95.806.038 260.235.038 260.235l165.678 31.042 89.77-19.42S223.973 58.8 223.775 57.34zM156.49 40.848l-14.019 4.339c.005-.988.01-1.96.01-3.023 0-9.264-1.286-16.723-3.349-22.636 8.287 1.04 13.806 10.469 17.358 21.32zm-27.638-19.483c2.304 5.773 3.802 14.058 3.802 25.238 0 .572-.005 1.095-.01 1.624-9.117 2.824-19.024 5.89-28.953 8.966 5.575-21.516 16.025-31.908 25.161-35.828zm-11.131-10.537c1.617 0 3.246.549 4.805 1.622-12.007 5.65-24.877 19.88-30.312 48.297l-22.886 7.088C75.694 46.16 90.81 10.828 117.72 10.828z" fill="#95BF46" />
+    <path d="M221.237 54.983c-1.055-.088-23.383-1.743-23.383-1.743s-15.507-15.395-17.209-17.099c-.637-.634-1.496-.959-2.394-1.099l-12.527 256.233 89.762-19.418S223.972 58.8 223.774 57.34c-.201-1.46-1.48-2.268-2.537-2.357" fill="#5E8E3E" />
+    <path d="M135.242 104.585l-11.069 32.926s-9.698-5.176-21.586-5.176c-17.428 0-18.305 10.937-18.305 13.693 0 15.038 39.2 20.8 39.2 56.024 0 27.713-17.577 45.558-41.277 45.558-28.44 0-42.984-17.7-42.984-17.7l7.615-25.16s14.95 12.835 27.565 12.835c8.243 0 11.596-6.49 11.596-11.232 0-19.616-32.16-20.491-32.16-52.724 0-27.129 19.472-53.382 58.778-53.382 15.145 0 22.627 4.338 22.627 4.338" fill="#FFF" />
   </svg>
 );
 
 const WordPressIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 122.52 122.523" className={className}>
     <g fill="#21759b">
-      <path d="m8.708 61.26c0 20.802 12.089 38.779 29.619 47.298l-25.069-68.686c-2.916 6.536-4.55 13.769-4.55 21.388z"/>
-      <path d="m96.74 58.608c0-6.495-2.333-10.993-4.334-14.494-2.664-4.329-5.161-7.995-5.161-12.324 0-4.831 3.664-9.328 8.825-9.328.233 0 .454.029.681.042-9.35-8.566-21.807-13.796-35.489-13.796-18.36 0-34.513 9.42-43.91 23.688 1.233.037 2.395.063 3.382.063 5.497 0 14.006-.667 14.006-.667 2.833-.167 3.167 3.994.337 4.329 0 0-2.847.335-6.015.501l19.138 56.925 11.501-34.493-8.188-22.434c-2.83-.166-5.511-.501-5.511-.501-2.832-.166-2.5-4.496.332-4.329 0 0 8.679.667 13.843.667 5.496 0 14.006-.667 14.006-.667 2.835-.167 3.168 3.994.337 4.329 0 0-2.853.335-6.015.501l18.992 56.494 5.242-17.517c2.272-7.269 4.001-12.49 4.001-16.989z"/>
-      <path d="m62.184 65.857-15.768 45.819c4.708 1.384 9.687 2.141 14.846 2.141 6.12 0 11.989-1.058 17.452-2.979-.141-.225-.269-.464-.374-.724z"/>
-      <path d="m107.376 36.046c.226 1.674.354 3.471.354 5.404 0 5.333-.996 11.328-3.996 18.824l-16.053 46.413c15.624-9.111 26.133-26.038 26.133-45.426.001-9.137-2.333-17.729-6.438-25.215z"/>
-      <path d="m61.262 0c-33.779 0-61.262 27.481-61.262 61.26 0 33.783 27.483 61.263 61.262 61.263 33.778 0 61.265-27.48 61.265-61.263-.001-33.779-27.487-61.26-61.265-61.26zm0 119.715c-32.23 0-58.453-26.223-58.453-58.455 0-32.23 26.222-58.451 58.453-58.451 32.229 0 58.45 26.221 58.45 58.451 0 32.232-26.221 58.455-58.45 58.455z"/>
+      <path d="m8.708 61.26c0 20.802 12.089 38.779 29.619 47.298l-25.069-68.686c-2.916 6.536-4.55 13.769-4.55 21.388z" />
+      <path d="m96.74 58.608c0-6.495-2.333-10.993-4.334-14.494-2.664-4.329-5.161-7.995-5.161-12.324 0-4.831 3.664-9.328 8.825-9.328.233 0 .454.029.681.042-9.35-8.566-21.807-13.796-35.489-13.796-18.36 0-34.513 9.42-43.91 23.688 1.233.037 2.395.063 3.382.063 5.497 0 14.006-.667 14.006-.667 2.833-.167 3.167 3.994.337 4.329 0 0-2.847.335-6.015.501l19.138 56.925 11.501-34.493-8.188-22.434c-2.83-.166-5.511-.501-5.511-.501-2.832-.166-2.5-4.496.332-4.329 0 0 8.679.667 13.843.667 5.496 0 14.006-.667 14.006-.667 2.835-.167 3.168 3.994.337 4.329 0 0-2.853.335-6.015.501l18.992 56.494 5.242-17.517c2.272-7.269 4.001-12.49 4.001-16.989z" />
+      <path d="m62.184 65.857-15.768 45.819c4.708 1.384 9.687 2.141 14.846 2.141 6.12 0 11.989-1.058 17.452-2.979-.141-.225-.269-.464-.374-.724z" />
+      <path d="m107.376 36.046c.226 1.674.354 3.471.354 5.404 0 5.333-.996 11.328-3.996 18.824l-16.053 46.413c15.624-9.111 26.133-26.038 26.133-45.426.001-9.137-2.333-17.729-6.438-25.215z" />
+      <path d="m61.262 0c-33.779 0-61.262 27.481-61.262 61.26 0 33.783 27.483 61.263 61.262 61.263 33.778 0 61.265-27.48 61.265-61.263-.001-33.779-27.487-61.26-61.265-61.26zm0 119.715c-32.23 0-58.453-26.223-58.453-58.455 0-32.23 26.222-58.451 58.453-58.451 32.229 0 58.45 26.221 58.45 58.451 0 32.232-26.221 58.455-58.45 58.455z" />
     </g>
   </svg>
 );
@@ -64,17 +65,17 @@ const WordPressIcon = ({ className }: { className?: string }) => (
 const SlackIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 2447.6 2452.5" className={className}>
     <g clipRule="evenodd" fillRule="evenodd">
-      <path d="m897.4 0c-135.3.1-244.8 109.9-244.7 245.2-.1 135.3 109.5 245.1 244.8 245.2h244.8v-245.1c.1-135.3-109.5-245.1-244.9-245.3.1 0 .1 0 0 0m0 654h-652.6c-135.3.1-244.9 109.9-244.8 245.2-.2 135.3 109.4 245.1 244.7 245.3h652.7c135.3-.1 244.9-109.9 244.8-245.2.1-135.4-109.5-245.2-244.8-245.3z" fill="#36c5f0"/>
-      <path d="m2447.6 899.2c.1-135.3-109.5-245.1-244.8-245.2-135.3.1-244.9 109.9-244.8 245.2v245.3h244.8c135.3-.1 244.9-109.9 244.8-245.3zm-652.7 0v-654c.1-135.2-109.4-245-244.7-245.2-135.3.1-244.9 109.9-244.8 245.2v654c-.2 135.3 109.4 245.1 244.7 245.3 135.3-.1 244.9-109.9 244.8-245.3z" fill="#2eb67d"/>
-      <path d="m1550.1 2452.5c135.3-.1 244.9-109.9 244.8-245.2.1-135.3-109.5-245.1-244.8-245.2h-244.8v245.2c-.1 135.2 109.5 245 244.8 245.2zm0-654.1h652.7c135.3-.1 244.9-109.9 244.8-245.2.2-135.3-109.4-245.1-244.7-245.3h-652.7c-135.3.1-244.9 109.9-244.8 245.2-.1 135.4 109.4 245.2 244.7 245.3z" fill="#ecb22e"/>
-      <path d="m0 1553.2c-.1 135.3 109.5 245.1 244.8 245.2 135.3-.1 244.9-109.9 244.8-245.2v-245.2h-244.8c-135.3.1-244.9 109.9-244.8 245.2zm652.7 0v654c-.2 135.3 109.4 245.1 244.7 245.3 135.3-.1 244.9-109.9 244.8-245.2v-653.9c.2-135.3-109.4-245.1-244.7-245.3-135.4 0-244.9 109.8-244.8 245.1 0 0 0 .1 0 0" fill="#e01e5a"/>
+      <path d="m897.4 0c-135.3.1-244.8 109.9-244.7 245.2-.1 135.3 109.5 245.1 244.8 245.2h244.8v-245.1c.1-135.3-109.5-245.1-244.9-245.3.1 0 .1 0 0 0m0 654h-652.6c-135.3.1-244.9 109.9-244.8 245.2-.2 135.3 109.4 245.1 244.7 245.3h652.7c135.3-.1 244.9-109.9 244.8-245.2.1-135.4-109.5-245.2-244.8-245.3z" fill="#36c5f0" />
+      <path d="m2447.6 899.2c.1-135.3-109.5-245.1-244.8-245.2-135.3.1-244.9 109.9-244.8 245.2v245.3h244.8c135.3-.1 244.9-109.9 244.8-245.3zm-652.7 0v-654c.1-135.2-109.4-245-244.7-245.2-135.3.1-244.9 109.9-244.8 245.2v654c-.2 135.3 109.4 245.1 244.7 245.3 135.3-.1 244.9-109.9 244.8-245.3z" fill="#2eb67d" />
+      <path d="m1550.1 2452.5c135.3-.1 244.9-109.9 244.8-245.2.1-135.3-109.5-245.1-244.8-245.2h-244.8v245.2c-.1 135.2 109.5 245 244.8 245.2zm0-654.1h652.7c135.3-.1 244.9-109.9 244.8-245.2.2-135.3-109.4-245.1-244.7-245.3h-652.7c-135.3.1-244.9 109.9-244.8 245.2-.1 135.4 109.4 245.2 244.7 245.3z" fill="#ecb22e" />
+      <path d="m0 1553.2c-.1 135.3 109.5 245.1 244.8 245.2 135.3-.1 244.9-109.9 244.8-245.2v-245.2h-244.8c-135.3.1-244.9 109.9-244.8 245.2zm652.7 0v654c-.2 135.3 109.4 245.1 244.7 245.3 135.3-.1 244.9-109.9 244.8-245.2v-653.9c.2-135.3-109.4-245.1-244.7-245.3-135.4 0-244.9 109.8-244.8 245.1 0 0 0 .1 0 0" fill="#e01e5a" />
     </g>
   </svg>
 );
 
 const WhatsAppIcon = ({ className }: { className?: string }) => (
   <svg fill="none" viewBox="0 0 360 362" className={className}>
-    <path fill="#25D366" fillRule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clipRule="evenodd"/>
+    <path fill="#25D366" fillRule="evenodd" d="M307.546 52.566C273.709 18.684 228.706.017 180.756 0 81.951 0 1.538 80.404 1.504 179.235c-.017 31.594 8.242 62.432 23.928 89.609L0 361.736l95.024-24.925c26.179 14.285 55.659 21.805 85.655 21.814h.077c98.788 0 179.21-80.413 179.244-179.244.017-47.898-18.608-92.926-52.454-126.807v-.008Zm-126.79 275.788h-.06c-26.73-.008-52.952-7.194-75.831-20.765l-5.44-3.231-56.391 14.791 15.05-54.981-3.542-5.638c-14.912-23.721-22.793-51.139-22.776-79.286.035-82.14 66.867-148.973 149.051-148.973 39.793.017 77.198 15.53 105.328 43.695 28.131 28.157 43.61 65.596 43.593 105.398-.035 82.149-66.867 148.982-148.982 148.982v.008Zm81.719-111.577c-4.478-2.243-26.497-13.073-30.606-14.568-4.108-1.496-7.09-2.243-10.073 2.243-2.982 4.487-11.568 14.577-14.181 17.559-2.613 2.991-5.226 3.361-9.704 1.117-4.477-2.243-18.908-6.97-36.02-22.226-13.313-11.878-22.304-26.54-24.916-31.027-2.613-4.486-.275-6.91 1.959-9.136 2.011-2.011 4.478-5.234 6.721-7.847 2.244-2.613 2.983-4.486 4.478-7.469 1.496-2.991.748-5.603-.369-7.847-1.118-2.243-10.073-24.289-13.812-33.253-3.636-8.732-7.331-7.546-10.073-7.692-2.613-.13-5.595-.155-8.586-.155-2.991 0-7.839 1.118-11.947 5.604-4.108 4.486-15.677 15.324-15.677 37.361s16.047 43.344 18.29 46.335c2.243 2.991 31.585 48.225 76.51 67.632 10.684 4.615 19.029 7.374 25.535 9.437 10.727 3.412 20.49 2.931 28.208 1.779 8.604-1.289 26.498-10.838 30.228-21.298 3.73-10.46 3.73-19.433 2.613-21.298-1.117-1.865-4.108-2.991-8.586-5.234l.008-.017Z" clipRule="evenodd" />
   </svg>
 );
 
@@ -82,19 +83,19 @@ const MetaIcon = ({ className }: { className?: string }) => (
   <svg preserveAspectRatio="xMidYMid" viewBox="0 0 256 171" className={className}>
     <defs>
       <linearGradient id="meta__a" x1="13.878%" x2="89.144%" y1="55.934%" y2="58.694%">
-        <stop offset="0%" stopColor="#0064E1"/>
-        <stop offset="40%" stopColor="#0064E1"/>
-        <stop offset="83%" stopColor="#0073EE"/>
-        <stop offset="100%" stopColor="#0082FB"/>
+        <stop offset="0%" stopColor="#0064E1" />
+        <stop offset="40%" stopColor="#0064E1" />
+        <stop offset="83%" stopColor="#0073EE" />
+        <stop offset="100%" stopColor="#0082FB" />
       </linearGradient>
       <linearGradient id="meta__b" x1="54.315%" x2="54.315%" y1="82.782%" y2="39.307%">
-        <stop offset="0%" stopColor="#0082FB"/>
-        <stop offset="100%" stopColor="#0064E0"/>
+        <stop offset="0%" stopColor="#0082FB" />
+        <stop offset="100%" stopColor="#0064E0" />
       </linearGradient>
     </defs>
-    <path fill="#0081FB" d="M27.651 112.136c0 9.775 2.146 17.28 4.95 21.82 3.677 5.947 9.16 8.466 14.751 8.466 7.211 0 13.808-1.79 26.52-19.372 10.185-14.092 22.186-33.874 30.26-46.275l13.675-21.01c9.499-14.591 20.493-30.811 33.1-41.806C161.196 4.985 172.298 0 183.47 0c18.758 0 36.625 10.87 50.3 31.257C248.735 53.584 256 81.707 256 110.729c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363v-27.616c15.695 0 19.612-14.422 19.612-30.927 0-23.52-5.484-49.623-17.564-68.273-8.574-13.23-19.684-21.313-31.907-21.313-13.22 0-23.859 9.97-35.815 27.75-6.356 9.445-12.882 20.956-20.208 33.944l-8.066 14.289c-16.203 28.728-20.307 35.271-28.408 46.07-14.2 18.91-26.324 26.076-42.287 26.076-18.935 0-30.91-8.2-38.325-20.556C2.973 139.413 0 126.202 0 111.148l27.651.988Z"/>
-    <path fill="url(#meta__a)" d="M21.802 33.206C34.48 13.666 52.774 0 73.757 0 85.91 0 97.99 3.597 110.605 13.897c13.798 11.261 28.505 29.805 46.853 60.368l6.58 10.967c15.881 26.459 24.917 40.07 30.205 46.49 6.802 8.243 11.565 10.7 17.752 10.7 15.695 0 19.612-14.422 19.612-30.927l24.393-.766c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363-11.395 0-21.49-2.475-32.654-13.007-8.582-8.083-18.615-22.443-26.334-35.352l-22.96-38.352C118.528 64.08 107.96 49.73 101.845 43.23c-6.578-6.988-15.036-15.428-28.532-15.428-10.923 0-20.2 7.666-27.963 19.39L21.802 33.206Z"/>
-    <path fill="url(#meta__b)" d="M73.312 27.802c-10.923 0-20.2 7.666-27.963 19.39-10.976 16.568-17.698 41.245-17.698 64.944 0 9.775 2.146 17.28 4.95 21.82L9.027 149.482C2.973 139.413 0 126.202 0 111.148 0 83.772 7.514 55.24 21.802 33.206 34.48 13.666 52.774 0 73.757 0l-.445 27.802Z"/>
+    <path fill="#0081FB" d="M27.651 112.136c0 9.775 2.146 17.28 4.95 21.82 3.677 5.947 9.16 8.466 14.751 8.466 7.211 0 13.808-1.79 26.52-19.372 10.185-14.092 22.186-33.874 30.26-46.275l13.675-21.01c9.499-14.591 20.493-30.811 33.1-41.806C161.196 4.985 172.298 0 183.47 0c18.758 0 36.625 10.87 50.3 31.257C248.735 53.584 256 81.707 256 110.729c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363v-27.616c15.695 0 19.612-14.422 19.612-30.927 0-23.52-5.484-49.623-17.564-68.273-8.574-13.23-19.684-21.313-31.907-21.313-13.22 0-23.859 9.97-35.815 27.75-6.356 9.445-12.882 20.956-20.208 33.944l-8.066 14.289c-16.203 28.728-20.307 35.271-28.408 46.07-14.2 18.91-26.324 26.076-42.287 26.076-18.935 0-30.91-8.2-38.325-20.556C2.973 139.413 0 126.202 0 111.148l27.651.988Z" />
+    <path fill="url(#meta__a)" d="M21.802 33.206C34.48 13.666 52.774 0 73.757 0 85.91 0 97.99 3.597 110.605 13.897c13.798 11.261 28.505 29.805 46.853 60.368l6.58 10.967c15.881 26.459 24.917 40.07 30.205 46.49 6.802 8.243 11.565 10.7 17.752 10.7 15.695 0 19.612-14.422 19.612-30.927l24.393-.766c0 17.253-3.4 29.93-9.187 39.946-5.591 9.686-16.488 19.363-34.818 19.363-11.395 0-21.49-2.475-32.654-13.007-8.582-8.083-18.615-22.443-26.334-35.352l-22.96-38.352C118.528 64.08 107.96 49.73 101.845 43.23c-6.578-6.988-15.036-15.428-28.532-15.428-10.923 0-20.2 7.666-27.963 19.39L21.802 33.206Z" />
+    <path fill="url(#meta__b)" d="M73.312 27.802c-10.923 0-20.2 7.666-27.963 19.39-10.976 16.568-17.698 41.245-17.698 64.944 0 9.775 2.146 17.28 4.95 21.82L9.027 149.482C2.973 139.413 0 126.202 0 111.148 0 83.772 7.514 55.24 21.802 33.206 34.48 13.666 52.774 0 73.757 0l-.445 27.802Z" />
   </svg>
 );
 
@@ -586,6 +587,46 @@ export default function CRM() {
     setEditingDeal(null);
   };
 
+  const onDragEnd = async (result: DropResult) => {
+    const { destination, source, draggableId } = result;
+
+    if (!destination) {
+      return;
+    }
+
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    ) {
+      return;
+    }
+
+    const newStageId = destination.droppableId;
+    const dealId = draggableId;
+
+    // Optimistic UI update
+    const updatedDeals = deals.map((deal) => {
+      if (deal.id === dealId) {
+        return { ...deal, stageId: newStageId };
+      }
+      return deal;
+    });
+
+    setDeals(updatedDeals);
+
+    try {
+      await apiClient.patch(`/api/crm/deals/${dealId}/stage`, { stageId: newStageId });
+      // Silent success or maybe a small toast
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo mover el prospecto',
+        variant: 'destructive',
+      });
+      loadData(); // Revert on error
+    }
+  };
+
   const filteredDeals = deals.filter((deal) => {
     const searchLower = searchQuery.toLowerCase();
     return (
@@ -682,161 +723,180 @@ export default function CRM() {
 
       {/* Kanban Board */}
       <div className="overflow-x-auto pb-4">
-        <div className="flex gap-4 min-w-max">
-          {activeStages.map((stage) => {
-            const stageDeals = getDealsByStage(stage.id);
-            const stageValue = stageDeals.reduce((sum, d) => sum + (d.estimatedValue || 0), 0);
+        <DragDropContext onDragEnd={onDragEnd}>
+          <div className="flex gap-4 min-w-max">
+            {activeStages.map((stage) => {
+              const stageDeals = getDealsByStage(stage.id);
+              const stageValue = stageDeals.reduce((sum, d) => sum + (d.estimatedValue || 0), 0);
 
-            return (
-              <div
-                key={stage.id}
-                className="w-80 flex-shrink-0 bg-muted/30 rounded-lg p-3"
-              >
-                {/* Stage Header */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: stage.color }}
-                    />
-                    <h3 className="font-semibold">{stage.name}</h3>
-                    <Badge variant="secondary" className="text-xs">
-                      {stageDeals.length}
-                    </Badge>
-                  </div>
-                  <span className="text-xs text-muted-foreground">
-                    {formatCurrency(stageValue)}
-                  </span>
-                </div>
-
-                {/* Deals */}
-                <div className="space-y-3">
-                  {stageDeals.map((deal) => {
-                    const priorityInfo = getPriorityBadge(deal.priority || 'media');
-                    const hasUrgentAlert = deal.alerts?.some(a => a.severity === 'urgent');
-
-                    return (
-                    <Card
-                      key={deal.id}
-                      className={`cursor-pointer hover:shadow-md transition-shadow ${hasUrgentAlert ? 'border-red-400 border-2' : ''}`}
-                      onClick={() => loadDealDetail(deal.id)}
-                    >
-                      <CardContent className="p-3">
-                        {/* Alerts Banner */}
-                        {deal.alerts && deal.alerts.length > 0 && (
-                          <div className="mb-2 -mt-1 -mx-1">
-                            {deal.alerts.slice(0, 2).map((alert, idx) => (
-                              <div key={idx} className={`text-xs px-2 py-0.5 ${getAlertSeverityColor(alert.severity)} ${idx === 0 ? 'rounded-t' : ''}`}>
-                                <AlertTriangle className="h-3 w-3 inline mr-1" />
-                                {alert.message}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="flex items-start justify-between mb-2">
-                          <div>
-                            <h4 className="font-medium text-sm">{deal.name}</h4>
-                            {deal.company && (
-                              <p className="text-xs text-muted-foreground">{deal.company}</p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {deal.priority && deal.priority !== 'media' && (
-                              <Badge
-                                variant="outline"
-                                className="text-xs"
-                                style={{ borderColor: priorityInfo.color, color: priorityInfo.color }}
-                              >
-                                {priorityInfo.label}
-                              </Badge>
-                            )}
-                            {deal.daysInStage && deal.daysInStage > 5 && (
-                              <Badge variant="outline" className="text-xs text-yellow-600">
-                                {deal.daysInStage}d
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2 mb-2">
-                          {deal.estimatedValue && (
-                            <span className="text-xs font-medium text-green-600">
-                              {formatCurrency(deal.estimatedValue, deal.currency)}
-                            </span>
-                          )}
-                          {deal.probability !== undefined && deal.probability !== 50 && (
-                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
-                              <Gauge className="h-3 w-3" />
-                              {deal.probability}%
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center flex-wrap gap-1 mb-3">
-                          {deal.service && (
-                            <Badge variant="secondary" className="text-xs">
-                              {deal.service.name}
-                            </Badge>
-                          )}
-                          {deal.tags && deal.tags.slice(0, 2).map((tag, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs">
-                              <Tag className="h-2 w-2 mr-0.5" />
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-
-                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                          {deal.phone && (
-                            <a
-                              href={getWhatsAppUrl(deal.phone, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0])}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => handleLogActivity(deal.id, 'whatsapp', 'Mensaje WhatsApp')}
-                              className="flex items-center gap-1 px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"
-                            >
-                              <MessageCircle className="h-3 w-3" />
-                              WhatsApp
-                            </a>
-                          )}
-                          {deal.phone && (
-                            <a
-                              href={`tel:${deal.phoneCountryCode}${deal.phone}`}
-                              onClick={() => handleLogActivity(deal.id, 'call', 'Llamada')}
-                              className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded transition-colors"
-                            >
-                              <Phone className="h-3 w-3" />
-                            </a>
-                          )}
-                        </div>
-
-                        {(deal.nextReminder || deal.nextFollowUp) && (
-                          <div className="mt-2 pt-2 border-t flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              {deal.nextFollowUp
-                                ? `Seguimiento: ${formatRelativeDate(deal.nextFollowUp)}`
-                                : deal.nextReminder && formatRelativeDate(deal.nextReminder.remindAt)
-                              }
-                            </span>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  );
-                  })}
-
-                  {stageDeals.length === 0 && (
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      Sin prospectos
+              return (
+                <div
+                  key={stage.id}
+                  className="w-80 flex-shrink-0 bg-muted/30 rounded-lg p-3"
+                >
+                  {/* Stage Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: stage.color }}
+                      />
+                      <h3 className="font-semibold">{stage.name}</h3>
+                      <Badge variant="secondary" className="text-xs">
+                        {stageDeals.length}
+                      </Badge>
                     </div>
-                  )}
+                    <span className="text-xs text-muted-foreground">
+                      {formatCurrency(stageValue)}
+                    </span>
+                  </div>
+
+                  {/* Deals */}
+                  <Droppable droppableId={stage.id}>
+                    {(provided) => (
+                      <div
+                        {...provided.droppableProps}
+                        ref={provided.innerRef}
+                        className="space-y-3 min-h-[100px]"
+                      >
+                        {stageDeals.map((deal, index) => {
+                          const priorityInfo = getPriorityBadge(deal.priority || 'media');
+                          const hasUrgentAlert = deal.alerts?.some(a => a.severity === 'urgent');
+
+                          return (
+                            <Draggable key={deal.id} draggableId={deal.id} index={index}>
+                              {(provided) => (
+                                <div
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                >
+                                  <Card
+                                    className={`cursor-pointer hover:shadow-md transition-shadow ${hasUrgentAlert ? 'border-red-400 border-2' : ''}`}
+                                    onClick={() => loadDealDetail(deal.id)}
+                                  >
+                                    <CardContent className="p-3">
+                                      {/* Alerts Banner */}
+                                      {deal.alerts && deal.alerts.length > 0 && (
+                                        <div className="mb-2 -mt-1 -mx-1">
+                                          {deal.alerts.slice(0, 2).map((alert, idx) => (
+                                            <div key={idx} className={`text-xs px-2 py-0.5 ${getAlertSeverityColor(alert.severity)} ${idx === 0 ? 'rounded-t' : ''}`}>
+                                              <AlertTriangle className="h-3 w-3 inline mr-1" />
+                                              {alert.message}
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="flex items-start justify-between mb-2">
+                                        <div>
+                                          <h4 className="font-medium text-sm">{deal.name}</h4>
+                                          {deal.company && (
+                                            <p className="text-xs text-muted-foreground">{deal.company}</p>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-1">
+                                          {deal.priority && deal.priority !== 'media' && (
+                                            <Badge
+                                              variant="outline"
+                                              className="text-xs"
+                                              style={{ borderColor: priorityInfo.color, color: priorityInfo.color }}
+                                            >
+                                              {priorityInfo.label}
+                                            </Badge>
+                                          )}
+                                          {deal.daysInStage && deal.daysInStage > 5 && (
+                                            <Badge variant="outline" className="text-xs text-yellow-600">
+                                              {deal.daysInStage}d
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      <div className="flex items-center gap-2 mb-2">
+                                        {deal.estimatedValue && (
+                                          <span className="text-xs font-medium text-green-600">
+                                            {formatCurrency(deal.estimatedValue, deal.currency)}
+                                          </span>
+                                        )}
+                                        {deal.probability !== undefined && deal.probability !== 50 && (
+                                          <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                            <Gauge className="h-3 w-3" />
+                                            {deal.probability}%
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="flex items-center flex-wrap gap-1 mb-3">
+                                        {deal.service && (
+                                          <Badge variant="secondary" className="text-xs">
+                                            {deal.service.name}
+                                          </Badge>
+                                        )}
+                                        {deal.tags && deal.tags.slice(0, 2).map((tag, idx) => (
+                                          <Badge key={idx} variant="outline" className="text-xs">
+                                            <Tag className="h-2 w-2 mr-0.5" />
+                                            {tag}
+                                          </Badge>
+                                        ))}
+                                      </div>
+
+                                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                                        {deal.phone && (
+                                          <a
+                                            href={getWhatsAppUrl(deal.phone, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0])}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={() => handleLogActivity(deal.id, 'whatsapp', 'Mensaje WhatsApp')}
+                                            className="flex items-center gap-1 px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"
+                                          >
+                                            <MessageCircle className="h-3 w-3" />
+                                            WhatsApp
+                                          </a>
+                                        )}
+                                        {deal.phone && (
+                                          <a
+                                            href={`tel:${deal.phoneCountryCode}${deal.phone}`}
+                                            onClick={() => handleLogActivity(deal.id, 'call', 'Llamada')}
+                                            className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded transition-colors"
+                                          >
+                                            <Phone className="h-3 w-3" />
+                                          </a>
+                                        )}
+                                      </div>
+
+                                      {(deal.nextReminder || deal.nextFollowUp) && (
+                                        <div className="mt-2 pt-2 border-t flex items-center gap-1 text-xs text-muted-foreground">
+                                          <Clock className="h-3 w-3" />
+                                          <span>
+                                            {deal.nextFollowUp
+                                              ? `Seguimiento: ${formatRelativeDate(deal.nextFollowUp)}`
+                                              : deal.nextReminder && formatRelativeDate(deal.nextReminder.remindAt)
+                                            }
+                                          </span>
+                                        </div>
+                                      )}
+                                    </CardContent>
+                                  </Card>
+                                </div>
+                              )}
+                            </Draggable>
+                          );
+                        })}
+                        {provided.placeholder}
+                        {stageDeals.length === 0 && (
+                          <div className="text-center py-8 text-muted-foreground text-sm">
+                            Sin prospectos
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Droppable>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        </DragDropContext>
       </div>
 
       {/* Deal Detail Sheet */}
