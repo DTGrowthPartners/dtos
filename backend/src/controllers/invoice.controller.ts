@@ -200,7 +200,7 @@ class InvoiceController {
           fecha: today,
           importe: invoice.totalAmount,
           descripcion: `Pago cuenta de cobro #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
-          categoria: 'Servicios',
+          categoria: 'PAGO DE CLIENTE',
           cuenta: 'Principal',
           entidad: invoice.clientName,
         });

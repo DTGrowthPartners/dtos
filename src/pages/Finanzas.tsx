@@ -16,6 +16,41 @@ import {
 import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
 
+// Categorías predefinidas
+const EXPENSE_CATEGORIES = [
+  'Arriendo',
+  'Nómina (Dairo)',
+  'Nómina (Edgardo)',
+  'Nómina (Stiven)',
+  'Almuerzos',
+  'Transportes - Gasolina',
+  'Meriendas',
+  'Herramientas (Claude, GPT, Lovable, Twilio, Etc)',
+  'Publicidad',
+  'Servidores/Hosting/Dominios',
+  'Gastos de Representación',
+  'Freelancers',
+  'Comisiones de Cierre',
+  'Honorarios Contador',
+  'REEMBOLSO INVERSIÓN PUBLICIDAD',
+  'TRASLADO DE NEQUI',
+  'TRASLADO DE DAVIPLATA',
+  'TRASLADO DE BANCOLOMBIA',
+  'TRASLADO DE RAPPICUENTA',
+  'AJUSTE SALDO',
+  'TRASLADO CUENTA DAIRO',
+];
+
+const INCOME_CATEGORIES = [
+  'PAGO DE CLIENTE',
+  'INVERSIÓN PUBLICIDAD DE CLIENTE',
+  'TRASLADO DE NEQUI',
+  'TRASLADO DE DAVIPLATA',
+  'TRASLADO DE BANCOLOMBIA',
+  'TRASLADO DE RAPPICUENTA',
+  'AJUSTE SALDO',
+];
+
 interface FinanceData {
   month: string;
   income: number;
@@ -1223,11 +1258,19 @@ export default function Finanzas() {
 
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
-                <Input
+                <Select
                   value={expenseForm.categoria}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, categoria: e.target.value })}
-                  placeholder="Ej: Alquiler, Servicios, Nómina"
-                />
+                  onValueChange={(value) => setExpenseForm({ ...expenseForm, categoria: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {EXPENSE_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
