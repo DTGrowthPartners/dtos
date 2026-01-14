@@ -24,6 +24,9 @@ import {
   ChevronLeft,
   Archive,
   RotateCcw,
+  AlertCircle,
+  CalendarDays,
+  CalendarRange,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -56,6 +59,7 @@ import {
   updateTask,
   loadProjects,
   createProject,
+  deleteProject,
   moveTaskToDeleted,
   copyTaskToCompleted,
   addTaskComment,
@@ -95,6 +99,7 @@ const STATUS_ICONS = {
 
 type ViewMode = 'card' | 'list' | 'compact';
 type TaskView = 'active' | 'archived' | 'deleted';
+type DateFilter = 'all' | 'today' | 'week' | 'month' | 'overdue';
 
 export default function Tareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -115,6 +120,7 @@ export default function Tareas() {
   const [taskView, setTaskView] = useState<TaskView>('active');
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const { toast } = useToast();
   const { user } = useAuthStore();
 
@@ -280,6 +286,39 @@ export default function Tareas() {
       toast({
         title: 'Error',
         description: 'Error al crear el proyecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    const projectTasks = tasks.filter(t => t.projectId === projectId);
+    if (projectTasks.length > 0) {
+      toast({
+        title: 'No se puede eliminar',
+        description: `Este proyecto tiene ${projectTasks.length} tareas asociadas. Elimina o mueve las tareas primero.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
+
+    try {
+      await deleteProject(projectId);
+      setProjects(projects.filter(p => p.id !== projectId));
+      if (filterProject === projectId) {
+        setFilterProject('all');
+      }
+      toast({
+        title: 'Proyecto eliminado',
+        description: 'El proyecto se eliminó correctamente',
+      });
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el proyecto',
         variant: 'destructive',
       });
     }
@@ -643,7 +682,20 @@ export default function Tareas() {
     const matchesProject = filterProject === 'all' || task.projectId === filterProject;
     const matchesAssignee = filterAssignee === 'all' || task.assignee === filterAssignee;
     const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
-    return matchesSearch && matchesProject && matchesAssignee && matchesPriority;
+
+    // Date filter
+    let matchesDate = true;
+    if (dateFilter === 'today') {
+      matchesDate = isToday(task.dueDate);
+    } else if (dateFilter === 'week') {
+      matchesDate = isThisWeek(task.dueDate);
+    } else if (dateFilter === 'month') {
+      matchesDate = isThisMonth(task.dueDate);
+    } else if (dateFilter === 'overdue') {
+      matchesDate = isOverdue(task.dueDate) && task.status !== TaskStatus.DONE;
+    }
+
+    return matchesSearch && matchesProject && matchesAssignee && matchesPriority && matchesDate;
   });
 
   const getTasksByColumn = (status: string) => {
@@ -665,15 +717,71 @@ export default function Tareas() {
     );
   }
 
-  // Helper to count tasks by project
+  // Helper to count tasks by project (excludes completed tasks)
   const getTaskCountByProject = (projectId: string) => {
     return tasks.filter(t => {
       const isUserTask = loggedUserName
         ? (t.assignee === loggedUserName || t.creator === loggedUserName)
         : true;
-      return isUserTask && t.projectId === projectId;
+      // Don't count completed tasks
+      const isNotDone = t.status !== TaskStatus.DONE;
+      return isUserTask && t.projectId === projectId && isNotDone;
     }).length;
   };
+
+  // Helper functions for date filtering
+  const isToday = (timestamp: number | undefined) => {
+    if (!timestamp) return false;
+    const today = new Date();
+    const date = new Date(timestamp);
+    return date.toDateString() === today.toDateString();
+  };
+
+  const isThisWeek = (timestamp: number | undefined) => {
+    if (!timestamp) return false;
+    const today = new Date();
+    const date = new Date(timestamp);
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+    return date >= startOfWeek && date < endOfWeek;
+  };
+
+  const isThisMonth = (timestamp: number | undefined) => {
+    if (!timestamp) return false;
+    const today = new Date();
+    const date = new Date(timestamp);
+    return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+  };
+
+  const isOverdue = (timestamp: number | undefined) => {
+    if (!timestamp) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return new Date(timestamp) < today;
+  };
+
+  // Get counts for date filters (only active, non-completed tasks)
+  const getDateFilterCounts = () => {
+    const activeTasks = tasks.filter(t => {
+      const isUserTask = loggedUserName
+        ? (t.assignee === loggedUserName || t.creator === loggedUserName)
+        : true;
+      return isUserTask && t.status !== TaskStatus.DONE;
+    });
+
+    return {
+      today: activeTasks.filter(t => isToday(t.dueDate)).length,
+      week: activeTasks.filter(t => isThisWeek(t.dueDate)).length,
+      month: activeTasks.filter(t => isThisMonth(t.dueDate)).length,
+      overdue: activeTasks.filter(t => isOverdue(t.dueDate) && t.status !== TaskStatus.DONE).length,
+      all: activeTasks.length,
+    };
+  };
+
+  const dateFilterCounts = getDateFilterCounts();
 
   return (
     <div className="animate-fade-in h-full flex gap-4">
@@ -825,21 +933,43 @@ export default function Tareas() {
                 {projects.map((project) => {
                   const count = getTaskCountByProject(project.id);
                   return (
-                    <button
+                    <div
                       key={project.id}
-                      onClick={() => setFilterProject(project.id)}
-                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
                         filterProject === project.id
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${project.color}`}></div>
+                      <button
+                        onClick={() => setFilterProject(project.id)}
+                        className="flex items-center gap-2 flex-1 min-w-0"
+                      >
+                        <div className={`w-3 h-3 rounded-full ${project.color} flex-shrink-0`}></div>
                         <span className="truncate">{project.name}</span>
+                      </button>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs opacity-70">{count}</span>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteProject(project.id);
+                              }}
+                              className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${
+                                filterProject === project.id
+                                  ? 'hover:bg-primary-foreground/20 text-primary-foreground'
+                                  : 'hover:bg-destructive/10 text-destructive'
+                              }`}
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Eliminar proyecto</TooltipContent>
+                        </Tooltip>
                       </div>
-                      <span className="text-xs opacity-70">{count}</span>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -1055,6 +1185,84 @@ export default function Tareas() {
             )}
           </div>
         </div>
+
+        {/* Date Filters - Only show in active view */}
+        {taskView === 'active' && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setDateFilter('all')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                dateFilter === 'all'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted hover:bg-muted/80'
+              }`}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+              <span>Todas</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'all' ? 'bg-primary-foreground/20' : 'bg-background'}`}>
+                {dateFilterCounts.all}
+              </span>
+            </button>
+            <button
+              onClick={() => setDateFilter('today')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                dateFilter === 'today'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300'
+              }`}
+            >
+              <Calendar className="h-3.5 w-3.5" />
+              <span>Hoy</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'today' ? 'bg-white/20' : 'bg-blue-200 dark:bg-blue-800'}`}>
+                {dateFilterCounts.today}
+              </span>
+            </button>
+            <button
+              onClick={() => setDateFilter('week')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                dateFilter === 'week'
+                  ? 'bg-purple-500 text-white'
+                  : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-300'
+              }`}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              <span>Esta semana</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'week' ? 'bg-white/20' : 'bg-purple-200 dark:bg-purple-800'}`}>
+                {dateFilterCounts.week}
+              </span>
+            </button>
+            <button
+              onClick={() => setDateFilter('month')}
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                dateFilter === 'month'
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300'
+              }`}
+            >
+              <CalendarRange className="h-3.5 w-3.5" />
+              <span>Este mes</span>
+              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'month' ? 'bg-white/20' : 'bg-emerald-200 dark:bg-emerald-800'}`}>
+                {dateFilterCounts.month}
+              </span>
+            </button>
+            {dateFilterCounts.overdue > 0 && (
+              <button
+                onClick={() => setDateFilter('overdue')}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                  dateFilter === 'overdue'
+                    ? 'bg-red-500 text-white'
+                    : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
+                }`}
+              >
+                <AlertCircle className="h-3.5 w-3.5" />
+                <span>Vencidas</span>
+                <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'overdue' ? 'bg-white/20' : 'bg-red-200 dark:bg-red-800'}`}>
+                  {dateFilterCounts.overdue}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Active Tasks - Kanban Board */}
         {taskView === 'active' && (
