@@ -193,12 +193,19 @@ model Deal {
   serviceNotes      String?   // Notas sobre personalización
 
   // Fuente y contexto
-  source            String?   // referido, pauta, web, etc
+  source            String?   // referido, pauta, web, evento, llamada_fria, otro
   sourceDetail      String?   // Quién refirió, qué campaña
 
   // Asignación
   ownerId           String?
   owner             User?     @relation("DealOwner", fields: [ownerId], references: [id])
+
+  // Nuevos campos CRM v2
+  probability       Int       @default(50)  // Probabilidad de cierre 0-100
+  priority          String    @default("media") // baja, media, alta, urgente
+  nextFollowUp      DateTime? // Próximo seguimiento programado
+  lastInteractionAt DateTime? // Última interacción registrada
+  tags              String[]  // Etiquetas personalizadas
 
   // Fechas importantes
   firstContactAt       DateTime?

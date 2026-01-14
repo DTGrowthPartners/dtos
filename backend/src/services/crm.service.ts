@@ -9,9 +9,73 @@ import {
   CreateReminderDto,
   PipelineMetricsDto,
   PerformanceMetricsDto,
+  DealAlert,
 } from '../dtos/crm.dto';
 
 const prisma = new PrismaClient();
+
+// ==================== Helper Functions ====================
+
+const calculateDealAlerts = (deal: any): DealAlert[] => {
+  const alerts: DealAlert[] = [];
+  const now = new Date();
+
+  // Calculate days since last interaction
+  const lastInteraction = deal.lastInteractionAt ? new Date(deal.lastInteractionAt) : new Date(deal.createdAt);
+  const daysSinceInteraction = Math.floor((now.getTime() - lastInteraction.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Alert: No interaction for 3+ days
+  if (daysSinceInteraction >= 3 && !deal.stage?.isWon && !deal.stage?.isLost) {
+    alerts.push({
+      type: 'no_interaction',
+      message: `${daysSinceInteraction} días sin interacción`,
+      severity: daysSinceInteraction >= 7 ? 'urgent' : daysSinceInteraction >= 5 ? 'high' : 'medium',
+    });
+  }
+
+  // Alert: Follow-up overdue
+  if (deal.nextFollowUp) {
+    const followUpDate = new Date(deal.nextFollowUp);
+    if (followUpDate < now && !deal.stage?.isWon && !deal.stage?.isLost) {
+      const daysOverdue = Math.floor((now.getTime() - followUpDate.getTime()) / (1000 * 60 * 60 * 24));
+      alerts.push({
+        type: 'follow_up_overdue',
+        message: `Seguimiento vencido hace ${daysOverdue} día(s)`,
+        severity: daysOverdue >= 3 ? 'urgent' : daysOverdue >= 1 ? 'high' : 'medium',
+      });
+    }
+  }
+
+  // Alert: High value deal dormant
+  const HIGH_VALUE_THRESHOLD = 1000000; // 1M COP
+  if (deal.estimatedValue && deal.estimatedValue >= HIGH_VALUE_THRESHOLD && daysSinceInteraction >= 3) {
+    alerts.push({
+      type: 'high_value_dormant',
+      message: 'Prospecto de alto valor sin actividad reciente',
+      severity: 'urgent',
+    });
+  }
+
+  // Alert: Meeting coming up in 24h
+  if (deal.meetingScheduledAt) {
+    const meetingDate = new Date(deal.meetingScheduledAt);
+    const hoursUntilMeeting = (meetingDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    if (hoursUntilMeeting > 0 && hoursUntilMeeting <= 24) {
+      alerts.push({
+        type: 'meeting_reminder',
+        message: 'Reunión en las próximas 24 horas',
+        severity: 'high',
+      });
+    }
+  }
+
+  return alerts;
+};
+
+const calculateDaysSinceInteraction = (deal: any): number => {
+  const lastInteraction = deal.lastInteractionAt ? new Date(deal.lastInteractionAt) : new Date(deal.createdAt);
+  return Math.floor((Date.now() - lastInteraction.getTime()) / (1000 * 60 * 60 * 24));
+};
 
 // ==================== Deal Stages ====================
 
@@ -50,6 +114,10 @@ export const getDeals = async (filters?: {
   ownerId?: string;
   source?: string;
   search?: string;
+  priority?: string;
+  hasAlerts?: boolean;
+  followUpOverdue?: boolean;
+  tags?: string[];
 }) => {
   const where: any = {};
 
@@ -65,11 +133,25 @@ export const getDeals = async (filters?: {
     where.source = filters.source;
   }
 
+  if (filters?.priority) {
+    where.priority = filters.priority;
+  }
+
+  if (filters?.followUpOverdue) {
+    where.nextFollowUp = { lt: new Date() };
+    where.stage = { isWon: false, isLost: false };
+  }
+
+  if (filters?.tags && filters.tags.length > 0) {
+    where.tags = { hasSome: filters.tags };
+  }
+
   if (filters?.search) {
     where.OR = [
       { name: { contains: filters.search, mode: 'insensitive' } },
       { company: { contains: filters.search, mode: 'insensitive' } },
       { email: { contains: filters.search, mode: 'insensitive' } },
+      { tags: { hasSome: [filters.search] } },
     ];
   }
 
@@ -95,18 +177,30 @@ export const getDeals = async (filters?: {
     orderBy: [{ stageId: 'asc' }, { createdAt: 'desc' }],
   });
 
-  // Calculate days in stage for each deal
-  return deals.map((deal) => {
+  // Calculate days in stage, alerts, and days since interaction for each deal
+  const enrichedDeals = deals.map((deal) => {
     const lastStageChange = deal.updatedAt;
     const daysInStage = Math.floor(
       (Date.now() - new Date(lastStageChange).getTime()) / (1000 * 60 * 60 * 24)
     );
+    const daysSinceInteraction = calculateDaysSinceInteraction(deal);
+    const alerts = calculateDealAlerts(deal);
+
     return {
       ...deal,
       daysInStage,
+      daysSinceInteraction,
+      alerts,
       nextReminder: deal.reminders[0] || null,
     };
   });
+
+  // Filter by hasAlerts if specified
+  if (filters?.hasAlerts) {
+    return enrichedDeals.filter((deal) => deal.alerts.length > 0);
+  }
+
+  return enrichedDeals;
 };
 
 export const getDeal = async (id: string) => {
@@ -150,10 +244,14 @@ export const getDeal = async (id: string) => {
   const daysInStage = Math.floor(
     (Date.now() - new Date(deal.updatedAt).getTime()) / (1000 * 60 * 60 * 24)
   );
+  const daysSinceInteraction = calculateDaysSinceInteraction(deal);
+  const alerts = calculateDealAlerts(deal);
 
   return {
     ...deal,
     daysInStage,
+    daysSinceInteraction,
+    alerts,
     nextReminder: deal.reminders.find((r) => !r.isCompleted) || null,
   };
 };
@@ -189,6 +287,12 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
       ownerId: data.ownerId || userId,
       expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
       notes: data.notes,
+      // CRM v2 fields
+      probability: data.probability ?? 50,
+      priority: data.priority || 'media',
+      nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : null,
+      tags: data.tags || [],
+      lastInteractionAt: new Date(), // Set to now on creation
       createdBy: userId,
     },
     include: {
@@ -244,6 +348,11 @@ export const updateDeal = async (id: string, data: UpdateDealDto, userId: string
       proposalSentAt: data.proposalSentAt ? new Date(data.proposalSentAt) : undefined,
       expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : undefined,
       notes: data.notes,
+      // CRM v2 fields
+      probability: data.probability,
+      priority: data.priority,
+      nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : undefined,
+      tags: data.tags,
     },
     include: {
       stage: true,
@@ -419,6 +528,12 @@ export const getActivities = async (dealId: string) => {
 };
 
 export const createActivity = async (dealId: string, data: CreateActivityDto, userId: string) => {
+  // Update lastInteractionAt on the deal
+  await prisma.deal.update({
+    where: { id: dealId },
+    data: { lastInteractionAt: new Date() },
+  });
+
   return prisma.dealActivity.create({
     data: {
       dealId,

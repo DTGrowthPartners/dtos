@@ -30,6 +30,11 @@ export interface CreateDealDto {
   ownerId?: string;
   expectedCloseDate?: string;
   notes?: string;
+  // CRM v2 fields
+  probability?: number;
+  priority?: string;
+  nextFollowUp?: string;
+  tags?: string[];
 }
 
 export interface UpdateDealDto {
@@ -51,6 +56,11 @@ export interface UpdateDealDto {
   proposalSentAt?: string;
   expectedCloseDate?: string;
   notes?: string;
+  // CRM v2 fields
+  probability?: number;
+  priority?: string;
+  nextFollowUp?: string;
+  tags?: string[];
 }
 
 export interface DealDto {
@@ -88,6 +98,15 @@ export interface DealDto {
   lostReason?: string;
   lostNotes?: string;
   notes?: string;
+  // CRM v2 fields
+  probability?: number;
+  priority?: string;
+  nextFollowUp?: string;
+  lastInteractionAt?: string;
+  tags?: string[];
+  daysSinceInteraction?: number;
+  alerts?: DealAlert[];
+  // Relations
   activities?: DealActivityDto[];
   reminders?: DealReminderDto[];
   nextReminder?: DealReminderDto;
@@ -95,6 +114,13 @@ export interface DealDto {
   createdAt: string;
   updatedAt: string;
   createdBy: string;
+}
+
+// ==================== Deal Alert DTO ====================
+export interface DealAlert {
+  type: 'follow_up_overdue' | 'high_value_dormant' | 'no_interaction' | 'meeting_reminder';
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'urgent';
 }
 
 export interface ChangeStageDto {
@@ -232,4 +258,11 @@ export const ACTIVITY_TYPES = [
   { value: 'meeting', label: 'Reunión', icon: 'Users' },
   { value: 'note', label: 'Nota', icon: 'FileText' },
   { value: 'stage_change', label: 'Cambio de etapa', icon: 'ArrowRight' },
+] as const;
+
+export const DEAL_PRIORITIES = [
+  { value: 'baja', label: 'Baja', color: '#6B7280' },
+  { value: 'media', label: 'Media', color: '#3B82F6' },
+  { value: 'alta', label: 'Alta', color: '#F59E0B' },
+  { value: 'urgente', label: 'Urgente', color: '#EF4444' },
 ] as const;

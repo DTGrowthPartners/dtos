@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 import {
   Sheet,
   SheetContent,
@@ -51,6 +52,12 @@ interface DealStage {
   _count?: { deals: number };
 }
 
+interface DealAlert {
+  type: 'follow_up_overdue' | 'high_value_dormant' | 'no_interaction' | 'meeting_reminder';
+  message: string;
+  severity: 'low' | 'medium' | 'high' | 'urgent';
+}
+
 interface Deal {
   id: string;
   name: string;
@@ -77,6 +84,15 @@ interface Deal {
   lostReason?: string;
   lostNotes?: string;
   notes?: string;
+  // CRM v2 fields
+  probability?: number;
+  priority?: string;
+  nextFollowUp?: string;
+  lastInteractionAt?: string;
+  tags?: string[];
+  daysSinceInteraction?: number;
+  alerts?: DealAlert[];
+  // Relations
   activities?: DealActivity[];
   reminders?: DealReminder[];
   nextReminder?: DealReminder;
@@ -144,6 +160,27 @@ const DEAL_SOURCES = [
   { value: 'otro', label: 'Otro' },
 ];
 
+const DEAL_PRIORITIES = [
+  { value: 'baja', label: 'Baja', color: '#6B7280' },
+  { value: 'media', label: 'Media', color: '#3B82F6' },
+  { value: 'alta', label: 'Alta', color: '#F59E0B' },
+  { value: 'urgente', label: 'Urgente', color: '#EF4444' },
+];
+
+const getAlertSeverityColor = (severity: string) => {
+  switch (severity) {
+    case 'urgent': return 'bg-red-500 text-white';
+    case 'high': return 'bg-orange-500 text-white';
+    case 'medium': return 'bg-yellow-500 text-black';
+    default: return 'bg-gray-500 text-white';
+  }
+};
+
+const getPriorityBadge = (priority: string) => {
+  const p = DEAL_PRIORITIES.find(pr => pr.value === priority);
+  return p ? { label: p.label, color: p.color } : { label: priority, color: '#6B7280' };
+};
+
 const formatCurrency = (value: number, currency: string = 'COP') => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -209,6 +246,11 @@ export default function CRM() {
     sourceDetail: '',
     expectedCloseDate: '',
     notes: '',
+    // CRM v2 fields
+    probability: 50,
+    priority: 'media',
+    nextFollowUp: '',
+    tags: '',
   });
 
   const [lostFormData, setLostFormData] = useState({
@@ -271,6 +313,9 @@ export default function CRM() {
       const payload = {
         ...formData,
         estimatedValue: formData.estimatedValue ? parseFloat(formData.estimatedValue) : undefined,
+        tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+        probability: formData.probability,
+        nextFollowUp: formData.nextFollowUp || undefined,
       };
 
       if (editingDeal) {
@@ -402,6 +447,11 @@ export default function CRM() {
       sourceDetail: deal.sourceDetail || '',
       expectedCloseDate: deal.expectedCloseDate?.split('T')[0] || '',
       notes: deal.notes || '',
+      // CRM v2 fields
+      probability: deal.probability ?? 50,
+      priority: deal.priority || 'media',
+      nextFollowUp: deal.nextFollowUp?.split('T')[0] || '',
+      tags: deal.tags?.join(', ') || '',
     });
     setIsDialogOpen(true);
   };
@@ -422,6 +472,11 @@ export default function CRM() {
       sourceDetail: '',
       expectedCloseDate: '',
       notes: '',
+      // CRM v2 fields
+      probability: 50,
+      priority: 'media',
+      nextFollowUp: '',
+      tags: '',
     });
     setEditingDeal(null);
   };
@@ -551,13 +606,29 @@ export default function CRM() {
 
                 {/* Deals */}
                 <div className="space-y-3">
-                  {stageDeals.map((deal) => (
+                  {stageDeals.map((deal) => {
+                    const priorityInfo = getPriorityBadge(deal.priority || 'media');
+                    const hasUrgentAlert = deal.alerts?.some(a => a.severity === 'urgent');
+
+                    return (
                     <Card
                       key={deal.id}
-                      className="cursor-pointer hover:shadow-md transition-shadow"
+                      className={`cursor-pointer hover:shadow-md transition-shadow ${hasUrgentAlert ? 'border-red-400 border-2' : ''}`}
                       onClick={() => loadDealDetail(deal.id)}
                     >
                       <CardContent className="p-3">
+                        {/* Alerts Banner */}
+                        {deal.alerts && deal.alerts.length > 0 && (
+                          <div className="mb-2 -mt-1 -mx-1">
+                            {deal.alerts.slice(0, 2).map((alert, idx) => (
+                              <div key={idx} className={`text-xs px-2 py-0.5 ${getAlertSeverityColor(alert.severity)} ${idx === 0 ? 'rounded-t' : ''}`}>
+                                <AlertTriangle className="h-3 w-3 inline mr-1" />
+                                {alert.message}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <h4 className="font-medium text-sm">{deal.name}</h4>
@@ -565,24 +636,50 @@ export default function CRM() {
                               <p className="text-xs text-muted-foreground">{deal.company}</p>
                             )}
                           </div>
-                          {deal.daysInStage && deal.daysInStage > 5 && (
-                            <Badge variant="outline" className="text-xs text-yellow-600">
-                              {deal.daysInStage}d
-                            </Badge>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {deal.priority && deal.priority !== 'media' && (
+                              <Badge
+                                variant="outline"
+                                className="text-xs"
+                                style={{ borderColor: priorityInfo.color, color: priorityInfo.color }}
+                              >
+                                {priorityInfo.label}
+                              </Badge>
+                            )}
+                            {deal.daysInStage && deal.daysInStage > 5 && (
+                              <Badge variant="outline" className="text-xs text-yellow-600">
+                                {deal.daysInStage}d
+                              </Badge>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="flex items-center gap-2 mb-3">
+                        <div className="flex items-center gap-2 mb-2">
                           {deal.estimatedValue && (
                             <span className="text-xs font-medium text-green-600">
                               {formatCurrency(deal.estimatedValue, deal.currency)}
                             </span>
                           )}
+                          {deal.probability !== undefined && deal.probability !== 50 && (
+                            <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                              <Gauge className="h-3 w-3" />
+                              {deal.probability}%
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center flex-wrap gap-1 mb-3">
                           {deal.service && (
                             <Badge variant="secondary" className="text-xs">
                               {deal.service.name}
                             </Badge>
                           )}
+                          {deal.tags && deal.tags.slice(0, 2).map((tag, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              <Tag className="h-2 w-2 mr-0.5" />
+                              {tag}
+                            </Badge>
+                          ))}
                         </div>
 
                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -609,15 +706,21 @@ export default function CRM() {
                           )}
                         </div>
 
-                        {deal.nextReminder && (
+                        {(deal.nextReminder || deal.nextFollowUp) && (
                           <div className="mt-2 pt-2 border-t flex items-center gap-1 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
-                            <span>{formatRelativeDate(deal.nextReminder.remindAt)}</span>
+                            <span>
+                              {deal.nextFollowUp
+                                ? `Seguimiento: ${formatRelativeDate(deal.nextFollowUp)}`
+                                : deal.nextReminder && formatRelativeDate(deal.nextReminder.remindAt)
+                              }
+                            </span>
                           </div>
                         )}
                       </CardContent>
                     </Card>
-                  ))}
+                  );
+                  })}
 
                   {stageDeals.length === 0 && (
                     <div className="text-center py-8 text-muted-foreground text-sm">
@@ -983,6 +1086,61 @@ export default function CRM() {
                     onChange={(e) => setFormData({ ...formData, sourceDetail: e.target.value })}
                   />
                 </div>
+              </div>
+
+              {/* CRM v2 Fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Prioridad</Label>
+                  <Select
+                    value={formData.priority}
+                    onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEAL_PRIORITIES.map((priority) => (
+                        <SelectItem key={priority.value} value={priority.value}>
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: priority.color }} />
+                            {priority.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="nextFollowUp">Proximo seguimiento</Label>
+                  <Input
+                    id="nextFollowUp"
+                    type="date"
+                    value={formData.nextFollowUp}
+                    onChange={(e) => setFormData({ ...formData, nextFollowUp: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="probability">Probabilidad de cierre: {formData.probability}%</Label>
+                <Slider
+                  value={[formData.probability]}
+                  onValueChange={(value) => setFormData({ ...formData, probability: value[0] })}
+                  max={100}
+                  step={5}
+                  className="py-2"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tags">Etiquetas (separadas por coma)</Label>
+                <Input
+                  id="tags"
+                  placeholder="vip, urgente, descuento"
+                  value={formData.tags}
+                  onChange={(e) => setFormData({ ...formData, tags: e.target.value })}
+                />
               </div>
 
               <div className="space-y-2">
