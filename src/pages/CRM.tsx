@@ -828,6 +828,20 @@ export default function CRM() {
                                       </div>
 
                                       <div className="flex items-center flex-wrap gap-1 mb-3">
+                                        {deal.source && (
+                                          <Badge variant="outline" className="text-xs bg-slate-100 dark:bg-slate-800">
+                                            {(() => {
+                                              const sourceInfo = DEAL_SOURCES.find(s => s.value === deal.source);
+                                              const SourceIcon = sourceInfo?.icon;
+                                              return (
+                                                <>
+                                                  {SourceIcon && <SourceIcon className="h-3 w-3 mr-1" />}
+                                                  {sourceInfo?.label || deal.source}
+                                                </>
+                                              );
+                                            })()}
+                                          </Badge>
+                                        )}
                                         {deal.service && (
                                           <Badge variant="secondary" className="text-xs">
                                             {deal.service.name}
