@@ -507,6 +507,111 @@ export const deleteDeal = async (id: string) => {
   await prisma.deal.delete({ where: { id } });
 };
 
+// ==================== Public Lead Capture ====================
+
+export interface PublicLeadDto {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  message?: string;
+  source?: string;
+  sourceDetail?: string;
+}
+
+// Helper to get or create system user for public API operations
+const getSystemUserId = async (): Promise<string> => {
+  const SYSTEM_EMAIL = 'system@dtgrowthpartners.com';
+
+  // Try to find existing system user
+  let systemUser = await prisma.user.findUnique({
+    where: { email: SYSTEM_EMAIL },
+  });
+
+  // If not exists, create one
+  if (!systemUser) {
+    // First get or create a system role
+    let systemRole = await prisma.role.findFirst({
+      where: { name: 'System' },
+    });
+
+    if (!systemRole) {
+      systemRole = await prisma.role.create({
+        data: {
+          name: 'System',
+          description: 'System user for automated operations',
+          permissions: [],
+        },
+      });
+    }
+
+    systemUser = await prisma.user.create({
+      data: {
+        email: SYSTEM_EMAIL,
+        firstName: 'Sistema',
+        lastName: 'Automático',
+        phone: '',
+        roleId: systemRole.id,
+      },
+    });
+  }
+
+  return systemUser.id;
+};
+
+export const createPublicLead = async (data: PublicLeadDto) => {
+  // Ensure default stages exist
+  await seedDefaultStages();
+
+  // Get system user ID for foreign key constraints
+  const systemUserId = await getSystemUserId();
+
+  // Get the first stage (Nuevo Prospecto)
+  const firstStage = await prisma.dealStage.findFirst({
+    orderBy: { position: 'asc' },
+  });
+  if (!firstStage) throw new Error('No stages found');
+
+  // Create the deal name from first and last name
+  const dealName = `${data.firstName} ${data.lastName}`.trim();
+
+  const deal = await prisma.deal.create({
+    data: {
+      name: dealName,
+      company: data.company,
+      phone: data.phone,
+      phoneCountryCode: '+57',
+      email: data.email,
+      stageId: firstStage.id,
+      currency: 'COP',
+      source: data.source || 'web',
+      sourceDetail: data.sourceDetail || 'Formulario externo',
+      notes: data.message,
+      probability: 50,
+      priority: 'media',
+      lastInteractionAt: new Date(),
+      createdBy: systemUserId, // Use system user ID
+    },
+    include: {
+      stage: true,
+    },
+  });
+
+  // Create initial activity
+  await prisma.dealActivity.create({
+    data: {
+      dealId: deal.id,
+      type: 'note',
+      title: 'Lead recibido via formulario externo',
+      description: data.message || 'Lead capturado desde formulario web',
+      performedBy: systemUserId, // Use system user ID
+    },
+  });
+
+  return deal;
+};
+
 // ==================== Activities ====================
 
 export const getActivities = async (dealId: string) => {
@@ -744,6 +849,7 @@ export default {
   markAsLost,
   markAsWon,
   deleteDeal,
+  createPublicLead,
   getActivities,
   createActivity,
   getPendingReminders,

@@ -4,7 +4,11 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
-// All routes require authentication
+// ==================== Public Routes (No Authentication Required) ====================
+// Public endpoint for external form submissions
+router.post('/leads/public', crmController.createPublicLead);
+
+// ==================== Protected Routes (Authentication Required) ====================
 router.use(authMiddleware);
 
 // ==================== Stages ====================

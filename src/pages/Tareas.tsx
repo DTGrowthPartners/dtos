@@ -101,6 +101,40 @@ type ViewMode = 'card' | 'list' | 'compact';
 type TaskView = 'active' | 'archived' | 'deleted';
 type DateFilter = 'all' | 'today' | 'week' | 'month' | 'overdue';
 
+// Helper functions for date filtering - defined at module level to avoid hoisting issues
+const isToday = (timestamp: number | undefined) => {
+  if (!timestamp) return false;
+  const today = new Date();
+  const date = new Date(timestamp);
+  return date.toDateString() === today.toDateString();
+};
+
+const isThisWeek = (timestamp: number | undefined) => {
+  if (!timestamp) return false;
+  const today = new Date();
+  const date = new Date(timestamp);
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay());
+  startOfWeek.setHours(0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek);
+  endOfWeek.setDate(startOfWeek.getDate() + 7);
+  return date >= startOfWeek && date < endOfWeek;
+};
+
+const isThisMonth = (timestamp: number | undefined) => {
+  if (!timestamp) return false;
+  const today = new Date();
+  const date = new Date(timestamp);
+  return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+};
+
+const isOverdue = (timestamp: number | undefined) => {
+  if (!timestamp) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(timestamp) < today;
+};
+
 export default function Tareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -121,6 +155,13 @@ export default function Tareas() {
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [deleteProjectDialog, setDeleteProjectDialog] = useState<{ open: boolean; projectId: string | null; projectName: string; taskCount: number }>({
+    open: false,
+    projectId: null,
+    projectName: '',
+    taskCount: 0,
+  });
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
   const { toast } = useToast();
   const { user } = useAuthStore();
 
@@ -291,28 +332,47 @@ export default function Tareas() {
     }
   };
 
-  const handleDeleteProject = async (projectId: string) => {
+  const handleDeleteProject = (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
     const projectTasks = tasks.filter(t => t.projectId === projectId);
-    if (projectTasks.length > 0) {
-      toast({
-        title: 'No se puede eliminar',
-        description: `Este proyecto tiene ${projectTasks.length} tareas asociadas. Elimina o mueve las tareas primero.`,
-        variant: 'destructive',
-      });
-      return;
-    }
 
-    if (!confirm('¿Estás seguro de eliminar este proyecto?')) return;
+    setDeleteProjectDialog({
+      open: true,
+      projectId,
+      projectName: project?.name || 'Este proyecto',
+      taskCount: projectTasks.length,
+    });
+  };
 
+  const confirmDeleteProject = async () => {
+    if (!deleteProjectDialog.projectId) return;
+
+    setIsDeletingProject(true);
     try {
+      const projectId = deleteProjectDialog.projectId;
+      const projectTasks = tasks.filter(t => t.projectId === projectId);
+
+      // Delete all tasks associated with the project
+      for (const task of projectTasks) {
+        await moveTaskToDeleted(task.id, task);
+      }
+
+      // Delete the project
       await deleteProject(projectId);
+
+      // Update local state
+      setTasks(tasks.filter(t => t.projectId !== projectId));
       setProjects(projects.filter(p => p.id !== projectId));
+
       if (filterProject === projectId) {
         setFilterProject('all');
       }
+
       toast({
         title: 'Proyecto eliminado',
-        description: 'El proyecto se eliminó correctamente',
+        description: projectTasks.length > 0
+          ? `Se eliminó el proyecto y ${projectTasks.length} tarea(s) asociada(s)`
+          : 'El proyecto se eliminó correctamente',
       });
     } catch (error) {
       console.error('Error deleting project:', error);
@@ -321,6 +381,9 @@ export default function Tareas() {
         description: 'No se pudo eliminar el proyecto',
         variant: 'destructive',
       });
+    } finally {
+      setIsDeletingProject(false);
+      setDeleteProjectDialog({ open: false, projectId: null, projectName: '', taskCount: 0 });
     }
   };
 
@@ -709,14 +772,6 @@ export default function Tareas() {
     setViewMode(modes[nextIndex]);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-muted-foreground">Cargando tareas...</div>
-      </div>
-    );
-  }
-
   // Helper to count tasks by project (excludes completed tasks)
   const getTaskCountByProject = (projectId: string) => {
     return tasks.filter(t => {
@@ -727,40 +782,6 @@ export default function Tareas() {
       const isNotDone = t.status !== TaskStatus.DONE;
       return isUserTask && t.projectId === projectId && isNotDone;
     }).length;
-  };
-
-  // Helper functions for date filtering
-  const isToday = (timestamp: number | undefined) => {
-    if (!timestamp) return false;
-    const today = new Date();
-    const date = new Date(timestamp);
-    return date.toDateString() === today.toDateString();
-  };
-
-  const isThisWeek = (timestamp: number | undefined) => {
-    if (!timestamp) return false;
-    const today = new Date();
-    const date = new Date(timestamp);
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 7);
-    return date >= startOfWeek && date < endOfWeek;
-  };
-
-  const isThisMonth = (timestamp: number | undefined) => {
-    if (!timestamp) return false;
-    const today = new Date();
-    const date = new Date(timestamp);
-    return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
-  };
-
-  const isOverdue = (timestamp: number | undefined) => {
-    if (!timestamp) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return new Date(timestamp) < today;
   };
 
   // Get counts for date filters (only active, non-completed tasks)
@@ -782,6 +803,14 @@ export default function Tareas() {
   };
 
   const dateFilterCounts = getDateFilterCounts();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-muted-foreground">Cargando tareas...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in h-full flex gap-4">
@@ -2029,6 +2058,63 @@ export default function Tareas() {
         task={selectedTaskForComments}
         onSaveComment={handleSaveComment}
       />
+
+      {/* Delete Project Confirmation Dialog */}
+      <Dialog open={deleteProjectDialog.open} onOpenChange={(open) => !open && setDeleteProjectDialog({ open: false, projectId: null, projectName: '', taskCount: 0 })}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Eliminar proyecto
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {deleteProjectDialog.taskCount > 0 ? (
+                <>
+                  ¿Estás seguro de eliminar <span className="font-semibold">"{deleteProjectDialog.projectName}"</span>?
+                  <br /><br />
+                  <span className="text-destructive font-medium">
+                    Se eliminarán también {deleteProjectDialog.taskCount} tarea(s) asociada(s).
+                  </span>
+                  <br />
+                  Las tareas se moverán a la papelera y podrás restaurarlas si lo necesitas.
+                </>
+              ) : (
+                <>
+                  ¿Estás seguro de eliminar <span className="font-semibold">"{deleteProjectDialog.projectName}"</span>?
+                  <br />
+                  Esta acción no se puede deshacer.
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteProjectDialog({ open: false, projectId: null, projectName: '', taskCount: 0 })}
+              disabled={isDeletingProject}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteProject}
+              disabled={isDeletingProject}
+            >
+              {isDeletingProject ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Eliminando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

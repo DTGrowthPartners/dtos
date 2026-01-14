@@ -134,6 +134,54 @@ export const deleteDeal = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== Public Lead Capture ====================
+
+export const createPublicLead = async (req: Request, res: Response) => {
+  try {
+    const { firstName, lastName, email, phone, company, message, source, sourceDetail } = req.body;
+
+    // Validate required fields
+    if (!firstName || !lastName || !email) {
+      return res.status(400).json({
+        error: 'Campos requeridos: firstName, lastName, email',
+        required: ['firstName', 'lastName', 'email'],
+        optional: ['phone', 'company', 'message', 'source', 'sourceDetail'],
+      });
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ error: 'Email inválido' });
+    }
+
+    const deal = await crmService.createPublicLead({
+      firstName,
+      lastName,
+      email,
+      phone,
+      company,
+      message,
+      source,
+      sourceDetail,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Lead recibido correctamente',
+      data: {
+        id: deal.id,
+        name: deal.name,
+        email: deal.email,
+        stage: deal.stage?.name,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error creating public lead:', error);
+    res.status(500).json({ error: 'Error al procesar el lead' });
+  }
+};
+
 // ==================== Activities ====================
 
 export const getActivities = async (req: Request, res: Response) => {
@@ -234,6 +282,7 @@ export default {
   markAsLost,
   markAsWon,
   deleteDeal,
+  createPublicLead,
   getActivities,
   createActivity,
   getPendingReminders,

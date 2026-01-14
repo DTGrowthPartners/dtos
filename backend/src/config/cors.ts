@@ -2,6 +2,15 @@ import { CorsOptions } from 'cors';
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
 
+// Always allow these domains for public lead API
+const alwaysAllowedOrigins = [
+  'https://dtgrowthpartners.com',
+  'https://www.dtgrowthpartners.com',
+  'https://dairotraslavina.com',
+  'https://www.dairotraslavina.com',
+  'https://os.dtgrowthpartners.com',
+];
+
 export const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (like mobile apps, curl, Postman)
@@ -11,6 +20,11 @@ export const corsOptions: CorsOptions = {
 
     // Allow any localhost or 127.0.0.1 with any port
     if (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      return callback(null, true);
+    }
+
+    // Always allow specific external domains
+    if (alwaysAllowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
