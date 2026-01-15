@@ -74,6 +74,7 @@ import {
   restoreDeletedTask,
   permanentlyDeleteCompletedTask,
   permanentlyDeleteTask,
+  sendTaskNotification,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -307,12 +308,37 @@ export default function Tareas() {
     try {
       if (editingTask) {
         await updateTask(editingTask.id, taskData);
+
+        // Send notification if assignee changed
+        const assigneeChanged = editingTask.assignee !== taskData.assignee;
+        if (assigneeChanged && taskData.assignee && user?.firstName) {
+          sendTaskNotification({
+            type: 'task_assigned',
+            taskTitle: taskData.title,
+            taskId: editingTask.id,
+            assigneeName: taskData.assignee,
+            senderName: user.firstName,
+          });
+        }
+
         toast({
           title: 'Tarea actualizada',
           description: 'La tarea se actualizó correctamente',
         });
       } else {
-        await createTask(taskData as Omit<Task, 'id' | 'createdAt'>);
+        const newTaskId = await createTask(taskData as Omit<Task, 'id' | 'createdAt'>);
+
+        // Send notification to assignee for new task
+        if (taskData.assignee && user?.firstName && taskData.assignee !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_assigned',
+            taskTitle: taskData.title,
+            taskId: newTaskId,
+            assigneeName: taskData.assignee,
+            senderName: user.firstName,
+          });
+        }
+
         toast({
           title: duplicatingTask ? 'Tarea duplicada' : 'Tarea creada',
           description: duplicatingTask
@@ -547,6 +573,17 @@ export default function Tareas() {
         // Mark as done and copy to completed tasks
         await updateTask(task.id, { status: TaskStatus.DONE, completedAt: Date.now() });
         await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
+
+        // Notify creator that task was completed
+        if (task.creator && user?.firstName && task.creator !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_completed',
+            taskTitle: task.title,
+            taskId: task.id,
+            assigneeName: task.creator, // Notify the creator
+            senderName: user.firstName,
+          });
+        }
       }
       // No need to fetchData() - we already updated the UI optimistically
     } catch (error) {
@@ -617,6 +654,17 @@ export default function Tareas() {
         if (newStatus === TaskStatus.DONE) {
           updateData.completedAt = Date.now();
           await copyTaskToCompleted(taskId, { ...task, status: newStatus });
+
+          // Notify creator that task was completed
+          if (task.creator && user?.firstName && task.creator !== user.firstName) {
+            sendTaskNotification({
+              type: 'task_completed',
+              taskTitle: task.title,
+              taskId: task.id,
+              assigneeName: task.creator,
+              senderName: user.firstName,
+            });
+          }
         }
         await updateTask(taskId, updateData);
         setTasks((prev) =>
