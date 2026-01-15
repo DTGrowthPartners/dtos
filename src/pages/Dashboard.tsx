@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Users, CheckSquare, TrendingUp } from 'lucide-react';
+import { DollarSign, Users, CheckSquare, TrendingUp, Briefcase } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
@@ -30,10 +30,14 @@ export default function Dashboard() {
   const [activeClients, setActiveClients] = useState(0);
   const [totalClients, setTotalClients] = useState(0);
   const [pendingTasks, setPendingTasks] = useState(0);
+  const [completedTasks, setCompletedTasks] = useState(0);
   const [monthlyIncome, setMonthlyIncome] = useState(0);
   const [servicesMRR, setServicesMRR] = useState(0);
   const [clientsWithServices, setClientsWithServices] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Check if user is admin
+  const isAdmin = authUser?.role?.toLowerCase() === 'admin';
 
   // Map user firstName to team member name
   const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
@@ -50,11 +54,11 @@ export default function Dashboard() {
       try {
         setIsLoading(true);
 
-        // Fetch all data in parallel
+        // Fetch all data in parallel (finance only for admin)
         const [clientsData, tasksData, financeData, servicesMetrics] = await Promise.all([
           apiClient.get<Client[]>('/api/clients').catch(() => []),
           loadTasks().catch(() => []),
-          apiClient.get<FinanceData>('/api/finance/data').catch(() => ({ totalIncome: 0, totalExpenses: 0 })),
+          isAdmin ? apiClient.get<FinanceData>('/api/finance/data').catch(() => ({ totalIncome: 0, totalExpenses: 0 })) : Promise.resolve({ totalIncome: 0, totalExpenses: 0 }),
           apiClient.get<ServiceRevenueMetrics>('/api/services/metrics/revenue').catch(() => ({ totalMRR: 0, totalARR: 0, activeServicesCount: 0, clientsWithServices: 0 })),
         ]);
 
@@ -71,10 +75,14 @@ export default function Dashboard() {
           return isUserTask;
         });
         const pending = userTasks.filter((t: Task) => t.status !== 'DONE').length;
+        const completed = userTasks.filter((t: Task) => t.status === 'DONE').length;
         setPendingTasks(pending);
+        setCompletedTasks(completed);
 
-        // Process finance
-        setMonthlyIncome(financeData.totalIncome || 0);
+        // Process finance (only for admin)
+        if (isAdmin) {
+          setMonthlyIncome(financeData.totalIncome || 0);
+        }
 
         // Process services MRR
         setServicesMRR(servicesMetrics.totalMRR || 0);
@@ -87,7 +95,7 @@ export default function Dashboard() {
     };
 
     fetchDashboardData();
-  }, [loggedUserName]);
+  }, [loggedUserName, isAdmin]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -101,12 +109,23 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Ingresos del Mes"
-          value={isLoading ? '...' : `$${monthlyIncome.toLocaleString()}`}
-          icon={DollarSign}
-          variant="primary"
-        />
+        {/* Primera tarjeta: Ingresos del Mes (solo admin) o Tareas Completadas (usuarios) */}
+        {isAdmin ? (
+          <StatCard
+            title="Ingresos del Mes"
+            value={isLoading ? '...' : `$${monthlyIncome.toLocaleString()}`}
+            icon={DollarSign}
+            variant="primary"
+          />
+        ) : (
+          <StatCard
+            title="Tareas Completadas"
+            value={isLoading ? '...' : completedTasks}
+            subtitle="este mes"
+            icon={Briefcase}
+            variant="primary"
+          />
+        )}
         <StatCard
           title="Clientes Activos"
           value={isLoading ? '...' : activeClients}
