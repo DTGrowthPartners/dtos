@@ -18,6 +18,7 @@ import Productos from "@/pages/Productos";
 import Finanzas from "@/pages/Finanzas";
 import CuentasCobro from "@/pages/CuentasCobro";
 import CRM from "@/pages/CRM";
+import Terceros from "@/pages/Terceros";
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
@@ -51,6 +52,7 @@ const App = () => (
               {/* <Route path="/proveedores" element={<Proveedores />} /> // Temporalmente oculto */}
               <Route path="/cuentas-cobro" element={<CuentasCobro />} />
               <Route path="/crm" element={<CRM />} />
+              <Route path="/terceros" element={<Terceros />} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

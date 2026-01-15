@@ -68,6 +68,7 @@ model Client {
   createdByUser User         @relation("ClientCreatedBy", fields: [createdBy], references: [id])
   services    ClientService[]
   sharedWith  ClientShare[]  @relation("ClientShares")
+  terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -92,6 +93,7 @@ model Service {
   duration    String?
   icon        String    @default("Briefcase")
   status      String    @default("active")
+  order       Int       @default(0)
   createdBy   String?
   createdByUser User?   @relation("ServiceCreatedBy", fields: [createdBy], references: [id])
   clients     ClientService[]
@@ -177,6 +179,12 @@ model DealStage {
 
 model Deal {
   id                String    @id @default(cuid())
+
+  // Relación con Tercero (fuente única de verdad)
+  terceroId         String?
+  tercero           Tercero?  @relation("DealTercero", fields: [terceroId], references: [id])
+
+  // Campos legacy (se mantienen por compatibilidad hasta migrar datos)
   name              String    // Nombre del contacto
   company           String?   // Empresa/Negocio
   phone             String?   // Número WhatsApp
@@ -270,4 +278,67 @@ model DealReminder {
   createdBy     String
   createdByUser User    @relation("ReminderCreatedBy", fields: [createdBy], references: [id])
   createdAt     DateTime @default(now())
+}
+
+// ==================== TERCEROS (Fuente Única de Verdad) ====================
+
+model Organizacion {
+  id          String    @id @default(cuid())
+  nombre      String
+  nit         String?   @unique
+  direccion   String?
+  telefono    String?
+  email       String?
+  logo        String?
+  estado      String    @default("activo") // activo, inactivo
+  notas       String?
+  terceros    Tercero[] // Personas asociadas a esta organización
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Tercero {
+  id              String    @id @default(cuid())
+
+  // Información básica
+  nombre          String
+  email           String?
+  telefono        String?
+  telefonoCodigo  String    @default("+57")
+  direccion       String?
+  documento       String?   // Cédula, NIT personal, pasaporte
+
+  // Tipo de tercero (puede tener múltiples roles)
+  esProspecto     Boolean   @default(false)
+  esCliente       Boolean   @default(false)
+  esProveedor     Boolean   @default(false)
+  esEmpleado      Boolean   @default(false)
+
+  // Organización asociada (opcional) - DEPRECADO, usar clientId
+  organizacionId  String?
+  organizacion    Organizacion? @relation(fields: [organizacionId], references: [id])
+
+  // Cliente asociado (empresa de la vista Clientes)
+  clientId        String?
+  client          Client?       @relation("TerceroClient", fields: [clientId], references: [id])
+
+  // Campos específicos para proveedores
+  categoriaProveedor String?  // Servicios, Software, Marketing, etc.
+  cuentaBancaria    String?
+
+  // Campos específicos para empleados
+  cargo           String?
+  salarioBase     Float?
+  fechaIngreso    DateTime?
+
+  // Estado y metadata
+  estado          String    @default("activo") // activo, inactivo
+  notas           String?
+  tags            String[]
+
+  // Relaciones con CRM
+  deals           Deal[]    @relation("DealTercero")
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

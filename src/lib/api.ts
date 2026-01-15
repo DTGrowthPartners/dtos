@@ -49,6 +49,11 @@ class ApiClient {
             throw new Error('Request failed after token refresh');
           }
 
+          // Handle 204 No Content responses
+          if (retryResponse.status === 204) {
+            return undefined as T;
+          }
+
           return await retryResponse.json();
         } catch {
           await authService.logout();
@@ -60,6 +65,11 @@ class ApiClient {
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Request failed');
+      }
+
+      // Handle 204 No Content responses
+      if (response.status === 204) {
+        return undefined as T;
       }
 
       return await response.json();

@@ -475,12 +475,13 @@ export default function CRM() {
   const handleDelete = async (dealId: string) => {
     if (!confirm('Estas seguro de eliminar este prospecto?')) return;
     try {
-      await apiClient.delete(`/api/crm/deals/${dealId}`);
-      toast({ title: 'Deal eliminado' });
-      loadData();
+      // Close the panel first if this is the selected deal
       if (selectedDeal?.id === dealId) {
         setSelectedDeal(null);
       }
+      await apiClient.delete(`/api/crm/deals/${dealId}`);
+      toast({ title: 'Deal eliminado' });
+      await loadData();
     } catch (error) {
       toast({
         title: 'Error',
@@ -682,9 +683,18 @@ export default function CRM() {
             <CardContent className="pt-4">
               <div className="flex items-center gap-2">
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">Pipeline Total</span>
+                <span className="text-sm text-muted-foreground">Ingresos Esperados</span>
               </div>
-              <p className="text-2xl font-bold">{formatCurrency(metrics.pipelineValue)}</p>
+              <p className="text-2xl font-bold">
+                {formatCurrency(
+                  deals
+                    .filter(d => {
+                      const dealStage = stages.find(s => s.id === d.stageId);
+                      return dealStage?.slug === 'propuesta' || dealStage?.slug === 'negociacion';
+                    })
+                    .reduce((sum, d) => sum + (d.estimatedValue || 0), 0)
+                )}
+              </p>
             </CardContent>
           </Card>
           <Card>
@@ -814,7 +824,7 @@ export default function CRM() {
                                       </div>
 
                                       <div className="flex items-center gap-2 mb-2">
-                                        {deal.estimatedValue && (
+                                        {deal.estimatedValue && deal.estimatedValue > 0 && (
                                           <span className="text-xs font-medium text-green-600">
                                             {formatCurrency(deal.estimatedValue, deal.currency)}
                                           </span>
@@ -1040,12 +1050,36 @@ export default function CRM() {
                       <span>Servicio: {selectedDeal.service.name}</span>
                     </div>
                   )}
-                  {selectedDeal.expectedCloseDate && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <span>Cierre esperado: {new Date(selectedDeal.expectedCloseDate).toLocaleDateString('es-CO')}</span>
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2 text-sm group">
+                    <button
+                      onClick={() => {
+                        const newDate = prompt(
+                          'Fecha de cierre esperado (YYYY-MM-DD):',
+                          selectedDeal.expectedCloseDate
+                            ? new Date(selectedDeal.expectedCloseDate).toISOString().split('T')[0]
+                            : new Date().toISOString().split('T')[0]
+                        );
+                        if (newDate) {
+                          apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                            expectedCloseDate: newDate
+                          }).then(() => {
+                            loadDealDetail(selectedDeal.id);
+                            toast({ title: 'Fecha actualizada' });
+                          }).catch(() => {
+                            toast({ title: 'Error', description: 'No se pudo actualizar la fecha', variant: 'destructive' });
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-2 hover:text-primary cursor-pointer"
+                    >
+                      <Calendar className="h-4 w-4 text-muted-foreground group-hover:text-primary" />
+                      <span>
+                        Cierre esperado: {selectedDeal.expectedCloseDate
+                          ? new Date(selectedDeal.expectedCloseDate).toLocaleDateString('es-CO')
+                          : 'Sin fecha'}
+                      </span>
+                    </button>
+                  </div>
                   {selectedDeal.source && (
                     <div className="flex items-center gap-2 text-sm">
                       {(() => {

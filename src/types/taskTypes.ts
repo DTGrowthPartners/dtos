@@ -66,6 +66,7 @@ export interface Project {
   name: string;
   color: string;
   order?: number;
+  description?: string;
 }
 
 export interface BoardColumn {

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Clock, Edit, Trash2, Package, Grid3x3, LayoutGrid, Columns3, List, Eye, EyeOff } from 'lucide-react';
+import { Plus, Search, Clock, Edit, Trash2, Package, Grid3x3, LayoutGrid, Columns3, List, Eye, EyeOff, GripVertical } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -181,6 +182,48 @@ export default function Servicios() {
     });
   };
 
+  const handleDragEnd = async (result: DropResult) => {
+    if (!result.destination) return;
+
+    const sourceIndex = result.source.index;
+    const destinationIndex = result.destination.index;
+
+    if (sourceIndex === destinationIndex) return;
+
+    // Reorder locally first for instant feedback
+    const reorderedServices = Array.from(filteredServices);
+    const [movedService] = reorderedServices.splice(sourceIndex, 1);
+    reorderedServices.splice(destinationIndex, 0, movedService);
+
+    // Update local state
+    setServices(prev => {
+      const newServices = [...prev];
+      const allServiceIds = reorderedServices.map(s => s.id);
+      // Reorder based on filtered order
+      return newServices.sort((a, b) => {
+        const aIndex = allServiceIds.indexOf(a.id);
+        const bIndex = allServiceIds.indexOf(b.id);
+        if (aIndex === -1) return 1;
+        if (bIndex === -1) return -1;
+        return aIndex - bIndex;
+      });
+    });
+
+    // Save to backend
+    try {
+      await apiClient.put('/api/services/reorder', {
+        serviceIds: reorderedServices.map(s => s.id),
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar el orden',
+        variant: 'destructive',
+      });
+      fetchServices(); // Reload to restore order
+    }
+  };
+
   const filteredServices = services.filter((service) => {
     const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase());
     const isHidden = hiddenServices.has(service.id);
@@ -351,77 +394,102 @@ export default function Servicios() {
           </div>
         </Card>
       ) : (
-        /* Cards Grid */
-        <div className={`grid gap-4 ${getGridColumns()}`}>
-          {filteredServices.map((service) => {
-            const isHidden = hiddenServices.has(service.id);
-            return (
-              <Card key={service.id} className={`hover:shadow-lg transition-all ${isHidden ? 'opacity-50 border-dashed' : ''}`}>
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-                        {getIcon(service.icon)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-lg">{service.name}</h3>
-                        <span className="text-xs text-muted-foreground">
-                          {service.status === 'active' ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleServiceVisibility(service.id)}
-                      className="h-8 w-8 p-0"
-                    >
-                      {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {service.description && (
-                    <p className="text-sm text-muted-foreground line-clamp-2 break-words">
-                      {service.description}
-                    </p>
-                  )}
-                  <div className="flex items-center gap-2 text-sm">
-                    <span className="font-semibold text-success text-lg break-words">
-                      {formatPrice(service.price, service.currency)}
-                    </span>
-                  </div>
-                  {service.duration && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4 flex-shrink-0" />
-                      <span className="break-words">{service.duration}</span>
-                    </div>
-                  )}
-                </CardContent>
-                <CardFooter className="flex flex-wrap gap-2 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 min-w-[100px]"
-                    onClick={() => handleEdit(service)}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Editar
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
-                    onClick={() => handleDelete(service.id)}
-                  >
-                    <Trash2 className="h-4 w-4 mr-2" />
-                    Eliminar
-                  </Button>
-                </CardFooter>
-              </Card>
-            );
-          })}
-        </div>
+        /* Cards Grid with Drag and Drop */
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="services" direction="vertical">
+            {(provided) => (
+              <div
+                ref={provided.innerRef}
+                {...provided.droppableProps}
+                className={`grid gap-4 ${getGridColumns()}`}
+              >
+                {filteredServices.map((service, index) => {
+                  const isHidden = hiddenServices.has(service.id);
+                  return (
+                    <Draggable key={service.id} draggableId={service.id} index={index}>
+                      {(provided, snapshot) => (
+                        <Card
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          className={`hover:shadow-lg transition-all ${isHidden ? 'opacity-50 border-dashed' : ''} ${snapshot.isDragging ? 'shadow-xl ring-2 ring-primary' : ''}`}
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  {...provided.dragHandleProps}
+                                  className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground"
+                                >
+                                  <GripVertical className="h-5 w-5" />
+                                </div>
+                                <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+                                  {getIcon(service.icon)}
+                                </div>
+                                <div>
+                                  <h3 className="font-semibold text-lg">{service.name}</h3>
+                                  <span className="text-xs text-muted-foreground">
+                                    {service.status === 'active' ? 'Activo' : 'Inactivo'}
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleServiceVisibility(service.id)}
+                                className="h-8 w-8 p-0"
+                              >
+                                {isHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </Button>
+                            </div>
+                          </CardHeader>
+                          <CardContent className="space-y-3">
+                            {service.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-2 break-words">
+                                {service.description}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 text-sm">
+                              <span className="font-semibold text-success text-lg break-words">
+                                {formatPrice(service.price, service.currency)}
+                              </span>
+                            </div>
+                            {service.duration && (
+                              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                <Clock className="h-4 w-4 flex-shrink-0" />
+                                <span className="break-words">{service.duration}</span>
+                              </div>
+                            )}
+                          </CardContent>
+                          <CardFooter className="flex flex-wrap gap-2 pt-4 border-t">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[100px]"
+                              onClick={() => handleEdit(service)}
+                            >
+                              <Edit className="h-4 w-4 mr-2" />
+                              Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(service.id)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Eliminar
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      )}
+                    </Draggable>
+                  );
+                })}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
 
       {/* Empty State */}

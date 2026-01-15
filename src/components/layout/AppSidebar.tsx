@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Target,
+  UsersRound,
   // Building2, // Temporalmente oculto
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard },
   { title: 'CRM', path: '/crm', icon: Target },
+  { title: 'Terceros', path: '/terceros', icon: UsersRound },
   { title: 'Clientes', path: '/clientes', icon: Users },
   { title: 'Servicios', path: '/servicios', icon: Briefcase },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare },

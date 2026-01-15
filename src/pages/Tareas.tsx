@@ -27,6 +27,7 @@ import {
   AlertCircle,
   CalendarDays,
   CalendarRange,
+  CheckSquare,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -60,6 +61,7 @@ import {
   loadProjects,
   createProject,
   deleteProject,
+  updateProject,
   moveTaskToDeleted,
   copyTaskToCompleted,
   addTaskComment,
@@ -135,6 +137,17 @@ const isOverdue = (timestamp: number | undefined) => {
   return new Date(timestamp) < today;
 };
 
+const getDaysOverdue = (timestamp: number | undefined) => {
+  if (!timestamp) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dueDate = new Date(timestamp);
+  dueDate.setHours(0, 0, 0, 0);
+  const diffTime = today.getTime() - dueDate.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays > 0 ? diffDays : 0;
+};
+
 export default function Tareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -184,6 +197,10 @@ export default function Tareas() {
   // New project form
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectColor, setNewProjectColor] = useState('bg-indigo-500');
+
+  // Edit project description
+  const [editingProjectDescription, setEditingProjectDescription] = useState(false);
+  const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('');
 
   const [formData, setFormData] = useState({
     title: '',
@@ -332,6 +349,28 @@ export default function Tareas() {
     }
   };
 
+  const handleSaveProjectDescription = async () => {
+    if (filterProject === 'all') return;
+
+    try {
+      await updateProject(filterProject, { description: projectDescriptionDraft });
+      setProjects(prev => prev.map(p =>
+        p.id === filterProject ? { ...p, description: projectDescriptionDraft } : p
+      ));
+      setEditingProjectDescription(false);
+      toast({
+        title: 'Descripción actualizada',
+      });
+    } catch (error) {
+      console.error('Error updating project description:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar la descripción',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDeleteProject = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     const projectTasks = tasks.filter(t => t.projectId === projectId);
@@ -474,7 +513,7 @@ export default function Tareas() {
       priority: Priority.MEDIUM,
       assignee: loggedUserName || 'Stiven',
       creator: loggedUserName || 'Dairo',
-      projectId: '',
+      projectId: filterProject !== 'all' ? filterProject : '',
       type: '',
       dueDate: '',
       startDate: '',
@@ -843,9 +882,17 @@ export default function Tareas() {
           {sidebarCollapsed ? (
             <Tooltip delayDuration={0}>
               <TooltipTrigger asChild>
-                <div className={`w-8 h-8 mx-auto rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white text-xs font-semibold cursor-default`}>
-                  {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
-                </div>
+                {user?.photoUrl ? (
+                  <img
+                    src={user.photoUrl}
+                    alt={user.firstName}
+                    className="w-8 h-8 mx-auto rounded-full object-cover cursor-default"
+                  />
+                ) : (
+                  <div className={`w-8 h-8 mx-auto rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white text-xs font-semibold cursor-default`}>
+                    {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                  </div>
+                )}
               </TooltipTrigger>
               <TooltipContent side="right">
                 <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
@@ -855,9 +902,17 @@ export default function Tareas() {
           ) : (
             <>
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
-                  {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
-                </div>
+                {user?.photoUrl ? (
+                  <img
+                    src={user.photoUrl}
+                    alt={user.firstName}
+                    className="w-10 h-10 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
+                    {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                  </div>
+                )}
                 <div>
                   <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
                   <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
@@ -1178,7 +1233,7 @@ export default function Tareas() {
       <div className="flex-1 flex flex-col min-w-0 gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold text-foreground">
               {taskView === 'active' && 'Mis Tareas'}
               {taskView === 'archived' && 'Tareas Archivadas'}
@@ -1194,6 +1249,46 @@ export default function Tareas() {
               {taskView === 'archived' && `${archivedTasks.length} tareas completadas`}
               {taskView === 'deleted' && `${deletedTasks.length} tareas en papelera`}
             </p>
+            {/* Project Description */}
+            {taskView === 'active' && filterProject !== 'all' && (
+              <div className="mt-2">
+                {editingProjectDescription ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={projectDescriptionDraft}
+                      onChange={(e) => setProjectDescriptionDraft(e.target.value)}
+                      placeholder="Objetivos del proyecto..."
+                      className="text-sm h-8 max-w-md"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveProjectDescription();
+                        if (e.key === 'Escape') setEditingProjectDescription(false);
+                      }}
+                      autoFocus
+                    />
+                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveProjectDescription}>
+                      <CheckSquare className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingProjectDescription(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => {
+                      const currentProject = projects.find(p => p.id === filterProject);
+                      setProjectDescriptionDraft(currentProject?.description || '');
+                      setEditingProjectDescription(true);
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 group"
+                  >
+                    {projects.find(p => p.id === filterProject)?.description || (
+                      <span className="italic opacity-50">Click para agregar objetivos del proyecto...</span>
+                    )}
+                    <Edit className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             {taskView === 'active' && (
@@ -1209,6 +1304,15 @@ export default function Tareas() {
                 </div>
                 <Button variant="outline" size="icon" onClick={cycleViewMode}>
                   {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+                </Button>
+                <Button
+                  onClick={() => {
+                    resetForm();
+                    setIsDialogOpen(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nueva Tarea
                 </Button>
               </>
             )}
@@ -1532,12 +1636,16 @@ export default function Tareas() {
                               {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
                             </span>
                             {task.dueDate && (
-                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <span className={`text-xs flex items-center gap-1 ${isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
                                 <Calendar className="h-3 w-3" />
-                                {new Date(task.dueDate).toLocaleDateString('es-ES', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                })}
+                                {isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? (
+                                  <span>{getDaysOverdue(task.dueDate)}d vencida</span>
+                                ) : (
+                                  new Date(task.dueDate).toLocaleDateString('es-ES', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                  })
+                                )}
                               </span>
                             )}
                           </div>

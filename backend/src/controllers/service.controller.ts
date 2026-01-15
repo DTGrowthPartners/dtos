@@ -53,4 +53,17 @@ export class ServiceController {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Error deleting service' });
     }
   }
+
+  async reorder(req: Request, res: Response) {
+    try {
+      const { serviceIds } = req.body;
+      if (!Array.isArray(serviceIds)) {
+        return res.status(400).json({ message: 'serviceIds must be an array' });
+      }
+      const result = await serviceService.reorder(serviceIds);
+      res.json(result);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Error reordering services' });
+    }
+  }
 }

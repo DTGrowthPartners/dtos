@@ -24,12 +24,26 @@ export class ServiceService {
   async findAll(_userId: string) {
     // Todos los usuarios pueden ver todos los servicios
     const services = await prisma.service.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: [
+        { order: 'asc' },
+        { createdAt: 'desc' },
+      ],
     });
 
     return services;
+  }
+
+  async reorder(serviceIds: string[]) {
+    // Update order for each service
+    const updates = serviceIds.map((id, index) =>
+      prisma.service.update({
+        where: { id },
+        data: { order: index },
+      })
+    );
+
+    await prisma.$transaction(updates);
+    return { message: 'Services reordered successfully' };
   }
 
   async findOne(id: string, _userId: string) {
