@@ -1,13 +1,6 @@
 import { useState, useEffect } from 'react';
-import { DollarSign, Users, CheckSquare, Target, AlertTriangle } from 'lucide-react';
+import { DollarSign, Users, CheckSquare, TrendingUp } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { TasksToday } from '@/components/dashboard/TasksToday';
-import { QuickAccess } from '@/components/dashboard/QuickAccess';
-import { RevenueChart } from '@/components/dashboard/RevenueChart';
-import { CampaignOverview } from '@/components/dashboard/CampaignOverview';
-import { ServiceRevenueCard } from '@/components/dashboard/ServiceRevenueCard';
-import { campaigns, notifications } from '@/data/mockData';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { authService, useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import { loadTasks } from '@/lib/firestoreTaskService';
@@ -24,6 +17,13 @@ interface FinanceData {
   totalExpenses: number;
 }
 
+interface ServiceRevenueMetrics {
+  totalMRR: number;
+  totalARR: number;
+  activeServicesCount: number;
+  clientsWithServices: number;
+}
+
 export default function Dashboard() {
   const user = authService.getUser();
   const { user: authUser } = useAuthStore();
@@ -31,6 +31,8 @@ export default function Dashboard() {
   const [totalClients, setTotalClients] = useState(0);
   const [pendingTasks, setPendingTasks] = useState(0);
   const [monthlyIncome, setMonthlyIncome] = useState(0);
+  const [servicesMRR, setServicesMRR] = useState(0);
+  const [clientsWithServices, setClientsWithServices] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   // Map user firstName to team member name
@@ -49,10 +51,11 @@ export default function Dashboard() {
         setIsLoading(true);
 
         // Fetch all data in parallel
-        const [clientsData, tasksData, financeData] = await Promise.all([
+        const [clientsData, tasksData, financeData, servicesMetrics] = await Promise.all([
           apiClient.get<Client[]>('/api/clients').catch(() => []),
           loadTasks().catch(() => []),
           apiClient.get<FinanceData>('/api/finance/data').catch(() => ({ totalIncome: 0, totalExpenses: 0 })),
+          apiClient.get<ServiceRevenueMetrics>('/api/services/metrics/revenue').catch(() => ({ totalMRR: 0, totalARR: 0, activeServicesCount: 0, clientsWithServices: 0 })),
         ]);
 
         // Process clients
@@ -72,6 +75,10 @@ export default function Dashboard() {
 
         // Process finance
         setMonthlyIncome(financeData.totalIncome || 0);
+
+        // Process services MRR
+        setServicesMRR(servicesMetrics.totalMRR || 0);
+        setClientsWithServices(servicesMetrics.clientsWithServices || 0);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       } finally {
@@ -82,9 +89,6 @@ export default function Dashboard() {
     fetchDashboardData();
   }, [loggedUserName]);
 
-  const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
-  const urgentNotifications = notifications.filter((n) => n.type === 'alert');
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Title */}
@@ -94,17 +98,6 @@ export default function Dashboard() {
         </h1>
         <p className="text-muted-foreground">Aquí tienes un resumen de las operaciones de hoy</p>
       </div>
-
-      {/* Alerts */}
-      {urgentNotifications.length > 0 && (
-        <Alert variant="destructive" className="border-destructive/50 bg-destructive/10">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Alertas Importantes</AlertTitle>
-          <AlertDescription>
-            {urgentNotifications.map((n) => n.message).join(' • ')}
-          </AlertDescription>
-        </Alert>
-      )}
 
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -129,28 +122,12 @@ export default function Dashboard() {
           variant="warning"
         />
         <StatCard
-          title="Campañas Activas"
-          value={activeCampaigns}
-          subtitle={`de ${campaigns.length} totales`}
-          icon={Target}
+          title="Ingresos por Servicios"
+          value={isLoading ? '...' : `$${servicesMRR.toLocaleString()}`}
+          subtitle={`${clientsWithServices} clientes con servicios`}
+          icon={TrendingUp}
           variant="primary"
         />
-      </div>
-
-      {/* Main Content Grid */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Column - 2/3 */}
-        <div className="lg:col-span-2 space-y-6">
-          <RevenueChart />
-          <CampaignOverview />
-        </div>
-
-        {/* Right Column - 1/3 */}
-        <div className="space-y-6">
-          <ServiceRevenueCard />
-          <TasksToday />
-          <QuickAccess />
-        </div>
       </div>
     </div>
   );
