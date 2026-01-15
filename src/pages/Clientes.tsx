@@ -1,10 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -40,10 +47,40 @@ interface Client {
   createdAt: string;
 }
 
+interface Organizacion {
+  id: string;
+  nombre: string;
+  nit?: string;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+  estado: string;
+  terceros: Tercero[];
+}
+
+interface Tercero {
+  id: string;
+  nombre: string;
+  email?: string;
+  telefono?: string;
+  telefonoCodigo: string;
+  esProspecto: boolean;
+  esCliente: boolean;
+  esProveedor: boolean;
+  esEmpleado: boolean;
+  organizacionId?: string;
+  organizacion?: Organizacion;
+  cargo?: string;
+  estado: string;
+}
+
 type ViewMode = '1' | '2' | '3' | 'list';
 
 export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [terceros, setTerceros] = useState<Tercero[]>([]);
+  const [organizaciones, setOrganizaciones] = useState<Organizacion[]>([]);
+  const [expandedOrgs, setExpandedOrgs] = useState<Set<string>>(new Set());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +88,7 @@ export default function Clientes() {
   const [viewMode, setViewMode] = useState<ViewMode>('3');
   const [hiddenClients, setHiddenClients] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
+  const [activeTab, setActiveTab] = useState('empresas');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -63,6 +101,7 @@ export default function Clientes() {
 
   useEffect(() => {
     fetchClients();
+    fetchTerceros();
   }, []);
 
   const fetchClients = async () => {
@@ -76,6 +115,36 @@ export default function Clientes() {
         variant: 'destructive',
       });
     }
+  };
+
+  const fetchTerceros = async () => {
+    try {
+      // Fetch terceros that are clients (esCliente: true)
+      const data = await apiClient.get<Tercero[]>('/api/terceros?tipo=cliente');
+      setTerceros(data);
+
+      // Fetch organizaciones with their terceros (clientes)
+      const orgsData = await apiClient.get<Organizacion[]>('/api/terceros/organizaciones/list');
+      // Filter only organizations that have terceros that are clients
+      const orgsWithClientes = orgsData.filter(org =>
+        org.terceros?.some(t => t.esCliente)
+      );
+      setOrganizaciones(orgsWithClientes);
+    } catch (error) {
+      console.error('Error fetching terceros:', error);
+    }
+  };
+
+  const toggleOrgExpanded = (orgId: string) => {
+    setExpandedOrgs(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(orgId)) {
+        newSet.delete(orgId);
+      } else {
+        newSet.add(orgId);
+      }
+      return newSet;
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -243,75 +312,103 @@ export default function Clientes() {
     }
   };
 
+  // Filter terceros by search
+  const filteredTerceros = terceros.filter((tercero) =>
+    tercero.nombre.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    tercero.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Terceros without organization
+  const tercerosSinOrg = filteredTerceros.filter(t => !t.organizacionId);
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Gestión de Clientes</h1>
-          <p className="text-muted-foreground">Clientes disponibles para todos los usuarios</p>
+          <p className="text-muted-foreground">Empresas y contactos clientes</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleImportClients}
-            className="w-full md:w-auto"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Importar Clientes
-          </Button>
-          <Button
-            onClick={() => {
-              resetForm();
-              setIsDialogOpen(true);
-            }}
-            className="w-full md:w-auto"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Nuevo Cliente
-          </Button>
+          {activeTab === 'empresas' && (
+            <>
+              <Button
+                variant="outline"
+                onClick={handleImportClients}
+                className="w-full md:w-auto"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                Importar
+              </Button>
+              <Button
+                onClick={() => {
+                  resetForm();
+                  setIsDialogOpen(true);
+                }}
+                className="w-full md:w-auto"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nueva Empresa
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Search and View Controls */}
-      <div className="flex flex-col gap-4">
-        <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre o email..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 w-full"
-          />
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={showHidden ? "default" : "outline"}
-            size="sm"
-            onClick={() => setShowHidden(!showHidden)}
-            className="whitespace-nowrap"
-          >
-            {showHidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
-            {showHidden ? 'Ocultar ocultados' : `Mostrar ocultados (${hiddenClients.size})`}
-          </Button>
-          <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as ViewMode)}>
-            <ToggleGroupItem value="list" aria-label="Vista de lista">
-              <List className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="1" aria-label="Vista de 1 columna">
-              <Columns3 className="h-4 w-4 rotate-90" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="2" aria-label="Vista de 2 columnas">
-              <LayoutGrid className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="3" aria-label="Vista de 3 columnas">
-              <Grid3x3 className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
-      </div>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="empresas" className="flex items-center gap-2">
+            <Building2 className="h-4 w-4" />
+            Empresas ({clients.length})
+          </TabsTrigger>
+          <TabsTrigger value="contactos" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Contactos Clientes ({terceros.length})
+          </TabsTrigger>
+        </TabsList>
 
-      {/* List View */}
+        {/* Tab: Empresas */}
+        <TabsContent value="empresas" className="space-y-4 mt-4">
+          {/* Search and View Controls */}
+          <div className="flex flex-col gap-4">
+            <div className="relative w-full">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre o email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-full"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={showHidden ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowHidden(!showHidden)}
+                className="whitespace-nowrap"
+              >
+                {showHidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+                {showHidden ? 'Ocultar ocultados' : `Mostrar ocultados (${hiddenClients.size})`}
+              </Button>
+              <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as ViewMode)}>
+                <ToggleGroupItem value="list" aria-label="Vista de lista">
+                  <List className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="1" aria-label="Vista de 1 columna">
+                  <Columns3 className="h-4 w-4 rotate-90" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="2" aria-label="Vista de 2 columnas">
+                  <LayoutGrid className="h-4 w-4" />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="3" aria-label="Vista de 3 columnas">
+                  <Grid3x3 className="h-4 w-4" />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </div>
+
+          {/* List View */}
       {viewMode === 'list' ? (
         <Card>
           <div className="table-responsive">
@@ -477,16 +574,163 @@ export default function Clientes() {
         </div>
       )}
 
-      {/* Empty State */}
-      {filteredClients.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
-          <h3 className="text-lg font-semibold text-foreground">No se encontraron clientes</h3>
-          <p className="text-muted-foreground">
-            {searchQuery ? 'Intenta con otra búsqueda' : 'Crea tu primer cliente'}
-          </p>
-        </div>
-      )}
+          {/* Empty State */}
+          {filteredClients.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Building2 className="h-12 w-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-semibold text-foreground">No se encontraron empresas</h3>
+              <p className="text-muted-foreground">
+                {searchQuery ? 'Intenta con otra búsqueda' : 'Crea tu primera empresa'}
+              </p>
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Tab: Contactos Clientes */}
+        <TabsContent value="contactos" className="space-y-4 mt-4">
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar contactos..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-full"
+            />
+          </div>
+
+          {/* Organizaciones con clientes */}
+          {organizaciones.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Por Organizacion</h3>
+              {organizaciones.map((org) => {
+                const clientesEnOrg = org.terceros?.filter(t => t.esCliente) || [];
+                if (clientesEnOrg.length === 0) return null;
+
+                return (
+                  <Collapsible
+                    key={org.id}
+                    open={expandedOrgs.has(org.id)}
+                    onOpenChange={() => toggleOrgExpanded(org.id)}
+                  >
+                    <Card>
+                      <CollapsibleTrigger asChild>
+                        <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors py-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {expandedOrgs.has(org.id) ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <Building2 className="h-5 w-5 text-primary" />
+                              <div>
+                                <CardTitle className="text-base">{org.nombre}</CardTitle>
+                                {org.nit && (
+                                  <p className="text-xs text-muted-foreground">NIT: {org.nit}</p>
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="secondary">
+                              <Users className="h-3 w-3 mr-1" />
+                              {clientesEnOrg.length}
+                            </Badge>
+                          </div>
+                        </CardHeader>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <CardContent className="pt-0">
+                          <div className="space-y-2 border-t pt-3">
+                            {clientesEnOrg.map((tercero) => (
+                              <div
+                                key={tercero.id}
+                                className="flex items-center justify-between p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
+                                    <UserCheck className="h-4 w-4 text-green-600" />
+                                  </div>
+                                  <div>
+                                    <p className="font-medium text-sm">{tercero.nombre}</p>
+                                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                      {tercero.email && (
+                                        <span className="flex items-center gap-1">
+                                          <Mail className="h-3 w-3" />
+                                          {tercero.email}
+                                        </span>
+                                      )}
+                                      {tercero.telefono && (
+                                        <span className="flex items-center gap-1">
+                                          <Phone className="h-3 w-3" />
+                                          {tercero.telefonoCodigo} {tercero.telefono}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                {tercero.cargo && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {tercero.cargo}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </CollapsibleContent>
+                    </Card>
+                  </Collapsible>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Terceros sin organizacion */}
+          {tercerosSinOrg.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Sin Organizacion</h3>
+              <div className="grid gap-3 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+                {tercerosSinOrg.map((tercero) => (
+                  <Card key={tercero.id} className="hover:shadow-md transition-shadow">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                          <UserCheck className="h-5 w-5 text-green-600" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium truncate">{tercero.nombre}</p>
+                          {tercero.email && (
+                            <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              {tercero.email}
+                            </p>
+                          )}
+                          {tercero.telefono && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Phone className="h-3 w-3" />
+                              {tercero.telefonoCodigo} {tercero.telefono}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty State for Contactos */}
+          {terceros.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
+              <h3 className="text-lg font-semibold text-foreground">No hay contactos clientes</h3>
+              <p className="text-muted-foreground">
+                Los prospectos convertidos a clientes aparecerán aquí
+              </p>
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Dialog Form */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
