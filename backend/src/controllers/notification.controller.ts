@@ -10,10 +10,14 @@ export const getNotifications = async (req: Request, res: Response) => {
     const userId = (req as any).user.userId;
     const { limit, unreadOnly } = req.query;
 
+    console.log('[Notifications] Fetching for userId:', userId);
+
     const notifications = await notificationService.getByUser(userId, {
       limit: limit ? parseInt(limit as string) : 50,
       unreadOnly: unreadOnly === 'true',
     });
+
+    console.log('[Notifications] Found:', notifications.length, 'notifications');
 
     res.json(notifications);
   } catch (error: any) {
@@ -103,6 +107,7 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
     let notification;
 
     if (type === 'task_assigned') {
+      console.log('[Notifications] Creating task_assigned notification for recipientId:', assigneeUser.id, 'from senderId:', senderId);
       notification = await notificationService.create({
         type: 'task_assigned',
         title: 'Nueva tarea asignada',
@@ -113,6 +118,7 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
         resourceId: taskId,
         resourceType: 'task',
       });
+      console.log('[Notifications] Created notification:', notification?.id);
     } else if (type === 'task_completed') {
       // Find task creator
       const creatorUser = await prisma.user.findFirst({

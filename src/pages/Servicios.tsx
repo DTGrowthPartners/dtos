@@ -97,8 +97,9 @@ const formatCurrency = (amount: number, currency: string = 'COP') => {
     style: 'currency',
     currency,
     minimumFractionDigits: 0,
-  }).format(amount);
+  }).format(amount); 
 };
+
 
 export default function Servicios() {
   const [services, setServices] = useState<Service[]>([]);
