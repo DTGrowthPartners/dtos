@@ -32,5 +32,6 @@ export interface TokenResponse {
     phone?: string;
     photoUrl?: string;
     role: string;
+    permissions?: string[];
   };
 }
