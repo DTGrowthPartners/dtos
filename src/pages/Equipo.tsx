@@ -42,11 +42,28 @@ const MODULE_PERMISSIONS = [
   { value: 'terceros', label: 'Terceros' },
   { value: 'clientes', label: 'Clientes' },
   { value: 'servicios', label: 'Servicios' },
+  { value: 'campanas', label: 'Campañas' },
   { value: 'tareas', label: 'Tareas' },
+  { value: 'reportes', label: 'Reportes' },
+  { value: 'productos', label: 'Productos' },
   { value: 'equipo', label: 'Equipo' },
   { value: 'finanzas', label: 'Finanzas' },
   { value: 'cuentas-cobro', label: 'Cuentas de Cobro' },
 ] as const;
+
+// Permisos por defecto para nuevos usuarios (todos excepto finanzas y equipo)
+const DEFAULT_USER_PERMISSIONS = [
+  'dashboard',
+  'clientes',
+  'servicios',
+  'campanas',
+  'tareas',
+  'reportes',
+  'productos',
+  'cuentas-cobro',
+  'crm',
+  'terceros',
+];
 
 interface Role {
   id: string;
@@ -100,7 +117,7 @@ export default function Equipo() {
     firstName: '',
     lastName: '',
     roleId: '',
-    permissions: [] as string[],
+    permissions: [...DEFAULT_USER_PERMISSIONS] as string[],
   });
 
   useEffect(() => {
@@ -137,7 +154,7 @@ export default function Equipo() {
       firstName: '',
       lastName: '',
       roleId: '',
-      permissions: [],
+      permissions: [...DEFAULT_USER_PERMISSIONS],
     });
   };
 

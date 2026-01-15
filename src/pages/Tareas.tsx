@@ -30,6 +30,7 @@ import {
   CheckSquare,
   ExternalLink,
   Link,
+  GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -180,11 +181,20 @@ export default function Tareas() {
   const { toast } = useToast();
   const { user } = useAuthStore();
 
-  // Map user firstName to team member name (case-insensitive matching)
+  // Map user firstName to team member name (flexible matching)
   const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
     if (!firstName) return undefined;
     const normalizedName = firstName.toLowerCase().trim();
-    const member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
+    // Try exact match first
+    let member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
+    // If no exact match, try if user name starts with team member name (e.g., "DAIRO T." starts with "dairo")
+    if (!member) {
+      member = TEAM_MEMBERS.find(m => normalizedName.startsWith(m.name.toLowerCase()));
+    }
+    // If still no match, try if team member name is contained in user name
+    if (!member) {
+      member = TEAM_MEMBERS.find(m => normalizedName.includes(m.name.toLowerCase()));
+    }
     return member?.name;
   };
 
@@ -1616,13 +1626,18 @@ export default function Tareas() {
                         onDragStart={(e) => handleDragStart(e, task.id)}
                         onDragEnd={handleDragEnd}
                         className={`p-3 md:p-4 cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 ${
-                          draggedTask === task.id ? 'opacity-50' : ''
+                          draggedTask === task.id ? 'opacity-50 scale-105' : ''
                         } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                       >
                         {/* Task Header */}
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-start gap-2 flex-1 min-w-0">
+                            {/* Drag Handle */}
+                            <div className="flex-shrink-0 mt-0.5 text-muted-foreground/50 cursor-grab">
+                              <GripVertical className="h-4 w-4" />
+                            </div>
                             <button
+                              draggable={false}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleToggleComplete(task);
@@ -1639,11 +1654,12 @@ export default function Tareas() {
                               {task.title}
                             </h3>
                           </div>
-                          <div className="flex gap-1 flex-shrink-0">
+                          <div className="flex gap-1 flex-shrink-0" draggable={false} onDragStart={(e) => e.preventDefault()}>
                             <Button
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6"
+                              draggable={false}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleEdit(task);
@@ -1655,6 +1671,7 @@ export default function Tareas() {
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6"
+                              draggable={false}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDuplicate(task);
@@ -1666,6 +1683,7 @@ export default function Tareas() {
                               variant="ghost"
                               size="icon"
                               className="h-6 w-6"
+                              draggable={false}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleDelete(task);

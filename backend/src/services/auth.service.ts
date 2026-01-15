@@ -8,6 +8,20 @@ const prisma = new PrismaClient();
 
 const SALT_ROUNDS = 10;
 
+// Permisos por defecto para nuevos usuarios (todos excepto finanzas y equipo)
+const DEFAULT_USER_PERMISSIONS = [
+  'dashboard',
+  'clientes',
+  'servicios',
+  'campanas',
+  'tareas',
+  'reportes',
+  'productos',
+  'cuentas-cobro',
+  'crm',
+  'terceros',
+];
+
 export class AuthService {
   async register(registerDto: RegisterDto) {
     const { email, password, firstName, lastName } = registerDto;
@@ -39,7 +53,7 @@ export class AuthService {
       });
     }
 
-    // Create user with default role
+    // Create user with default role and permissions
     const user = await prisma.user.create({
       data: {
         email,
@@ -47,6 +61,7 @@ export class AuthService {
         firstName,
         lastName,
         roleId: userRole.id,
+        permissions: DEFAULT_USER_PERMISSIONS,
       },
       include: {
         role: true,
@@ -90,7 +105,7 @@ export class AuthService {
       });
     }
 
-    // Create user with Firebase UID
+    // Create user with Firebase UID and default permissions
     const user = await prisma.user.create({
       data: {
         email,
@@ -98,6 +113,7 @@ export class AuthService {
         lastName,
         roleId: userRole.id,
         firebaseUid: decodedToken.uid,
+        permissions: DEFAULT_USER_PERMISSIONS,
       },
       include: {
         role: true,
@@ -142,7 +158,7 @@ export class AuthService {
         });
       }
 
-      // Create user from Firebase
+      // Create user from Firebase with default permissions
       user = await prisma.user.create({
         data: {
           email,
@@ -150,6 +166,7 @@ export class AuthService {
           lastName: '',
           roleId: userRole.id,
           firebaseUid: uid,
+          permissions: DEFAULT_USER_PERMISSIONS,
         },
         include: {
           role: true,

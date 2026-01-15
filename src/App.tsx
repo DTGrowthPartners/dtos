@@ -40,19 +40,19 @@ const App = () => (
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/clientes" element={<Clientes />} />
-              <Route path="/servicios" element={<Servicios />} />
-              <Route path="/campanas" element={<Campanas />} />
-              <Route path="/tareas" element={<Tareas />} />
+              <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
+              <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
+              <Route path="/campanas" element={<ProtectedRoute requiredPermission="campanas"><Campanas /></ProtectedRoute>} />
+              <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
               <Route path="/mis-tareas" element={<MisTareas />} />
-              <Route path="/reportes" element={<Reportes />} />
-              <Route path="/equipo" element={<Equipo />} />
-              <Route path="/productos" element={<Productos />} />
-              <Route path="/finanzas" element={<Finanzas />} />
+              <Route path="/reportes" element={<ProtectedRoute requiredPermission="reportes"><Reportes /></ProtectedRoute>} />
+              <Route path="/equipo" element={<ProtectedRoute requiredPermission="equipo"><Equipo /></ProtectedRoute>} />
+              <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
+              <Route path="/finanzas" element={<ProtectedRoute requiredPermission="finanzas"><Finanzas /></ProtectedRoute>} />
               {/* <Route path="/proveedores" element={<Proveedores />} /> // Temporalmente oculto */}
-              <Route path="/cuentas-cobro" element={<CuentasCobro />} />
-              <Route path="/crm" element={<CRM />} />
-              <Route path="/terceros" element={<Terceros />} />
+              <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="cuentas-cobro"><CuentasCobro /></ProtectedRoute>} />
+              <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
+              <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
