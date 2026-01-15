@@ -13,6 +13,7 @@ import {
   getDoc
 } from 'firebase/firestore';
 import type { Task, Project, BoardColumn, PomodoroSession } from '@/types/taskTypes';
+import { apiClient } from './api';
 
 const TASKS_COLLECTION = 'tasks';
 const PROJECTS_COLLECTION = 'projects';
@@ -359,4 +360,21 @@ export const importTasksFromExport = async (exportData: ExportData, defaultProje
   }
 
   return { imported, errors };
+};
+
+// ============= NOTIFICATIONS =============
+
+export const sendTaskNotification = async (params: {
+  type: 'task_assigned' | 'task_completed';
+  taskTitle: string;
+  taskId: string;
+  assigneeName: string;
+  senderName: string;
+}): Promise<void> => {
+  try {
+    await apiClient.post('/api/notifications/task', params);
+  } catch (error) {
+    // Don't fail the task operation if notification fails
+    console.error('Failed to send task notification:', error);
+  }
 };

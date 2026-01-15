@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Bell, Search, User, ChevronRight, Moon, Sun, LogOut } from 'lucide-react';
+import { Search, User, ChevronRight, Moon, Sun, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -11,8 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { notifications } from '@/data/mockData';
+import { NotificationsDropdown } from '@/components/notifications/NotificationsDropdown';
 import { cn } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -109,45 +108,7 @@ export function AppHeader() {
         </Button>
 
         {/* Notifications */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn("relative", isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground")}
-            >
-              <Bell className="h-5 w-5" />
-              <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs bg-destructive text-destructive-foreground">
-                {notifications.length}
-              </Badge>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-80">
-            <DropdownMenuLabel className="font-semibold">Notificaciones</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {notifications.map((notification) => (
-              <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-1 py-3 cursor-pointer">
-                <div className="flex items-center gap-2 w-full">
-                  <div
-                    className={cn(
-                      'h-2 w-2 rounded-full',
-                      notification.type === 'alert' && 'bg-destructive',
-                      notification.type === 'success' && 'bg-success',
-                      notification.type === 'task' && 'bg-warning',
-                      notification.type === 'info' && 'bg-primary'
-                    )}
-                  />
-                  <span className="text-sm font-medium flex-1">{notification.message}</span>
-                </div>
-                <span className="text-xs text-muted-foreground ml-4">Hace {notification.time}</span>
-              </DropdownMenuItem>
-            ))}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-center text-primary font-medium cursor-pointer justify-center">
-              Ver todas las notificaciones
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <NotificationsDropdown isMisTareasView={isMisTareasView} />
 
         {/* User Menu */}
         <DropdownMenu>

@@ -30,6 +30,9 @@ model User {
   dealActivities     DealActivity[] @relation("ActivityPerformedBy")
   assignedReminders  DealReminder[] @relation("ReminderAssignedTo")
   createdReminders   DealReminder[] @relation("ReminderCreatedBy")
+  // Notifications
+  receivedNotifications Notification[] @relation("NotificationRecipient")
+  sentNotifications     Notification[] @relation("NotificationSender")
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }
@@ -358,4 +361,33 @@ model Tercero {
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// ==================== NOTIFICACIONES ====================
+
+model Notification {
+  id          String    @id @default(cuid())
+
+  // Tipo de notificación
+  type        String    // task_assigned, task_completed, deal_assigned, reminder, mention, system
+  title       String
+  message     String
+
+  // Links para navegación
+  link        String?   // URL relativa para navegar al recurso
+  resourceId  String?   // ID del recurso relacionado (taskId, dealId, etc)
+  resourceType String?  // task, deal, reminder, etc
+
+  // Estado
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+
+  // Relaciones
+  recipientId String
+  recipient   User      @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+
+  senderId    String?   // Puede ser null para notificaciones del sistema
+  sender      User?     @relation("NotificationSender", fields: [senderId], references: [id])
+
+  createdAt   DateTime  @default(now())
 }
