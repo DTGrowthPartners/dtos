@@ -67,6 +67,7 @@ export interface Project {
   color: string;
   order?: number;
   description?: string;
+  chatLink?: string; // Link al grupo de WhatsApp u otro canal de comunicacion
 }
 
 export interface BoardColumn {

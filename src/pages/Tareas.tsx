@@ -28,6 +28,8 @@ import {
   CalendarDays,
   CalendarRange,
   CheckSquare,
+  ExternalLink,
+  Link,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -202,6 +204,10 @@ export default function Tareas() {
   const [editingProjectDescription, setEditingProjectDescription] = useState(false);
   const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('');
 
+  // Edit project chat link
+  const [editingChatLink, setEditingChatLink] = useState(false);
+  const [chatLinkDraft, setChatLinkDraft] = useState('');
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -371,6 +377,28 @@ export default function Tareas() {
     }
   };
 
+  const handleSaveChatLink = async () => {
+    if (filterProject === 'all') return;
+
+    try {
+      await updateProject(filterProject, { chatLink: chatLinkDraft });
+      setProjects(prev => prev.map(p =>
+        p.id === filterProject ? { ...p, chatLink: chatLinkDraft } : p
+      ));
+      setEditingChatLink(false);
+      toast({
+        title: 'Link del grupo actualizado',
+      });
+    } catch (error) {
+      console.error('Error updating chat link:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el link',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleDeleteProject = (projectId: string) => {
     const project = projects.find(p => p.id === projectId);
     const projectTasks = tasks.filter(t => t.projectId === projectId);
@@ -525,9 +553,20 @@ export default function Tareas() {
 
   // Drag and Drop handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
-    setDraggedTask(taskId);
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('taskId', taskId);
+    e.dataTransfer.setData('text/plain', taskId);
+    setDraggedTask(taskId);
+    // Add a slight delay to set dragging state for visual feedback
+    setTimeout(() => {
+      const element = e.target as HTMLElement;
+      element.style.opacity = '0.5';
+    }, 0);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    const element = e.target as HTMLElement;
+    element.style.opacity = '1';
+    setDraggedTask(null);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -537,10 +576,10 @@ export default function Tareas() {
 
   const handleDrop = async (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
-    const taskId = e.dataTransfer.getData('taskId');
+    const taskId = e.dataTransfer.getData('text/plain');
     const task = tasks.find(t => t.id === taskId);
 
-    if (taskId && draggedTask && task) {
+    if (taskId && task && task.status !== newStatus) {
       try {
         const updateData: Partial<Task> = { status: newStatus };
         if (newStatus === TaskStatus.DONE) {
@@ -1289,6 +1328,63 @@ export default function Tareas() {
                 )}
               </div>
             )}
+            {/* Chat Link - Abrir Grupo WhatsApp */}
+            {taskView === 'active' && filterProject !== 'all' && (
+              <div className="mt-2 flex items-center gap-2">
+                {editingChatLink ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={chatLinkDraft}
+                      onChange={(e) => setChatLinkDraft(e.target.value)}
+                      placeholder="https://chat.whatsapp.com/..."
+                      className="text-sm h-8 w-80"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveChatLink();
+                        if (e.key === 'Escape') setEditingChatLink(false);
+                      }}
+                      autoFocus
+                    />
+                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveChatLink}>
+                      <CheckSquare className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingChatLink(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {projects.find(p => p.id === filterProject)?.chatLink ? (
+                      <a
+                        href={projects.find(p => p.id === filterProject)?.chatLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        Abrir grupo
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            const currentProject = projects.find(p => p.id === filterProject);
+                            setChatLinkDraft(currentProject?.chatLink || '');
+                            setEditingChatLink(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                        >
+                          <Link className="h-3 w-3" />
+                          {projects.find(p => p.id === filterProject)?.chatLink ? 'Editar link' : 'Agregar link de grupo'}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Configurar link de WhatsApp del proyecto</TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-2 flex-wrap">
             {taskView === 'active' && (
@@ -1346,7 +1442,10 @@ export default function Tareas() {
               }`}
             >
               <Calendar className="h-3 w-3 md:h-3.5 md:w-3.5" />
-              <span>Hoy</span>
+              <span className="hidden sm:inline">
+                {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'short' })}
+              </span>
+              <span className="sm:hidden">Hoy</span>
               <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'today' ? 'bg-white/20' : 'bg-blue-200 dark:bg-blue-800'}`}>
                 {dateFilterCounts.today}
               </span>
@@ -1379,22 +1478,20 @@ export default function Tareas() {
                 {dateFilterCounts.month}
               </span>
             </button>
-            {dateFilterCounts.overdue > 0 && (
-              <button
-                onClick={() => setDateFilter('overdue')}
-                className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                  dateFilter === 'overdue'
-                    ? 'bg-red-500 text-white'
-                    : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
-                }`}
-              >
-                <AlertCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
-                <span>Vencidas</span>
-                <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'overdue' ? 'bg-white/20' : 'bg-red-200 dark:bg-red-800'}`}>
-                  {dateFilterCounts.overdue}
-                </span>
-              </button>
-            )}
+            <button
+              onClick={() => setDateFilter('overdue')}
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
+                dateFilter === 'overdue'
+                  ? 'bg-red-500 text-white'
+                  : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
+              }`}
+            >
+              <AlertCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
+              <span>Vencidas</span>
+              <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'overdue' ? 'bg-white/20' : 'bg-red-200 dark:bg-red-800'}`}>
+                {dateFilterCounts.overdue}
+              </span>
+            </button>
           </div>
         )}
 
@@ -1435,12 +1532,12 @@ export default function Tareas() {
                       return (
                         <div
                           key={task.id}
-                          draggable
+                          draggable={true}
                           onDragStart={(e) => handleDragStart(e, task.id)}
-                          className={`p-2 bg-card rounded border-l-4 cursor-move hover:shadow transition-all ${
+                          onDragEnd={handleDragEnd}
+                          className={`p-2 bg-card rounded border-l-4 cursor-grab active:cursor-grabbing hover:shadow transition-all ${
                             draggedTask === task.id ? 'opacity-50' : ''
-                          }`}
-                          style={{ borderLeftColor: project?.color.replace('bg-', '#').replace('-500', '') || '#3b82f6' }}
+                          } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                         >
                           <div className="flex items-center gap-2">
                             <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[task.priority].split(' ')[0]}`}></span>
@@ -1458,9 +1555,10 @@ export default function Tareas() {
                       return (
                         <div
                           key={task.id}
-                          draggable
+                          draggable={true}
                           onDragStart={(e) => handleDragStart(e, task.id)}
-                          className={`p-3 bg-card rounded-lg border cursor-move hover:shadow transition-all ${
+                          onDragEnd={handleDragEnd}
+                          className={`p-3 bg-card rounded-lg border cursor-grab active:cursor-grabbing hover:shadow transition-all ${
                             draggedTask === task.id ? 'opacity-50' : ''
                           }`}
                         >
@@ -1514,15 +1612,12 @@ export default function Tareas() {
                     return (
                       <Card
                         key={task.id}
-                        draggable
+                        draggable={true}
                         onDragStart={(e) => handleDragStart(e, task.id)}
-                        className={`p-3 md:p-4 cursor-move hover:shadow-lg transition-all ${
+                        onDragEnd={handleDragEnd}
+                        className={`p-3 md:p-4 cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 ${
                           draggedTask === task.id ? 'opacity-50' : ''
-                        }`}
-                        style={{
-                          borderLeftWidth: '4px',
-                          borderLeftColor: project?.color.replace('bg-', '#').replace('-500', '') || '#3b82f6',
-                        }}
+                        } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                       >
                         {/* Task Header */}
                         <div className="flex items-start justify-between mb-2">

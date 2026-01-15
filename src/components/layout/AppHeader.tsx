@@ -16,6 +16,7 @@ import { notifications } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { TEAM_MEMBERS } from '@/types/taskTypes';
 
 const pathNames: Record<string, string> = {
   '/': 'Dashboard',
@@ -38,6 +39,10 @@ export function AppHeader() {
   const currentPath = pathNames[location.pathname] || 'Dashboard';
   const user = authService.getUser();
   const isMisTareasView = location.pathname === '/mis-tareas';
+
+  // Obtener el rol/cargo del equipo basado en el nombre del usuario
+  const teamMember = TEAM_MEMBERS.find(m => m.name.toLowerCase() === user?.firstName?.toLowerCase());
+  const userRole = teamMember?.role || user?.role || 'Usuario';
 
   const toggleTheme = () => {
     setIsDark(!isDark);
@@ -157,10 +162,10 @@ export function AppHeader() {
               </div>
               <div className="hidden md:flex flex-col items-start">
                 <span className={cn("text-sm font-medium", isMisTareasView ? "text-slate-200" : "")}>
-                  {user ? `${user.firstName} ${user.lastName}` : 'Usuario'}
+                  {user?.firstName || 'Usuario'}
                 </span>
                 <span className={cn("text-xs", isMisTareasView ? "text-slate-400" : "text-muted-foreground")}>
-                  {user?.role || 'Usuario'}
+                  {userRole}
                 </span>
               </div>
             </Button>
