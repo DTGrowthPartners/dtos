@@ -162,6 +162,7 @@ export default function Tareas() {
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [duplicatingTask, setDuplicatingTask] = useState<Task | null>(null);
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
+  const [draggedProject, setDraggedProject] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -251,8 +252,11 @@ export default function Tareas() {
       setTasks(tasksData);
       setArchivedTasks(archivedData);
       setDeletedTasks(deletedData);
-      // Use loaded projects or default if none exist
-      setProjects(projectsData.length > 0 ? projectsData : DEFAULT_PROJECTS);
+      // Use loaded projects or default if none exist, sorted by order
+      const sortedProjects = projectsData.length > 0
+        ? [...projectsData].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
+        : DEFAULT_PROJECTS;
+      setProjects(sortedProjects);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -616,6 +620,74 @@ export default function Tareas() {
       }
     }
     setDraggedTask(null);
+  };
+
+  // Project Drag and Drop handlers
+  const handleProjectDragStart = (e: React.DragEvent, projectId: string) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', projectId);
+    setDraggedProject(projectId);
+    setTimeout(() => {
+      const element = e.target as HTMLElement;
+      element.style.opacity = '0.5';
+    }, 0);
+  };
+
+  const handleProjectDragEnd = (e: React.DragEvent) => {
+    const element = e.target as HTMLElement;
+    element.style.opacity = '1';
+    setDraggedProject(null);
+  };
+
+  const handleProjectDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleProjectDrop = async (e: React.DragEvent, targetProjectId: string) => {
+    e.preventDefault();
+    const sourceProjectId = e.dataTransfer.getData('text/plain');
+
+    if (!sourceProjectId || sourceProjectId === targetProjectId) {
+      setDraggedProject(null);
+      return;
+    }
+
+    const sourceIndex = projects.findIndex(p => p.id === sourceProjectId);
+    const targetIndex = projects.findIndex(p => p.id === targetProjectId);
+
+    if (sourceIndex === -1 || targetIndex === -1) {
+      setDraggedProject(null);
+      return;
+    }
+
+    // Reorder projects
+    const newProjects = [...projects];
+    const [removed] = newProjects.splice(sourceIndex, 1);
+    newProjects.splice(targetIndex, 0, removed);
+
+    // Update order for each project
+    const updatedProjects = newProjects.map((p, index) => ({ ...p, order: index }));
+    setProjects(updatedProjects);
+
+    // Save new order to Firebase
+    try {
+      for (const project of updatedProjects) {
+        await updateProject(project.id, { order: project.order });
+      }
+      toast({
+        title: 'Proyectos reordenados',
+      });
+    } catch (error) {
+      console.error('Error saving project order:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo guardar el orden',
+        variant: 'destructive',
+      });
+    }
+
+    setDraggedProject(null);
   };
 
   // Image handlers
@@ -1068,20 +1140,27 @@ export default function Tareas() {
                   return (
                     <div
                       key={project.id}
-                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                      draggable={true}
+                      onDragStart={(e) => handleProjectDragStart(e, project.id)}
+                      onDragEnd={handleProjectDragEnd}
+                      onDragOver={handleProjectDragOver}
+                      onDrop={(e) => handleProjectDrop(e, project.id)}
+                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${
                         filterProject === project.id
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
-                      }`}
+                      } ${draggedProject === project.id ? 'opacity-50' : ''}`}
                     >
                       <button
                         onClick={() => setFilterProject(project.id)}
                         className="flex items-center gap-2 flex-1 min-w-0"
+                        draggable={false}
                       >
+                        <GripVertical className={`h-3 w-3 flex-shrink-0 ${filterProject === project.id ? 'text-primary-foreground/50' : 'text-muted-foreground/50'}`} />
                         <div className={`w-3 h-3 rounded-full ${project.color} flex-shrink-0`}></div>
                         <span className="truncate">{project.name}</span>
                       </button>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
                         <span className="text-xs opacity-70">{count}</span>
                         <Tooltip delayDuration={0}>
                           <TooltipTrigger asChild>
@@ -1095,6 +1174,7 @@ export default function Tareas() {
                                   ? 'hover:bg-primary-foreground/20 text-primary-foreground'
                                   : 'hover:bg-destructive/10 text-destructive'
                               }`}
+                              draggable={false}
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
