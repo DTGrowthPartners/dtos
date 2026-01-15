@@ -40,6 +40,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
 
 // Source Icons
 const ShopifyIcon = ({ className }: { className?: string }) => (
@@ -292,6 +293,7 @@ export default function CRM() {
   const [isLostDialogOpen, setIsLostDialogOpen] = useState(false);
   const [isWonDialogOpen, setIsWonDialogOpen] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [isMeetingDialogOpen, setIsMeetingDialogOpen] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
   const { toast } = useToast();
@@ -1117,6 +1119,15 @@ export default function CRM() {
                       <CheckSquare className="h-4 w-4" />
                       Crear Tarea
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsMeetingDialogOpen(true)}
+                      className="flex items-center gap-2"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      Agendar Cita
+                    </Button>
                   </div>
                 </div>
 
@@ -1569,6 +1580,29 @@ export default function CRM() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Schedule Meeting Dialog */}
+      <ScheduleMeetingDialog
+        open={isMeetingDialogOpen}
+        onOpenChange={setIsMeetingDialogOpen}
+        dealId={selectedDeal?.id}
+        dealName={selectedDeal?.name}
+        contactEmail={selectedDeal?.email}
+        onSuccess={async (event) => {
+          // Log the activity
+          if (selectedDeal) {
+            try {
+              await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+                type: 'meeting',
+                description: `Cita agendada: ${event.title}${event.meetLink ? ` - ${event.meetLink}` : ''}`,
+              });
+              loadDealDetail(selectedDeal.id);
+            } catch (error) {
+              console.error('Error logging meeting activity:', error);
+            }
+          }
+        }}
+      />
     </div>
   );
 }
