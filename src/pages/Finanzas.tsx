@@ -434,18 +434,118 @@ export default function Finanzas() {
     };
   }, [ingresos, gastos]);
 
-  // Top 5 expenses and income
+  // Top 5 expenses and income (filtered)
   const topExpenses = useMemo(() => {
-    return [...gastos]
+    return [...filteredGastos]
       .sort((a, b) => b.importe - a.importe)
       .slice(0, 5);
-  }, [gastos]);
+  }, [filteredGastos]);
 
   const topIncome = useMemo(() => {
-    return [...ingresos]
+    return [...filteredIngresos]
       .sort((a, b) => b.importe - a.importe)
       .slice(0, 5);
-  }, [ingresos]);
+  }, [filteredIngresos]);
+
+  // Filtered expense categories for PieChart
+  const filteredExpenseCategories = useMemo(() => {
+    const categoryMap = new Map<string, number>();
+
+    filteredGastos.forEach(t => {
+      if (t.categoria) {
+        const current = categoryMap.get(t.categoria) || 0;
+        categoryMap.set(t.categoria, current + t.importe);
+      }
+    });
+
+    const colors = [
+      'hsl(var(--primary))',
+      'hsl(var(--destructive))',
+      'hsl(var(--success))',
+      'hsl(var(--warning))',
+      '#8884d8',
+      '#82ca9d',
+      '#ffc658',
+      '#ff7c43',
+      '#665191',
+      '#a05195',
+    ];
+
+    return Array.from(categoryMap.entries())
+      .map(([name, value], index) => ({
+        name,
+        value,
+        color: colors[index % colors.length],
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8); // Top 8 categories
+  }, [filteredGastos]);
+
+  // Filtered finance by month data for BarChart
+  const filteredFinanceByMonth = useMemo(() => {
+    // Group filtered transactions by month
+    const monthlyData = new Map<string, { income: number; expenses: number }>();
+
+    filteredIngresos.forEach(t => {
+      const normalizedDate = normalizeDate(t.fecha);
+      if (normalizedDate) {
+        const monthKey = normalizedDate.substring(0, 7); // YYYY-MM
+        const current = monthlyData.get(monthKey) || { income: 0, expenses: 0 };
+        monthlyData.set(monthKey, { ...current, income: current.income + t.importe });
+      }
+    });
+
+    filteredGastos.forEach(t => {
+      const normalizedDate = normalizeDate(t.fecha);
+      if (normalizedDate) {
+        const monthKey = normalizedDate.substring(0, 7); // YYYY-MM
+        const current = monthlyData.get(monthKey) || { income: 0, expenses: 0 };
+        monthlyData.set(monthKey, { ...current, expenses: current.expenses + t.importe });
+      }
+    });
+
+    // Convert to array and sort by month
+    const monthNames = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+    return Array.from(monthlyData.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(-6) // Last 6 months
+      .map(([monthKey, data]) => {
+        const [year, month] = monthKey.split('-');
+        const monthIndex = parseInt(month) - 1;
+        return {
+          month: `${monthNames[monthIndex]} ${year.slice(2)}`,
+          income: data.income,
+          expenses: data.expenses,
+        };
+      });
+  }, [filteredIngresos, filteredGastos]);
+
+  // Filtered entity stats
+  const filteredEntityStats = useMemo(() => {
+    const stats = new Map<string, { income: number; expenses: number }>();
+
+    filteredIngresos.forEach(t => {
+      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+      stats.set(t.entidad, { ...current, income: current.income + t.importe });
+    });
+
+    filteredGastos.forEach(t => {
+      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+      stats.set(t.entidad, { ...current, expenses: current.expenses + t.importe });
+    });
+
+    return Array.from(stats.entries())
+      .map(([name, data]) => ({
+        name: name.length > 12 ? name.substring(0, 12) + '...' : name,
+        fullName: name,
+        ingresos: data.income,
+        gastos: data.expenses,
+        balance: data.income - data.expenses
+      }))
+      .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance))
+      .slice(0, 6);
+  }, [filteredIngresos, filteredGastos]);
 
   // Group by entity
   const entityStats = useMemo(() => {
@@ -687,29 +787,29 @@ export default function Finanzas() {
       </div>
 
       {/* Quick Filter Buttons */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {/* Hoy */}
         <button
           onClick={() => applyDatePreset('today')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'today'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
-          <p className="text-sm font-semibold text-foreground mt-1 capitalize">
-            {new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
+            {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
           </p>
-          <div className="mt-3 space-y-1">
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Ingresos</span>
-              <span className="text-xs font-medium text-success">${periodTotals.today.income.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.today.income / 1000).toFixed(0)}k</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Gastos</span>
-              <span className="text-xs font-medium text-destructive">${periodTotals.today.expenses.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.today.expenses / 1000).toFixed(0)}k</span>
             </div>
           </div>
         </button>
@@ -718,22 +818,22 @@ export default function Finanzas() {
         <button
           onClick={() => applyDatePreset('last7days')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'last7days'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Esta Semana</p>
-          <p className="text-sm font-semibold text-foreground mt-1">Últimos 7 días</p>
-          <div className="mt-3 space-y-1">
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Semana</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">7 días</p>
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Ingresos</span>
-              <span className="text-xs font-medium text-success">${periodTotals.week.income.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.week.income / 1000).toFixed(0)}k</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Gastos</span>
-              <span className="text-xs font-medium text-destructive">${periodTotals.week.expenses.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.week.expenses / 1000).toFixed(0)}k</span>
             </div>
           </div>
         </button>
@@ -742,24 +842,24 @@ export default function Finanzas() {
         <button
           onClick={() => applyDatePreset('thisMonth')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'thisMonth'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Mes</p>
-          <p className="text-sm font-semibold text-foreground mt-1 capitalize">
-            {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Mes</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
+            {new Date().toLocaleDateString('es-ES', { month: 'short' })}
           </p>
-          <div className="mt-3 space-y-1">
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Ingresos</span>
-              <span className="text-xs font-medium text-success">${periodTotals.month.income.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.month.income / 1000000).toFixed(1)}M</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Gastos</span>
-              <span className="text-xs font-medium text-destructive">${periodTotals.month.expenses.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.month.expenses / 1000000).toFixed(1)}M</span>
             </div>
           </div>
         </button>
@@ -768,147 +868,162 @@ export default function Finanzas() {
         <button
           onClick={() => applyDatePreset('thisYear')}
           className={cn(
-            "p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
             filterDatePreset === 'thisYear'
               ? "border-primary bg-primary/10 shadow-sm"
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Este Año</p>
-          <p className="text-sm font-semibold text-foreground mt-1">{new Date().getFullYear()}</p>
-          <div className="mt-3 space-y-1">
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Año</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">{new Date().getFullYear()}</p>
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Ingresos</span>
-              <span className="text-xs font-medium text-success">${periodTotals.year.income.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.year.income / 1000000).toFixed(1)}M</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Gastos</span>
-              <span className="text-xs font-medium text-destructive">${periodTotals.year.expenses.toLocaleString()}</span>
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.year.expenses / 1000000).toFixed(1)}M</span>
             </div>
           </div>
         </button>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="stat-card">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+        <div className="stat-card p-3 sm:p-4">
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Ingresos {hasActiveFilters ? '(Filtrado)' : 'Totales'}
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
+                Ingresos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
-              <p className="text-2xl font-bold text-foreground mt-1">${displayIncome.toLocaleString()}</p>
+              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">${(displayIncome / 1000000).toFixed(1)}M</p>
               {hasActiveFilters && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Total: ${totalIncome.toLocaleString()}
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
+                  Total: ${(totalIncome / 1000000).toFixed(1)}M
                 </p>
               )}
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-              <TrendingUp className="h-5 w-5 text-success" />
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-success/10 flex-shrink-0">
+              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
             </div>
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card p-3 sm:p-4">
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Gastos {hasActiveFilters ? '(Filtrado)' : 'Totales'}
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
+                Gastos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
-              <p className="text-2xl font-bold text-foreground mt-1">${displayExpenses.toLocaleString()}</p>
+              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">${(displayExpenses / 1000000).toFixed(1)}M</p>
               {hasActiveFilters && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Total: ${totalExpenses.toLocaleString()}
+                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
+                  Total: ${(totalExpenses / 1000000).toFixed(1)}M
                 </p>
               )}
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-destructive/10">
-              <TrendingDown className="h-5 w-5 text-destructive" />
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-destructive/10 flex-shrink-0">
+              <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card p-3 sm:p-4">
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">
-                Beneficio Neto {hasActiveFilters ? '(Filtrado)' : ''}
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
+                Beneficio {hasActiveFilters ? '(Filt.)' : ''}
               </p>
-              <p className={cn("text-2xl font-bold mt-1", netProfit >= 0 ? "text-success" : "text-destructive")}>
-                ${netProfit.toLocaleString()}
+              <p className={cn("text-base sm:text-2xl font-bold mt-0.5 sm:mt-1", netProfit >= 0 ? "text-success" : "text-destructive")}>
+                ${(netProfit / 1000000).toFixed(1)}M
               </p>
-              <p className={cn("text-sm mt-2", profitMargin >= 0 ? "text-success" : "text-destructive")}>
+              <p className={cn("text-[10px] sm:text-sm mt-1 sm:mt-2", profitMargin >= 0 ? "text-success" : "text-destructive")}>
                 {profitMargin.toFixed(1)}% margen
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <DollarSign className="h-5 w-5 text-primary" />
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
+              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
           </div>
         </div>
 
-        <div className="stat-card">
+        <div className="stat-card p-3 sm:p-4">
           <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sm text-muted-foreground">Transacciones</p>
-              <p className="text-2xl font-bold text-foreground mt-1">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">Transac.</p>
+              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">
                 {hasActiveFilters
                   ? filteredIngresos.length + filteredGastos.length
                   : ingresos.length + gastos.length
                 }
               </p>
-              <p className="text-sm text-muted-foreground mt-2">
+              <p className="text-[10px] sm:text-sm text-muted-foreground mt-1 sm:mt-2">
                 {hasActiveFilters
-                  ? `${filteredIngresos.length} ing. / ${filteredGastos.length} gas.`
-                  : `${ingresos.length} ing. / ${gastos.length} gas.`
+                  ? `${filteredIngresos.length}↑ / ${filteredGastos.length}↓`
+                  : `${ingresos.length}↑ / ${gastos.length}↓`
                 }
               </p>
             </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-warning/10">
-              <CreditCard className="h-5 w-5 text-warning" />
+            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-warning/10 flex-shrink-0">
+              <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-warning" />
             </div>
           </div>
         </div>
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
         {/* Revenue Chart */}
-        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-4">
+        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2 sm:gap-4">
             <div>
-              <h3 className="font-semibold text-foreground">Evolución Financiera</h3>
-              <p className="text-sm text-muted-foreground">Ingresos vs Gastos (últimos 6 meses)</p>
+              <h3 className="font-semibold text-foreground text-sm sm:text-base">Evolución Financiera</h3>
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                {hasActiveFilters ? 'Datos filtrados' : 'Ingresos vs Gastos'}
+              </p>
             </div>
-            <div className="flex items-center gap-4 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-primary" />
+            <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-primary" />
                 <span className="text-muted-foreground">Ingresos</span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="h-3 w-3 rounded-full bg-destructive" />
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-destructive" />
                 <span className="text-muted-foreground">Gastos</span>
               </div>
             </div>
           </div>
-          <div className="h-64">
+          <div className="h-48 sm:h-64 -ml-2 sm:ml-0">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={financeData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart
+                data={hasActiveFilters ? filteredFinanceByMonth : financeData}
+                margin={{ top: 10, right: 5, left: -15, bottom: 0 }}
+              >
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis
+                <XAxis
+                  dataKey="month"
                   stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
+                  fontSize={10}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                  interval={0}
+                  tick={{ fontSize: 9 }}
+                />
+                <YAxis
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={10}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
+                  width={45}
                 />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: 'hsl(var(--card))',
                     border: '1px solid hsl(var(--border))',
                     borderRadius: '8px',
+                    fontSize: '12px',
                   }}
                   formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                 />
@@ -917,27 +1032,34 @@ export default function Finanzas() {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {hasActiveFilters && filteredFinanceByMonth.length === 0 && (
+            <div className="text-center text-muted-foreground text-sm py-8">
+              No hay datos para el período seleccionado
+            </div>
+          )}
         </div>
 
         {/* Expense Distribution */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-2">Distribución de Gastos</h3>
-          <p className="text-sm text-muted-foreground mb-4">Por categoría</p>
-          {expenseCategories.length > 0 ? (
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+          <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Distribución de Gastos</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+            {hasActiveFilters ? 'Filtrado por período' : 'Por categoría'}
+          </p>
+          {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).length > 0 ? (
             <>
-              <div className="h-48">
+              <div className="h-40 sm:h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={expenseCategories}
+                      data={hasActiveFilters ? filteredExpenseCategories : expenseCategories}
                       cx="50%"
                       cy="50%"
-                      innerRadius={50}
-                      outerRadius={80}
+                      innerRadius={35}
+                      outerRadius={60}
                       paddingAngle={2}
                       dataKey="value"
                     >
-                      {expenseCategories.map((entry, index) => (
+                      {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
@@ -946,17 +1068,18 @@ export default function Finanzas() {
                         backgroundColor: 'hsl(var(--card))',
                         border: '1px solid hsl(var(--border))',
                         borderRadius: '8px',
+                        fontSize: '12px',
                       }}
                       formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                     />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-2 mt-4">
-                {expenseCategories.map((cat) => (
-                  <div key={cat.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+              <div className="space-y-1.5 sm:space-y-2 mt-3 sm:mt-4 max-h-32 sm:max-h-40 overflow-y-auto">
+                {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).map((cat) => (
+                  <div key={cat.name} className="flex items-center justify-between text-xs sm:text-sm">
+                    <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
+                      <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
                       <span className="text-muted-foreground truncate">{cat.name}</span>
                     </div>
                     <span className="font-medium text-foreground whitespace-nowrap ml-2">${cat.value.toLocaleString()}</span>
@@ -965,7 +1088,7 @@ export default function Finanzas() {
               </div>
             </>
           ) : (
-            <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+            <div className="flex items-center justify-center h-40 sm:h-48 text-muted-foreground text-xs sm:text-sm">
               No hay categorías de gastos
             </div>
           )}
@@ -975,67 +1098,102 @@ export default function Finanzas() {
       {/* Additional Charts Row */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Top Transactions */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-2">Top 5 Transacciones</h3>
-          <p className="text-sm text-muted-foreground mb-4">Mayores montos</p>
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+          <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Top 5 Transacciones</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+            {hasActiveFilters ? 'Filtrado por período' : 'Mayores montos'}
+          </p>
 
-          <div className="space-y-4">
+          <div className="space-y-3 sm:space-y-4">
             <div>
               <p className="text-xs font-medium text-success mb-2">INGRESOS</p>
-              <div className="space-y-2">
-                {topIncome.slice(0, 3).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
-                      <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+              <div className="space-y-1.5 sm:space-y-2">
+                {topIncome.length > 0 ? (
+                  topIncome.slice(0, 3).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-foreground truncate">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                      </div>
+                      <span className="text-xs sm:text-sm font-bold text-success ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
-                    <span className="text-sm font-bold text-success ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground py-2">Sin ingresos en el período</p>
+                )}
               </div>
             </div>
 
             <div>
               <p className="text-xs font-medium text-destructive mb-2">GASTOS</p>
-              <div className="space-y-2">
-                {topExpenses.slice(0, 3).map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{item.descripcion}</p>
-                      <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+              <div className="space-y-1.5 sm:space-y-2">
+                {topExpenses.length > 0 ? (
+                  topExpenses.slice(0, 3).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs sm:text-sm font-medium text-foreground truncate">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                      </div>
+                      <span className="text-xs sm:text-sm font-bold text-destructive ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
-                    <span className="text-sm font-bold text-destructive ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground py-2">Sin gastos en el período</p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* Balance by Entity */}
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-2">Balance por Entidad</h3>
-          <p className="text-sm text-muted-foreground mb-4">Top 6 entidades</p>
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+          <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Balance por Entidad</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+            {hasActiveFilters ? 'Top 6 filtrado' : 'Top 6 entidades'}
+          </p>
 
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={entityStats.slice(0, 6)} layout="vertical" margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" stroke="hsl(var(--muted-foreground))" fontSize={12} tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-                <YAxis dataKey="name" type="category" stroke="hsl(var(--muted-foreground))" fontSize={12} width={80} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                  formatter={(value: number) => `$${value.toLocaleString()}`}
-                />
-                <Legend />
-                <Bar dataKey="ingresos" fill="hsl(var(--success))" name="Ingresos" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="gastos" fill="hsl(var(--destructive))" name="Gastos" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="h-48 sm:h-64 -ml-2 sm:ml-0">
+            {(hasActiveFilters ? filteredEntityStats : entityStats.slice(0, 6)).length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={hasActiveFilters ? filteredEntityStats : entityStats.slice(0, 6)}
+                  layout="vertical"
+                  margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis
+                    type="number"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={9}
+                    tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
+                  />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    stroke="hsl(var(--muted-foreground))"
+                    fontSize={9}
+                    width={70}
+                    tick={{ fontSize: 8 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      fontSize: '11px',
+                    }}
+                    formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} />
+                  <Bar dataKey="ingresos" fill="hsl(var(--success))" name="Ingresos" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="gastos" fill="hsl(var(--destructive))" name="Gastos" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-xs sm:text-sm">
+                No hay datos de entidades para el período
+              </div>
+            )}
           </div>
         </div>
       </div>
