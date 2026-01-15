@@ -120,7 +120,7 @@ export default function Clientes() {
   const fetchTerceros = async () => {
     try {
       // Fetch terceros that are clients (esCliente: true)
-      const data = await apiClient.get<Tercero[]>('/api/terceros?tipo=cliente');
+      const data = await apiClient.get<Tercero[]>('/api/terceros?esCliente=true');
       setTerceros(data);
 
       // Fetch organizaciones with their terceros (clientes)
