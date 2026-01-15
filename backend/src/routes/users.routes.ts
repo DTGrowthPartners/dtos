@@ -70,6 +70,7 @@ router.get('/', roleMiddleware(['admin']), async (req, res) => {
         email: true,
         firstName: true,
         lastName: true,
+        permissions: true,
         roleId: true,
         firebaseUid: true,
         createdAt: true,
@@ -202,7 +203,7 @@ router.post('/', roleMiddleware(['admin']), async (req, res) => {
 router.put('/:id', roleMiddleware(['admin']), async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, password, firstName, lastName, roleId } = req.body;
+    const { email, password, firstName, lastName, roleId, permissions } = req.body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -230,6 +231,7 @@ router.put('/:id', roleMiddleware(['admin']), async (req, res) => {
     if (firstName !== undefined) updateData.firstName = firstName;
     if (lastName !== undefined) updateData.lastName = lastName;
     if (roleId) updateData.roleId = roleId;
+    if (permissions !== undefined) updateData.permissions = permissions;
 
     // Hash password if provided
     if (password) {
@@ -244,6 +246,7 @@ router.put('/:id', roleMiddleware(['admin']), async (req, res) => {
         email: true,
         firstName: true,
         lastName: true,
+        permissions: true,
         roleId: true,
         createdAt: true,
         updatedAt: true,

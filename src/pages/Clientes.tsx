@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -32,8 +32,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import ClientServicesManager from '@/components/clients/ClientServicesManager';
 
 interface Client {
   id: string;
@@ -89,6 +96,7 @@ export default function Clientes() {
   const [hiddenClients, setHiddenClients] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
   const [activeTab, setActiveTab] = useState('empresas');
+  const [selectedClientForServices, setSelectedClientForServices] = useState<Client | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -552,19 +560,28 @@ export default function Clientes() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 min-w-[100px]"
+                    className="flex-1 min-w-[80px]"
+                    onClick={() => setSelectedClientForServices(client)}
+                  >
+                    <Briefcase className="h-4 w-4 mr-1" />
+                    Servicios
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 min-w-[80px]"
                     onClick={() => handleEdit(client)}
                   >
-                    <Edit className="h-4 w-4 mr-2" />
+                    <Edit className="h-4 w-4 mr-1" />
                     Editar
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
+                    className="flex-1 min-w-[80px] text-destructive hover:text-destructive"
                     onClick={() => handleDelete(client.id)}
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <Trash2 className="h-4 w-4 mr-1" />
                     Eliminar
                   </Button>
                 </CardFooter>
@@ -821,6 +838,28 @@ export default function Clientes() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Sheet de Servicios del Cliente */}
+      <Sheet open={!!selectedClientForServices} onOpenChange={(open) => !open && setSelectedClientForServices(null)}>
+        <SheetContent className="sm:max-w-[500px]">
+          {selectedClientForServices && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5" />
+                  Servicios de {selectedClientForServices.name}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-6">
+                <ClientServicesManager
+                  client={selectedClientForServices}
+                  onUpdate={() => {}}
+                />
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
 
     </div>
   );

@@ -27,19 +27,19 @@ interface NavItem {
   title: string;
   path: string;
   icon: React.ComponentType<{ className?: string }>;
+  permission?: string; // Permiso requerido para ver este item
 }
 
 const navItems: NavItem[] = [
-  { title: 'Dashboard', path: '/', icon: LayoutDashboard },
-  { title: 'CRM', path: '/crm', icon: Target },
-  { title: 'Terceros', path: '/terceros', icon: UsersRound },
-  { title: 'Clientes', path: '/clientes', icon: Users },
-  { title: 'Servicios', path: '/servicios', icon: Briefcase },
-  { title: 'Tareas', path: '/tareas', icon: CheckSquare },
-  { title: 'Equipo', path: '/equipo', icon: UserCog },
-  { title: 'Finanzas', path: '/finanzas', icon: DollarSign },
-  // { title: 'Proveedores', path: '/proveedores', icon: Building2 }, // Temporalmente oculto
-  { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText },
+  { title: 'Dashboard', path: '/', icon: LayoutDashboard, permission: 'dashboard' },
+  { title: 'CRM', path: '/crm', icon: Target, permission: 'crm' },
+  { title: 'Terceros', path: '/terceros', icon: UsersRound, permission: 'terceros' },
+  { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
+  { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
+  { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
+  { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
+  { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
+  { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'cuentas-cobro' },
 ];
 
 export function AppSidebar() {
@@ -52,6 +52,16 @@ export function AppSidebar() {
     const last = user?.lastName?.charAt(0) || '';
     return (first + last).toUpperCase() || 'U';
   };
+
+  // Filtrar items del menu segun permisos
+  const filteredNavItems = navItems.filter((item) => {
+    // Admin tiene acceso a todo
+    if (user?.role === 'admin') return true;
+    // Si no tiene permiso definido, mostrar siempre
+    if (!item.permission) return true;
+    // Verificar si el usuario tiene el permiso
+    return user?.permissions?.includes(item.permission);
+  });
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -122,7 +132,7 @@ export function AppSidebar() {
 
         {/* Navigation */}
         <nav className="flex flex-col gap-1 p-3 overflow-y-auto h-[calc(100vh-8rem)]">
-          {navItems.map((item) => {
+          {filteredNavItems.map((item) => {
             const isActive = location.pathname === item.path;
             const Icon = item.icon;
 

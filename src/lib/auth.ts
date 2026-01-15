@@ -19,6 +19,7 @@ interface User {
   phone?: string;
   role: string;
   photoUrl?: string;
+  permissions?: string[];
 }
 
 interface AuthState {

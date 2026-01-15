@@ -198,11 +198,16 @@ export class AuthService {
   }
 
   private generateTokens(user: any): TokenResponse {
+    // Los permisos del usuario tienen prioridad sobre los del rol
+    const userPermissions = user.permissions && user.permissions.length > 0
+      ? user.permissions
+      : user.role.permissions || [];
+
     const payload = {
       userId: user.id,
       email: user.email,
       role: user.role.name,
-      permissions: user.role.permissions || [],
+      permissions: userPermissions,
     };
 
     const token = generateToken(payload);
@@ -219,6 +224,7 @@ export class AuthService {
         phone: user.phone,
         photoUrl: user.photoUrl,
         role: user.role.name,
+        permissions: userPermissions,
       },
     };
   }

@@ -15,6 +15,7 @@ model User {
   lastName      String        @default("")
   phone         String        @default("3007189383")
   photoUrl      String?       // Profile photo (base64 or URL)
+  permissions   String[]      // Permisos individuales (override del rol)
   roleId        String
   role          Role          @relation(fields: [roleId], references: [id])
   firebaseUid   String?       @unique // Firebase UID for Firebase Auth users
@@ -103,15 +104,31 @@ model Service {
 }
 
 model ClientService {
-  id        String   @id @default(cuid())
-  clientId  String
-  serviceId String
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  startDate DateTime @default(now())
-  endDate   DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String    @id @default(cuid())
+  clientId          String
+  serviceId         String
+  client            Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service           Service   @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  // Precio y frecuencia de pago
+  precioCliente     Float?    // Precio personalizado (override del servicio)
+  frecuencia        String    @default("mensual") // mensual, trimestral, semestral, anual, unico
+
+  // Fechas de control
+  fechaInicio       DateTime  @default(now())
+  fechaProximoCobro DateTime?
+  fechaVencimiento  DateTime?
+
+  // Estado del servicio
+  estado            String    @default("activo") // activo, pausado, cancelado
+  notas             String?
+
+  // Legacy fields (mantener compatibilidad)
+  startDate         DateTime  @default(now())
+  endDate           DateTime?
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@unique([clientId, serviceId])
 }

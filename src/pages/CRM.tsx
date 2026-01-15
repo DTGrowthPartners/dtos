@@ -481,7 +481,10 @@ export default function CRM() {
       }
       await apiClient.delete(`/api/crm/deals/${dealId}`);
       toast({ title: 'Deal eliminado' });
-      await loadData();
+      // Reload data separately to avoid showing error if reload fails
+      loadData().catch(() => {
+        // Silent catch - data will refresh on next interaction
+      });
     } catch (error) {
       toast({
         title: 'Error',

@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus } from 'lucide-react';
+import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -35,6 +36,18 @@ import { apiClient } from '@/lib/api';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 
+const MODULE_PERMISSIONS = [
+  { value: 'dashboard', label: 'Dashboard' },
+  { value: 'crm', label: 'CRM' },
+  { value: 'terceros', label: 'Terceros' },
+  { value: 'clientes', label: 'Clientes' },
+  { value: 'servicios', label: 'Servicios' },
+  { value: 'tareas', label: 'Tareas' },
+  { value: 'equipo', label: 'Equipo' },
+  { value: 'finanzas', label: 'Finanzas' },
+  { value: 'cuentas-cobro', label: 'Cuentas de Cobro' },
+] as const;
+
 interface Role {
   id: string;
   name: string;
@@ -46,6 +59,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  permissions: string[];
   roleId: string;
   firebaseUid?: string;
   createdAt: string;
@@ -86,6 +100,7 @@ export default function Equipo() {
     firstName: '',
     lastName: '',
     roleId: '',
+    permissions: [] as string[],
   });
 
   useEffect(() => {
@@ -122,6 +137,7 @@ export default function Equipo() {
       firstName: '',
       lastName: '',
       roleId: '',
+      permissions: [],
     });
   };
 
@@ -174,6 +190,7 @@ export default function Equipo() {
         firstName: formData.firstName,
         lastName: formData.lastName,
         roleId: formData.roleId,
+        permissions: formData.permissions,
       };
 
       if (formData.email && formData.email !== selectedUser.email) {
@@ -236,8 +253,32 @@ export default function Equipo() {
       firstName: user.firstName,
       lastName: user.lastName,
       roleId: user.roleId,
+      permissions: user.permissions || [],
     });
     setShowEditModal(true);
+  };
+
+  const togglePermission = (permission: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: prev.permissions.includes(permission)
+        ? prev.permissions.filter((p) => p !== permission)
+        : [...prev.permissions, permission],
+    }));
+  };
+
+  const selectAllPermissions = () => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: MODULE_PERMISSIONS.map((p) => p.value),
+    }));
+  };
+
+  const clearAllPermissions = () => {
+    setFormData((prev) => ({
+      ...prev,
+      permissions: [],
+    }));
   };
 
   const openDeleteDialog = (user: User) => {
@@ -345,6 +386,20 @@ export default function Equipo() {
                     <Mail className="h-4 w-4 flex-shrink-0" />
                     <span className="truncate">{user.email}</span>
                   </div>
+                  {user.role.name !== 'admin' && user.permissions && user.permissions.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {user.permissions.slice(0, 4).map((perm) => (
+                        <Badge key={perm} variant="secondary" className="text-xs">
+                          {MODULE_PERMISSIONS.find((m) => m.value === perm)?.label || perm}
+                        </Badge>
+                      ))}
+                      {user.permissions.length > 4 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{user.permissions.length - 4}
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -440,6 +495,56 @@ export default function Equipo() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Permisos por modulo - solo si no es admin */}
+            {formData.roleId && roles.find(r => r.id === formData.roleId)?.name !== 'admin' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Permisos de acceso
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={selectAllPermissions}
+                    >
+                      Todos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllPermissions}
+                    >
+                      Ninguno
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-muted/50 rounded-lg max-h-40 overflow-y-auto">
+                  {MODULE_PERMISSIONS.map((module) => (
+                    <div key={module.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`create-perm-${module.value}`}
+                        checked={formData.permissions.includes(module.value)}
+                        onCheckedChange={() => togglePermission(module.value)}
+                      />
+                      <label
+                        htmlFor={`create-perm-${module.value}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        {module.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Selecciona los modulos a los que el usuario tendra acceso.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreateModal(false)}>
@@ -528,6 +633,56 @@ export default function Equipo() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Permisos por modulo */}
+            {selectedUser?.role.name !== 'admin' && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Permisos de acceso
+                  </Label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={selectAllPermissions}
+                    >
+                      Todos
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearAllPermissions}
+                    >
+                      Ninguno
+                    </Button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 p-3 bg-muted/50 rounded-lg">
+                  {MODULE_PERMISSIONS.map((module) => (
+                    <div key={module.value} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`perm-${module.value}`}
+                        checked={formData.permissions.includes(module.value)}
+                        onCheckedChange={() => togglePermission(module.value)}
+                      />
+                      <label
+                        htmlFor={`perm-${module.value}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        {module.label}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Los administradores tienen acceso a todos los modulos automaticamente.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditModal(false)}>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Clock, Edit, Trash2, Package, Grid3x3, LayoutGrid, Columns3, List, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { Plus, Search, Clock, Edit, Trash2, Package, Grid3x3, LayoutGrid, Columns3, List, Eye, EyeOff, GripVertical, Users, Building2, DollarSign, Calendar } from 'lucide-react';
 import * as Icons from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   ToggleGroup,
   ToggleGroupItem,
@@ -27,6 +28,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import {
   Select,
   SelectContent,
@@ -49,6 +56,25 @@ interface Service {
   createdAt: string;
 }
 
+interface ServiceClient {
+  id: string;
+  clientId: string;
+  serviceId: string;
+  client: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    logo: string;
+    status: string;
+  };
+  precioCliente?: number;
+  frecuencia: string;
+  fechaInicio: string;
+  fechaProximoCobro?: string;
+  estado: string;
+}
+
 type ViewMode = '1' | '2' | '3' | 'list';
 
 const AVAILABLE_ICONS = [
@@ -57,6 +83,22 @@ const AVAILABLE_ICONS = [
   'Globe', 'Mail', 'Phone', 'MessageCircle', 'Users', 'User', 'Shield',
   'Lock', 'Unlock', 'Settings', 'Search', 'FileText', 'Clipboard'
 ];
+
+const FRECUENCIAS_MAP: Record<string, string> = {
+  mensual: 'Mensual',
+  trimestral: 'Trimestral',
+  semestral: 'Semestral',
+  anual: 'Anual',
+  unico: 'Pago Unico',
+};
+
+const formatCurrency = (amount: number, currency: string = 'COP') => {
+  return new Intl.NumberFormat('es-CO', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 0,
+  }).format(amount);
+};
 
 export default function Servicios() {
   const [services, setServices] = useState<Service[]>([]);
@@ -67,6 +109,9 @@ export default function Servicios() {
   const [viewMode, setViewMode] = useState<ViewMode>('3');
   const [hiddenServices, setHiddenServices] = useState<Set<string>>(new Set());
   const [showHidden, setShowHidden] = useState(false);
+  const [selectedServiceForClients, setSelectedServiceForClients] = useState<Service | null>(null);
+  const [serviceClients, setServiceClients] = useState<ServiceClient[]>([]);
+  const [loadingClients, setLoadingClients] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -93,6 +138,24 @@ export default function Servicios() {
         variant: 'destructive',
       });
     }
+  };
+
+  const fetchServiceClients = async (serviceId: string) => {
+    setLoadingClients(true);
+    try {
+      const data = await apiClient.get<ServiceClient[]>(`/api/services/${serviceId}/clients`);
+      setServiceClients(data);
+    } catch (error) {
+      console.error('Error fetching service clients:', error);
+      setServiceClients([]);
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  const handleViewClients = (service: Service) => {
+    setSelectedServiceForClients(service);
+    fetchServiceClients(service.id);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -363,6 +426,15 @@ export default function Servicios() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleViewClients(service)}
+                            className="h-8 w-8 p-0"
+                            title="Ver clientes"
+                          >
+                            <Users className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => toggleServiceVisibility(service.id)}
                             className="h-8 w-8 p-0"
                           >
@@ -464,7 +536,16 @@ export default function Servicios() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 min-w-[100px]"
+                              className="flex-1 min-w-[80px]"
+                              onClick={() => handleViewClients(service)}
+                            >
+                              <Users className="h-4 w-4 mr-2" />
+                              Clientes
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 min-w-[80px]"
                               onClick={() => handleEdit(service)}
                             >
                               <Edit className="h-4 w-4 mr-2" />
@@ -473,7 +554,7 @@ export default function Servicios() {
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 min-w-[100px] text-destructive hover:text-destructive"
+                              className="flex-1 min-w-[80px] text-destructive hover:text-destructive"
                               onClick={() => handleDelete(service.id)}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
@@ -618,6 +699,97 @@ export default function Servicios() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Sheet de Clientes del Servicio */}
+      <Sheet open={!!selectedServiceForClients} onOpenChange={(open) => !open && setSelectedServiceForClients(null)}>
+        <SheetContent className="sm:max-w-[500px]">
+          {selectedServiceForClients && (
+            <>
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Clientes con {selectedServiceForClients.name}
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 space-y-4">
+                {loadingClients ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                  </div>
+                ) : serviceClients.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Building2 className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                    <p className="text-muted-foreground">Ningun cliente tiene este servicio</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Asigna este servicio desde la vista de Clientes
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>{serviceClients.length} cliente{serviceClients.length !== 1 ? 's' : ''}</span>
+                      <span>
+                        Total: {formatCurrency(
+                          serviceClients.reduce((sum, sc) => sum + (sc.precioCliente ?? selectedServiceForClients.price), 0),
+                          selectedServiceForClients.currency
+                        )}
+                      </span>
+                    </div>
+                    <div className="space-y-3">
+                      {serviceClients.map((sc) => {
+                        const precio = sc.precioCliente ?? selectedServiceForClients.price;
+                        return (
+                          <Card key={sc.id} className={sc.estado !== 'activo' ? 'opacity-60' : ''}>
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <img
+                                  src={sc.client.logo}
+                                  alt={sc.client.name}
+                                  className="h-10 w-10 rounded object-contain bg-muted p-1"
+                                  onError={(e) => { e.currentTarget.src = '/img/logo.png'; }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium truncate">{sc.client.name}</span>
+                                    <Badge variant={sc.estado === 'activo' ? 'default' : 'secondary'} className="text-xs">
+                                      {sc.estado}
+                                    </Badge>
+                                  </div>
+                                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                                    <span className="flex items-center gap-1">
+                                      <DollarSign className="h-3 w-3" />
+                                      {formatCurrency(precio, selectedServiceForClients.currency)}
+                                      {sc.precioCliente && (
+                                        <span className="line-through opacity-50">
+                                          {formatCurrency(selectedServiceForClients.price)}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      {FRECUENCIAS_MAP[sc.frecuencia] || sc.frecuencia}
+                                    </span>
+                                    {sc.fechaProximoCobro && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        Cobro: {new Date(sc.fechaProximoCobro).toLocaleDateString('es-CO')}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

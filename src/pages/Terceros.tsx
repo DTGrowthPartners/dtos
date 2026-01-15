@@ -112,6 +112,10 @@ export default function Terceros() {
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
+  // Estado para crear organizacion inline desde el modal de tercero
+  const [isCreatingOrgInline, setIsCreatingOrgInline] = useState(false);
+  const [inlineOrgData, setInlineOrgData] = useState({ nombre: '', nit: '' });
+
   const { toast } = useToast();
 
   // Form data
@@ -240,6 +244,35 @@ export default function Terceros() {
     setEditingOrg(null);
   };
 
+  // Crear organizacion inline desde el modal de tercero
+  const handleCreateOrgInline = async () => {
+    if (!inlineOrgData.nombre.trim()) {
+      toast({ title: 'El nombre de la organizacion es requerido', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      const newOrg = await apiClient.post<Organizacion>('/api/terceros/organizaciones', {
+        nombre: inlineOrgData.nombre,
+        nit: inlineOrgData.nit || undefined,
+      });
+
+      // Agregar la nueva org a la lista local
+      setOrganizaciones(prev => [...prev, newOrg]);
+
+      // Asignar la nueva org al tercero
+      setTerceroFormData(prev => ({ ...prev, organizacionId: newOrg.id, clientId: '' }));
+
+      // Limpiar y cerrar el modo inline
+      setInlineOrgData({ nombre: '', nit: '' });
+      setIsCreatingOrgInline(false);
+
+      toast({ title: 'Organizacion creada' });
+    } catch (error) {
+      toast({ title: 'Error al crear organizacion', variant: 'destructive' });
+    }
+  };
+
   // Tercero handlers
   const handleSubmitTercero = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -343,6 +376,8 @@ export default function Terceros() {
     setEditingTercero(null);
     setSelectedOrgId(null);
     setSelectedClientId(null);
+    setIsCreatingOrgInline(false);
+    setInlineOrgData({ nombre: '', nit: '' });
   };
 
   const toggleOrgExpanded = (orgId: string) => {
@@ -910,21 +945,109 @@ export default function Terceros() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="tercero-client">Empresa / Cliente</Label>
-                <Select
-                  value={terceroFormData.clientId || "none"}
-                  onValueChange={(value) => setTerceroFormData({ ...terceroFormData, clientId: value === "none" ? "" : value })}
+                <Label>Asociar a</Label>
+                <Tabs
+                  value={terceroFormData.clientId ? 'cliente' : terceroFormData.organizacionId ? 'organizacion' : 'ninguno'}
+                  onValueChange={(val) => {
+                    if (val === 'ninguno') {
+                      setTerceroFormData({ ...terceroFormData, clientId: '', organizacionId: '' });
+                    } else if (val === 'cliente') {
+                      setTerceroFormData({ ...terceroFormData, organizacionId: '' });
+                    } else if (val === 'organizacion') {
+                      setTerceroFormData({ ...terceroFormData, clientId: '' });
+                    }
+                    setIsCreatingOrgInline(false);
+                  }}
+                  className="w-full"
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sin empresa asociada" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Sin empresa asociada</SelectItem>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="ninguno">Ninguno</TabsTrigger>
+                    <TabsTrigger value="cliente">Cliente</TabsTrigger>
+                    <TabsTrigger value="organizacion">Organizacion</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="cliente" className="mt-2">
+                    <Select
+                      value={terceroFormData.clientId || "none"}
+                      onValueChange={(value) => setTerceroFormData({ ...terceroFormData, clientId: value === "none" ? "" : value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar cliente" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Seleccionar cliente...</SelectItem>
+                        {clients.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TabsContent>
+
+                  <TabsContent value="organizacion" className="mt-2 space-y-2">
+                    {!isCreatingOrgInline ? (
+                      <>
+                        <Select
+                          value={terceroFormData.organizacionId || "none"}
+                          onValueChange={(value) => setTerceroFormData({ ...terceroFormData, organizacionId: value === "none" ? "" : value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar organizacion" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">Seleccionar organizacion...</SelectItem>
+                            {organizaciones.map((org) => (
+                              <SelectItem key={org.id} value={org.id}>{org.nombre}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => setIsCreatingOrgInline(true)}
+                        >
+                          <Plus className="h-4 w-4 mr-2" />
+                          Crear nueva organizacion
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+                        <p className="text-sm font-medium">Nueva Organizacion</p>
+                        <Input
+                          placeholder="Nombre de la organizacion *"
+                          value={inlineOrgData.nombre}
+                          onChange={(e) => setInlineOrgData({ ...inlineOrgData, nombre: e.target.value })}
+                        />
+                        <Input
+                          placeholder="NIT (opcional)"
+                          value={inlineOrgData.nit}
+                          onChange={(e) => setInlineOrgData({ ...inlineOrgData, nit: e.target.value })}
+                        />
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setIsCreatingOrgInline(false);
+                              setInlineOrgData({ nombre: '', nit: '' });
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={handleCreateOrgInline}
+                          >
+                            Crear y Asignar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </div>
 
               <div className="space-y-2">

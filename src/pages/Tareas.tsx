@@ -852,9 +852,9 @@ export default function Tareas() {
   }
 
   return (
-    <div className="animate-fade-in h-full flex gap-4">
-      {/* Left Sidebar - Projects (Collapsable) */}
-      <div className={`flex-shrink-0 flex flex-col gap-3 transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
+    <div className="animate-fade-in h-full flex gap-2 md:gap-4">
+      {/* Left Sidebar - Projects (Collapsable) - Hidden on mobile */}
+      <div className={`hidden md:flex flex-shrink-0 flex-col gap-3 transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
         {/* Collapse Toggle - At the top */}
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
@@ -1230,16 +1230,16 @@ export default function Tareas() {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 gap-4">
+      <div className="flex-1 flex flex-col min-w-0 gap-3 md:gap-4">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <h1 className="text-2xl font-bold text-foreground">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground">
               {taskView === 'active' && 'Mis Tareas'}
               {taskView === 'archived' && 'Tareas Archivadas'}
               {taskView === 'deleted' && 'Tareas Eliminadas'}
             </h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs md:text-sm text-muted-foreground">
               {taskView === 'active' && (
                 <>
                   {filterProject !== 'all' ? projects.find(p => p.id === filterProject)?.name : 'Todos los proyectos'}
@@ -1290,19 +1290,19 @@ export default function Tareas() {
               </div>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             {taskView === 'active' && (
               <>
-                <div className="relative">
+                <div className="relative flex-1 md:flex-none">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
                     placeholder="Buscar..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 w-[200px]"
+                    className="pl-9 w-full md:w-[200px]"
                   />
                 </div>
-                <Button variant="outline" size="icon" onClick={cycleViewMode}>
+                <Button variant="outline" size="icon" onClick={cycleViewMode} className="flex-shrink-0">
                   {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
                 </Button>
                 <Button
@@ -1310,9 +1310,10 @@ export default function Tareas() {
                     resetForm();
                     setIsDialogOpen(true);
                   }}
+                  className="flex-shrink-0"
                 >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Nueva Tarea
+                  <Plus className="h-4 w-4 md:mr-2" />
+                  <span className="hidden md:inline">Nueva Tarea</span>
                 </Button>
               </>
             )}
@@ -1321,75 +1322,75 @@ export default function Tareas() {
 
         {/* Date Filters - Only show in active view */}
         {taskView === 'active' && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5 md:gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setDateFilter('all')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
                 dateFilter === 'all'
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted hover:bg-muted/80'
               }`}
             >
-              <LayoutGrid className="h-3.5 w-3.5" />
+              <LayoutGrid className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span>Todas</span>
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'all' ? 'bg-primary-foreground/20' : 'bg-background'}`}>
+              <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'all' ? 'bg-primary-foreground/20' : 'bg-background'}`}>
                 {dateFilterCounts.all}
               </span>
             </button>
             <button
               onClick={() => setDateFilter('today')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
                 dateFilter === 'today'
                   ? 'bg-blue-500 text-white'
                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300'
               }`}
             >
-              <Calendar className="h-3.5 w-3.5" />
+              <Calendar className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span>Hoy</span>
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'today' ? 'bg-white/20' : 'bg-blue-200 dark:bg-blue-800'}`}>
+              <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'today' ? 'bg-white/20' : 'bg-blue-200 dark:bg-blue-800'}`}>
                 {dateFilterCounts.today}
               </span>
             </button>
             <button
               onClick={() => setDateFilter('week')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
                 dateFilter === 'week'
                   ? 'bg-purple-500 text-white'
                   : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-300'
               }`}
             >
-              <CalendarDays className="h-3.5 w-3.5" />
-              <span>Esta semana</span>
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'week' ? 'bg-white/20' : 'bg-purple-200 dark:bg-purple-800'}`}>
+              <CalendarDays className="h-3 w-3 md:h-3.5 md:w-3.5" />
+              <span className="hidden sm:inline">Esta </span><span>Semana</span>
+              <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'week' ? 'bg-white/20' : 'bg-purple-200 dark:bg-purple-800'}`}>
                 {dateFilterCounts.week}
               </span>
             </button>
             <button
               onClick={() => setDateFilter('month')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
                 dateFilter === 'month'
                   ? 'bg-emerald-500 text-white'
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300'
               }`}
             >
-              <CalendarRange className="h-3.5 w-3.5" />
-              <span>Este mes</span>
-              <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'month' ? 'bg-white/20' : 'bg-emerald-200 dark:bg-emerald-800'}`}>
+              <CalendarRange className="h-3 w-3 md:h-3.5 md:w-3.5" />
+              <span className="hidden sm:inline">Este </span><span>Mes</span>
+              <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'month' ? 'bg-white/20' : 'bg-emerald-200 dark:bg-emerald-800'}`}>
                 {dateFilterCounts.month}
               </span>
             </button>
             {dateFilterCounts.overdue > 0 && (
               <button
                 onClick={() => setDateFilter('overdue')}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
                   dateFilter === 'overdue'
                     ? 'bg-red-500 text-white'
                     : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
                 }`}
               >
-                <AlertCircle className="h-3.5 w-3.5" />
+                <AlertCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
                 <span>Vencidas</span>
-                <span className={`ml-1 px-1.5 py-0.5 rounded text-xs ${dateFilter === 'overdue' ? 'bg-white/20' : 'bg-red-200 dark:bg-red-800'}`}>
+                <span className={`px-1 md:px-1.5 py-0.5 rounded text-[10px] md:text-xs ${dateFilter === 'overdue' ? 'bg-white/20' : 'bg-red-200 dark:bg-red-800'}`}>
                   {dateFilterCounts.overdue}
                 </span>
               </button>
@@ -1399,8 +1400,8 @@ export default function Tareas() {
 
         {/* Active Tasks - Kanban Board */}
         {taskView === 'active' && (
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-4 h-full pb-4">
+        <div className="flex-1 overflow-x-auto pb-4">
+          <div className="flex gap-3 md:gap-4 h-full min-w-max md:min-w-0">
           {DEFAULT_COLUMNS.map((column) => {
             const columnTasks = getTasksByColumn(column.status);
             const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
@@ -1408,16 +1409,16 @@ export default function Tareas() {
             return (
               <div
                 key={column.id}
-                className="w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-4"
+                className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-3 md:p-4"
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, column.status)}
               >
                 {/* Column Header */}
-                <div className="flex items-center gap-2 mb-4">
-                  <StatusIcon className={`h-5 w-5 ${column.color}`} />
-                  <h2 className="font-semibold text-lg">
+                <div className="flex items-center gap-2 mb-3 md:mb-4">
+                  <StatusIcon className={`h-4 w-4 md:h-5 md:w-5 ${column.color}`} />
+                  <h2 className="font-semibold text-base md:text-lg truncate">
                     {column.name}
-                    <span className="ml-2 text-sm text-muted-foreground">
+                    <span className="ml-2 text-xs md:text-sm text-muted-foreground">
                       ({columnTasks.length})
                     </span>
                   </h2>
@@ -1515,7 +1516,7 @@ export default function Tareas() {
                         key={task.id}
                         draggable
                         onDragStart={(e) => handleDragStart(e, task.id)}
-                        className={`p-4 cursor-move hover:shadow-lg transition-all ${
+                        className={`p-3 md:p-4 cursor-move hover:shadow-lg transition-all ${
                           draggedTask === task.id ? 'opacity-50' : ''
                         }`}
                         style={{
@@ -1539,7 +1540,7 @@ export default function Tareas() {
                             >
                               {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
                             </button>
-                            <h3 className={`font-semibold text-sm ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
+                            <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
                               {task.title}
                             </h3>
                           </div>

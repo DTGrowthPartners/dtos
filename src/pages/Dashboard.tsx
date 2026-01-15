@@ -5,6 +5,7 @@ import { TasksToday } from '@/components/dashboard/TasksToday';
 import { QuickAccess } from '@/components/dashboard/QuickAccess';
 import { RevenueChart } from '@/components/dashboard/RevenueChart';
 import { CampaignOverview } from '@/components/dashboard/CampaignOverview';
+import { ServiceRevenueCard } from '@/components/dashboard/ServiceRevenueCard';
 import { campaigns, notifications } from '@/data/mockData';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { authService, useAuthStore } from '@/lib/auth';
@@ -146,6 +147,7 @@ export default function Dashboard() {
 
         {/* Right Column - 1/3 */}
         <div className="space-y-6">
+          <ServiceRevenueCard />
           <TasksToday />
           <QuickAccess />
         </div>
