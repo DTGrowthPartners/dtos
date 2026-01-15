@@ -527,8 +527,20 @@ export default function Tareas() {
   };
 
   const handleToggleComplete = async (task: Task) => {
+    const previousStatus = task.status;
+    const newStatus = task.status === TaskStatus.DONE ? TaskStatus.TODO : TaskStatus.DONE;
+
+    // Optimistic update - update UI immediately
+    setTasks(prevTasks =>
+      prevTasks.map(t =>
+        t.id === task.id
+          ? { ...t, status: newStatus, completedAt: newStatus === TaskStatus.DONE ? Date.now() : undefined }
+          : t
+      )
+    );
+
     try {
-      if (task.status === TaskStatus.DONE) {
+      if (previousStatus === TaskStatus.DONE) {
         // If already done, move back to TODO
         await updateTask(task.id, { status: TaskStatus.TODO });
       } else {
@@ -536,9 +548,15 @@ export default function Tareas() {
         await updateTask(task.id, { status: TaskStatus.DONE, completedAt: Date.now() });
         await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
       }
-      fetchData();
+      // No need to fetchData() - we already updated the UI optimistically
     } catch (error) {
       console.error('Error toggling complete:', error);
+      // Revert optimistic update on error
+      setTasks(prevTasks =>
+        prevTasks.map(t =>
+          t.id === task.id ? { ...t, status: previousStatus } : t
+        )
+      );
       toast({
         title: 'Error',
         description: 'No se pudo actualizar la tarea',
@@ -1722,15 +1740,15 @@ export default function Tareas() {
                                 e.stopPropagation();
                                 handleToggleComplete(task);
                               }}
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
                                 task.status === TaskStatus.DONE
-                                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                                  : 'border-muted-foreground hover:border-emerald-500'
+                                  ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
+                                  : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
                               }`}
                             >
-                              {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
+                              {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
                             </button>
-                            <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
+                            <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
                               {task.title}
                             </h3>
                           </div>
