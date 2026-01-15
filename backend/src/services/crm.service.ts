@@ -165,6 +165,7 @@ export const getDeals = async (filters?: {
       owner: {
         select: { id: true, firstName: true, lastName: true, email: true },
       },
+      tercero: true,
       reminders: {
         where: { isCompleted: false },
         orderBy: { remindAt: 'asc' },
@@ -213,6 +214,11 @@ export const getDeal = async (id: string) => {
       },
       owner: {
         select: { id: true, firstName: true, lastName: true, email: true },
+      },
+      tercero: {
+        include: {
+          organizacion: true,
+        },
       },
       activities: {
         orderBy: { performedAt: 'desc' },
@@ -270,6 +276,36 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
     stageId = firstStage.id;
   }
 
+  // If company is provided, find or create Organizacion
+  let organizacionId: string | undefined;
+  if (data.company) {
+    const existingOrg = await prisma.organizacion.findFirst({
+      where: { nombre: { equals: data.company, mode: 'insensitive' } },
+    });
+
+    if (existingOrg) {
+      organizacionId = existingOrg.id;
+    } else {
+      const newOrg = await prisma.organizacion.create({
+        data: { nombre: data.company },
+      });
+      organizacionId = newOrg.id;
+    }
+  }
+
+  // Create Tercero as prospecto linked to Organizacion
+  const tercero = await prisma.tercero.create({
+    data: {
+      nombre: data.name,
+      email: data.email,
+      telefono: data.phone,
+      telefonoCodigo: data.phoneCountryCode || '+57',
+      esProspecto: true,
+      esCliente: false,
+      organizacionId,
+    },
+  });
+
   const deal = await prisma.deal.create({
     data: {
       name: data.name,
@@ -294,6 +330,8 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
       tags: data.tags || [],
       lastInteractionAt: new Date(), // Set to now on creation
       createdBy: userId,
+      // Link to Tercero
+      terceroId: tercero.id,
     },
     include: {
       stage: true,
@@ -303,6 +341,7 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
       owner: {
         select: { id: true, firstName: true, lastName: true, email: true },
       },
+      tercero: true,
     },
   });
 
@@ -487,6 +526,17 @@ export const markAsWon = async (id: string, data: MarkAsWonDto, userId: string) 
     },
   });
 
+  // Convert Tercero from prospecto to cliente
+  if (existingDeal.terceroId) {
+    await prisma.tercero.update({
+      where: { id: existingDeal.terceroId },
+      data: {
+        esCliente: true,
+        esProspecto: false,
+      },
+    });
+  }
+
   // Create activity
   await prisma.dealActivity.create({
     data: {
@@ -504,7 +554,24 @@ export const markAsWon = async (id: string, data: MarkAsWonDto, userId: string) 
 };
 
 export const deleteDeal = async (id: string) => {
+  // First, get the deal to check if it has a tercero associated
+  const deal = await prisma.deal.findUnique({
+    where: { id },
+    select: { terceroId: true },
+  });
+
+  // Delete the deal (activities and reminders cascade automatically)
   await prisma.deal.delete({ where: { id } });
+
+  // If there was an associated tercero that was only a prospecto, optionally clean it up
+  // Note: We keep the tercero as it may be useful for historical purposes
+  // If you want to delete the tercero when deleting the deal, uncomment below:
+  // if (deal?.terceroId) {
+  //   const tercero = await prisma.tercero.findUnique({ where: { id: deal.terceroId } });
+  //   if (tercero && tercero.esProspecto && !tercero.esCliente && !tercero.esProveedor && !tercero.esEmpleado) {
+  //     await prisma.tercero.delete({ where: { id: deal.terceroId } });
+  //   }
+  // }
 };
 
 // ==================== Public Lead Capture ====================
@@ -576,6 +643,36 @@ export const createPublicLead = async (data: PublicLeadDto) => {
   // Create the deal name from first and last name
   const dealName = `${data.firstName} ${data.lastName}`.trim();
 
+  // If company is provided, find or create Organizacion
+  let organizacionId: string | undefined;
+  if (data.company) {
+    const existingOrg = await prisma.organizacion.findFirst({
+      where: { nombre: { equals: data.company, mode: 'insensitive' } },
+    });
+
+    if (existingOrg) {
+      organizacionId = existingOrg.id;
+    } else {
+      const newOrg = await prisma.organizacion.create({
+        data: { nombre: data.company },
+      });
+      organizacionId = newOrg.id;
+    }
+  }
+
+  // Create Tercero as prospecto linked to Organizacion
+  const tercero = await prisma.tercero.create({
+    data: {
+      nombre: dealName,
+      email: data.email,
+      telefono: data.phone,
+      telefonoCodigo: '+57',
+      esProspecto: true,
+      esCliente: false,
+      organizacionId,
+    },
+  });
+
   const deal = await prisma.deal.create({
     data: {
       name: dealName,
@@ -591,10 +688,13 @@ export const createPublicLead = async (data: PublicLeadDto) => {
       probability: 50,
       priority: 'media',
       lastInteractionAt: new Date(),
-      createdBy: systemUserId, // Use system user ID
+      createdBy: systemUserId,
+      // Link to Tercero
+      terceroId: tercero.id,
     },
     include: {
       stage: true,
+      tercero: true,
     },
   });
 
@@ -605,7 +705,7 @@ export const createPublicLead = async (data: PublicLeadDto) => {
       type: 'note',
       title: 'Lead recibido via formulario externo',
       description: data.message || 'Lead capturado desde formulario web',
-      performedBy: systemUserId, // Use system user ID
+      performedBy: systemUserId,
     },
   });
 
