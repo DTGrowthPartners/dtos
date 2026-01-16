@@ -4,7 +4,6 @@ import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { authService } from '@/lib/auth';
 
@@ -39,18 +38,40 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">DT Growth Hub</CardTitle>
-          <CardDescription className="text-center">
-            Ingresa tus credenciales para acceder
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-4">
+    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
+      {/* Video Background */}
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="absolute inset-0 w-full h-full object-cover z-0"
+      >
+        <source src="https://dtgrowthpartners.com/images/fondo-seccion-DT-OS2.mp4" type="video/mp4" />
+      </video>
+
+      {/* Overlay for better readability */}
+      <div className="absolute inset-0 bg-black/40 z-10" />
+
+      {/* Login Card */}
+      <div className="relative z-20 w-full max-w-md p-4">
+        <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/50 rounded-2xl shadow-2xl p-8">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-white mb-2">
+              DT <span className="text-sky-400">Growth Hub</span>
+            </h1>
+            <p className="text-slate-300">
+              Ingresa tus credenciales para acceder
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email">Correo electrónico</Label>
+              <Label htmlFor="email" className="text-slate-200">
+                Correo electrónico
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -59,10 +80,14 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/20"
               />
             </div>
+
             <div className="space-y-2">
-              <Label htmlFor="password">Contraseña</Label>
+              <Label htmlFor="password" className="text-slate-200">
+                Contraseña
+              </Label>
               <div className="relative">
                 <Input
                   id="password"
@@ -72,44 +97,48 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   disabled={isLoading}
-                  className="pr-10"
+                  className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 focus:border-sky-400 focus:ring-sky-400/20 pr-10"
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                  className="absolute right-0 top-0 h-full px-3 hover:bg-transparent text-slate-400 hover:text-white"
                   onClick={() => setShowPassword(!showPassword)}
                   disabled={isLoading}
                 >
                   {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    <Eye className="h-4 w-4" />
                   )}
                 </Button>
               </div>
             </div>
-          </CardContent>
-          <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+
+            <Button
+              type="submit"
+              className="w-full bg-sky-500 hover:bg-sky-600 text-white font-semibold py-5 rounded-lg transition-all duration-200 shadow-lg shadow-sky-500/25"
+              disabled={isLoading}
+            >
               {isLoading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </Button>
-            <div className="text-sm text-center text-muted-foreground">
+
+            <div className="text-sm text-center text-slate-400">
               ¿No tienes cuenta?{' '}
               <Button
                 type="button"
                 variant="link"
-                className="p-0 h-auto"
+                className="p-0 h-auto text-sky-400 hover:text-sky-300"
                 onClick={() => navigate('/register')}
                 disabled={isLoading}
               >
                 Regístrate
               </Button>
             </div>
-          </CardFooter>
-        </form>
-      </Card>
+          </form>
+        </div>
+      </div>
     </div>
   );
 }
