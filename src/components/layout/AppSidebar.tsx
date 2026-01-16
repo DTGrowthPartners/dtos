@@ -15,7 +15,6 @@ import {
   X,
   Target,
   UsersRound,
-  Receipt,
   // Building2, // Temporalmente oculto
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,7 +39,6 @@ const navItems: NavItem[] = [
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
-  { title: 'Cuentas', path: '/cuentas', icon: Receipt, permission: 'finanzas' },
   { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'cuentas-cobro' },
 ];
 

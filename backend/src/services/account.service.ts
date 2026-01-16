@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { googleSheetsService } from './googleSheets.service';
 
 const prisma = new PrismaClient();
 
@@ -210,38 +211,84 @@ export const accountService = {
 
   // ==================== PAYMENTS ====================
 
-  // Register a payment
-  async registerPayment(data: CreatePaymentDto) {
+  // Register a payment and log to Google Sheets
+  async registerPayment(data: CreatePaymentDto & { registerInSheets?: boolean }) {
     const payment = await prisma.accountPayment.create({
       data: {
-        ...data,
+        accountId: data.accountId,
+        amount: data.amount,
+        currency: data.currency,
         paidAt: data.paidAt || new Date(),
+        dueDate: data.dueDate,
+        status: data.status,
+        paymentMethod: data.paymentMethod,
+        receiptUrl: data.receiptUrl,
+        reference: data.reference,
+        notes: data.notes,
       },
     });
 
-    // Update nextDueDate for recurring accounts
+    // Get account details for Google Sheets logging
     const account = await prisma.account.findUnique({
       where: { id: data.accountId },
+      include: { client: true },
     });
 
-    if (account && account.isRecurring && account.frequency) {
-      const nextDueDate = calculateNextDueDate(
-        account.nextDueDate || new Date(),
-        account.frequency,
-        account.frequencyDays ?? undefined
-      );
+    if (account) {
+      // Register in Google Sheets if requested (default: true)
+      if (data.registerInSheets !== false) {
+        try {
+          const fecha = (data.paidAt || new Date()).toISOString().split('T')[0];
+          const entityName = account.client?.name || account.entityName;
 
-      // Check if we've reached the end date
-      if (account.endDate && nextDueDate > account.endDate) {
-        await prisma.account.update({
-          where: { id: data.accountId },
-          data: { status: 'completed' },
-        });
-      } else {
-        await prisma.account.update({
-          where: { id: data.accountId },
-          data: { nextDueDate },
-        });
+          if (account.type === 'receivable') {
+            // It's a collection (income) - add to Entradas
+            await googleSheetsService.addIncome({
+              fecha,
+              importe: data.amount,
+              descripcion: `Cobro: ${account.concept}`,
+              categoria: 'PAGO DE CLIENTE',
+              cuenta: 'Principal',
+              entidad: entityName,
+            });
+          } else {
+            // It's a payment (expense) - add to Salidas
+            await googleSheetsService.addExpense({
+              fecha,
+              importe: data.amount,
+              descripcion: `Pago: ${account.concept}`,
+              categoria: account.category || 'Otros',
+              cuenta: 'Principal',
+              entidad: entityName,
+            });
+          }
+          console.log(`Payment registered in Google Sheets: ${account.type} - ${entityName} - $${data.amount}`);
+        } catch (error) {
+          console.error('Error registering payment in Google Sheets:', error);
+          // Don't throw - payment was still recorded in database
+        }
+      }
+
+      // Update nextDueDate for recurring accounts
+      if (account.isRecurring && account.frequency) {
+        const nextDueDate = calculateNextDueDate(
+          account.nextDueDate || new Date(),
+          account.frequency,
+          account.frequencyDays ?? undefined
+        );
+
+        // Check if we've reached the end date
+        if (account.endDate && nextDueDate > account.endDate) {
+          await prisma.account.update({
+            where: { id: data.accountId },
+            data: { status: 'completed' },
+          });
+        } else {
+          await prisma.account.update({
+            where: { id: data.accountId },
+            data: { nextDueDate },
+          });
+        }
       }
     }
 
@@ -334,6 +381,138 @@ export const accountService = {
       },
       orderBy: { nextDueDate: 'asc' },
     });
+  },
+
+  // Get balance by client (all receivables grouped by client)
+  async getClientBalances() {
+    const accounts = await prisma.account.findMany({
+      where: {
+        type: 'receivable',
+        status: 'active',
+        clientId: { not: null },
+      },
+      include: {
+        client: {
+          select: { id: true, name: true, logo: true, email: true },
+        },
+        payments: {
+          select: { amount: true, paidAt: true },
+        },
+      },
+    });
+
+    // Group by client and calculate pending balance
+    const clientMap = new Map<string, {
+      clientId: string;
+      clientName: string;
+      clientLogo?: string;
+      clientEmail?: string;
+      totalOwed: number;
+      totalPaid: number;
+      pendingBalance: number;
+      accounts: typeof accounts;
+      lastPayment?: Date;
+      nextDueDate?: Date;
+    }>();
+
+    accounts.forEach(account => {
+      if (!account.clientId || !account.client) return;
+
+      const existing = clientMap.get(account.clientId) || {
+        clientId: account.clientId,
+        clientName: account.client.name,
+        clientLogo: account.client.logo || undefined,
+        clientEmail: account.client.email || undefined,
+        totalOwed: 0,
+        totalPaid: 0,
+        pendingBalance: 0,
+        accounts: [],
+        lastPayment: undefined,
+        nextDueDate: undefined,
+      };
+
+      // Calculate total paid for this account
+      const paidForAccount = account.payments.reduce((sum, p) => sum + p.amount, 0);
+
+      existing.totalOwed += account.amount;
+      existing.totalPaid += paidForAccount;
+      existing.accounts.push(account);
+
+      // Track last payment
+      account.payments.forEach(p => {
+        if (!existing.lastPayment || p.paidAt > existing.lastPayment) {
+          existing.lastPayment = p.paidAt;
+        }
+      });
+
+      // Track next due date
+      if (account.nextDueDate) {
+        if (!existing.nextDueDate || account.nextDueDate < existing.nextDueDate) {
+          existing.nextDueDate = account.nextDueDate;
+        }
+      }
+
+      clientMap.set(account.clientId, existing);
+    });
+
+    // Calculate pending balance
+    return Array.from(clientMap.values()).map(client => ({
+      ...client,
+      pendingBalance: client.totalOwed - client.totalPaid,
+    })).sort((a, b) => b.pendingBalance - a.pendingBalance);
+  },
+
+  // Get accounts by client
+  async getByClient(clientId: string) {
+    return prisma.account.findMany({
+      where: { clientId },
+      include: {
+        payments: {
+          orderBy: { paidAt: 'desc' },
+        },
+      },
+      orderBy: { nextDueDate: 'asc' },
+    });
+  },
+
+  // Create invoice from receivable account (stub for invoice generation)
+  async createInvoiceFromAccount(accountId: string, invoiceData: {
+    invoiceNumber: string;
+    clientNit: string;
+    observaciones?: string;
+    createdBy: string;
+  }) {
+    const account = await prisma.account.findUnique({
+      where: { id: accountId },
+      include: { client: true },
+    });
+
+    if (!account) {
+      throw new Error('Cuenta no encontrada');
+    }
+
+    if (account.type !== 'receivable') {
+      throw new Error('Solo se pueden generar cuentas de cobro para cuentas por cobrar');
+    }
+
+    // Create invoice
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber: invoiceData.invoiceNumber,
+        clientId: account.clientId || '',
+        clientName: account.client?.name || account.entityName,
+        clientNit: invoiceData.clientNit,
+        totalAmount: account.amount,
+        fecha: account.nextDueDate || new Date(),
+        concepto: account.concept,
+        servicio: account.category || undefined,
+        observaciones: invoiceData.observaciones,
+        filePath: '', // Will be updated when PDF is generated
+        createdBy: invoiceData.createdBy,
+      },
+    });
+
+    return invoice;
   },
 };
 

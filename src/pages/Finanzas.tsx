@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,8 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
+import AccountsPanel from '@/components/finance/AccountsPanel';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -82,6 +84,7 @@ interface FinanceResponse {
 }
 
 export default function Finanzas() {
+  const [activeTab, setActiveTab] = useState<string>('resumen');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
@@ -640,51 +643,75 @@ export default function Finanzas() {
             <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
             <p className="text-muted-foreground text-sm">Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setShowFilters(!showFilters)}
-              className="w-full sm:w-auto"
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtros
-              {hasActiveFilters && <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span>}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={fetchFinanceData}
-              disabled={isLoading}
-              className="w-full sm:w-auto"
-            >
-              <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-              Actualizar
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => setShowAddExpenseModal(true)}
-              className="w-full sm:w-auto"
-            >
-              <DollarSign className="h-4 w-4 mr-2" />
-              Agregar Gasto
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => setShowTercerosModal(true)}
-              className="w-full sm:w-auto"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Terceros
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => setShowNominaModal(true)}
-              className="w-full sm:w-auto"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              Nómina
-            </Button>
-          </div>
         </div>
+
+        {/* Main Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <TabsList className="grid w-full sm:w-auto grid-cols-2">
+              <TabsTrigger value="resumen" className="flex items-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                Resumen
+              </TabsTrigger>
+              <TabsTrigger value="cuentas" className="flex items-center gap-2">
+                <Receipt className="h-4 w-4" />
+                Cuentas
+              </TabsTrigger>
+            </TabsList>
+
+            {activeTab === 'resumen' && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="w-full sm:w-auto"
+                >
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filtros
+                  {hasActiveFilters && <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span>}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={fetchFinanceData}
+                  disabled={isLoading}
+                  className="w-full sm:w-auto"
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
+                  Actualizar
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => setShowAddExpenseModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Agregar Gasto
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => setShowTercerosModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Terceros
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => setShowNominaModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  <FileText className="h-4 w-4 mr-2" />
+                  Nómina
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <TabsContent value="cuentas" className="mt-6">
+            <AccountsPanel />
+          </TabsContent>
+
+          <TabsContent value="resumen" className="mt-6 space-y-6">
 
         {/* Filter Panel */}
         {showFilters && (
@@ -784,9 +811,8 @@ export default function Finanzas() {
             )}
           </div>
         )}
-      </div>
 
-      {/* Quick Filter Buttons */}
+        {/* Quick Filter Buttons */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         {/* Hoy */}
         <button
@@ -1372,6 +1398,9 @@ export default function Finanzas() {
             </p>
           </div>
         </div>
+      </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       {/* Add Expense Modal */}

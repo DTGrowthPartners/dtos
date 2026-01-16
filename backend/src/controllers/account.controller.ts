@@ -154,3 +154,47 @@ export const getOverdue = async (_req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Get client balances
+export const getClientBalances = async (_req: Request, res: Response) => {
+  try {
+    const balances = await accountService.getClientBalances();
+    res.json(balances);
+  } catch (error: any) {
+    console.error('Error getting client balances:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get accounts by client
+export const getAccountsByClient = async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+    const accounts = await accountService.getByClient(clientId);
+    res.json(accounts);
+  } catch (error: any) {
+    console.error('Error getting client accounts:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Create invoice from account
+export const createInvoiceFromAccount = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user.userId;
+    const { invoiceNumber, clientNit, observaciones } = req.body;
+
+    const invoice = await accountService.createInvoiceFromAccount(id, {
+      invoiceNumber,
+      clientNit,
+      observaciones,
+      createdBy: userId,
+    });
+
+    res.status(201).json(invoice);
+  } catch (error: any) {
+    console.error('Error creating invoice from account:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
