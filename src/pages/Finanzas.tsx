@@ -17,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
+import InvoicesPanel from '@/components/finance/InvoicesPanel';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -648,7 +649,7 @@ export default function Finanzas() {
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <TabsList className="grid w-full sm:w-auto grid-cols-2">
+            <TabsList className="grid w-full sm:w-auto grid-cols-3">
               <TabsTrigger value="resumen" className="flex items-center gap-2">
                 <TrendingUp className="h-4 w-4" />
                 Resumen
@@ -656,6 +657,10 @@ export default function Finanzas() {
               <TabsTrigger value="cuentas" className="flex items-center gap-2">
                 <Receipt className="h-4 w-4" />
                 Cuentas
+              </TabsTrigger>
+              <TabsTrigger value="cuentas-cobro" className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Cuentas de Cobro
               </TabsTrigger>
             </TabsList>
 
@@ -709,6 +714,10 @@ export default function Finanzas() {
 
           <TabsContent value="cuentas" className="mt-6">
             <AccountsPanel />
+          </TabsContent>
+
+          <TabsContent value="cuentas-cobro" className="mt-6">
+            <InvoicesPanel />
           </TabsContent>
 
           <TabsContent value="resumen" className="mt-6 space-y-6">
