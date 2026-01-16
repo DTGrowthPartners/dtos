@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
 
 // Source Icons
@@ -122,6 +123,7 @@ interface Deal {
   id: string;
   name: string;
   company?: string;
+  logo?: string;
   phone?: string;
   phoneCountryCode: string;
   email?: string;
@@ -301,6 +303,7 @@ export default function CRM() {
   const [formData, setFormData] = useState({
     name: '',
     company: '',
+    logo: '',
     phone: '',
     phoneCountryCode: '+57',
     email: '',
@@ -547,6 +550,7 @@ export default function CRM() {
     setFormData({
       name: deal.name,
       company: deal.company || '',
+      logo: deal.logo || '',
       phone: deal.phone || '',
       phoneCountryCode: deal.phoneCountryCode,
       email: deal.email || '',
@@ -572,6 +576,7 @@ export default function CRM() {
     setFormData({
       name: '',
       company: '',
+      logo: '',
       phone: '',
       phoneCountryCode: '+57',
       email: '',
@@ -804,11 +809,16 @@ export default function CRM() {
                                       )}
 
                                       <div className="flex items-start justify-between mb-2">
-                                        <div>
-                                          <h4 className="font-medium text-sm">{deal.name}</h4>
-                                          {deal.company && (
-                                            <p className="text-xs text-muted-foreground">{deal.company}</p>
+                                        <div className="flex items-center gap-2">
+                                          {deal.logo && (
+                                            <img src={deal.logo} alt="" className="h-8 w-8 rounded-md object-cover flex-shrink-0" />
                                           )}
+                                          <div>
+                                            <h4 className="font-medium text-sm">{deal.name}</h4>
+                                            {deal.company && (
+                                              <p className="text-xs text-muted-foreground">{deal.company}</p>
+                                            )}
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-1">
                                           {deal.priority && deal.priority !== 'media' && (
@@ -935,11 +945,20 @@ export default function CRM() {
             <>
               <SheetHeader>
                 <div className="flex items-start justify-between">
-                  <div>
-                    <SheetTitle>{selectedDeal.name}</SheetTitle>
-                    {selectedDeal.company && (
-                      <p className="text-sm text-muted-foreground">{selectedDeal.company}</p>
+                  <div className="flex items-center gap-3">
+                    {selectedDeal.logo ? (
+                      <img src={selectedDeal.logo} alt="" className="h-12 w-12 rounded-lg object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                        <Building2 className="h-6 w-6 text-muted-foreground" />
+                      </div>
                     )}
+                    <div>
+                      <SheetTitle>{selectedDeal.name}</SheetTitle>
+                      {selectedDeal.company && (
+                        <p className="text-sm text-muted-foreground">{selectedDeal.company}</p>
+                      )}
+                    </div>
                   </div>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -1197,25 +1216,63 @@ export default function CRM() {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nombre del contacto *</Label>
-                  <Input
-                    id="name"
-                    placeholder="Juan Perez"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    required
-                  />
+              {/* Logo Upload */}
+              <div className="flex items-center gap-4">
+                <div className="relative h-20 w-20 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden bg-muted/50 flex-shrink-0">
+                  {formData.logo ? (
+                    <>
+                      <img src={formData.logo} alt="Logo" className="h-full w-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, logo: '' })}
+                        className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-white rounded-full flex items-center justify-center hover:bg-destructive/90"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center h-full w-full hover:bg-muted/80 transition-colors">
+                      <ImagePlus className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground mt-1">Logo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const base64 = await convertImageToBase64(file);
+                              setFormData({ ...formData, logo: base64 });
+                            } catch (error) {
+                              console.error('Error converting image:', error);
+                            }
+                          }
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="company">Empresa</Label>
-                  <Input
-                    id="company"
-                    placeholder="Mi Empresa S.A.S"
-                    value={formData.company}
-                    onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                  />
+                <div className="flex-1 grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nombre del contacto *</Label>
+                    <Input
+                      id="name"
+                      placeholder="Juan Perez"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company">Empresa</Label>
+                    <Input
+                      id="company"
+                      placeholder="Mi Empresa S.A.S"
+                      value={formData.company}
+                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                    />
+                  </div>
                 </div>
               </div>
 

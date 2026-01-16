@@ -73,6 +73,7 @@ model Client {
   services    ClientService[]
   sharedWith  ClientShare[]  @relation("ClientShares")
   terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
+  accounts    Account[]      @relation("AccountClient")  // Cuentas por cobrar/pagar
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -210,6 +211,7 @@ model Deal {
   phone             String?   // Número WhatsApp
   phoneCountryCode  String    @default("+57")
   email             String?
+  logo              String?   // Logo de la empresa/cliente
 
   // Pipeline
   stageId           String
@@ -390,4 +392,76 @@ model Notification {
   sender      User?     @relation("NotificationSender", fields: [senderId], references: [id])
 
   createdAt   DateTime  @default(now())
+}
+
+// ==================== CUENTAS (Por Cobrar / Por Pagar) ====================
+
+model Account {
+  id              String    @id @default(cuid())
+
+  // Tipo: receivable (por cobrar) o payable (por pagar)
+  type            String    // receivable | payable
+
+  // Información del tercero
+  entityName      String    // Nombre del cliente/proveedor
+  entityLogo      String?   // Logo del cliente/proveedor
+
+  // Relación opcional con Client
+  clientId        String?
+  client          Client?   @relation("AccountClient", fields: [clientId], references: [id])
+
+  // Monto y moneda
+  amount          Float     // Monto a pagar/cobrar
+  currency        String    @default("COP")
+
+  // Recurrencia
+  isRecurring     Boolean   @default(false)
+  frequency       String?   // daily, weekly, biweekly, monthly, quarterly, yearly
+  frequencyDays   Int?      // Cada cuantos días (ej: 15 para quincenal personalizado)
+
+  // Fechas
+  startDate       DateTime  // Fecha de inicio o fecha única
+  nextDueDate     DateTime? // Próxima fecha de vencimiento (calculada)
+  endDate         DateTime? // Fecha fin (para recurrencias con límite)
+
+  // Descripción y categoría
+  concept         String    // Concepto/descripción del pago
+  category        String?   // servicios, salarios, software, marketing, etc.
+
+  // Estado
+  status          String    @default("active") // active, paused, completed, cancelled
+
+  // Historial de pagos
+  payments        AccountPayment[]
+
+  // Metadata
+  notes           String?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model AccountPayment {
+  id              String    @id @default(cuid())
+  accountId       String
+  account         Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  // Monto pagado
+  amount          Float
+  currency        String    @default("COP")
+
+  // Fecha del pago
+  paidAt          DateTime  @default(now())
+  dueDate         DateTime? // Fecha de vencimiento original
+
+  // Estado y método
+  status          String    @default("completed") // completed, pending, partial, failed
+  paymentMethod   String?   // transferencia, efectivo, tarjeta, etc.
+
+  // Comprobante
+  receiptUrl      String?   // URL o base64 del comprobante
+  reference       String?   // Número de referencia/transacción
+
+  notes           String?
+  createdAt       DateTime  @default(now())
 }

@@ -19,6 +19,7 @@ import Finanzas from "@/pages/Finanzas";
 import CuentasCobro from "@/pages/CuentasCobro";
 import CRM from "@/pages/CRM";
 import Terceros from "@/pages/Terceros";
+import Cuentas from "@/pages/Cuentas";
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="cuentas-cobro"><CuentasCobro /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
+              <Route path="/cuentas" element={<ProtectedRoute requiredPermission="finanzas"><Cuentas /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

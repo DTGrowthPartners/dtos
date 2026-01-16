@@ -95,7 +95,7 @@ export default function Login() {
           {/* Header */}
           <div className="text-center mb-8" style={{ transform: 'translateZ(20px)' }}>
             <h1 className="text-3xl font-bold text-white mb-2">
-              DT<span className="text-sky-400">OS</span>
+              DT-<span className="text-sky-400">OS</span>
             </h1>
             <p className="text-slate-300">
               Ingresa tus credenciales para acceder

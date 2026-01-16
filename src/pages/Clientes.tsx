@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase, ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/sheet';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { convertImageToBase64 } from '@/lib/imageService';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
 
 interface Client {
@@ -105,6 +106,7 @@ export default function Clientes() {
     nit: '',
     phone: '',
     address: '',
+    logo: '',
   });
 
   useEffect(() => {
@@ -196,6 +198,7 @@ export default function Clientes() {
       nit: client.nit || '',
       phone: client.phone || '',
       address: client.address || '',
+      logo: client.logo || '',
     });
     setIsDialogOpen(true);
   };
@@ -245,7 +248,7 @@ export default function Clientes() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', nit: '', phone: '', address: '' });
+    setFormData({ name: '', email: '', nit: '', phone: '', address: '', logo: '' });
     setEditingClient(null);
   };
 
@@ -762,16 +765,55 @@ export default function Clientes() {
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nombre *</Label>
-                <Input
-                  id="name"
-                  placeholder="Nombre del cliente"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                  disabled={isLoading}
-                />
+              {/* Logo Upload */}
+              <div className="flex items-center gap-4">
+                <div className="relative h-20 w-20 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden bg-muted/50 flex-shrink-0">
+                  {formData.logo ? (
+                    <>
+                      <img src={formData.logo} alt="Logo" className="h-full w-full object-contain p-1" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, logo: '' })}
+                        className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-white rounded-full flex items-center justify-center hover:bg-destructive/90"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center h-full w-full hover:bg-muted/80 transition-colors">
+                      <ImagePlus className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground mt-1">Logo</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            try {
+                              const base64 = await convertImageToBase64(file);
+                              setFormData({ ...formData, logo: base64 });
+                            } catch (error) {
+                              console.error('Error converting image:', error);
+                            }
+                          }
+                        }}
+                        className="hidden"
+                        disabled={isLoading}
+                      />
+                    </label>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="name">Nombre *</Label>
+                  <Input
+                    id="name"
+                    placeholder="Nombre del cliente"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email *</Label>
