@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,15 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { authService } from '@/lib/auth';
 
+// Declare VanillaTilt for TypeScript
+declare global {
+  interface Window {
+    VanillaTilt: {
+      init: (element: HTMLElement, options?: Record<string, unknown>) => void;
+    };
+  }
+}
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -14,6 +23,21 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // Initialize vanilla-tilt effect
+  useEffect(() => {
+    if (cardRef.current && window.VanillaTilt) {
+      window.VanillaTilt.init(cardRef.current, {
+        max: 8,
+        speed: 400,
+        glare: true,
+        'max-glare': 0.15,
+        scale: 1.02,
+        perspective: 1000,
+      });
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,11 +79,24 @@ export default function Login() {
 
       {/* Login Card */}
       <div className="relative z-20 w-full max-w-md p-4">
-        <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/50 rounded-2xl shadow-2xl p-8">
+        <div
+          ref={cardRef}
+          className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/50 rounded-2xl shadow-2xl p-8"
+          style={{ transformStyle: 'preserve-3d' }}
+        >
+          {/* Logo */}
+          <div className="flex justify-center mb-4" style={{ transform: 'translateZ(30px)' }}>
+            <img
+              src="https://dtgrowthpartners.com/assets/DT-GROWTH-LOGO-DYCI6Arf.png"
+              alt="DT Growth Partners"
+              className="h-12 object-contain"
+            />
+          </div>
+
           {/* Header */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-8" style={{ transform: 'translateZ(20px)' }}>
             <h1 className="text-3xl font-bold text-white mb-2">
-              DT <span className="text-sky-400">Growth Hub</span>
+              DT<span className="text-sky-400">OS</span>
             </h1>
             <p className="text-slate-300">
               Ingresa tus credenciales para acceder
@@ -67,7 +104,7 @@ export default function Login() {
           </div>
 
           {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" style={{ transform: 'translateZ(15px)' }}>
             <div className="space-y-2">
               <Label htmlFor="email" className="text-slate-200">
                 Correo electrónico
