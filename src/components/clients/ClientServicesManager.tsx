@@ -58,6 +58,7 @@ interface ClientServicesManagerProps {
 }
 
 const FRECUENCIAS = [
+  { value: 'quincenal', label: 'Quincenal' },
   { value: 'mensual', label: 'Mensual' },
   { value: 'trimestral', label: 'Trimestral' },
   { value: 'semestral', label: 'Semestral' },
@@ -227,6 +228,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     .reduce((sum, cs) => {
       const precio = cs.precioCliente ?? cs.service.price;
       switch (cs.frecuencia) {
+        case 'quincenal': return sum + precio * 2; // 2 pagos por mes
         case 'mensual': return sum + precio;
         case 'trimestral': return sum + precio / 3;
         case 'semestral': return sum + precio / 6;
