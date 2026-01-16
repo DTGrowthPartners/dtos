@@ -123,7 +123,7 @@ export function AppHeader() {
               </div>
               <div className="hidden md:flex flex-col items-start">
                 <span className={cn("text-sm font-medium", isMisTareasView ? "text-slate-200" : "")}>
-                  {user?.firstName || 'Usuario'}
+                  {user?.firstName || 'Usuario'} {user?.lastName || ''}
                 </span>
                 <span className={cn("text-xs", isMisTareasView ? "text-slate-400" : "text-muted-foreground")}>
                   {userRole}
