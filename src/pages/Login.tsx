@@ -25,16 +25,15 @@ export default function Login() {
   const { toast } = useToast();
   const cardRef = useRef<HTMLDivElement>(null);
 
-  // Initialize vanilla-tilt effect
+  // Initialize vanilla-tilt effect (very subtle)
   useEffect(() => {
     if (cardRef.current && window.VanillaTilt) {
       window.VanillaTilt.init(cardRef.current, {
-        max: 8,
-        speed: 400,
-        glare: true,
-        'max-glare': 0.15,
-        scale: 1.02,
-        perspective: 1000,
+        max: 3,
+        speed: 600,
+        glare: false,
+        scale: 1,
+        perspective: 1500,
       });
     }
   }, []);
