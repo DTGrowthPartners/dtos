@@ -16,7 +16,6 @@ import Reportes from "@/pages/Reportes";
 import Equipo from "@/pages/Equipo";
 import Productos from "@/pages/Productos";
 import Finanzas from "@/pages/Finanzas";
-import CuentasCobro from "@/pages/CuentasCobro";
 import CRM from "@/pages/CRM";
 import Terceros from "@/pages/Terceros";
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
@@ -50,7 +49,6 @@ const App = () => (
               <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute requiredPermission="finanzas"><Finanzas /></ProtectedRoute>} />
               {/* <Route path="/proveedores" element={<Proveedores />} /> // Temporalmente oculto */}
-              <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="cuentas-cobro"><CuentasCobro /></ProtectedRoute>} />
               <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />

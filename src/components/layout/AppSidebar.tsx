@@ -4,18 +4,15 @@ import {
   LayoutDashboard,
   Users,
   CheckSquare,
-  FileText,
   UserCog,
   DollarSign,
   ChevronLeft,
   ChevronRight,
-  Layers,
   Briefcase,
   Menu,
   X,
   Target,
   UsersRound,
-  // Building2, // Temporalmente oculto
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,7 +36,6 @@ const navItems: NavItem[] = [
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
-  { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'cuentas-cobro' },
 ];
 
 export function AppSidebar() {
