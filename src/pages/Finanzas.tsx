@@ -1141,16 +1141,19 @@ export default function Finanzas() {
 
           <div className="space-y-3 sm:space-y-4">
             <div>
-              <p className="text-xs font-medium text-success mb-2">INGRESOS</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-success">INGRESOS</p>
+                <p className="text-xs font-bold text-success">Total: ${filteredTotalIncome.toLocaleString()}</p>
+              </div>
               <div className="space-y-1.5 sm:space-y-2">
                 {topIncome.length > 0 ? (
                   topIncome.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors">
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors gap-1">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-foreground truncate">{item.descripcion}</p>
-                        <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                        <p className="text-xs sm:text-sm font-medium text-foreground break-words">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground break-words">{item.entidad}</p>
                       </div>
-                      <span className="text-xs sm:text-sm font-bold text-success ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
+                      <span className="text-xs sm:text-sm font-bold text-success whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
                   ))
                 ) : (
@@ -1160,16 +1163,19 @@ export default function Finanzas() {
             </div>
 
             <div>
-              <p className="text-xs font-medium text-destructive mb-2">GASTOS</p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-destructive">GASTOS</p>
+                <p className="text-xs font-bold text-destructive">Total: ${filteredTotalExpenses.toLocaleString()}</p>
+              </div>
               <div className="space-y-1.5 sm:space-y-2">
                 {topExpenses.length > 0 ? (
                   topExpenses.slice(0, 3).map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors">
+                    <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors gap-1">
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs sm:text-sm font-medium text-foreground truncate">{item.descripcion}</p>
-                        <p className="text-xs text-muted-foreground truncate">{item.entidad}</p>
+                        <p className="text-xs sm:text-sm font-medium text-foreground break-words">{item.descripcion}</p>
+                        <p className="text-xs text-muted-foreground break-words">{item.entidad}</p>
                       </div>
-                      <span className="text-xs sm:text-sm font-bold text-destructive ml-2 whitespace-nowrap">${item.importe.toLocaleString()}</span>
+                      <span className="text-xs sm:text-sm font-bold text-destructive whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
                   ))
                 ) : (

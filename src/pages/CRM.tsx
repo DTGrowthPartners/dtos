@@ -844,7 +844,7 @@ export default function CRM() {
                                             {formatCurrency(deal.estimatedValue, deal.currency)}
                                           </span>
                                         )}
-                                        {deal.probability !== undefined && deal.probability !== 50 && (
+                                        {deal.probability !== undefined && deal.probability !== 50 && deal.probability > 0 && (
                                           <span className="text-xs text-muted-foreground flex items-center gap-0.5">
                                             <Gauge className="h-3 w-3" />
                                             {deal.probability}%

@@ -368,7 +368,7 @@ export default function MisTareas() {
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap gap-2 ml-8">
+                          <div className="flex flex-wrap gap-2 ml-0 sm:ml-8 mt-2 sm:mt-0">
                             {project && (
                               <span className={`text-xs px-2 py-1 rounded-full ${project.color} text-white`}>
                                 {project.name}
