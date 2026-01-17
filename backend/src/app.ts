@@ -12,7 +12,6 @@ import invoiceRoutes from './routes/invoice.router';
 import financeRoutes from './routes/finance.routes';
 import crmRoutes from './routes/crm.routes';
 import tercerosRoutes from './routes/terceros.routes';
-import calendarRoutes from './routes/calendar.routes';
 import notificationRoutes from './routes/notification.routes';
 import accountRoutes from './routes/account.routes';
 import { errorHandler } from './middlewares/error.middleware';
@@ -48,7 +47,6 @@ app.use('/api/invoices', invoiceRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/terceros', tercerosRoutes);
-app.use('/api/calendar', calendarRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/accounts', accountRoutes);
 
