@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Home,
@@ -14,7 +14,6 @@ import {
   LogOut,
   Moon,
   Sun,
-  HelpCircle,
   Command,
 } from 'lucide-react';
 import { authService } from '@/lib/auth';
@@ -24,24 +23,19 @@ interface CommandItem {
   label: string;
   description?: string;
   icon: React.ReactNode;
-  shortcut?: string[];
   action: () => void;
   category: 'navigation' | 'actions' | 'settings';
   keywords?: string[];
+  shortcut?: string;
 }
 
-interface CommandPaletteProps {
-  onNewTask?: () => void;
-}
-
-export function CommandPalette({ onNewTask }: CommandPaletteProps) {
+export function CommandPalette() {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
 
   const toggleTheme = useCallback(() => {
     const newIsDark = !isDark;
@@ -50,83 +44,86 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
   }, [isDark]);
 
   const commands: CommandItem[] = useMemo(() => [
+    // Actions first
+    {
+      id: 'action-new-task',
+      label: 'Nueva Tarea',
+      description: 'Ir a tareas para crear una nueva',
+      icon: <Plus className="h-4 w-4" />,
+      action: () => navigate('/tareas'),
+      category: 'actions',
+      keywords: ['crear', 'agregar', 'task', 'nueva'],
+      shortcut: 'Ctrl+Q',
+    },
     // Navigation
     {
       id: 'nav-dashboard',
-      label: 'Ir a Dashboard',
+      label: 'Dashboard',
       description: 'Panel principal',
       icon: <Home className="h-4 w-4" />,
-      shortcut: ['G', 'D'],
       action: () => navigate('/'),
       category: 'navigation',
       keywords: ['inicio', 'home', 'panel'],
     },
     {
       id: 'nav-crm',
-      label: 'Ir a CRM',
+      label: 'CRM',
       description: 'Pipeline de ventas',
       icon: <Target className="h-4 w-4" />,
-      shortcut: ['G', 'C'],
       action: () => navigate('/crm'),
       category: 'navigation',
       keywords: ['ventas', 'pipeline', 'prospectos', 'deals'],
     },
     {
       id: 'nav-terceros',
-      label: 'Ir a Terceros',
+      label: 'Terceros',
       description: 'Contactos y organizaciones',
       icon: <Users className="h-4 w-4" />,
-      shortcut: ['G', 'T'],
       action: () => navigate('/terceros'),
       category: 'navigation',
       keywords: ['contactos', 'personas', 'organizaciones'],
     },
     {
       id: 'nav-clientes',
-      label: 'Ir a Clientes',
+      label: 'Clientes',
       description: 'Gestionar clientes',
       icon: <Building2 className="h-4 w-4" />,
-      shortcut: ['G', 'L'],
       action: () => navigate('/clientes'),
       category: 'navigation',
       keywords: ['empresas', 'cuentas'],
     },
     {
       id: 'nav-servicios',
-      label: 'Ir a Servicios',
+      label: 'Servicios',
       description: 'Catálogo de servicios',
       icon: <Briefcase className="h-4 w-4" />,
-      shortcut: ['G', 'S'],
       action: () => navigate('/servicios'),
       category: 'navigation',
       keywords: ['productos', 'ofertas'],
     },
     {
       id: 'nav-tareas',
-      label: 'Ir a Tareas',
-      description: 'Gestión de tareas',
+      label: 'Tareas',
+      description: 'Gestión de tareas y proyectos',
       icon: <CheckSquare className="h-4 w-4" />,
-      shortcut: ['G', 'A'],
       action: () => navigate('/tareas'),
       category: 'navigation',
-      keywords: ['tasks', 'pendientes', 'kanban'],
+      keywords: ['tasks', 'pendientes', 'kanban', 'proyectos'],
     },
     {
       id: 'nav-finanzas',
-      label: 'Ir a Finanzas',
+      label: 'Finanzas',
       description: 'Dashboard financiero',
       icon: <DollarSign className="h-4 w-4" />,
-      shortcut: ['G', 'F'],
       action: () => navigate('/finanzas'),
       category: 'navigation',
       keywords: ['dinero', 'gastos', 'ingresos', 'cuentas'],
     },
     {
       id: 'nav-equipo',
-      label: 'Ir a Equipo',
+      label: 'Equipo',
       description: 'Gestión del equipo',
       icon: <Users className="h-4 w-4" />,
-      shortcut: ['G', 'E'],
       action: () => navigate('/equipo'),
       category: 'navigation',
       keywords: ['usuarios', 'miembros', 'team'],
@@ -136,38 +133,19 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
       label: 'Mi Perfil',
       description: 'Ver y editar perfil',
       icon: <UserCircle className="h-4 w-4" />,
-      shortcut: ['G', 'P'],
       action: () => navigate('/perfil'),
       category: 'navigation',
       keywords: ['cuenta', 'usuario', 'configuración'],
     },
-    // Actions
-    {
-      id: 'action-new-task',
-      label: 'Nueva Tarea',
-      description: 'Crear una nueva tarea',
-      icon: <Plus className="h-4 w-4" />,
-      shortcut: ['Ctrl', 'N'],
-      action: () => {
-        if (onNewTask) {
-          onNewTask();
-        } else {
-          navigate('/tareas');
-        }
-      },
-      category: 'actions',
-      keywords: ['crear', 'agregar', 'task'],
-    },
     // Settings
     {
       id: 'settings-theme-toggle',
-      label: isDark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro',
-      description: 'Alternar modo oscuro/claro',
+      label: isDark ? 'Tema Claro' : 'Tema Oscuro',
+      description: 'Cambiar apariencia',
       icon: isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
-      shortcut: ['Ctrl', 'Shift', 'L'],
       action: toggleTheme,
       category: 'settings',
-      keywords: ['dark', 'light', 'modo', 'apariencia'],
+      keywords: ['dark', 'light', 'modo', 'apariencia', 'oscuro', 'claro'],
     },
     {
       id: 'settings-logout',
@@ -181,19 +159,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
       category: 'settings',
       keywords: ['salir', 'logout', 'exit'],
     },
-    {
-      id: 'settings-help',
-      label: 'Ayuda y atajos',
-      description: 'Ver atajos de teclado',
-      icon: <HelpCircle className="h-4 w-4" />,
-      shortcut: ['?'],
-      action: () => {
-        alert('Atajos de teclado:\n\nCtrl+K - Abrir paleta de comandos\nCtrl+N - Nueva tarea\nEscape - Cerrar modal\n\nNavegación:\nG+D - Dashboard\nG+C - CRM\nG+T - Terceros\nG+L - Clientes\nG+S - Servicios\nG+A - Tareas\nG+F - Finanzas');
-      },
-      category: 'settings',
-      keywords: ['shortcuts', 'keyboard', 'atajos', 'teclado'],
-    },
-  ], [navigate, isDark, toggleTheme, onNewTask]);
+  ], [navigate, isDark, toggleTheme]);
 
   const filteredCommands = useMemo(() => {
     if (!search) return commands;
@@ -235,23 +201,10 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
       return;
     }
 
-    // New task with Ctrl+N
-    if ((e.ctrlKey || e.metaKey) && e.key === 'n' && !isOpen) {
+    // Quick action: Ctrl+Q to go to tasks (new task)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
       e.preventDefault();
-      if (onNewTask) {
-        onNewTask();
-      } else if (location.pathname === '/tareas') {
-        // Trigger new task if on tasks page
-        const event = new CustomEvent('newTask');
-        window.dispatchEvent(event);
-      }
-      return;
-    }
-
-    // Theme toggle with Ctrl+Shift+L
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
-      e.preventDefault();
-      toggleTheme();
+      navigate('/tareas');
       return;
     }
 
@@ -281,7 +234,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
         setSearch('');
         break;
     }
-  }, [isOpen, flatCommands, selectedIndex, onNewTask, location.pathname, toggleTheme]);
+  }, [isOpen, flatCommands, selectedIndex]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -302,8 +255,8 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
   if (!isOpen) return null;
 
   const categoryLabels: Record<string, string> = {
-    actions: 'Acciones',
-    navigation: 'Navegación',
+    actions: 'Acciones Rápidas',
+    navigation: 'Ir a...',
     settings: 'Configuración',
   };
 
@@ -326,7 +279,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Buscar comandos, páginas..."
+            placeholder="Buscar páginas, acciones..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="command-palette-input border-0 px-0"
@@ -381,13 +334,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
                             )}
                           </div>
                           {cmd.shortcut && (
-                            <div className="command-palette-shortcut">
-                              {cmd.shortcut.map((key, i) => (
-                                <kbd key={i} className="command-palette-kbd">
-                                  {key}
-                                </kbd>
-                              ))}
-                            </div>
+                            <kbd className="command-palette-kbd text-[10px]">{cmd.shortcut}</kbd>
                           )}
                         </div>
                       );
@@ -403,8 +350,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
         <div className="px-4 py-2 border-t border-border flex items-center justify-between text-xs text-muted-foreground">
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1">
-              <kbd className="command-palette-kbd">↑</kbd>
-              <kbd className="command-palette-kbd">↓</kbd>
+              <kbd className="command-palette-kbd">↑↓</kbd>
               navegar
             </span>
             <span className="flex items-center gap-1">
@@ -414,7 +360,7 @@ export function CommandPalette({ onNewTask }: CommandPaletteProps) {
           </div>
           <div className="flex items-center gap-1">
             <Command className="h-3 w-3" />
-            <span>DTOS</span>
+            <span>DT-OS</span>
           </div>
         </div>
       </div>
