@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { User, Camera, Save, Mail, Shield, Download, QrCode, Phone } from 'lucide-react';
+import { User, Camera, Save, Mail, Shield, Download, QrCode, Phone, MapPin } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,7 @@ export default function Profile() {
   const [firstName, setFirstName] = useState(user?.firstName || '');
   const [lastName, setLastName] = useState(user?.lastName || '');
   const [phone, setPhone] = useState(user?.phone || '3007189383');
+  const [address, setAddress] = useState(user?.address || '');
   const [photoUrl, setPhotoUrl] = useState<string | null>(user?.photoUrl || null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(user?.photoUrl || null);
   const [isSaving, setIsSaving] = useState(false);
@@ -26,14 +27,20 @@ export default function Profile() {
   // Generate QR code with vCard data
   useEffect(() => {
     const generateQR = async () => {
-      const vCard = `BEGIN:VCARD
+      let vCard = `BEGIN:VCARD
 VERSION:3.0
 N:${lastName};${firstName}
 FN:${firstName} ${lastName}
 TEL;TYPE=CELL:+57${phone}
 EMAIL:${user?.email || ''}
-ORG:DT Growth Partners
-END:VCARD`;
+ORG:DT Growth Partners`;
+
+      // Add address if provided
+      if (address) {
+        vCard += `\nADR;TYPE=WORK:;;${address};;;;`;
+      }
+
+      vCard += `\nEND:VCARD`;
 
       try {
         const dataUrl = await QRCode.toDataURL(vCard, {
@@ -53,7 +60,7 @@ END:VCARD`;
     if (firstName || lastName || user?.email || phone) {
       generateQR();
     }
-  }, [firstName, lastName, phone, user?.email]);
+  }, [firstName, lastName, phone, address, user?.email]);
 
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -106,6 +113,7 @@ END:VCARD`;
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
+        address: address.trim(),
         photoUrl: photoUrl,
       });
 
@@ -234,6 +242,22 @@ END:VCARD`;
               />
             </div>
             <p className="text-xs text-muted-foreground">Este numero aparecera en tu codigo QR</p>
+          </div>
+
+          {/* Address field */}
+          <div className="space-y-2">
+            <Label htmlFor="address">Direccion (opcional)</Label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="address"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+                placeholder="Calle 123 #45-67, Bogota"
+                className="pl-10"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">La direccion aparecera en tu codigo QR</p>
           </div>
 
           {/* Read-only fields */}

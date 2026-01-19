@@ -14,6 +14,7 @@ model User {
   firstName     String        @default("")
   lastName      String        @default("")
   phone         String        @default("3007189383")
+  address       String?       // Address for vCard QR code
   photoUrl      String?       // Profile photo (base64 or URL)
   permissions   String[]      // Permisos individuales (override del rol)
   roleId        String

@@ -17,6 +17,7 @@ interface User {
   firstName: string;
   lastName: string;
   phone?: string;
+  address?: string;
   role: string;
   photoUrl?: string;
   permissions?: string[];
