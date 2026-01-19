@@ -39,6 +39,7 @@ interface ClientService {
   serviceId: string;
   service: Service;
   precioCliente?: number;
+  moneda: string;
   frecuencia: string;
   fechaInicio: string;
   fechaProximoCobro?: string;
@@ -72,6 +73,13 @@ const ESTADOS = [
   { value: 'cancelado', label: 'Cancelado', color: 'bg-red-100 text-red-800' },
 ];
 
+const MONEDAS = [
+  { value: 'COP', label: 'COP - Peso Colombiano', symbol: '$' },
+  { value: 'USD', label: 'USD - Dólar Americano', symbol: '$' },
+  { value: 'EUR', label: 'EUR - Euro', symbol: '€' },
+  { value: 'MXN', label: 'MXN - Peso Mexicano', symbol: '$' },
+];
+
 const formatCurrency = (amount: number, currency: string = 'COP') => {
   return new Intl.NumberFormat('es-CO', {
     style: 'currency',
@@ -99,6 +107,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
   const [formData, setFormData] = useState({
     serviceId: '',
     precioCliente: '',
+    moneda: 'COP',
     frecuencia: 'mensual',
     fechaInicio: new Date().toISOString().split('T')[0],
     fechaProximoCobro: '',
@@ -139,6 +148,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
       const payload = {
         serviceId: formData.serviceId,
         precioCliente: formData.precioCliente ? parseFloat(formData.precioCliente) : undefined,
+        moneda: formData.moneda,
         frecuencia: formData.frecuencia,
         fechaInicio: formData.fechaInicio,
         fechaProximoCobro: formData.fechaProximoCobro || undefined,
@@ -174,6 +184,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     setFormData({
       serviceId: cs.serviceId,
       precioCliente: cs.precioCliente?.toString() || '',
+      moneda: cs.moneda || 'COP',
       frecuencia: cs.frecuencia,
       fechaInicio: cs.fechaInicio.split('T')[0],
       fechaProximoCobro: cs.fechaProximoCobro?.split('T')[0] || '',
@@ -204,6 +215,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     setFormData({
       serviceId: '',
       precioCliente: '',
+      moneda: 'COP',
       frecuencia: 'mensual',
       fechaInicio: new Date().toISOString().split('T')[0],
       fechaProximoCobro: '',
@@ -288,10 +300,10 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm">
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <DollarSign className="h-3 w-3" />
-                          <span>{formatCurrency(precio, cs.service.currency)}</span>
+                          <span>{formatCurrency(precio, cs.moneda || 'COP')}</span>
                           {cs.precioCliente && (
                             <span className="text-xs line-through text-muted-foreground/50">
-                              {formatCurrency(cs.service.price)}
+                              {formatCurrency(cs.service.price, cs.service.currency)}
                             </span>
                           )}
                         </div>
@@ -371,17 +383,35 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                 </Select>
               </div>
 
-              {/* Precio personalizado */}
-              <div className="space-y-2">
-                <Label>Precio para este cliente</Label>
-                <Input
-                  type="number"
-                  placeholder={selectedService ? `Default: ${selectedService.price}` : 'Precio'}
-                  value={formData.precioCliente}
-                  onChange={(e) => setFormData({ ...formData, precioCliente: e.target.value })}
-                />
-                <p className="text-xs text-muted-foreground">Dejar vacio para usar el precio estandar del servicio</p>
+              {/* Precio y Moneda */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2 col-span-2">
+                  <Label>Precio para este cliente</Label>
+                  <Input
+                    type="number"
+                    placeholder={selectedService ? `Default: ${selectedService.price}` : 'Precio'}
+                    value={formData.precioCliente}
+                    onChange={(e) => setFormData({ ...formData, precioCliente: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Moneda</Label>
+                  <Select
+                    value={formData.moneda}
+                    onValueChange={(value) => setFormData({ ...formData, moneda: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {MONEDAS.map((m) => (
+                        <SelectItem key={m.value} value={m.value}>{m.value}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
+              <p className="text-xs text-muted-foreground -mt-2">Dejar vacio el precio para usar el estandar del servicio</p>
 
               {/* Frecuencia */}
               <div className="space-y-2">

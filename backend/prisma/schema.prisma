@@ -117,6 +117,7 @@ model ClientService {
 
   // Precio y frecuencia de pago
   precioCliente     Float?    // Precio personalizado (override del servicio)
+  moneda            String    @default("COP") // Moneda personalizada para este cliente
   frecuencia        String    @default("mensual") // mensual, trimestral, semestral, anual, unico
 
   // Fechas de control

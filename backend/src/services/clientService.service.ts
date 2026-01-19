@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 export interface CreateClientServiceDto {
   serviceId: string;
   precioCliente?: number;
+  moneda?: string;
   frecuencia?: string;
   fechaInicio?: Date;
   fechaProximoCobro?: Date;
@@ -15,6 +16,7 @@ export interface CreateClientServiceDto {
 
 export interface UpdateClientServiceDto {
   precioCliente?: number;
+  moneda?: string;
   frecuencia?: string;
   fechaProximoCobro?: Date;
   fechaVencimiento?: Date;
@@ -109,6 +111,7 @@ export const assignServiceToClient = async (clientId: string, data: CreateClient
       clientId,
       serviceId: data.serviceId,
       precioCliente: data.precioCliente,
+      moneda: data.moneda || 'COP',
       frecuencia,
       fechaInicio,
       fechaProximoCobro,
@@ -149,6 +152,7 @@ export const updateClientService = async (clientId: string, serviceId: string, d
     where: { clientId_serviceId: { clientId, serviceId } },
     data: {
       precioCliente: data.precioCliente,
+      moneda: data.moneda,
       frecuencia: data.frecuencia,
       fechaProximoCobro: data.fechaProximoCobro,
       fechaVencimiento: data.fechaVencimiento,

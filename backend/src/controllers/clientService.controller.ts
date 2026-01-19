@@ -16,7 +16,7 @@ export const getClientServices = async (req: Request, res: Response) => {
 export const assignServiceToClient = async (req: Request, res: Response) => {
   try {
     const { clientId } = req.params;
-    const { serviceId, precioCliente, frecuencia, fechaInicio, fechaProximoCobro, fechaVencimiento, notas } = req.body;
+    const { serviceId, precioCliente, moneda, frecuencia, fechaInicio, fechaProximoCobro, fechaVencimiento, notas } = req.body;
 
     if (!serviceId) {
       return res.status(400).json({ error: 'serviceId es requerido' });
@@ -25,6 +25,7 @@ export const assignServiceToClient = async (req: Request, res: Response) => {
     const clientService = await clientServiceService.assignServiceToClient(clientId, {
       serviceId,
       precioCliente: precioCliente ? parseFloat(precioCliente) : undefined,
+      moneda,
       frecuencia,
       fechaInicio: fechaInicio ? new Date(fechaInicio) : undefined,
       fechaProximoCobro: fechaProximoCobro ? new Date(fechaProximoCobro) : undefined,
@@ -48,10 +49,11 @@ export const assignServiceToClient = async (req: Request, res: Response) => {
 export const updateClientService = async (req: Request, res: Response) => {
   try {
     const { clientId, serviceId } = req.params;
-    const { precioCliente, frecuencia, fechaProximoCobro, fechaVencimiento, estado, notas } = req.body;
+    const { precioCliente, moneda, frecuencia, fechaProximoCobro, fechaVencimiento, estado, notas } = req.body;
 
     const clientService = await clientServiceService.updateClientService(clientId, serviceId, {
       precioCliente: precioCliente !== undefined ? parseFloat(precioCliente) : undefined,
+      moneda,
       frecuencia,
       fechaProximoCobro: fechaProximoCobro ? new Date(fechaProximoCobro) : undefined,
       fechaVencimiento: fechaVencimiento ? new Date(fechaVencimiento) : undefined,
