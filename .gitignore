@@ -48,3 +48,8 @@ env/
 # Temporary files
 nul
 tmpclaude*
+
+# Documentation files (internal)
+COBRAFLOW_INSTRUCTIONS.md
+FIXES_ANALISIS.md
+INTEGRACION_TAREAS.md
