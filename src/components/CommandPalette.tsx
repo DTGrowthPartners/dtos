@@ -146,6 +146,7 @@ export function CommandPalette() {
       action: toggleTheme,
       category: 'settings',
       keywords: ['dark', 'light', 'modo', 'apariencia', 'oscuro', 'claro'],
+      shortcut: 'Ctrl+Shift+L',
     },
     {
       id: 'settings-logout',
@@ -208,6 +209,13 @@ export function CommandPalette() {
       return;
     }
 
+    // Toggle theme with Ctrl+Shift+L
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'L') {
+      e.preventDefault();
+      toggleTheme();
+      return;
+    }
+
     if (!isOpen) return;
 
     // Navigation within palette
@@ -234,7 +242,7 @@ export function CommandPalette() {
         setSearch('');
         break;
     }
-  }, [isOpen, flatCommands, selectedIndex]);
+  }, [isOpen, flatCommands, selectedIndex, navigate, toggleTheme]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
