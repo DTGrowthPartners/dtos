@@ -1707,7 +1707,8 @@ export default function Tareas() {
                           draggable={true}
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onDragEnd={handleDragEnd}
-                          className={`p-2 bg-card rounded border-l-4 cursor-grab active:cursor-grabbing hover:shadow transition-all ${
+                          onClick={() => handleEdit(task)}
+                          className={`p-2 bg-card rounded border-l-4 cursor-pointer hover:shadow transition-all ${
                             draggedTask === task.id ? 'opacity-50' : ''
                           } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                         >
@@ -1730,7 +1731,8 @@ export default function Tareas() {
                           draggable={true}
                           onDragStart={(e) => handleDragStart(e, task.id)}
                           onDragEnd={handleDragEnd}
-                          className={`p-3 bg-card rounded-lg border cursor-grab active:cursor-grabbing hover:shadow transition-all ${
+                          onClick={() => handleEdit(task)}
+                          className={`p-3 bg-card rounded-lg border cursor-pointer hover:shadow transition-all ${
                             draggedTask === task.id ? 'opacity-50' : ''
                           }`}
                         >
@@ -1764,7 +1766,7 @@ export default function Tareas() {
                             <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
                               {assignee?.initials}
                             </div>
-                            <div className="flex gap-1">
+                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
                                 <Edit className="h-3 w-3" />
                               </Button>
@@ -1787,7 +1789,8 @@ export default function Tareas() {
                         draggable={true}
                         onDragStart={(e) => handleDragStart(e, task.id)}
                         onDragEnd={handleDragEnd}
-                        className={`p-3 md:p-4 cursor-grab active:cursor-grabbing hover:shadow-lg transition-all border-l-4 ${
+                        onClick={() => handleEdit(task)}
+                        className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${
                           draggedTask === task.id ? 'opacity-50 scale-105' : ''
                         } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                       >
