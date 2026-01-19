@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, ChevronRight, Moon, Sun, LogOut } from 'lucide-react';
+import { Search, User, ChevronRight, Moon, Sun, LogOut, Command } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,19 +82,35 @@ export function AppHeader() {
 
       {/* Actions */}
       <div className="flex items-center gap-3">
-        {/* Search */}
-        <div className="relative hidden md:block">
-          <Search className={cn("absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2", isMisTareasView ? "text-slate-500" : "text-muted-foreground")} />
-          <Input
-            placeholder="Buscar clientes, tareas, campañas..."
-            className={cn(
-              "w-72 pl-9 border-0 focus-visible:ring-1 focus-visible:ring-primary",
-              isMisTareasView
-                ? "bg-slate-800/50 text-slate-200 placeholder:text-slate-500"
-                : "bg-muted/50"
-            )}
-          />
-        </div>
+        {/* Search - Opens Command Palette */}
+        <button
+          onClick={() => {
+            // Trigger Ctrl+K programmatically
+            const event = new KeyboardEvent('keydown', {
+              key: 'k',
+              ctrlKey: true,
+              bubbles: true,
+            });
+            document.dispatchEvent(event);
+          }}
+          className={cn(
+            "hidden md:flex items-center gap-2 w-72 h-9 px-3 rounded-md text-sm transition-colors",
+            isMisTareasView
+              ? "bg-slate-800/50 text-slate-400 hover:bg-slate-800 hover:text-slate-300"
+              : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+          )}
+        >
+          <Search className="h-4 w-4" />
+          <span className="flex-1 text-left">Buscar...</span>
+          <kbd className={cn(
+            "hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-mono rounded border",
+            isMisTareasView
+              ? "bg-slate-700 border-slate-600"
+              : "bg-muted border-border"
+          )}>
+            <Command className="h-2.5 w-2.5" />K
+          </kbd>
+        </button>
 
         {/* Theme Toggle */}
         <Button

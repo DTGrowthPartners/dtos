@@ -207,20 +207,268 @@
   .glass-card {
     @apply bg-card/80 backdrop-blur-sm border border-border/50 shadow-sm;
   }
-  
+
   .stat-card {
     @apply p-6 rounded-xl bg-card border border-border shadow-sm hover:shadow-md transition-shadow duration-200;
   }
-  
+
   .module-card {
     @apply p-4 rounded-lg bg-card border border-border hover:border-primary/30 hover:shadow-md transition-all duration-200 cursor-pointer;
   }
-  
+
   .kanban-column {
     @apply bg-muted/50 rounded-xl p-4 min-h-[500px];
   }
-  
+
   .kanban-card {
     @apply bg-card p-4 rounded-lg border border-border shadow-sm hover:shadow-md transition-shadow duration-200 cursor-grab active:cursor-grabbing;
+  }
+}
+
+/* ==================== OS-LIKE CURSOR STYLES ==================== */
+@layer base {
+  /* Default cursor - subtle pointer enhancement */
+  html {
+    cursor: default;
+  }
+
+  /* Interactive elements - pointer cursor */
+  a,
+  button,
+  [role="button"],
+  [type="button"],
+  [type="submit"],
+  [type="reset"],
+  .cursor-pointer,
+  label[for],
+  select,
+  summary {
+    cursor: pointer;
+  }
+
+  /* Text inputs - text cursor */
+  input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  [contenteditable="true"],
+  .cursor-text {
+    cursor: text;
+  }
+
+  /* Draggable elements */
+  .draggable,
+  .cursor-grab,
+  [draggable="true"] {
+    cursor: grab;
+  }
+
+  .draggable:active,
+  .cursor-grab:active,
+  [draggable="true"]:active,
+  .cursor-grabbing {
+    cursor: grabbing;
+  }
+
+  /* Move cursor for sortable/moveable items */
+  .cursor-move,
+  .sortable-handle {
+    cursor: move;
+  }
+
+  /* Resize cursors */
+  .cursor-resize,
+  .resizable {
+    cursor: nwse-resize;
+  }
+
+  .cursor-col-resize {
+    cursor: col-resize;
+  }
+
+  .cursor-row-resize {
+    cursor: row-resize;
+  }
+
+  /* Not allowed */
+  .cursor-not-allowed,
+  [disabled],
+  :disabled {
+    cursor: not-allowed;
+  }
+
+  /* Wait/loading */
+  .cursor-wait {
+    cursor: wait;
+  }
+
+  /* Help cursor */
+  .cursor-help,
+  [title]:not(a):not(button) {
+    cursor: help;
+  }
+
+  /* Zoom cursors */
+  .cursor-zoom-in {
+    cursor: zoom-in;
+  }
+
+  .cursor-zoom-out {
+    cursor: zoom-out;
+  }
+
+  /* Crosshair for precision */
+  .cursor-crosshair {
+    cursor: crosshair;
+  }
+
+  /* Context menu indicator */
+  .cursor-context-menu {
+    cursor: context-menu;
+  }
+}
+
+/* ==================== FOCUS RING IMPROVEMENTS ==================== */
+@layer base {
+  /* Remove default focus outline and add custom */
+  *:focus {
+    outline: none;
+  }
+
+  *:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+    border-radius: var(--radius);
+  }
+
+  /* Keyboard focus indicator - more visible */
+  .focus-ring:focus-visible {
+    box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  }
+}
+
+/* ==================== SELECTION STYLES ==================== */
+@layer base {
+  ::selection {
+    background-color: hsl(var(--primary) / 0.25);
+    color: inherit;
+  }
+
+  ::-moz-selection {
+    background-color: hsl(var(--primary) / 0.25);
+    color: inherit;
+  }
+}
+
+/* ==================== SMOOTH TRANSITIONS ==================== */
+@layer base {
+  /* Global smooth transitions for interactive elements */
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role="button"] {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* ==================== COMMAND PALETTE STYLES ==================== */
+@layer components {
+  .command-palette-overlay {
+    @apply fixed inset-0 bg-background/80 backdrop-blur-sm z-50;
+    animation: fadeIn 150ms ease-out;
+  }
+
+  .command-palette {
+    @apply fixed top-[20%] left-1/2 -translate-x-1/2 w-full max-w-xl bg-card border border-border rounded-xl shadow-2xl z-50 overflow-hidden;
+    animation: slideIn 150ms ease-out;
+  }
+
+  .command-palette-input {
+    @apply w-full px-4 py-3 text-base bg-transparent border-b border-border focus:outline-none placeholder:text-muted-foreground;
+  }
+
+  .command-palette-results {
+    @apply max-h-[400px] overflow-y-auto py-2;
+  }
+
+  .command-palette-item {
+    @apply flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors;
+  }
+
+  .command-palette-item:hover,
+  .command-palette-item.selected {
+    @apply bg-accent;
+  }
+
+  .command-palette-item-icon {
+    @apply w-8 h-8 rounded-lg bg-muted flex items-center justify-center text-muted-foreground;
+  }
+
+  .command-palette-item.selected .command-palette-item-icon {
+    @apply bg-primary text-primary-foreground;
+  }
+
+  .command-palette-shortcut {
+    @apply ml-auto flex items-center gap-1;
+  }
+
+  .command-palette-kbd {
+    @apply px-1.5 py-0.5 text-xs font-mono bg-muted rounded border border-border;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translate(-50%, -10px);
+    }
+    to {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+  }
+}
+
+/* ==================== INLINE EDIT STYLES ==================== */
+@layer components {
+  .inline-edit {
+    @apply px-1 -mx-1 rounded cursor-text hover:bg-muted/50 transition-colors;
+  }
+
+  .inline-edit:focus {
+    @apply bg-muted outline-none ring-2 ring-ring;
+  }
+
+  .inline-edit-active {
+    @apply bg-background border border-input rounded px-2 py-1;
+  }
+}
+
+/* ==================== LOADING STATES ==================== */
+@layer components {
+  .skeleton {
+    @apply bg-muted animate-pulse rounded;
+  }
+
+  .skeleton-text {
+    @apply h-4 w-full skeleton;
+  }
+
+  .skeleton-title {
+    @apply h-6 w-3/4 skeleton;
+  }
+
+  .skeleton-avatar {
+    @apply h-10 w-10 rounded-full skeleton;
+  }
+
+  .skeleton-card {
+    @apply h-32 w-full skeleton;
   }
 }

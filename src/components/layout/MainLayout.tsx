@@ -4,12 +4,16 @@ import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { AppFooter } from './AppFooter';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { CommandPalette } from '@/components/CommandPalette';
 
 export function MainLayout() {
   const { collapsed } = useSidebar();
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Global Command Palette - Ctrl+K */}
+      <CommandPalette />
+
       <AppSidebar />
       <div
         className={cn(
