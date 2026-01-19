@@ -566,7 +566,3 @@ MIT License - ver [LICENSE](LICENSE) para detalles
 - 🔄 **Mejoras Continuas**
 
 **Última actualización:** Enero 2026
-
----
-
-Built with ❤️ by DT Growth Partners
