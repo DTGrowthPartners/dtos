@@ -31,6 +31,8 @@ import {
   ExternalLink,
   Link,
   GripVertical,
+  Flag,
+  ArrowRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -53,6 +55,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { useToast } from '@/hooks/use-toast';
 import { convertImageToBase64, validateImage } from '@/lib/imageService';
 import ImageModal from '@/components/ImageModal';
@@ -615,6 +627,77 @@ export default function Tareas() {
         description: 'No se pudo actualizar la tarea',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Quick actions for context menu
+  const handleQuickStatusChange = async (task: Task, newStatus: TaskStatus) => {
+    setTasks(prevTasks =>
+      prevTasks.map(t =>
+        t.id === task.id ? { ...t, status: newStatus } : t
+      )
+    );
+    try {
+      await updateTask(task.id, { status: newStatus });
+      if (newStatus === TaskStatus.DONE) {
+        await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
+      }
+      toast({
+        title: 'Estado actualizado',
+        description: `Tarea movida a ${newStatus === TaskStatus.TODO ? 'Por hacer' : newStatus === TaskStatus.IN_PROGRESS ? 'En progreso' : 'Completada'}`,
+      });
+    } catch {
+      setTasks(prevTasks =>
+        prevTasks.map(t =>
+          t.id === task.id ? { ...t, status: task.status } : t
+        )
+      );
+      toast({ title: 'Error', description: 'No se pudo actualizar el estado', variant: 'destructive' });
+    }
+  };
+
+  const handleQuickPriorityChange = async (task: Task, newPriority: Priority) => {
+    setTasks(prevTasks =>
+      prevTasks.map(t =>
+        t.id === task.id ? { ...t, priority: newPriority } : t
+      )
+    );
+    try {
+      await updateTask(task.id, { priority: newPriority });
+      toast({
+        title: 'Prioridad actualizada',
+        description: `Prioridad cambiada a ${newPriority === Priority.HIGH ? 'Alta' : newPriority === Priority.MEDIUM ? 'Media' : 'Baja'}`,
+      });
+    } catch {
+      setTasks(prevTasks =>
+        prevTasks.map(t =>
+          t.id === task.id ? { ...t, priority: task.priority } : t
+        )
+      );
+      toast({ title: 'Error', description: 'No se pudo actualizar la prioridad', variant: 'destructive' });
+    }
+  };
+
+  const handleQuickProjectChange = async (task: Task, newProjectId: string) => {
+    setTasks(prevTasks =>
+      prevTasks.map(t =>
+        t.id === task.id ? { ...t, projectId: newProjectId } : t
+      )
+    );
+    try {
+      await updateTask(task.id, { projectId: newProjectId });
+      const projectName = projects.find(p => p.id === newProjectId)?.name || 'Sin proyecto';
+      toast({
+        title: 'Proyecto actualizado',
+        description: `Tarea movida a ${projectName}`,
+      });
+    } catch {
+      setTasks(prevTasks =>
+        prevTasks.map(t =>
+          t.id === task.id ? { ...t, projectId: task.projectId } : t
+        )
+      );
+      toast({ title: 'Error', description: 'No se pudo cambiar el proyecto', variant: 'destructive' });
     }
   };
 
@@ -1784,16 +1867,17 @@ export default function Tareas() {
 
                     // Card View (default)
                     return (
-                      <Card
-                        key={task.id}
-                        draggable={true}
-                        onDragStart={(e) => handleDragStart(e, task.id)}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => handleEdit(task)}
-                        className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${
-                          draggedTask === task.id ? 'opacity-50 scale-105' : ''
-                        } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
-                      >
+                      <ContextMenu key={task.id}>
+                        <ContextMenuTrigger asChild>
+                          <Card
+                            draggable={true}
+                            onDragStart={(e) => handleDragStart(e, task.id)}
+                            onDragEnd={handleDragEnd}
+                            onClick={() => handleEdit(task)}
+                            className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${
+                              draggedTask === task.id ? 'opacity-50 scale-105' : ''
+                            } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
+                          >
                         {/* Task Header */}
                         <div className="flex items-start justify-between mb-2">
                           <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -1954,7 +2038,116 @@ export default function Tareas() {
                             </div>
                           </div>
                         </div>
-                      </Card>
+                          </Card>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent className="w-56">
+                          <ContextMenuItem onClick={() => handleEdit(task)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                          </ContextMenuItem>
+                          <ContextMenuItem onClick={() => handleDuplicate(task)}>
+                            <Copy className="mr-2 h-4 w-4" />
+                            Duplicar
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger>
+                              <ArrowRight className="mr-2 h-4 w-4" />
+                              Cambiar estado
+                            </ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                              <ContextMenuItem
+                                onClick={() => handleQuickStatusChange(task, TaskStatus.TODO)}
+                                disabled={task.status === TaskStatus.TODO}
+                              >
+                                <Circle className="mr-2 h-4 w-4" />
+                                Por hacer
+                                {task.status === TaskStatus.TODO && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => handleQuickStatusChange(task, TaskStatus.IN_PROGRESS)}
+                                disabled={task.status === TaskStatus.IN_PROGRESS}
+                              >
+                                <Clock className="mr-2 h-4 w-4" />
+                                En progreso
+                                {task.status === TaskStatus.IN_PROGRESS && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => handleQuickStatusChange(task, TaskStatus.DONE)}
+                                disabled={task.status === TaskStatus.DONE}
+                              >
+                                <CheckCircle2 className="mr-2 h-4 w-4" />
+                                Completada
+                                {task.status === TaskStatus.DONE && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger>
+                              <Flag className="mr-2 h-4 w-4" />
+                              Cambiar prioridad
+                            </ContextMenuSubTrigger>
+                            <ContextMenuSubContent>
+                              <ContextMenuItem
+                                onClick={() => handleQuickPriorityChange(task, Priority.HIGH)}
+                                disabled={task.priority === Priority.HIGH}
+                              >
+                                <span className="mr-2 w-3 h-3 rounded-full bg-red-500" />
+                                Alta
+                                {task.priority === Priority.HIGH && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => handleQuickPriorityChange(task, Priority.MEDIUM)}
+                                disabled={task.priority === Priority.MEDIUM}
+                              >
+                                <span className="mr-2 w-3 h-3 rounded-full bg-yellow-500" />
+                                Media
+                                {task.priority === Priority.MEDIUM && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => handleQuickPriorityChange(task, Priority.LOW)}
+                                disabled={task.priority === Priority.LOW}
+                              >
+                                <span className="mr-2 w-3 h-3 rounded-full bg-emerald-500" />
+                                Baja
+                                {task.priority === Priority.LOW && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                              </ContextMenuItem>
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                          <ContextMenuSub>
+                            <ContextMenuSubTrigger>
+                              <FolderOpen className="mr-2 h-4 w-4" />
+                              Mover a proyecto
+                            </ContextMenuSubTrigger>
+                            <ContextMenuSubContent className="max-h-60 overflow-y-auto">
+                              {projects.map((p) => (
+                                <ContextMenuItem
+                                  key={p.id}
+                                  onClick={() => handleQuickProjectChange(task, p.id)}
+                                  disabled={task.projectId === p.id}
+                                >
+                                  <span className={`mr-2 w-3 h-3 rounded-full ${p.color}`} />
+                                  {p.name}
+                                  {task.projectId === p.id && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                </ContextMenuItem>
+                              ))}
+                            </ContextMenuSubContent>
+                          </ContextMenuSub>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem onClick={() => handleAddComment(task)}>
+                            <MessageCircle className="mr-2 h-4 w-4" />
+                            Agregar comentario
+                          </ContextMenuItem>
+                          <ContextMenuSeparator />
+                          <ContextMenuItem
+                            onClick={() => handleDelete(task)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Eliminar
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     );
                   })}
 
