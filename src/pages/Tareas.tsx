@@ -2140,6 +2140,22 @@ export default function Tareas() {
                           </ContextMenuItem>
                           <ContextMenuSeparator />
                           <ContextMenuItem
+                            onClick={() => handleToggleComplete(task)}
+                            className={task.status === TaskStatus.DONE ? "text-amber-600 focus:text-amber-600" : "text-emerald-600 focus:text-emerald-600"}
+                          >
+                            {task.status === TaskStatus.DONE ? (
+                              <>
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                Restaurar tarea
+                              </>
+                            ) : (
+                              <>
+                                <Archive className="mr-2 h-4 w-4" />
+                                Archivar (completar)
+                              </>
+                            )}
+                          </ContextMenuItem>
+                          <ContextMenuItem
                             onClick={() => handleDelete(task)}
                             className="text-destructive focus:text-destructive"
                           >
