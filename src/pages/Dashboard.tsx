@@ -111,12 +111,10 @@ export default function Dashboard() {
 
   const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName);
 
-  // Filter tasks for current user
+  // Filter tasks for current user (only assigned tasks, not created by)
   const myTasks = useMemo(() => {
     if (!loggedUserName) return allTasks;
-    return allTasks.filter(t =>
-      t.assignee === loggedUserName || t.creator === loggedUserName
-    );
+    return allTasks.filter(t => t.assignee === loggedUserName);
   }, [allTasks, loggedUserName]);
 
   const myPendingTasks = useMemo(() =>
