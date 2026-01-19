@@ -130,6 +130,25 @@ export default function Dashboard() {
     [myTasks]
   );
 
+  // Tasks I created (assigned to others)
+  const tasksICreated = useMemo(() => {
+    if (!loggedUserName) return [];
+    return allTasks.filter(t =>
+      t.creator === loggedUserName &&
+      t.assignee !== loggedUserName &&
+      t.status !== 'DONE'
+    ).sort((a, b) => {
+      // Sort by due date first, then by priority
+      if (a.dueDate && b.dueDate) {
+        return a.dueDate - b.dueDate;
+      }
+      if (a.dueDate) return -1;
+      if (b.dueDate) return 1;
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      return (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2);
+    });
+  }, [allTasks, loggedUserName]);
+
   // Tasks completed this week
   const myCompletedThisWeek = useMemo(() => {
     const now = new Date();
@@ -346,6 +365,27 @@ export default function Dashboard() {
       case 'low': return 'Baja';
       default: return priority;
     }
+  };
+
+  // Format due date with urgency indicator
+  const formatDueDate = (dueDate: number | undefined) => {
+    if (!dueDate) return null;
+    const date = new Date(dueDate);
+    const now = new Date();
+    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+    const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+    if (diffDays < 0) {
+      return { text: `Vencida ${dateStr}`, className: 'text-red-500 font-medium' };
+    } else if (diffDays === 0) {
+      return { text: 'Hoy', className: 'text-orange-500 font-medium' };
+    } else if (diffDays === 1) {
+      return { text: 'Mañana', className: 'text-yellow-500' };
+    } else if (diffDays <= 3) {
+      return { text: dateStr, className: 'text-yellow-500' };
+    }
+    return { text: dateStr, className: 'text-muted-foreground' };
   };
 
   // ==================== ADMIN DASHBOARD ====================
@@ -602,7 +642,7 @@ export default function Dashboard() {
             <CardTitle className="text-base flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                Mis Tareas Pendientes
+                Mis Tareas Pendientes ({myPendingTasks.length})
               </span>
               <Link to="/tareas">
                 <Button variant="ghost" size="sm" className="h-7 text-xs">
@@ -619,32 +659,38 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground">¡No tienes tareas pendientes!</p>
                 </div>
               ) : (
-                myPendingTasks.slice(0, 5).map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                  >
-                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
-                    <div className="flex-1 min-w-0 overflow-hidden">
-                      <p className="text-sm font-medium truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <Badge variant="outline" className="text-[10px] px-1.5 flex-shrink-0">
-                          {getPriorityLabel(task.priority)}
-                        </Badge>
-                        {task.client && (
-                          <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                            {task.client}
-                          </span>
-                        )}
+                myPendingTasks.slice(0, 5).map((task) => {
+                  const dueDateInfo = formatDueDate(task.dueDate);
+                  return (
+                    <div
+                      key={task.id}
+                      className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    >
+                      <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className="text-sm font-medium truncate">{task.title}</p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <Badge variant="outline" className="text-[10px] px-1.5 flex-shrink-0">
+                            {getPriorityLabel(task.priority)}
+                          </Badge>
+                          {task.client && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                              {task.client}
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      {dueDateInfo && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Calendar className="h-3 w-3 text-muted-foreground" />
+                          <span className={`text-xs whitespace-nowrap ${dueDateInfo.className}`}>
+                            {dueDateInfo.text}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    {task.dueDate && (
-                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
-                        {new Date(task.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
-                      </span>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </CardContent>
@@ -693,6 +739,57 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Tasks I Created (Assigned to Others) */}
+      {tasksICreated.length > 0 && (
+        <Card className="overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Tareas que Asigné ({tasksICreated.length})
+              </span>
+              <Link to="/tareas">
+                <Button variant="ghost" size="sm" className="h-7 text-xs">
+                  Ver todas <ArrowRight className="ml-1 h-3 w-3" />
+                </Button>
+              </Link>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {tasksICreated.slice(0, 6).map((task) => {
+                const dueDateInfo = formatDueDate(task.dueDate);
+                return (
+                  <div
+                    key={task.id}
+                    className="flex flex-col gap-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
+                      <p className="text-sm font-medium line-clamp-2">{task.title}</p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1 text-muted-foreground">
+                        <UserCheck className="h-3 w-3" />
+                        <span className="truncate max-w-[80px]">{task.assignee}</span>
+                      </div>
+                      {dueDateInfo && (
+                        <div className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-muted-foreground" />
+                          <span className={`whitespace-nowrap ${dueDateInfo.className}`}>
+                            {dueDateInfo.text}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions */}
       <Card>
