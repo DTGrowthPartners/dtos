@@ -368,16 +368,18 @@ export default function Clientes() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="empresas" className="flex items-center gap-2">
-            <Building2 className="h-4 w-4" />
-            Empresas ({clients.length})
-          </TabsTrigger>
-          <TabsTrigger value="contactos" className="flex items-center gap-2">
-            <Users className="h-4 w-4" />
-            Contactos Clientes ({terceros.length})
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="inline-flex w-max sm:w-auto">
+            <TabsTrigger value="empresas" className="flex items-center gap-2 whitespace-nowrap">
+              <Building2 className="h-4 w-4" />
+              Empresas ({clients.length})
+            </TabsTrigger>
+            <TabsTrigger value="contactos" className="flex items-center gap-2 whitespace-nowrap">
+              <Users className="h-4 w-4" />
+              Contactos Clientes ({terceros.length})
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Tab: Empresas */}
         <TabsContent value="empresas" className="space-y-4 mt-4">

@@ -524,20 +524,22 @@ export default function Terceros() {
 
       {/* Content Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="clientes">
-            <Users className="h-4 w-4 mr-2" />
-            Clientes ({clients.length})
-          </TabsTrigger>
-          <TabsTrigger value="organizaciones">
-            <Building2 className="h-4 w-4 mr-2" />
-            Organizaciones ({filteredOrganizaciones.length})
-          </TabsTrigger>
-          <TabsTrigger value="independientes">
-            <User className="h-4 w-4 mr-2" />
-            Sin Empresa ({tercerosSinOrg.length})
-          </TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="inline-flex w-max sm:w-auto">
+            <TabsTrigger value="clientes" className="whitespace-nowrap">
+              <Users className="h-4 w-4 mr-2" />
+              Clientes ({clients.length})
+            </TabsTrigger>
+            <TabsTrigger value="organizaciones" className="whitespace-nowrap">
+              <Building2 className="h-4 w-4 mr-2" />
+              Organizaciones ({filteredOrganizaciones.length})
+            </TabsTrigger>
+            <TabsTrigger value="independientes" className="whitespace-nowrap">
+              <User className="h-4 w-4 mr-2" />
+              Sin Empresa ({tercerosSinOrg.length})
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* Tab: Clientes (empresas de la vista Clientes) */}
         <TabsContent value="clientes" className="space-y-4 mt-4">

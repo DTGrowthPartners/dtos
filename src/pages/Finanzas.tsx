@@ -649,20 +649,22 @@ export default function Finanzas() {
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <TabsList className="grid w-full sm:w-auto grid-cols-3">
-              <TabsTrigger value="resumen" className="flex items-center gap-2">
-                <TrendingUp className="h-4 w-4" />
-                Resumen
-              </TabsTrigger>
-              <TabsTrigger value="cuentas" className="flex items-center gap-2">
-                <Receipt className="h-4 w-4" />
-                Cuentas
-              </TabsTrigger>
-              <TabsTrigger value="cuentas-cobro" className="flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Cuentas de Cobro
-              </TabsTrigger>
-            </TabsList>
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <TabsList className="inline-flex w-max sm:w-auto gap-1">
+                <TabsTrigger value="resumen" className="flex items-center gap-2 whitespace-nowrap">
+                  <TrendingUp className="h-4 w-4" />
+                  Resumen
+                </TabsTrigger>
+                <TabsTrigger value="cuentas" className="flex items-center gap-2 whitespace-nowrap px-4">
+                  <Receipt className="h-4 w-4" />
+                  Cuentas
+                </TabsTrigger>
+                <TabsTrigger value="cuentas-cobro" className="flex items-center gap-2 whitespace-nowrap">
+                  <FileText className="h-4 w-4" />
+                  Cuentas de Cobro
+                </TabsTrigger>
+              </TabsList>
+            </div>
 
             {activeTab === 'resumen' && (
               <div className="flex flex-wrap gap-2">

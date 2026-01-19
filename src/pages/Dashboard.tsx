@@ -597,9 +597,9 @@ export default function Dashboard() {
       </div>
 
       {/* Content Row */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-1 lg:grid-cols-3">
         {/* My Pending Tasks */}
-        <Card className="lg:col-span-2">
+        <Card className="lg:col-span-2 overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -626,22 +626,22 @@ export default function Dashboard() {
                     key={task.id}
                     className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
                   >
-                    <div className={`w-2 h-2 rounded-full mt-2 ${getPriorityColor(task.priority)}`} />
-                    <div className="flex-1 min-w-0">
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
+                    <div className="flex-1 min-w-0 overflow-hidden">
                       <p className="text-sm font-medium truncate">{task.title}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Badge variant="outline" className="text-[10px] px-1.5">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <Badge variant="outline" className="text-[10px] px-1.5 flex-shrink-0">
                           {getPriorityLabel(task.priority)}
                         </Badge>
                         {task.client && (
-                          <span className="text-xs text-muted-foreground truncate">
+                          <span className="text-xs text-muted-foreground truncate max-w-[120px]">
                             {task.client}
                           </span>
                         )}
                       </div>
                     </div>
                     {task.dueDate && (
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
                         {new Date(task.dueDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
                       </span>
                     )}
@@ -653,15 +653,15 @@ export default function Dashboard() {
         </Card>
 
         {/* Task Status Breakdown */}
-        <Card>
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <PieChart className="h-4 w-4" />
               Estado de Mis Tareas
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="h-[180px]">
+          <CardContent className="overflow-hidden">
+            <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RechartsPieChart>
                   <Pie
