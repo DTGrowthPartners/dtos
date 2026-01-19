@@ -1110,12 +1110,20 @@ export default function Finanzas() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="space-y-1.5 sm:space-y-2 mt-3 sm:mt-4 max-h-32 sm:max-h-40 overflow-y-auto">
+              {/* Total de Gastos */}
+              <div className="mt-3 sm:mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-destructive">Total Gastos:</span>
+                  <span className="text-lg font-bold text-destructive">${(hasActiveFilters ? filteredTotalExpenses : totalExpenses).toLocaleString()}</span>
+                </div>
+              </div>
+              {/* Lista de categorías sin scroll */}
+              <div className="space-y-1.5 sm:space-y-2 mt-3 sm:mt-4">
                 {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).map((cat) => (
                   <div key={cat.name} className="flex items-center justify-between text-xs sm:text-sm">
                     <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                       <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                      <span className="text-muted-foreground truncate">{cat.name}</span>
+                      <span className="text-muted-foreground">{cat.name}</span>
                     </div>
                     <span className="font-medium text-foreground whitespace-nowrap ml-2">${cat.value.toLocaleString()}</span>
                   </div>
@@ -1130,10 +1138,8 @@ export default function Finanzas() {
         </div>
       </div>
 
-      {/* Additional Charts Row */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        {/* Top Transactions */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+      {/* Top Transactions */}
+      <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
           <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Top 5 Transacciones</h3>
           <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
             {hasActiveFilters ? 'Filtrado por período' : 'Mayores montos'}
@@ -1184,59 +1190,6 @@ export default function Finanzas() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Balance by Entity */}
-        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
-          <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Balance por Entidad</h3>
-          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
-            {hasActiveFilters ? 'Top 6 filtrado' : 'Top 6 entidades'}
-          </p>
-
-          <div className="h-48 sm:h-64 -ml-2 sm:ml-0">
-            {(hasActiveFilters ? filteredEntityStats : entityStats.slice(0, 6)).length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={hasActiveFilters ? filteredEntityStats : entityStats.slice(0, 6)}
-                  layout="vertical"
-                  margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis
-                    type="number"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={9}
-                    tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
-                  />
-                  <YAxis
-                    dataKey="name"
-                    type="category"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={9}
-                    width={70}
-                    tick={{ fontSize: 8 }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'hsl(var(--card))',
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                    }}
-                    formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '10px' }} />
-                  <Bar dataKey="ingresos" fill="hsl(var(--success))" name="Ingresos" radius={[0, 4, 4, 0]} />
-                  <Bar dataKey="gastos" fill="hsl(var(--destructive))" name="Gastos" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted-foreground text-xs sm:text-sm">
-                No hay datos de entidades para el período
-              </div>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Tablas de Transacciones */}

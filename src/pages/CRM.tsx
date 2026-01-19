@@ -830,7 +830,7 @@ export default function CRM() {
                                               {priorityInfo.label}
                                             </Badge>
                                           )}
-                                          {deal.daysInStage && deal.daysInStage > 5 && (
+                                          {deal.daysInStage && deal.daysInStage > 5 && deal.daysInStage !== 0 && (
                                             <Badge variant="outline" className="text-xs text-yellow-600">
                                               {deal.daysInStage}d
                                             </Badge>
