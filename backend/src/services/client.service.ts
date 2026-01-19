@@ -130,20 +130,54 @@ export class ClientService {
     return updatedClient;
   }
 
-  async remove(id: string, userId: string) {
-    const client = await prisma.client.findFirst({
-      where: {
-        id,
-        createdBy: userId,
-      },
+  async remove(id: string, _userId: string) {
+    const client = await prisma.client.findUnique({
+      where: { id },
     });
 
     if (!client) {
       throw new Error('Client not found');
     }
 
-    await prisma.client.delete({
-      where: { id },
+    // Use transaction to clean up all references before deleting client
+    await prisma.$transaction(async (tx) => {
+      // Delete client services
+      await tx.clientService.deleteMany({
+        where: { clientId: id },
+      });
+
+      // Delete client shares
+      await tx.clientShare.deleteMany({
+        where: { clientId: id },
+      });
+
+      // Unassign terceros from this client
+      await tx.tercero.updateMany({
+        where: { clientId: id },
+        data: { clientId: null },
+      });
+
+      // Delete account payments first, then accounts
+      const accounts = await tx.account.findMany({
+        where: { clientId: id },
+        select: { id: true },
+      });
+      const accountIds = accounts.map(a => a.id);
+
+      if (accountIds.length > 0) {
+        await tx.accountPayment.deleteMany({
+          where: { accountId: { in: accountIds } },
+        });
+      }
+
+      await tx.account.deleteMany({
+        where: { clientId: id },
+      });
+
+      // Finally delete the client
+      await tx.client.delete({
+        where: { id },
+      });
     });
 
     return { message: 'Client deleted successfully' };

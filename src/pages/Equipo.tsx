@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -76,6 +76,7 @@ interface User {
   email: string;
   firstName: string;
   lastName: string;
+  photoUrl?: string;
   permissions: string[];
   roleId: string;
   firebaseUid?: string;
@@ -388,6 +389,9 @@ export default function Equipo() {
             >
               <div className="flex items-start gap-4">
                 <Avatar className="h-14 w-14">
+                  {user.photoUrl && (
+                    <AvatarImage src={user.photoUrl} alt={`${user.firstName} ${user.lastName}`} />
+                  )}
                   <AvatarFallback className="text-lg bg-primary/10 text-primary font-semibold">
                     {getInitials(user.firstName, user.lastName)}
                   </AvatarFallback>

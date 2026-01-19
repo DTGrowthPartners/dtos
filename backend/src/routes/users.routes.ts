@@ -73,6 +73,7 @@ router.get('/', roleMiddleware(['admin']), async (req, res) => {
         email: true,
         firstName: true,
         lastName: true,
+        photoUrl: true,
         permissions: true,
         roleId: true,
         firebaseUid: true,
@@ -289,8 +290,86 @@ router.delete('/:id', roleMiddleware(['admin']), async (req, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    await prisma.user.delete({
-      where: { id },
+    // Use transaction to clean up all references before deleting user
+    await prisma.$transaction(async (tx) => {
+      // Delete user's notifications
+      await tx.notification.deleteMany({
+        where: { OR: [{ recipientId: id }, { senderId: id }] },
+      });
+
+      // Delete user's reminders
+      await tx.dealReminder.deleteMany({
+        where: { OR: [{ assignedTo: id }, { createdBy: id }] },
+      });
+
+      // Delete user's deal activities
+      await tx.dealActivity.deleteMany({
+        where: { performedBy: id },
+      });
+
+      // Unassign deals owned by user (set to null)
+      await tx.deal.updateMany({
+        where: { ownerId: id },
+        data: { ownerId: null },
+      });
+
+      // Delete deals created by user (or unassign)
+      await tx.deal.deleteMany({
+        where: { createdBy: id },
+      });
+
+      // Delete tasks created by user
+      await tx.task.deleteMany({
+        where: { createdBy: id },
+      });
+
+      // Delete models created by user
+      await tx.model.deleteMany({
+        where: { createdBy: id },
+      });
+
+      // Delete client shares for this user
+      await tx.clientShare.deleteMany({
+        where: { userId: id },
+      });
+
+      // Delete services created by user (set null or delete)
+      await tx.service.updateMany({
+        where: { createdBy: id },
+        data: { createdBy: null },
+      });
+
+      // Delete clients created by user
+      // First, delete related ClientServices
+      const userClients = await tx.client.findMany({
+        where: { createdBy: id },
+        select: { id: true },
+      });
+      const clientIds = userClients.map(c => c.id);
+
+      if (clientIds.length > 0) {
+        await tx.clientService.deleteMany({
+          where: { clientId: { in: clientIds } },
+        });
+        await tx.clientShare.deleteMany({
+          where: { clientId: { in: clientIds } },
+        });
+        await tx.tercero.updateMany({
+          where: { clientId: { in: clientIds } },
+          data: { clientId: null },
+        });
+        await tx.account.deleteMany({
+          where: { clientId: { in: clientIds } },
+        });
+        await tx.client.deleteMany({
+          where: { createdBy: id },
+        });
+      }
+
+      // Finally delete the user
+      await tx.user.delete({
+        where: { id },
+      });
     });
 
     res.json({ message: 'Usuario eliminado correctamente' });
