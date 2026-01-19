@@ -24,6 +24,12 @@ router.post('/deals/:dealId/lost', crmController.markAsLost);
 router.post('/deals/:dealId/won', crmController.markAsWon);
 router.delete('/deals/:dealId', crmController.deleteDeal);
 
+// ==================== Trash (Papelera) ====================
+router.get('/trash', crmController.getDeletedDeals);
+router.post('/trash/:dealId/restore', crmController.restoreDeal);
+router.delete('/trash/:dealId', crmController.permanentlyDeleteDeal);
+router.delete('/trash', crmController.emptyTrash);
+
 // ==================== Activities ====================
 router.get('/deals/:dealId/activities', crmController.getActivities);
 router.post('/deals/:dealId/activities', crmController.createActivity);

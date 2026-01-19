@@ -134,6 +134,49 @@ export const deleteDeal = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== Trash (Papelera) ====================
+
+export const getDeletedDeals = async (req: Request, res: Response) => {
+  try {
+    const deals = await crmService.getDeletedDeals();
+    res.json(deals);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const restoreDeal = async (req: Request, res: Response) => {
+  try {
+    const { dealId } = req.params;
+    const deal = await crmService.restoreDeal(dealId);
+    res.json(deal);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const permanentlyDeleteDeal = async (req: Request, res: Response) => {
+  try {
+    const { dealId } = req.params;
+    await crmService.permanentlyDeleteDeal(dealId);
+    res.status(204).send();
+  } catch (error: any) {
+    if (error.message === 'Deal not found' || error.message === 'Deal must be in trash before permanent deletion') {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const emptyTrash = async (req: Request, res: Response) => {
+  try {
+    const count = await crmService.emptyTrash();
+    res.json({ deleted: count, message: `${count} deals eliminados permanentemente` });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 // ==================== Public Lead Capture ====================
 
 export const createPublicLead = async (req: Request, res: Response) => {
@@ -282,6 +325,10 @@ export default {
   markAsLost,
   markAsWon,
   deleteDeal,
+  getDeletedDeals,
+  restoreDeal,
+  permanentlyDeleteDeal,
+  emptyTrash,
   createPublicLead,
   getActivities,
   createActivity,

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -159,6 +159,7 @@ interface Deal {
   reminders?: DealReminder[];
   nextReminder?: DealReminder;
   daysInStage?: number;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -296,6 +297,8 @@ export default function CRM() {
   const [isWonDialogOpen, setIsWonDialogOpen] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [isMeetingDialogOpen, setIsMeetingDialogOpen] = useState(false);
+  const [isTrashDialogOpen, setIsTrashDialogOpen] = useState(false);
+  const [deletedDeals, setDeletedDeals] = useState<Deal[]>([]);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
   const { toast } = useToast();
@@ -545,6 +548,61 @@ export default function CRM() {
     }
   };
 
+  // ==================== Trash Functions ====================
+  const loadDeletedDeals = async () => {
+    try {
+      const data = await apiClient.get<Deal[]>('/api/crm/trash');
+      setDeletedDeals(data);
+    } catch (error) {
+      console.error('Error loading deleted deals:', error);
+    }
+  };
+
+  const handleRestoreDeal = async (dealId: string) => {
+    try {
+      await apiClient.post(`/api/crm/trash/${dealId}/restore`);
+      toast({ title: 'Prospecto restaurado', description: 'El prospecto ha sido restaurado al pipeline' });
+      loadDeletedDeals();
+      loadData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo restaurar el prospecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handlePermanentDelete = async (dealId: string) => {
+    if (!confirm('¿Estás seguro? Esta acción no se puede deshacer.')) return;
+    try {
+      await apiClient.delete(`/api/crm/trash/${dealId}`);
+      toast({ title: 'Prospecto eliminado permanentemente' });
+      loadDeletedDeals();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el prospecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (!confirm('¿Estás seguro de vaciar la papelera? Esta acción eliminará todos los prospectos permanentemente.')) return;
+    try {
+      const result = await apiClient.delete<{ deleted: number; message: string }>('/api/crm/trash');
+      toast({ title: 'Papelera vaciada', description: result.message });
+      loadDeletedDeals();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo vaciar la papelera',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleEdit = (deal: Deal) => {
     setEditingDeal(deal);
     setFormData({
@@ -671,10 +729,19 @@ export default function CRM() {
           <h1 className="text-2xl font-bold text-foreground">CRM / Pipeline de Ventas</h1>
           <p className="text-muted-foreground">Gestiona tus prospectos y oportunidades</p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nuevo Prospecto
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => { loadDeletedDeals(); setIsTrashDialogOpen(true); }}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Papelera
+          </Button>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nuevo Prospecto
+          </Button>
+        </div>
       </div>
 
       {/* Metrics */}
@@ -1660,6 +1727,86 @@ export default function CRM() {
           }
         }}
       />
+
+      {/* Trash Dialog (Papelera) */}
+      <Dialog open={isTrashDialogOpen} onOpenChange={setIsTrashDialogOpen}>
+        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Papelera
+            </DialogTitle>
+            <DialogDescription>
+              Prospectos eliminados. Puedes restaurarlos o eliminarlos permanentemente.
+            </DialogDescription>
+          </DialogHeader>
+
+          {deletedDeals.length > 0 ? (
+            <div className="space-y-3 py-4">
+              {deletedDeals.map((deal) => (
+                <div
+                  key={deal.id}
+                  className="flex items-center justify-between p-3 rounded-lg border bg-muted/30"
+                >
+                  <div className="flex items-center gap-3">
+                    {deal.logo ? (
+                      <img src={deal.logo} alt="" className="h-10 w-10 rounded-md object-cover" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center">
+                        <Building2 className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium">{deal.name}</p>
+                      {deal.company && (
+                        <p className="text-sm text-muted-foreground">{deal.company}</p>
+                      )}
+                      {deal.deletedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          Eliminado: {new Date(deal.deletedAt).toLocaleDateString('es-CO')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRestoreDeal(deal.id)}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Restaurar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handlePermanentDelete(deal.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Trash2 className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p>La papelera está vacía</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTrashDialogOpen(false)}>
+              Cerrar
+            </Button>
+            {deletedDeals.length > 0 && (
+              <Button variant="destructive" onClick={handleEmptyTrash}>
+                Vaciar Papelera
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

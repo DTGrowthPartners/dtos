@@ -118,8 +118,12 @@ export const getDeals = async (filters?: {
   hasAlerts?: boolean;
   followUpOverdue?: boolean;
   tags?: string[];
+  includeDeleted?: boolean;
 }) => {
-  const where: any = {};
+  const where: any = {
+    // By default, exclude soft-deleted deals
+    deletedAt: filters?.includeDeleted ? undefined : null,
+  };
 
   if (filters?.stageId) {
     where.stageId = filters.stageId;
@@ -554,24 +558,71 @@ export const markAsWon = async (id: string, data: MarkAsWonDto, userId: string) 
 };
 
 export const deleteDeal = async (id: string) => {
+  // Soft delete - just mark as deleted
+  await prisma.deal.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+};
+
+// ==================== Trash Functions ====================
+
+export const getDeletedDeals = async () => {
+  const deals = await prisma.deal.findMany({
+    where: {
+      deletedAt: { not: null },
+    },
+    include: {
+      stage: true,
+      service: {
+        select: { id: true, name: true, icon: true },
+      },
+      owner: {
+        select: { id: true, firstName: true, lastName: true, email: true },
+      },
+    },
+    orderBy: { deletedAt: 'desc' },
+  });
+
+  return deals;
+};
+
+export const restoreDeal = async (id: string) => {
+  const deal = await prisma.deal.update({
+    where: { id },
+    data: { deletedAt: null },
+    include: {
+      stage: true,
+      service: {
+        select: { id: true, name: true, icon: true },
+      },
+    },
+  });
+  return deal;
+};
+
+export const permanentlyDeleteDeal = async (id: string) => {
   // First, get the deal to check if it has a tercero associated
   const deal = await prisma.deal.findUnique({
     where: { id },
-    select: { terceroId: true },
+    select: { terceroId: true, deletedAt: true },
   });
 
-  // Delete the deal (activities and reminders cascade automatically)
-  await prisma.deal.delete({ where: { id } });
+  if (!deal) throw new Error('Deal not found');
+  if (!deal.deletedAt) throw new Error('Deal must be in trash before permanent deletion');
 
-  // If there was an associated tercero that was only a prospecto, optionally clean it up
-  // Note: We keep the tercero as it may be useful for historical purposes
-  // If you want to delete the tercero when deleting the deal, uncomment below:
-  // if (deal?.terceroId) {
-  //   const tercero = await prisma.tercero.findUnique({ where: { id: deal.terceroId } });
-  //   if (tercero && tercero.esProspecto && !tercero.esCliente && !tercero.esProveedor && !tercero.esEmpleado) {
-  //     await prisma.tercero.delete({ where: { id: deal.terceroId } });
-  //   }
-  // }
+  // Permanently delete the deal (activities and reminders cascade automatically)
+  await prisma.deal.delete({ where: { id } });
+};
+
+export const emptyTrash = async () => {
+  // Delete all soft-deleted deals permanently
+  const result = await prisma.deal.deleteMany({
+    where: {
+      deletedAt: { not: null },
+    },
+  });
+  return result.count;
 };
 
 // ==================== Public Lead Capture ====================
@@ -949,6 +1000,10 @@ export default {
   markAsLost,
   markAsWon,
   deleteDeal,
+  getDeletedDeals,
+  restoreDeal,
+  permanentlyDeleteDeal,
+  emptyTrash,
   createPublicLead,
   getActivities,
   createActivity,

@@ -257,6 +257,9 @@ model Deal {
   activities        DealActivity[]
   reminders         DealReminder[]
 
+  // Soft delete
+  deletedAt         DateTime?
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   createdBy         String
