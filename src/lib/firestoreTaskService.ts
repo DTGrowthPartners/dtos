@@ -378,3 +378,31 @@ export const sendTaskNotification = async (params: {
     console.error('Failed to send task notification:', error);
   }
 };
+
+// ============= WHATSAPP WEBHOOK =============
+
+export interface WhatsAppTaskPayload {
+  id: string;
+  titulo: string;
+  descripcion: string;
+  prioridad: string;
+  asignado: string;
+  creador: string;
+  proyecto: string;
+  fechaLimite: string | null;
+}
+
+/**
+ * Envía una tarea de alta prioridad al webhook para notificar via WhatsApp
+ */
+export const sendHighPriorityTaskToWhatsApp = async (params: WhatsAppTaskPayload): Promise<boolean> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; sent: boolean }>('/api/webhook/whatsapp/tasks', params);
+    console.log('[WhatsApp Webhook] Tarea enviada:', response.sent ? 'SI' : 'NO');
+    return response.sent;
+  } catch (error) {
+    // Don't fail the task operation if webhook fails
+    console.error('Failed to send high priority task to WhatsApp webhook:', error);
+    return false;
+  }
+};

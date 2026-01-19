@@ -75,6 +75,7 @@ import {
   permanentlyDeleteCompletedTask,
   permanentlyDeleteTask,
   sendTaskNotification,
+  sendHighPriorityTaskToWhatsApp,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -336,6 +337,21 @@ export default function Tareas() {
             taskId: newTaskId,
             assigneeName: taskData.assignee,
             senderName: user.firstName,
+          });
+        }
+
+        // Send to WhatsApp webhook if high priority
+        if (taskData.priority === Priority.HIGH) {
+          const project = projects.find(p => p.id === taskData.projectId);
+          sendHighPriorityTaskToWhatsApp({
+            id: newTaskId,
+            titulo: taskData.title,
+            descripcion: taskData.description || '',
+            prioridad: 'Alta',
+            asignado: taskData.assignee,
+            creador: taskData.creator,
+            proyecto: project?.name || 'Sin proyecto',
+            fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
           });
         }
 

@@ -14,6 +14,7 @@ import crmRoutes from './routes/crm.routes';
 import tercerosRoutes from './routes/terceros.routes';
 import notificationRoutes from './routes/notification.routes';
 import accountRoutes from './routes/account.routes';
+import webhookRoutes from './routes/webhook.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -49,6 +50,7 @@ app.use('/api/crm', crmRoutes);
 app.use('/api/terceros', tercerosRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/accounts', accountRoutes);
+app.use('/api/webhook', webhookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
