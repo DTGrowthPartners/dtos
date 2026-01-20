@@ -14,9 +14,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { Calendar, Plus, Trash2, Edit2, MapPin, Clock, Users } from 'lucide-react';
+import { Calendar, Plus, Trash2, Edit2, MapPin, Clock, Users, Check } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import { useAuthStore } from '@/lib/auth';
+import { apiClient } from '@/lib/api';
 
 interface CalendarEvent {
   id: string;
@@ -54,6 +55,12 @@ interface Tercero {
   nombre: string;
 }
 
+interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+}
+
 const EVENT_TYPES = [
   { value: 'meeting', label: 'Reunión', color: '#3b82f6' },
   { value: 'call', label: 'Llamada', color: '#22c55e' },
@@ -65,13 +72,14 @@ const EVENT_TYPES = [
 
 const Calendario = () => {
   const { toast } = useToast();
-  const { token } = useAuthStore();
   const calendarRef = useRef<FullCalendar>(null);
 
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [deals, setDeals] = useState<Deal[]>([]);
   const [terceros, setTerceros] = useState<Tercero[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [selectedAttendees, setSelectedAttendees] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -95,24 +103,15 @@ const Calendario = () => {
     reminder: 30,
   });
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-
   // Fetch events
   const fetchEvents = async () => {
     try {
-      const response = await fetch(`${API_URL}/calendar`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error('Error al cargar eventos');
-      const data = await response.json();
-      setEvents(data);
+      const response = await apiClient.get('/calendar');
+      setEvents(response.data || []);
     } catch (error) {
       console.error('Error fetching events:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los eventos',
-        variant: 'destructive',
-      });
+      // Don't show error toast, just set empty events
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -121,13 +120,8 @@ const Calendario = () => {
   // Fetch clients
   const fetchClients = async () => {
     try {
-      const response = await fetch(`${API_URL}/clients`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setClients(data);
-      }
+      const response = await apiClient.get('/clients');
+      setClients(response.data || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
     }
@@ -136,13 +130,8 @@ const Calendario = () => {
   // Fetch deals
   const fetchDeals = async () => {
     try {
-      const response = await fetch(`${API_URL}/crm/deals`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setDeals(data);
-      }
+      const response = await apiClient.get('/crm/deals');
+      setDeals(response.data || []);
     } catch (error) {
       console.error('Error fetching deals:', error);
     }
@@ -151,15 +140,20 @@ const Calendario = () => {
   // Fetch terceros
   const fetchTerceros = async () => {
     try {
-      const response = await fetch(`${API_URL}/terceros`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setTerceros(data);
-      }
+      const response = await apiClient.get('/terceros');
+      setTerceros(response.data || []);
     } catch (error) {
       console.error('Error fetching terceros:', error);
+    }
+  };
+
+  // Fetch users for attendees
+  const fetchUsers = async () => {
+    try {
+      const response = await apiClient.get('/users');
+      setUsers(response.data || []);
+    } catch (error) {
+      console.error('Error fetching users:', error);
     }
   };
 
@@ -168,12 +162,14 @@ const Calendario = () => {
     fetchClients();
     fetchDeals();
     fetchTerceros();
+    fetchUsers();
   }, []);
 
   // Handle date select (create new event)
   const handleDateSelect = (selectInfo: DateSelectArg) => {
     setIsEditing(false);
     setSelectedEvent(null);
+    setSelectedAttendees([]);
 
     const startDate = new Date(selectInfo.start);
     const endDate = new Date(selectInfo.end);
@@ -202,6 +198,7 @@ const Calendario = () => {
     if (event) {
       setIsEditing(true);
       setSelectedEvent(event);
+      setSelectedAttendees([]);
       setFormData({
         title: event.title,
         description: event.description || '',
@@ -225,19 +222,10 @@ const Calendario = () => {
   const handleEventDrop = async (dropInfo: EventDropArg) => {
     const { event } = dropInfo;
     try {
-      const response = await fetch(`${API_URL}/calendar/${event.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          start: event.start?.toISOString(),
-          end: event.end?.toISOString(),
-        }),
+      await apiClient.put(`/calendar/${event.id}`, {
+        start: event.start?.toISOString(),
+        end: event.end?.toISOString(),
       });
-
-      if (!response.ok) throw new Error('Error al actualizar evento');
 
       toast({
         title: 'Evento actualizado',
@@ -267,27 +255,24 @@ const Calendario = () => {
     }
 
     try {
-      const url = isEditing
-        ? `${API_URL}/calendar/${selectedEvent?.id}`
-        : `${API_URL}/calendar`;
+      // Build attendees string from selected users
+      const attendeesStr = selectedAttendees.length > 0
+        ? users.filter(u => selectedAttendees.includes(u.id)).map(u => `${u.firstName} ${u.lastName}`).join(', ')
+        : formData.attendees;
 
-      const method = isEditing ? 'PUT' : 'POST';
+      const eventData = {
+        ...formData,
+        attendees: attendeesStr,
+        clientId: formData.clientId || undefined,
+        dealId: formData.dealId || undefined,
+        terceroId: formData.terceroId || undefined,
+      };
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          ...formData,
-          clientId: formData.clientId || undefined,
-          dealId: formData.dealId || undefined,
-          terceroId: formData.terceroId || undefined,
-        }),
-      });
-
-      if (!response.ok) throw new Error('Error al guardar evento');
+      if (isEditing) {
+        await apiClient.put(`/calendar/${selectedEvent?.id}`, eventData);
+      } else {
+        await apiClient.post('/calendar', eventData);
+      }
 
       toast({
         title: isEditing ? 'Evento actualizado' : 'Evento creado',
@@ -295,8 +280,9 @@ const Calendario = () => {
       });
 
       setDialogOpen(false);
+      setSelectedAttendees([]);
       fetchEvents();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving event:', error);
       toast({
         title: 'Error',
@@ -311,12 +297,7 @@ const Calendario = () => {
     if (!selectedEvent) return;
 
     try {
-      const response = await fetch(`${API_URL}/calendar/${selectedEvent.id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!response.ok) throw new Error('Error al eliminar evento');
+      await apiClient.delete(`/calendar/${selectedEvent.id}`);
 
       toast({
         title: 'Evento eliminado',
@@ -334,6 +315,15 @@ const Calendario = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  // Toggle attendee selection
+  const toggleAttendee = (userId: string) => {
+    setSelectedAttendees(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
   };
 
   // Format date for datetime-local input
@@ -381,6 +371,7 @@ const Calendario = () => {
         <Button onClick={() => {
           setIsEditing(false);
           setSelectedEvent(null);
+          setSelectedAttendees([]);
           const now = new Date();
           const later = new Date(now.getTime() + 60 * 60 * 1000);
           setFormData({
@@ -620,7 +611,38 @@ const Calendario = () => {
 
             {/* Attendees */}
             <div className="space-y-2">
-              <Label htmlFor="attendees">Asistentes</Label>
+              <Label>Asistentes del equipo</Label>
+              <div className="grid grid-cols-2 gap-2 p-3 border rounded-md max-h-32 overflow-y-auto">
+                {users.length > 0 ? (
+                  users.map((user) => (
+                    <div key={user.id} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`attendee-${user.id}`}
+                        checked={selectedAttendees.includes(user.id)}
+                        onCheckedChange={() => toggleAttendee(user.id)}
+                      />
+                      <label
+                        htmlFor={`attendee-${user.id}`}
+                        className="text-sm cursor-pointer"
+                      >
+                        {user.firstName} {user.lastName}
+                      </label>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground col-span-2">No hay usuarios disponibles</p>
+                )}
+              </div>
+              {selectedAttendees.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {selectedAttendees.length} asistente(s) seleccionado(s)
+                </p>
+              )}
+            </div>
+
+            {/* Additional attendees (external) */}
+            <div className="space-y-2">
+              <Label htmlFor="attendees">Otros asistentes (externos)</Label>
               <Input
                 id="attendees"
                 value={formData.attendees}
