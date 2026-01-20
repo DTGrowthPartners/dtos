@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -195,6 +196,7 @@ export default function Tareas() {
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const { toast } = useToast();
   const { user } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Map user firstName to team member name (flexible matching)
   const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
@@ -253,6 +255,34 @@ export default function Tareas() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Handle taskId URL parameter to open task modal
+  useEffect(() => {
+    const taskId = searchParams.get('taskId');
+    if (taskId && tasks.length > 0 && !isLoading) {
+      const task = tasks.find(t => t.id === taskId);
+      if (task) {
+        setEditingTask(task);
+        setDuplicatingTask(null);
+        setFormData({
+          title: task.title,
+          description: task.description || '',
+          status: task.status as TaskStatus,
+          priority: task.priority,
+          assignee: task.assignee,
+          creator: task.creator,
+          projectId: task.projectId,
+          type: task.type || '',
+          dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+          startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
+          images: task.images || [],
+        });
+        setIsDialogOpen(true);
+        // Clear the URL parameter after opening
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [tasks, isLoading, searchParams, setSearchParams]);
 
   const fetchData = async () => {
     try {

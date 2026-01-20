@@ -24,7 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -83,6 +83,7 @@ interface CRMStage {
 export default function Dashboard() {
   const user = authService.getUser();
   const { user: authUser } = useAuthStore();
+  const navigate = useNavigate();
 
   // State for all data
   const [activeClients, setActiveClients] = useState(0);
@@ -763,7 +764,8 @@ export default function Dashboard() {
                 return (
                   <div
                     key={task.id}
-                    className="flex flex-col gap-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors"
+                    className="flex flex-col gap-2 p-3 rounded-lg border hover:bg-muted/50 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/tareas?taskId=${task.id}`)}
                   >
                     <div className="flex items-start gap-2">
                       <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
