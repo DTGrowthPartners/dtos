@@ -12,11 +12,12 @@ import {
   increment,
   getDoc
 } from 'firebase/firestore';
-import type { Task, Project, BoardColumn, PomodoroSession } from '@/types/taskTypes';
+import type { Task, Project, ProjectFolder, BoardColumn, PomodoroSession } from '@/types/taskTypes';
 import { apiClient } from './api';
 
 const TASKS_COLLECTION = 'tasks';
 const PROJECTS_COLLECTION = 'projects';
+const PROJECT_FOLDERS_COLLECTION = 'project_folders';
 const COMPLETED_TASKS_COLLECTION = 'completed_tasks';
 const DELETED_TASKS_COLLECTION = 'deleted_tasks';
 const COLUMNS_COLLECTION = 'board_columns';
@@ -78,6 +79,27 @@ export const deleteProject = async (id: string): Promise<void> => {
 export const updateProjectOrder = async (projectId: string, order: number): Promise<void> => {
   const projectRef = doc(db, PROJECTS_COLLECTION, projectId);
   await updateDoc(projectRef, { order });
+};
+
+// ============= PROJECT FOLDERS =============
+
+export const loadProjectFolders = async (): Promise<ProjectFolder[]> => {
+  const querySnapshot = await getDocs(collection(db, PROJECT_FOLDERS_COLLECTION));
+  return querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as ProjectFolder));
+};
+
+export const createProjectFolder = async (folder: Omit<ProjectFolder, 'id'>): Promise<string> => {
+  const docRef = await addDoc(collection(db, PROJECT_FOLDERS_COLLECTION), folder);
+  return docRef.id;
+};
+
+export const updateProjectFolder = async (id: string, folder: Partial<ProjectFolder>): Promise<void> => {
+  const folderRef = doc(db, PROJECT_FOLDERS_COLLECTION, id);
+  await updateDoc(folderRef, folder);
+};
+
+export const deleteProjectFolder = async (id: string): Promise<void> => {
+  await deleteDoc(doc(db, PROJECT_FOLDERS_COLLECTION, id));
 };
 
 // ============= POMODORO =============

@@ -38,6 +38,9 @@ import {
   Pencil,
   FolderArchive,
   Repeat,
+  Folder,
+  FolderPlus,
+  ChevronDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -90,6 +93,10 @@ import {
   createProject,
   deleteProject,
   updateProject,
+  loadProjectFolders,
+  createProjectFolder,
+  updateProjectFolder,
+  deleteProjectFolder,
   moveTaskToDeleted,
   copyTaskToCompleted,
   addTaskComment,
@@ -105,6 +112,7 @@ import {
 import {
   type Task,
   type Project,
+  type ProjectFolder,
   type TaskComment,
   type RecurrenceConfig,
   type RecurrenceFrequency,
@@ -153,6 +161,15 @@ const isToday = (timestamp: number | undefined) => {
   const taskDate = getDateOnly(timestamp);
   const today = getTodayOnly();
   return taskDate.getTime() === today.getTime();
+};
+
+const isTomorrow = (timestamp: number | undefined) => {
+  if (!timestamp) return false;
+  const taskDate = getDateOnly(timestamp);
+  const today = getTodayOnly();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return taskDate.getTime() === tomorrow.getTime();
 };
 
 const isThisWeek = (timestamp: number | undefined) => {
@@ -258,6 +275,14 @@ export default function Tareas() {
 
   // Archived projects
   const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+
+  // Project Folders
+  const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [isFolderDialogOpen, setIsFolderDialogOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState('');
+  const [newFolderColor, setNewFolderColor] = useState('bg-gray-500');
+  const [editingFolder, setEditingFolder] = useState<ProjectFolder | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Edit project description
   const [editingProjectDescription, setEditingProjectDescription] = useState(false);
@@ -411,11 +436,12 @@ export default function Tareas() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [tasksData, projectsData, archivedData, deletedData] = await Promise.all([
+      const [tasksData, projectsData, archivedData, deletedData, foldersData] = await Promise.all([
         loadTasks(),
         loadProjects(),
         loadCompletedTasks(),
         loadDeletedTasks(),
+        loadProjectFolders(),
       ]);
 
       // Process recurring tasks
@@ -426,6 +452,11 @@ export default function Tareas() {
       setTasks(updatedTasks);
       setArchivedTasks(archivedData);
       setDeletedTasks(deletedData);
+      // Load folders
+      const sortedFolders = foldersData.sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      setFolders(sortedFolders);
+      // Expand all folders by default
+      setExpandedFolders(new Set(sortedFolders.map(f => f.id)));
       // Use loaded projects or default if none exist, sorted by order
       // Separate active and archived projects
       const allProjects = projectsData.length > 0 ? projectsData : DEFAULT_PROJECTS;
@@ -831,6 +862,143 @@ export default function Tareas() {
         variant: 'destructive',
       });
     }
+  };
+
+  // ============= FOLDER HANDLERS =============
+
+  const toggleFolderExpanded = (folderId: string) => {
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(folderId)) {
+        newSet.delete(folderId);
+      } else {
+        newSet.add(folderId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleCreateFolder = async () => {
+    if (!newFolderName.trim()) {
+      toast({
+        title: 'Error',
+        description: 'El nombre de la carpeta es requerido',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const folderId = await createProjectFolder({
+        name: newFolderName.trim(),
+        color: newFolderColor,
+        order: folders.length,
+        expanded: true,
+      });
+      setFolders([...folders, { id: folderId, name: newFolderName.trim(), color: newFolderColor, order: folders.length, expanded: true }]);
+      setExpandedFolders(prev => new Set([...prev, folderId]));
+      setIsFolderDialogOpen(false);
+      setNewFolderName('');
+      setNewFolderColor('bg-gray-500');
+      toast({
+        title: 'Carpeta creada',
+        description: 'La carpeta se creó correctamente',
+      });
+    } catch (error) {
+      console.error('Error creating folder:', error);
+      toast({
+        title: 'Error',
+        description: 'Error al crear la carpeta',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleEditFolder = async () => {
+    if (!editingFolder || !newFolderName.trim()) return;
+
+    try {
+      await updateProjectFolder(editingFolder.id, {
+        name: newFolderName.trim(),
+        color: newFolderColor,
+      });
+      setFolders(prev => prev.map(f =>
+        f.id === editingFolder.id
+          ? { ...f, name: newFolderName.trim(), color: newFolderColor }
+          : f
+      ));
+      setIsFolderDialogOpen(false);
+      setEditingFolder(null);
+      setNewFolderName('');
+      setNewFolderColor('bg-gray-500');
+      toast({
+        title: 'Carpeta actualizada',
+      });
+    } catch (error) {
+      console.error('Error updating folder:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar la carpeta',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteFolder = async (folderId: string) => {
+    // Check if folder has projects
+    const projectsInFolder = projects.filter(p => p.folderId === folderId);
+    if (projectsInFolder.length > 0) {
+      toast({
+        title: 'No se puede eliminar',
+        description: 'La carpeta tiene proyectos. Muévelos primero.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      await deleteProjectFolder(folderId);
+      setFolders(prev => prev.filter(f => f.id !== folderId));
+      toast({
+        title: 'Carpeta eliminada',
+      });
+    } catch (error) {
+      console.error('Error deleting folder:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar la carpeta',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleMoveProjectToFolder = async (projectId: string, folderId: string | null) => {
+    try {
+      await updateProject(projectId, { folderId: folderId || undefined });
+      setProjects(prev => prev.map(p =>
+        p.id === projectId ? { ...p, folderId: folderId || undefined } : p
+      ));
+      toast({
+        title: folderId ? 'Proyecto movido a carpeta' : 'Proyecto sacado de carpeta',
+      });
+    } catch (error) {
+      console.error('Error moving project:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo mover el proyecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Get projects in a folder
+  const getProjectsInFolder = (folderId: string) => {
+    return projects.filter(p => p.folderId === folderId);
+  };
+
+  // Get projects without folder
+  const getProjectsWithoutFolder = () => {
+    return projects.filter(p => !p.folderId);
   };
 
   const handleEdit = (task: Task) => {
@@ -1618,14 +1786,34 @@ export default function Tareas() {
                   <FolderOpen className="h-4 w-4" />
                   Proyectos
                 </h3>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  onClick={() => setIsProjectDialogOpen(true)}
-                >
-                  <Plus className="h-3 w-3" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Tooltip delayDuration={0}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6"
+                        onClick={() => {
+                          setEditingFolder(null);
+                          setNewFolderName('');
+                          setNewFolderColor('bg-gray-500');
+                          setIsFolderDialogOpen(true);
+                        }}
+                      >
+                        <FolderPlus className="h-3 w-3" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Nueva carpeta</TooltipContent>
+                  </Tooltip>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6"
+                    onClick={() => setIsProjectDialogOpen(true)}
+                  >
+                    <Plus className="h-3 w-3" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-1 overflow-y-auto flex-1">
                 <button
@@ -1642,7 +1830,128 @@ export default function Tareas() {
                   </div>
                   <span className="text-xs opacity-70">{filteredTasks.length}</span>
                 </button>
-                {projects.map((project) => {
+
+                {/* Folders with nested projects */}
+                {folders.map((folder) => {
+                  const folderProjects = getProjectsInFolder(folder.id);
+                  const isExpanded = expandedFolders.has(folder.id);
+                  const folderTaskCount = folderProjects.reduce((sum, p) => sum + getTaskCountByProject(p.id), 0);
+
+                  return (
+                    <div key={folder.id} className="space-y-0.5">
+                      {/* Folder header */}
+                      <div className="group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors">
+                        <button
+                          onClick={() => toggleFolderExpanded(folder.id)}
+                          className="flex items-center gap-2 flex-1 min-w-0"
+                        >
+                          <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                          <Folder className={`h-3 w-3 flex-shrink-0 ${folder.color.replace('bg-', 'text-')}`} />
+                          <span className="truncate font-medium">{folder.name}</span>
+                        </button>
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs opacity-70">{folderTaskCount}</span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity"
+                              >
+                                <MoreVertical className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40">
+                              <DropdownMenuItem onClick={() => {
+                                setEditingFolder(folder);
+                                setNewFolderName(folder.name);
+                                setNewFolderColor(folder.color);
+                                setIsFolderDialogOpen(true);
+                              }}>
+                                <Pencil className="h-3 w-3 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => handleDeleteFolder(folder.id)}
+                                className="text-destructive"
+                              >
+                                <Trash2 className="h-3 w-3 mr-2" />
+                                Eliminar
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+
+                      {/* Projects inside folder */}
+                      {isExpanded && folderProjects.map((project) => {
+                        const count = getTaskCountByProject(project.id);
+                        return (
+                          <div
+                            key={project.id}
+                            draggable={true}
+                            onDragStart={(e) => handleProjectDragStart(e, project.id)}
+                            onDragEnd={handleProjectDragEnd}
+                            onDragOver={handleProjectDragOver}
+                            onDrop={(e) => handleProjectDrop(e, project.id)}
+                            className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${
+                              filterProject === project.id
+                                ? 'bg-primary text-primary-foreground'
+                                : 'hover:bg-muted'
+                            } ${draggedProject === project.id ? 'opacity-50' : ''}`}
+                          >
+                            <button
+                              onClick={() => setFilterProject(project.id)}
+                              className="flex items-center gap-2 flex-1 min-w-0"
+                              draggable={false}
+                            >
+                              <GripVertical className={`h-3 w-3 flex-shrink-0 ${filterProject === project.id ? 'text-primary-foreground/50' : 'text-muted-foreground/50'}`} />
+                              <div className={`w-3 h-3 rounded-full ${project.color} flex-shrink-0`}></div>
+                              <span className="truncate">{project.name}</span>
+                            </button>
+                            <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                              <span className="text-xs opacity-70">{count}</span>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${
+                                      filterProject === project.id
+                                        ? 'hover:bg-primary-foreground/20 text-primary-foreground'
+                                        : 'hover:bg-muted'
+                                    }`}
+                                    draggable={false}
+                                  >
+                                    <MoreVertical className="h-3 w-3" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  <DropdownMenuItem onClick={() => handleEditProject(project)}>
+                                    <Pencil className="h-3 w-3 mr-2" />
+                                    Editar
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleMoveProjectToFolder(project.id, null)}>
+                                    <ArrowRight className="h-3 w-3 mr-2" />
+                                    Sacar de carpeta
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
+                                    <FolderArchive className="h-3 w-3 mr-2" />
+                                    Archivar
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+
+                {/* Projects without folder */}
+                {getProjectsWithoutFolder().map((project) => {
                   const count = getTaskCountByProject(project.id);
                   return (
                     <div
@@ -1683,11 +1992,26 @@ export default function Tareas() {
                               <MoreVertical className="h-3 w-3" />
                             </button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuContent align="end" className="w-48">
                             <DropdownMenuItem onClick={() => handleEditProject(project)}>
                               <Pencil className="h-3 w-3 mr-2" />
                               Editar
                             </DropdownMenuItem>
+                            {folders.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                {folders.map(folder => (
+                                  <DropdownMenuItem
+                                    key={folder.id}
+                                    onClick={() => handleMoveProjectToFolder(project.id, folder.id)}
+                                  >
+                                    <Folder className={`h-3 w-3 mr-2 ${folder.color.replace('bg-', 'text-')}`} />
+                                    Mover a {folder.name}
+                                  </DropdownMenuItem>
+                                ))}
+                              </>
+                            )}
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
                               <FolderArchive className="h-3 w-3 mr-2" />
                               Archivar
@@ -2383,6 +2707,10 @@ export default function Tareas() {
                                 <Calendar className="h-3 w-3" />
                                 {isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? (
                                   <span>{getDaysOverdue(task.dueDate)}d vencida</span>
+                                ) : isToday(task.dueDate) ? (
+                                  'Hoy'
+                                ) : isTomorrow(task.dueDate) ? (
+                                  'Mañana'
                                 ) : (
                                   new Date(task.dueDate).toLocaleDateString('es-ES', {
                                     day: '2-digit',
@@ -3158,6 +3486,54 @@ export default function Tareas() {
               Cancelar
             </Button>
             <Button onClick={handleSaveEditProject}>Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Folder Dialog */}
+      <Dialog open={isFolderDialogOpen} onOpenChange={setIsFolderDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>{editingFolder ? 'Editar Carpeta' : 'Nueva Carpeta'}</DialogTitle>
+            <DialogDescription>
+              {editingFolder ? 'Modifica el nombre y color de la carpeta' : 'Crea una carpeta para agrupar proyectos relacionados (ej: proyectos del mismo cliente)'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nombre de la carpeta</Label>
+              <Input
+                placeholder="Ej: Cliente XYZ"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex flex-wrap gap-2">
+                {['bg-gray-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-orange-500', 'bg-red-500', 'bg-purple-500', 'bg-pink-500'].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`w-8 h-8 rounded-full ${color} ${newFolderColor === color ? 'ring-2 ring-offset-2 ring-primary' : ''}`}
+                    onClick={() => setNewFolderColor(color)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setIsFolderDialogOpen(false);
+              setEditingFolder(null);
+              setNewFolderName('');
+              setNewFolderColor('bg-gray-500');
+            }}>
+              Cancelar
+            </Button>
+            <Button onClick={editingFolder ? handleEditFolder : handleCreateFolder}>
+              {editingFolder ? 'Guardar' : 'Crear'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

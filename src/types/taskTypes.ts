@@ -61,6 +61,14 @@ export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Edgardo', role: 'Dev', initials: 'EM', color: 'bg-blue-500' },
 ];
 
+export interface ProjectFolder {
+  id: string;
+  name: string;
+  color: string;
+  order?: number;
+  expanded?: boolean; // Whether folder is expanded in UI
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -69,6 +77,7 @@ export interface Project {
   description?: string;
   chatLink?: string; // Link al grupo de WhatsApp u otro canal de comunicacion
   archived?: boolean;
+  folderId?: string; // ID of parent folder (for grouping projects)
 }
 
 export interface BoardColumn {
