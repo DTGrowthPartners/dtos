@@ -162,7 +162,9 @@ const isOverdue = (timestamp: number | undefined) => {
   if (!timestamp) return false;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  return new Date(timestamp) < today;
+  const dueDate = new Date(timestamp);
+  dueDate.setHours(0, 0, 0, 0);
+  return dueDate < today;
 };
 
 const getDaysOverdue = (timestamp: number | undefined) => {
@@ -1269,20 +1271,23 @@ export default function Tareas() {
     }).length;
   };
 
-  // Get counts for date filters (only active, non-completed tasks)
+  // Get counts for date filters (only active, non-completed tasks, respecting current filters)
   const getDateFilterCounts = () => {
     const activeTasks = tasks.filter(t => {
       const isUserTask = loggedUserName
         ? (t.assignee === loggedUserName || t.creator === loggedUserName)
         : true;
-      return isUserTask && t.status !== TaskStatus.DONE;
+      const matchesProject = filterProject === 'all' || t.projectId === filterProject;
+      const matchesAssignee = filterAssignee === 'all' || t.assignee === filterAssignee;
+      const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
+      return isUserTask && t.status !== TaskStatus.DONE && matchesProject && matchesAssignee && matchesPriority;
     });
 
     return {
       today: activeTasks.filter(t => isToday(t.dueDate)).length,
       week: activeTasks.filter(t => isThisWeek(t.dueDate)).length,
       month: activeTasks.filter(t => isThisMonth(t.dueDate)).length,
-      overdue: activeTasks.filter(t => isOverdue(t.dueDate) && t.status !== TaskStatus.DONE).length,
+      overdue: activeTasks.filter(t => isOverdue(t.dueDate)).length,
       all: activeTasks.length,
     };
   };
