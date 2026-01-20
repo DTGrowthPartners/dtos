@@ -340,58 +340,119 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         </div>
       </div>
 
-      {/* Category Breakdown Chart */}
+      {/* Category Breakdown - Custom Bar Style */}
       <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="font-semibold text-foreground mb-4">Desglose por Categoría - {currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1)}</h3>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart
-              data={comparisonData}
-              layout="vertical"
-              margin={{ top: 10, right: 30, left: 100, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                type="number"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={10}
-                tickLine={false}
-                tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
-              />
-              <YAxis
-                type="category"
-                dataKey="category"
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={10}
-                tickLine={false}
-                width={100}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-                formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'presupuesto' ? 'Presupuesto' : 'Real']}
-                labelFormatter={(label) => comparisonData.find(d => d.category === label)?.fullCategory || label}
-              />
-              <Legend />
-              <Bar dataKey="presupuesto" name="Presupuesto" fill="hsl(var(--muted-foreground))" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="real" name="Real" radius={[0, 4, 4, 0]}>
-                {comparisonData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={
-                      entry.status === 'over' ? 'hsl(var(--destructive))' :
-                      entry.status === 'warning' ? 'hsl(var(--warning))' :
-                      'hsl(var(--success))'
-                    }
+        <div className="space-y-3">
+          {/* Header */}
+          <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b border-border">
+            <div className="col-span-4">Categoría</div>
+            <div className="col-span-5 text-center">Gastado</div>
+            <div className="col-span-3 text-right">Presupuestado</div>
+          </div>
+
+          {/* Rows */}
+          {comparisonData.map((row, index) => {
+            const percentCapped = Math.min(row.percentUsed, 100);
+            return (
+              <div key={index} className="grid grid-cols-12 gap-2 items-center py-1">
+                {/* Category Name */}
+                <div className="col-span-4 text-sm text-foreground truncate" title={row.fullCategory}>
+                  {row.fullCategory}
+                </div>
+
+                {/* Bar + Value + Percentage */}
+                <div className="col-span-5 flex items-center gap-2">
+                  {/* Progress Bar Container */}
+                  <div className="flex-1 relative">
+                    <div className="h-6 bg-muted/50 rounded overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded transition-all duration-300",
+                          row.status === 'over' ? "bg-red-400" :
+                          row.status === 'warning' ? "bg-yellow-400" :
+                          "bg-yellow-400"
+                        )}
+                        style={{ width: `${percentCapped}%` }}
+                      />
+                    </div>
+                    {/* Value inside bar */}
+                    <div className="absolute inset-0 flex items-center px-2">
+                      <span className="text-xs font-medium text-foreground">
+                        {row.real >= 1000000
+                          ? `${(row.real / 1000000).toFixed(1).replace('.0', '')}M`
+                          : row.real >= 1000
+                            ? `${(row.real / 1000).toFixed(0)}K`
+                            : row.real.toLocaleString()
+                        }
+                      </span>
+                    </div>
+                  </div>
+                  {/* Percentage */}
+                  <span className={cn(
+                    "text-xs font-medium w-10 text-right",
+                    row.status === 'over' ? "text-destructive" :
+                    row.status === 'warning' ? "text-warning" :
+                    "text-muted-foreground"
+                  )}>
+                    {Math.round(row.percentUsed)}%
+                  </span>
+                </div>
+
+                {/* Budget */}
+                <div className="col-span-3 text-sm text-right text-muted-foreground">
+                  {row.presupuesto >= 1000000
+                    ? `${(row.presupuesto / 1000000).toFixed(1).replace('.0', '')}M`
+                    : row.presupuesto >= 1000
+                      ? `${(row.presupuesto / 1000).toFixed(0)}K`
+                      : row.presupuesto.toLocaleString()
+                  }
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Total Row */}
+          <div className="grid grid-cols-12 gap-2 items-center py-2 mt-2 border-t-2 border-border font-bold">
+            <div className="col-span-4 text-sm text-foreground">TOTAL</div>
+            <div className="col-span-5 flex items-center gap-2">
+              <div className="flex-1 relative">
+                <div className="h-6 bg-muted/50 rounded overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full rounded transition-all duration-300",
+                      totals.percentUsed > 100 ? "bg-red-400" :
+                      totals.percentUsed > 80 ? "bg-yellow-400" :
+                      "bg-green-400"
+                    )}
+                    style={{ width: `${Math.min(totals.percentUsed, 100)}%` }}
                   />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+                </div>
+                <div className="absolute inset-0 flex items-center px-2">
+                  <span className="text-xs font-bold text-foreground">
+                    {totals.actualTotal >= 1000000
+                      ? `${(totals.actualTotal / 1000000).toFixed(1)}M`
+                      : `${(totals.actualTotal / 1000).toFixed(0)}K`
+                    }
+                  </span>
+                </div>
+              </div>
+              <span className={cn(
+                "text-xs font-bold w-10 text-right",
+                totals.percentUsed > 100 ? "text-destructive" :
+                totals.percentUsed > 80 ? "text-warning" :
+                "text-success"
+              )}>
+                {Math.round(totals.percentUsed)}%
+              </span>
+            </div>
+            <div className="col-span-3 text-sm text-right text-muted-foreground">
+              {totals.budgetTotal >= 1000000
+                ? `${(totals.budgetTotal / 1000000).toFixed(1)}M`
+                : `${(totals.budgetTotal / 1000).toFixed(0)}K`
+              }
+            </div>
+          </div>
         </div>
       </div>
 
