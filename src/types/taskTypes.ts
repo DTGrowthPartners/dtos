@@ -151,6 +151,10 @@ export interface Task {
   currentPomodoroTime?: number;
   pomodoroStatus?: 'idle' | 'running' | 'paused' | 'break';
   deletedAt?: number;
+  // Recurrence fields
+  recurrence?: RecurrenceConfig;
+  isRecurringInstance?: boolean; // true if this task was generated from a recurring template
+  recurringTemplateId?: string; // ID of the original recurring task template
 }
 
 export interface PomodoroSession {
@@ -171,6 +175,25 @@ export interface PomodoroConfig {
   autoStartBreak: boolean;
   soundEnabled: boolean;
 }
+
+// Recurrence types
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+export interface RecurrenceConfig {
+  enabled: boolean;
+  frequency: RecurrenceFrequency;
+  dayOfWeek?: number; // 0-6 for weekly (0 = Sunday)
+  dayOfMonth?: number; // 1-31 for monthly
+  nextOccurrence?: number; // timestamp of next occurrence
+  lastGenerated?: number; // timestamp when last task was generated
+}
+
+export const RECURRENCE_OPTIONS: { value: RecurrenceFrequency; label: string }[] = [
+  { value: 'daily', label: 'Diaria' },
+  { value: 'weekly', label: 'Semanal' },
+  { value: 'biweekly', label: 'Quincenal' },
+  { value: 'monthly', label: 'Mensual' },
+];
 
 export type NewTask = Omit<Task, 'id' | 'createdAt'>;
 export type NewProject = Omit<Project, 'id'>;

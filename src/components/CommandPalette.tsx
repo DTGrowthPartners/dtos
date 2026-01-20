@@ -48,9 +48,9 @@ export function CommandPalette() {
     {
       id: 'action-new-task',
       label: 'Nueva Tarea',
-      description: 'Ir a tareas para crear una nueva',
+      description: 'Abrir formulario de nueva tarea',
       icon: <Plus className="h-4 w-4" />,
-      action: () => navigate('/tareas'),
+      action: () => navigate('/tareas?action=new'),
       category: 'actions',
       keywords: ['crear', 'agregar', 'task', 'nueva'],
       shortcut: 'Ctrl+Q',
@@ -205,7 +205,7 @@ export function CommandPalette() {
     // Quick action: Ctrl+Q to go to tasks (new task)
     if ((e.ctrlKey || e.metaKey) && e.key === 'q') {
       e.preventDefault();
-      navigate('/tareas');
+      navigate('/tareas?action=new');
       return;
     }
 

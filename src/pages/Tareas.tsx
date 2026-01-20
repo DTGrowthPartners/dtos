@@ -37,12 +37,14 @@ import {
   MoreVertical,
   Pencil,
   FolderArchive,
+  Repeat,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Card } from '@/components/ui/card';
 import {
   Select,
@@ -104,12 +106,15 @@ import {
   type Task,
   type Project,
   type TaskComment,
+  type RecurrenceConfig,
+  type RecurrenceFrequency,
   TaskStatus,
   Priority,
   TASK_TYPES,
   TEAM_MEMBERS,
   DEFAULT_COLUMNS,
   DEFAULT_PROJECTS,
+  RECURRENCE_OPTIONS,
   type TaskType,
   type TeamMemberName,
 } from '@/types/taskTypes';
@@ -268,6 +273,11 @@ export default function Tareas() {
     dueDate: '',
     startDate: '',
     images: [] as string[],
+    // Recurrence fields
+    isRecurring: false,
+    recurrenceFrequency: 'weekly' as RecurrenceFrequency,
+    recurrenceDayOfWeek: 1, // Monday by default
+    recurrenceDayOfMonth: 1,
   });
 
   const [uploading, setUploading] = useState(false);
@@ -277,9 +287,20 @@ export default function Tareas() {
     fetchData();
   }, []);
 
-  // Handle taskId URL parameter to open task modal
+  // Handle URL parameters (taskId to edit, action=new to create)
   useEffect(() => {
     const taskId = searchParams.get('taskId');
+    const action = searchParams.get('action');
+
+    // Handle action=new to open new task modal
+    if (action === 'new' && !isLoading) {
+      resetForm();
+      setIsDialogOpen(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+
+    // Handle taskId to edit existing task
     if (taskId && tasks.length > 0 && !isLoading) {
       const task = tasks.find(t => t.id === taskId);
       if (task) {
@@ -297,6 +318,10 @@ export default function Tareas() {
           dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
           startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
           images: task.images || [],
+          isRecurring: task.recurrence?.enabled || false,
+          recurrenceFrequency: task.recurrence?.frequency || 'weekly',
+          recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
+          recurrenceDayOfMonth: task.recurrence?.dayOfMonth ?? 1,
         });
         setIsDialogOpen(true);
         // Clear the URL parameter after opening
@@ -304,6 +329,78 @@ export default function Tareas() {
       }
     }
   }, [tasks, isLoading, searchParams, setSearchParams]);
+
+  // Process recurring tasks and create new instances if needed
+  const processRecurringTasks = async (tasksData: Task[]) => {
+    const now = Date.now();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayTimestamp = today.getTime();
+
+    for (const task of tasksData) {
+      if (task.recurrence?.enabled && task.recurrence.nextOccurrence) {
+        // Check if it's time to create a new instance
+        if (task.recurrence.nextOccurrence <= todayTimestamp) {
+          try {
+            // Create new task instance
+            const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
+              title: task.title,
+              description: task.description,
+              status: TaskStatus.TODO,
+              priority: task.priority,
+              assignee: task.assignee,
+              creator: task.creator,
+              projectId: task.projectId,
+              type: task.type,
+              dueDate: task.recurrence.nextOccurrence,
+              isRecurringInstance: true,
+              recurringTemplateId: task.id,
+            };
+
+            await createTask(newTaskData);
+
+            // Calculate next occurrence
+            let nextOccurrence: number;
+            const currentOccurrence = new Date(task.recurrence.nextOccurrence);
+
+            switch (task.recurrence.frequency) {
+              case 'daily':
+                currentOccurrence.setDate(currentOccurrence.getDate() + 1);
+                nextOccurrence = currentOccurrence.getTime();
+                break;
+              case 'weekly':
+                currentOccurrence.setDate(currentOccurrence.getDate() + 7);
+                nextOccurrence = currentOccurrence.getTime();
+                break;
+              case 'biweekly':
+                currentOccurrence.setDate(currentOccurrence.getDate() + 14);
+                nextOccurrence = currentOccurrence.getTime();
+                break;
+              case 'monthly':
+                currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
+                nextOccurrence = currentOccurrence.getTime();
+                break;
+              default:
+                nextOccurrence = currentOccurrence.getTime();
+            }
+
+            // Update the template task with new next occurrence
+            await updateTask(task.id, {
+              recurrence: {
+                ...task.recurrence,
+                nextOccurrence,
+                lastGenerated: now,
+              },
+            });
+
+            console.log(`[Recurrence] Created recurring task instance for: ${task.title}`);
+          } catch (error) {
+            console.error(`[Recurrence] Error processing recurring task ${task.id}:`, error);
+          }
+        }
+      }
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -314,7 +411,13 @@ export default function Tareas() {
         loadCompletedTasks(),
         loadDeletedTasks(),
       ]);
-      setTasks(tasksData);
+
+      // Process recurring tasks
+      await processRecurringTasks(tasksData);
+
+      // Reload tasks after processing recurring ones
+      const updatedTasks = await loadTasks();
+      setTasks(updatedTasks);
       setArchivedTasks(archivedData);
       setDeletedTasks(deletedData);
       // Use loaded projects or default if none exist, sorted by order
@@ -361,6 +464,47 @@ export default function Tareas() {
 
     setIsSaving(true);
 
+    // Calculate next occurrence for recurring tasks
+    const calculateNextOccurrence = (): number => {
+      const now = new Date();
+      now.setHours(9, 0, 0, 0); // Default to 9 AM
+
+      switch (formData.recurrenceFrequency) {
+        case 'daily':
+          // Next day
+          const tomorrow = new Date(now);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          return tomorrow.getTime();
+
+        case 'weekly':
+        case 'biweekly':
+          // Find next occurrence of the selected day
+          const targetDay = formData.recurrenceDayOfWeek;
+          const currentDay = now.getDay();
+          let daysUntilTarget = targetDay - currentDay;
+          if (daysUntilTarget <= 0) daysUntilTarget += 7;
+          if (formData.recurrenceFrequency === 'biweekly' && daysUntilTarget === 7) {
+            daysUntilTarget += 7;
+          }
+          const nextWeekday = new Date(now);
+          nextWeekday.setDate(now.getDate() + daysUntilTarget);
+          return nextWeekday.getTime();
+
+        case 'monthly':
+          // Find next occurrence of the selected day of month
+          const targetDayOfMonth = formData.recurrenceDayOfMonth;
+          const nextMonth = new Date(now);
+          if (now.getDate() >= targetDayOfMonth) {
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+          }
+          nextMonth.setDate(targetDayOfMonth);
+          return nextMonth.getTime();
+
+        default:
+          return now.getTime();
+      }
+    };
+
     const taskData = {
       title: formData.title.trim(),
       description: formData.description.trim(),
@@ -373,6 +517,14 @@ export default function Tareas() {
       dueDate: formData.dueDate ? new Date(formData.dueDate).getTime() : undefined,
       startDate: formData.startDate ? new Date(formData.startDate).getTime() : undefined,
       images: formData.images,
+      recurrence: formData.isRecurring ? {
+        enabled: true,
+        frequency: formData.recurrenceFrequency,
+        dayOfWeek: formData.recurrenceDayOfWeek,
+        dayOfMonth: formData.recurrenceDayOfMonth,
+        nextOccurrence: calculateNextOccurrence(),
+        lastGenerated: Date.now(),
+      } : undefined,
     };
 
     try {
@@ -683,6 +835,10 @@ export default function Tareas() {
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
       startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
       images: task.images || [],
+      isRecurring: task.recurrence?.enabled || false,
+      recurrenceFrequency: task.recurrence?.frequency || 'weekly',
+      recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
+      recurrenceDayOfMonth: task.recurrence?.dayOfMonth ?? 1,
     });
     setIsDialogOpen(true);
   };
@@ -702,6 +858,10 @@ export default function Tareas() {
       dueDate: '',
       startDate: '',
       images: task.images || [],
+      isRecurring: false,
+      recurrenceFrequency: 'weekly',
+      recurrenceDayOfWeek: 1,
+      recurrenceDayOfMonth: 1,
     });
     setIsDialogOpen(true);
   };
@@ -860,6 +1020,10 @@ export default function Tareas() {
       dueDate: '',
       startDate: '',
       images: [],
+      isRecurring: false,
+      recurrenceFrequency: 'weekly',
+      recurrenceDayOfWeek: 1,
+      recurrenceDayOfMonth: 1,
     });
     setEditingTask(null);
     setDuplicatingTask(null);
@@ -2775,6 +2939,116 @@ export default function Tareas() {
                     disabled={isSaving}
                   />
                 </div>
+              </div>
+
+              {/* Recurrence Section */}
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="recurrence-toggle" className="font-medium">Tarea recurrente</Label>
+                  </div>
+                  <Switch
+                    id="recurrence-toggle"
+                    checked={formData.isRecurring}
+                    onCheckedChange={(checked) => setFormData({ ...formData, isRecurring: checked })}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                {formData.isRecurring && (
+                  <div className="space-y-4 pt-2">
+                    <div className="space-y-2">
+                      <Label>Frecuencia</Label>
+                      <Select
+                        value={formData.recurrenceFrequency}
+                        onValueChange={(value) => setFormData({ ...formData, recurrenceFrequency: value as RecurrenceFrequency })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {RECURRENCE_OPTIONS.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {formData.recurrenceFrequency === 'weekly' && (
+                      <div className="space-y-2">
+                        <Label>Día de la semana</Label>
+                        <Select
+                          value={String(formData.recurrenceDayOfWeek)}
+                          onValueChange={(value) => setFormData({ ...formData, recurrenceDayOfWeek: parseInt(value) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Domingo</SelectItem>
+                            <SelectItem value="1">Lunes</SelectItem>
+                            <SelectItem value="2">Martes</SelectItem>
+                            <SelectItem value="3">Miércoles</SelectItem>
+                            <SelectItem value="4">Jueves</SelectItem>
+                            <SelectItem value="5">Viernes</SelectItem>
+                            <SelectItem value="6">Sábado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {formData.recurrenceFrequency === 'biweekly' && (
+                      <div className="space-y-2">
+                        <Label>Día de la semana</Label>
+                        <Select
+                          value={String(formData.recurrenceDayOfWeek)}
+                          onValueChange={(value) => setFormData({ ...formData, recurrenceDayOfWeek: parseInt(value) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">Domingo</SelectItem>
+                            <SelectItem value="1">Lunes</SelectItem>
+                            <SelectItem value="2">Martes</SelectItem>
+                            <SelectItem value="3">Miércoles</SelectItem>
+                            <SelectItem value="4">Jueves</SelectItem>
+                            <SelectItem value="5">Viernes</SelectItem>
+                            <SelectItem value="6">Sábado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {formData.recurrenceFrequency === 'monthly' && (
+                      <div className="space-y-2">
+                        <Label>Día del mes</Label>
+                        <Select
+                          value={String(formData.recurrenceDayOfMonth)}
+                          onValueChange={(value) => setFormData({ ...formData, recurrenceDayOfMonth: parseInt(value) })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                              <SelectItem key={day} value={String(day)}>
+                                Día {day}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    <p className="text-xs text-muted-foreground">
+                      La tarea se creará automáticamente en la fecha especificada según la frecuencia seleccionada.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
