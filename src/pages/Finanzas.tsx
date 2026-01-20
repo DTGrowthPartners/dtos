@@ -85,6 +85,26 @@ interface FinanceResponse {
   gastos: Transaction[];
 }
 
+// Helper function to format currency in a compact way
+const formatCompactCurrency = (value: number): string => {
+  const absValue = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+
+  if (absValue >= 1000000) {
+    // 1M+ -> show as X.XM
+    return `${sign}$${(absValue / 1000000).toFixed(1)}M`;
+  } else if (absValue >= 10000) {
+    // 10K+ -> show as XK (no decimal)
+    return `${sign}$${Math.round(absValue / 1000)}K`;
+  } else if (absValue >= 1000) {
+    // 1K-10K -> show as X.XK
+    return `${sign}$${(absValue / 1000).toFixed(1)}K`;
+  } else {
+    // Less than 1K -> show full number
+    return `${sign}$${Math.round(absValue).toLocaleString()}`;
+  }
+};
+
 export default function Finanzas() {
   const [activeTab, setActiveTab] = useState<string>('resumen');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
@@ -859,11 +879,11 @@ export default function Finanzas() {
           <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.today.income / 1000).toFixed(0)}k</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.today.income)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.today.expenses / 1000).toFixed(0)}k</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.today.expenses)}</span>
             </div>
           </div>
         </button>
@@ -883,11 +903,11 @@ export default function Finanzas() {
           <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.week.income / 1000).toFixed(0)}k</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.week.income)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.week.expenses / 1000).toFixed(0)}k</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.week.expenses)}</span>
             </div>
           </div>
         </button>
@@ -909,11 +929,11 @@ export default function Finanzas() {
           <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.month.income / 1000000).toFixed(1)}M</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.month.income)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.month.expenses / 1000000).toFixed(1)}M</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.month.expenses)}</span>
             </div>
           </div>
         </button>
@@ -933,11 +953,11 @@ export default function Finanzas() {
           <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">${(periodTotals.year.income / 1000000).toFixed(1)}M</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.year.income)}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">${(periodTotals.year.expenses / 1000000).toFixed(1)}M</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.year.expenses)}</span>
             </div>
           </div>
         </button>
@@ -951,10 +971,10 @@ export default function Finanzas() {
               <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
                 Ingresos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
-              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">${(displayIncome / 1000000).toFixed(1)}M</p>
+              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayIncome)}</p>
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: ${(totalIncome / 1000000).toFixed(1)}M
+                  Total: {formatCompactCurrency(totalIncome)}
                 </p>
               )}
             </div>
@@ -970,10 +990,10 @@ export default function Finanzas() {
               <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
                 Gastos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
-              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">${(displayExpenses / 1000000).toFixed(1)}M</p>
+              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayExpenses)}</p>
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: ${(totalExpenses / 1000000).toFixed(1)}M
+                  Total: {formatCompactCurrency(totalExpenses)}
                 </p>
               )}
             </div>
@@ -990,7 +1010,7 @@ export default function Finanzas() {
                 Beneficio {hasActiveFilters ? '(Filt.)' : ''}
               </p>
               <p className={cn("text-base sm:text-2xl font-bold mt-0.5 sm:mt-1", netProfit >= 0 ? "text-success" : "text-destructive")}>
-                ${(netProfit / 1000000).toFixed(1)}M
+                {formatCompactCurrency(netProfit)}
               </p>
               <p className={cn("text-[10px] sm:text-sm mt-1 sm:mt-2", profitMargin >= 0 ? "text-success" : "text-destructive")}>
                 {profitMargin.toFixed(1)}% margen
@@ -1069,7 +1089,7 @@ export default function Finanzas() {
                   fontSize={10}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
+                  tickFormatter={(value) => formatCompactCurrency(value)}
                   width={45}
                 />
                 <Tooltip
