@@ -34,6 +34,9 @@ import {
   GripVertical,
   Flag,
   ArrowRight,
+  MoreVertical,
+  Pencil,
+  FolderArchive,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -66,6 +69,13 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { convertImageToBase64, validateImage } from '@/lib/imageService';
 import ImageModal from '@/components/ImageModal';
@@ -227,6 +237,15 @@ export default function Tareas() {
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectColor, setNewProjectColor] = useState('bg-indigo-500');
 
+  // Edit project state
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editProjectName, setEditProjectName] = useState('');
+  const [editProjectColor, setEditProjectColor] = useState('');
+  const [isEditProjectDialogOpen, setIsEditProjectDialogOpen] = useState(false);
+
+  // Archived projects
+  const [archivedProjects, setArchivedProjects] = useState<Project[]>([]);
+
   // Edit project description
   const [editingProjectDescription, setEditingProjectDescription] = useState(false);
   const [projectDescriptionDraft, setProjectDescriptionDraft] = useState('');
@@ -297,10 +316,16 @@ export default function Tareas() {
       setArchivedTasks(archivedData);
       setDeletedTasks(deletedData);
       // Use loaded projects or default if none exist, sorted by order
-      const sortedProjects = projectsData.length > 0
-        ? [...projectsData].sort((a, b) => (a.order ?? 999) - (b.order ?? 999))
-        : DEFAULT_PROJECTS;
-      setProjects(sortedProjects);
+      // Separate active and archived projects
+      const allProjects = projectsData.length > 0 ? projectsData : DEFAULT_PROJECTS;
+      const sortedActiveProjects = allProjects
+        .filter(p => !p.archived)
+        .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      const sortedArchivedProjects = allProjects
+        .filter(p => p.archived)
+        .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+      setProjects(sortedActiveProjects);
+      setArchivedProjects(sortedArchivedProjects);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -549,6 +574,95 @@ export default function Tareas() {
     } finally {
       setIsDeletingProject(false);
       setDeleteProjectDialog({ open: false, projectId: null, projectName: '', taskCount: 0 });
+    }
+  };
+
+  // Edit project
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project);
+    setEditProjectName(project.name);
+    setEditProjectColor(project.color);
+    setIsEditProjectDialogOpen(true);
+  };
+
+  const handleSaveEditProject = async () => {
+    if (!editingProject || !editProjectName.trim()) return;
+
+    try {
+      await updateProject(editingProject.id, {
+        name: editProjectName.trim(),
+        color: editProjectColor,
+      });
+      setProjects(prev => prev.map(p =>
+        p.id === editingProject.id
+          ? { ...p, name: editProjectName.trim(), color: editProjectColor }
+          : p
+      ));
+      setIsEditProjectDialogOpen(false);
+      setEditingProject(null);
+      toast({
+        title: 'Proyecto actualizado',
+        description: 'El proyecto se actualizó correctamente',
+      });
+    } catch (error) {
+      console.error('Error updating project:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el proyecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Archive project
+  const handleArchiveProject = async (projectId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    try {
+      await updateProject(projectId, { archived: true });
+      setProjects(prev => prev.filter(p => p.id !== projectId));
+      setArchivedProjects(prev => [...prev, { ...project, archived: true }]);
+
+      if (filterProject === projectId) {
+        setFilterProject('all');
+      }
+
+      toast({
+        title: 'Proyecto archivado',
+        description: 'El proyecto se archivó correctamente',
+      });
+    } catch (error) {
+      console.error('Error archiving project:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo archivar el proyecto',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Restore archived project
+  const handleRestoreProject = async (projectId: string) => {
+    const project = archivedProjects.find(p => p.id === projectId);
+    if (!project) return;
+
+    try {
+      await updateProject(projectId, { archived: false });
+      setArchivedProjects(prev => prev.filter(p => p.id !== projectId));
+      setProjects(prev => [...prev, { ...project, archived: false }]);
+
+      toast({
+        title: 'Proyecto restaurado',
+        description: 'El proyecto se restauró correctamente',
+      });
+    } catch (error) {
+      console.error('Error restoring project:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo restaurar el proyecto',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -981,6 +1095,22 @@ export default function Tareas() {
         });
       }
 
+      // Send notification to task creator if different from comment author
+      const task = tasks.find(t => t.id === taskId) || selectedTaskForComments;
+      if (task && task.creator && user?.firstName) {
+        // Only notify if the comment author is different from the task creator
+        const commenterName = user.firstName;
+        if (task.creator !== commenterName) {
+          sendTaskNotification({
+            type: 'task_comment',
+            taskTitle: task.title,
+            taskId: taskId,
+            assigneeName: task.creator, // This is used to find the creator in the backend
+            senderName: commenterName,
+          });
+        }
+      }
+
       toast({
         title: 'Comentario agregado',
         description: 'El comentario se agregó correctamente',
@@ -1357,29 +1487,75 @@ export default function Tareas() {
                       </button>
                       <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
                         <span className="text-xs opacity-70">{count}</span>
-                        <Tooltip delayDuration={0}>
-                          <TooltipTrigger asChild>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteProject(project.id);
-                              }}
+                              onClick={(e) => e.stopPropagation()}
                               className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${
                                 filterProject === project.id
                                   ? 'hover:bg-primary-foreground/20 text-primary-foreground'
-                                  : 'hover:bg-destructive/10 text-destructive'
+                                  : 'hover:bg-muted'
                               }`}
                               draggable={false}
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <MoreVertical className="h-3 w-3" />
                             </button>
-                          </TooltipTrigger>
-                          <TooltipContent>Eliminar proyecto</TooltipContent>
-                        </Tooltip>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={() => handleEditProject(project)}>
+                              <Pencil className="h-3 w-3 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
+                              <FolderArchive className="h-3 w-3 mr-2" />
+                              Archivar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteProject(project.id)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3 mr-2" />
+                              Eliminar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
                   );
                 })}
+
+                {/* Archived Projects Section */}
+                {archivedProjects.length > 0 && (
+                  <div className="mt-4 pt-4 border-t border-dashed">
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                      <FolderArchive className="h-3 w-3" />
+                      Archivados
+                    </h4>
+                    {archivedProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm text-muted-foreground hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`w-3 h-3 rounded-full ${project.color} opacity-50 flex-shrink-0`}></div>
+                          <span className="truncate">{project.name}</span>
+                        </div>
+                        <Tooltip delayDuration={0}>
+                          <TooltipTrigger asChild>
+                            <button
+                              onClick={() => handleRestoreProject(project.id)}
+                              className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity"
+                            >
+                              <RotateCcw className="h-3 w-3" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>Restaurar proyecto</TooltipContent>
+                        </Tooltip>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -2225,7 +2401,7 @@ export default function Tareas() {
                   const project = getProject(task.projectId);
                   const assignee = getTeamMember(task.assignee);
                   return (
-                    <Card key={task.id} className="p-4">
+                    <Card key={task.id} className="p-4 border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/10">
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="font-semibold text-sm line-through text-muted-foreground">
                           {task.title}
@@ -2302,7 +2478,7 @@ export default function Tareas() {
                   const project = getProject(task.projectId);
                   const assignee = getTeamMember(task.assignee);
                   return (
-                    <Card key={task.id} className="p-4 border-destructive/30">
+                    <Card key={task.id} className="p-4 border-destructive/30 bg-red-50/30 dark:bg-red-950/10">
                       <div className="flex items-start justify-between mb-2">
                         <h3 className="font-semibold text-sm text-muted-foreground">
                           {task.title}
@@ -2659,6 +2835,45 @@ export default function Tareas() {
               Cancelar
             </Button>
             <Button onClick={handleCreateProject}>Crear Proyecto</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Project Dialog */}
+      <Dialog open={isEditProjectDialogOpen} onOpenChange={setIsEditProjectDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Editar Proyecto</DialogTitle>
+            <DialogDescription>Modifica el nombre y color del proyecto</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nombre del proyecto</Label>
+              <Input
+                placeholder="Nombre del proyecto"
+                value={editProjectName}
+                onChange={(e) => setEditProjectName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex flex-wrap gap-2">
+                {['bg-indigo-500', 'bg-rose-500', 'bg-emerald-500', 'bg-amber-500', 'bg-purple-500', 'bg-cyan-500', 'bg-pink-500', 'bg-slate-500'].map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`w-8 h-8 rounded-full ${color} ${editProjectColor === color ? 'ring-2 ring-offset-2 ring-primary' : ''}`}
+                    onClick={() => setEditProjectColor(color)}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditProjectDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveEditProject}>Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

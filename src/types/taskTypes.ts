@@ -68,6 +68,7 @@ export interface Project {
   order?: number;
   description?: string;
   chatLink?: string; // Link al grupo de WhatsApp u otro canal de comunicacion
+  archived?: boolean;
 }
 
 export interface BoardColumn {

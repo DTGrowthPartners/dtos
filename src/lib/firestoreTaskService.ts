@@ -365,7 +365,7 @@ export const importTasksFromExport = async (exportData: ExportData, defaultProje
 // ============= NOTIFICATIONS =============
 
 export const sendTaskNotification = async (params: {
-  type: 'task_assigned' | 'task_completed';
+  type: 'task_assigned' | 'task_completed' | 'task_comment';
   taskTitle: string;
   taskId: string;
   assigneeName: string;

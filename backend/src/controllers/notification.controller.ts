@@ -142,6 +142,31 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
           resourceType: 'task',
         });
       }
+    } else if (type === 'task_comment') {
+      // Find task creator to notify about new comment
+      const creatorUser = await prisma.user.findFirst({
+        where: {
+          firstName: {
+            equals: assigneeName, // In this case, assigneeName is actually the creator name
+            mode: 'insensitive',
+          },
+        },
+      });
+
+      if (creatorUser && creatorUser.id !== senderId) {
+        console.log('[Notifications] Creating task_comment notification for recipientId:', creatorUser.id, 'from senderId:', senderId);
+        notification = await notificationService.create({
+          type: 'task_comment',
+          title: 'Nuevo comentario en tarea',
+          message: `${senderName} comentó en la tarea: "${taskTitle}"`,
+          recipientId: creatorUser.id,
+          senderId,
+          link: '/tareas',
+          resourceId: taskId,
+          resourceType: 'task',
+        });
+        console.log('[Notifications] Created task_comment notification:', notification?.id);
+      }
     }
 
     res.status(201).json({ success: true, notification });
