@@ -80,16 +80,17 @@ export class GoogleSheetsService {
 
       // Leer hoja de Entradas (Ingresos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
       // Usamos UNFORMATTED_VALUE para obtener fechas como números seriales y valores sin formato
+      // Nota: Las hojas NO tienen encabezados, empiezan desde A1
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:F',
+        range: 'Entradas!A1:F',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       // Leer hoja de Salidas (Gastos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
       const expensesResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A2:F',
+        range: 'Salidas!A1:F',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
