@@ -161,11 +161,14 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
         const users = await prisma.user.findMany({
           select: { id: true, firstName: true, lastName: true }
         });
-        creatorUser = users.find(u =>
+        const foundUser = users.find(u =>
           `${u.firstName} ${u.lastName}`.toLowerCase().trim() === assigneeName.toLowerCase().trim() ||
           u.firstName?.toLowerCase().trim() === assigneeName.toLowerCase().trim()
-        ) as typeof creatorUser;
-        console.log('[Notifications] Searched all users, found:', creatorUser?.id || 'none');
+        );
+        if (foundUser) {
+          creatorUser = await prisma.user.findUnique({ where: { id: foundUser.id } });
+        }
+        console.log('[Notifications] Searched all users, found:', foundUser?.id || 'none');
       }
 
       if (creatorUser && creatorUser.id !== senderId) {

@@ -553,14 +553,14 @@ const Calendario = () => {
 
               {/* Client */}
               <Select
-                value={formData.clientId}
-                onValueChange={(value) => setFormData({ ...formData, clientId: value })}
+                value={formData.clientId || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, clientId: value === 'none' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar cliente (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin cliente</SelectItem>
+                  <SelectItem value="none">Sin cliente</SelectItem>
                   {clients.map((client) => (
                     <SelectItem key={client.id} value={client.id}>
                       {client.name}
@@ -571,14 +571,14 @@ const Calendario = () => {
 
               {/* Deal */}
               <Select
-                value={formData.dealId}
-                onValueChange={(value) => setFormData({ ...formData, dealId: value })}
+                value={formData.dealId || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, dealId: value === 'none' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar prospecto/deal (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin prospecto</SelectItem>
+                  <SelectItem value="none">Sin prospecto</SelectItem>
                   {deals.map((deal) => (
                     <SelectItem key={deal.id} value={deal.id}>
                       {deal.title}
@@ -589,14 +589,14 @@ const Calendario = () => {
 
               {/* Tercero */}
               <Select
-                value={formData.terceroId}
-                onValueChange={(value) => setFormData({ ...formData, terceroId: value })}
+                value={formData.terceroId || 'none'}
+                onValueChange={(value) => setFormData({ ...formData, terceroId: value === 'none' ? '' : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seleccionar tercero (opcional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Sin tercero</SelectItem>
+                  <SelectItem value="none">Sin tercero</SelectItem>
                   {terceros.map((tercero) => (
                     <SelectItem key={tercero.id} value={tercero.id}>
                       {tercero.nombre}
