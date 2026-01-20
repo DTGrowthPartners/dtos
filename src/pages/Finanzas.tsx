@@ -134,11 +134,19 @@ export default function Finanzas() {
     { value: 'custom', label: 'Personalizado' },
   ];
 
+  // Helper to get local date string YYYY-MM-DD
+  const getLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Apply date preset
   const applyDatePreset = (preset: string) => {
     setFilterDatePreset(preset);
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = getLocalDateString(today);
 
     switch (preset) {
       case 'todas':
@@ -152,7 +160,7 @@ export default function Finanzas() {
       case 'yesterday': {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        const yesterdayStr = yesterday.toISOString().split('T')[0];
+        const yesterdayStr = getLocalDateString(yesterday);
         setFilterDateFrom(yesterdayStr);
         setFilterDateTo(yesterdayStr);
         break;
@@ -160,34 +168,34 @@ export default function Finanzas() {
       case 'last7days': {
         const last7 = new Date(today);
         last7.setDate(last7.getDate() - 7);
-        setFilterDateFrom(last7.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(last7));
         setFilterDateTo(todayStr);
         break;
       }
       case 'last30days': {
         const last30 = new Date(today);
         last30.setDate(last30.getDate() - 30);
-        setFilterDateFrom(last30.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(last30));
         setFilterDateTo(todayStr);
         break;
       }
       case 'thisMonth': {
         const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        setFilterDateFrom(firstDayMonth.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayMonth));
         setFilterDateTo(todayStr);
         break;
       }
       case 'lastMonth': {
         const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
         const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
-        setFilterDateFrom(firstDayLastMonth.toISOString().split('T')[0]);
-        setFilterDateTo(lastDayLastMonth.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayLastMonth));
+        setFilterDateTo(getLocalDateString(lastDayLastMonth));
         break;
       }
       case 'thisQuarter': {
         const quarter = Math.floor(today.getMonth() / 3);
         const firstDayQuarter = new Date(today.getFullYear(), quarter * 3, 1);
-        setFilterDateFrom(firstDayQuarter.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayQuarter));
         setFilterDateTo(todayStr);
         break;
       }
@@ -198,21 +206,21 @@ export default function Finanzas() {
         const adjustedQuarter = lastQuarter < 0 ? 3 : lastQuarter;
         const firstDayLastQuarter = new Date(year, adjustedQuarter * 3, 1);
         const lastDayLastQuarter = new Date(year, adjustedQuarter * 3 + 3, 0);
-        setFilterDateFrom(firstDayLastQuarter.toISOString().split('T')[0]);
-        setFilterDateTo(lastDayLastQuarter.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayLastQuarter));
+        setFilterDateTo(getLocalDateString(lastDayLastQuarter));
         break;
       }
       case 'thisYear': {
         const firstDayYear = new Date(today.getFullYear(), 0, 1);
-        setFilterDateFrom(firstDayYear.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayYear));
         setFilterDateTo(todayStr);
         break;
       }
       case 'lastYear': {
         const firstDayLastYear = new Date(today.getFullYear() - 1, 0, 1);
         const lastDayLastYear = new Date(today.getFullYear() - 1, 11, 31);
-        setFilterDateFrom(firstDayLastYear.toISOString().split('T')[0]);
-        setFilterDateTo(lastDayLastYear.toISOString().split('T')[0]);
+        setFilterDateFrom(getLocalDateString(firstDayLastYear));
+        setFilterDateTo(getLocalDateString(lastDayLastYear));
         break;
       }
       case 'custom':
@@ -388,20 +396,20 @@ export default function Finanzas() {
   // Calculate period totals for quick filters
   const periodTotals = useMemo(() => {
     const today = new Date();
-    const todayStr = today.toISOString().split('T')[0];
+    const todayStr = getLocalDateString(today);
 
     // This week (last 7 days)
     const last7 = new Date(today);
     last7.setDate(last7.getDate() - 7);
-    const last7Str = last7.toISOString().split('T')[0];
+    const last7Str = getLocalDateString(last7);
 
     // This month
     const firstDayMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const firstDayMonthStr = firstDayMonth.toISOString().split('T')[0];
+    const firstDayMonthStr = getLocalDateString(firstDayMonth);
 
     // This year
     const firstDayYear = new Date(today.getFullYear(), 0, 1);
-    const firstDayYearStr = firstDayYear.toISOString().split('T')[0];
+    const firstDayYearStr = getLocalDateString(firstDayYear);
 
     // Today
     const todayIngresos = filterByDateRange(ingresos, todayStr, todayStr);
