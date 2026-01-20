@@ -3,9 +3,24 @@ import { PrismaClient } from '@prisma/client';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import { roleMiddleware } from '../middlewares/roles.middleware';
 import bcrypt from 'bcrypt';
+import { admin } from '../app';
 
 const router = Router();
 const prisma = new PrismaClient();
+
+// Default permissions for new users
+const DEFAULT_USER_PERMISSIONS = [
+  'dashboard',
+  'clientes',
+  'servicios',
+  'campanas',
+  'tareas',
+  'reportes',
+  'productos',
+  'cuentas-cobro',
+  'crm',
+  'terceros',
+];
 
 // Protected routes
 router.use(authMiddleware);
@@ -154,10 +169,16 @@ router.get('/:id', roleMiddleware(['admin']), async (req, res) => {
 
 // Create user (admin only)
 router.post('/', roleMiddleware(['admin']), async (req, res) => {
+  let firebaseUser = null;
+
   try {
     const { email, password, firstName, lastName, roleId } = req.body;
 
-    // Check if email already exists
+    if (!password) {
+      return res.status(400).json({ message: 'La contraseña es requerida' });
+    }
+
+    // Check if email already exists in database
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -166,12 +187,25 @@ router.post('/', roleMiddleware(['admin']), async (req, res) => {
       return res.status(400).json({ message: 'El correo ya esta registrado' });
     }
 
-    // Hash password if provided
-    let hashedPassword = null;
-    if (password) {
-      hashedPassword = await bcrypt.hash(password, 10);
+    // First, create user in Firebase Authentication
+    try {
+      firebaseUser = await admin.auth().createUser({
+        email,
+        password,
+        displayName: `${firstName || ''} ${lastName || ''}`.trim(),
+      });
+    } catch (firebaseError: any) {
+      console.error('Firebase create user error:', firebaseError);
+      if (firebaseError.code === 'auth/email-already-exists') {
+        return res.status(400).json({ message: 'El correo ya esta registrado en Firebase' });
+      }
+      throw firebaseError;
     }
 
+    // Hash password for local storage (backup)
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user in database with Firebase UID
     const user = await prisma.user.create({
       data: {
         email,
@@ -179,6 +213,8 @@ router.post('/', roleMiddleware(['admin']), async (req, res) => {
         firstName: firstName || '',
         lastName: lastName || '',
         roleId,
+        firebaseUid: firebaseUser.uid,
+        permissions: DEFAULT_USER_PERMISSIONS,
       },
       select: {
         id: true,
@@ -186,6 +222,7 @@ router.post('/', roleMiddleware(['admin']), async (req, res) => {
         firstName: true,
         lastName: true,
         roleId: true,
+        firebaseUid: true,
         createdAt: true,
         role: {
           select: {
@@ -199,6 +236,17 @@ router.post('/', roleMiddleware(['admin']), async (req, res) => {
     res.status(201).json(user);
   } catch (error) {
     console.error('Error creating user:', error);
+
+    // If database creation failed but Firebase user was created, delete the Firebase user
+    if (firebaseUser) {
+      try {
+        await admin.auth().deleteUser(firebaseUser.uid);
+        console.log('Rolled back Firebase user creation');
+      } catch (rollbackError) {
+        console.error('Error rolling back Firebase user:', rollbackError);
+      }
+    }
+
     res.status(500).json({ message: 'Error al crear usuario' });
   }
 });
