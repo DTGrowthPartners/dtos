@@ -897,7 +897,7 @@ export default function CRM() {
                                               {priorityInfo.label}
                                             </Badge>
                                           )}
-                                          {deal.daysInStage && deal.daysInStage > 5 && deal.daysInStage !== 0 && (
+                                          {deal.daysInStage && deal.daysInStage > 5 && (
                                             <Badge variant="outline" className="text-xs text-yellow-600">
                                               {deal.daysInStage}d
                                             </Badge>
@@ -1004,6 +1004,65 @@ export default function CRM() {
           </div>
         </DragDropContext>
       </div>
+
+      {/* Won Deals Section */}
+      {wonStage && getDealsByStage(wonStage.id).length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <div
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: wonStage.color }}
+            />
+            <h3 className="font-semibold text-lg">Ganados ({getDealsByStage(wonStage.id).length})</h3>
+            <span className="text-sm text-muted-foreground ml-2">
+              {formatCurrency(getDealsByStage(wonStage.id).reduce((sum, d) => sum + (d.estimatedValue || 0), 0))}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {getDealsByStage(wonStage.id).map((deal) => (
+              <Card
+                key={deal.id}
+                className="cursor-pointer hover:shadow-md transition-shadow border-green-200 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800"
+                onClick={() => loadDealDetail(deal.id)}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {deal.logo && (
+                        <img src={deal.logo} alt="" className="h-8 w-8 rounded-md object-cover flex-shrink-0" />
+                      )}
+                      <div>
+                        <h4 className="font-medium text-sm">{deal.name}</h4>
+                        {deal.company && (
+                          <p className="text-xs text-muted-foreground">{deal.company}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Badge className="bg-green-500 text-white text-xs">Ganado</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    {deal.estimatedValue && deal.estimatedValue > 0 && (
+                      <span className="text-sm font-medium text-green-600">
+                        {formatCurrency(deal.estimatedValue, deal.currency)}
+                      </span>
+                    )}
+                    {deal.closedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(deal.closedAt).toLocaleDateString('es-CO')}
+                      </span>
+                    )}
+                  </div>
+                  {deal.service && (
+                    <Badge variant="secondary" className="text-xs mt-2">
+                      {deal.service.name}
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Deal Detail Sheet */}
       <Sheet open={!!selectedDeal} onOpenChange={(open) => !open && setSelectedDeal(null)}>
