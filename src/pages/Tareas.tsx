@@ -1510,14 +1510,6 @@ export default function Tareas() {
                               <FolderArchive className="h-3 w-3 mr-2" />
                               Archivar
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteProject(project.id)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="h-3 w-3 mr-2" />
-                              Eliminar
-                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
