@@ -18,6 +18,7 @@ const BUDGET_Q1 = {
     'Servidores/Hosting/Dominios': 250000,
     'Herramientas (Claude, GPT, Lovable, Twilio, Etc)': 850000,
     'Honorarios Contador': 300000,
+    'Publicidad': 0,
   },
   febrero: {
     'Arriendo oficina': 1200000,
@@ -29,6 +30,7 @@ const BUDGET_Q1 = {
     'Servidores/Hosting/Dominios': 250000,
     'Herramientas (Claude, GPT, Lovable, Twilio, Etc)': 500000,
     'Honorarios Contador': 300000,
+    'Publicidad': 0,
   },
   marzo: {
     'Arriendo oficina': 1200000,
@@ -40,6 +42,7 @@ const BUDGET_Q1 = {
     'Servidores/Hosting/Dominios': 250000,
     'Herramientas (Claude, GPT, Lovable, Twilio, Etc)': 500000,
     'Honorarios Contador': 300000,
+    'Publicidad': 0,
   },
 };
 
@@ -74,6 +77,7 @@ const categoryMapping: Record<string, string> = {
   'Servidores/Hosting/Dominios': 'Servidores/Hosting/Dominios',
   'Herramientas (Claude, GPT, Lovable, Twilio, Etc)': 'Herramientas (Claude, GPT, Lovable, Twilio, Etc)',
   'Honorarios Contador': 'Honorarios Contador',
+  'Publicidad': 'Publicidad',
 };
 
 export default function BudgetComparisonReport({ gastos }: BudgetComparisonReportProps) {

@@ -144,14 +144,29 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
       }
     } else if (type === 'task_comment') {
       // Find task creator to notify about new comment
-      const creatorUser = await prisma.user.findFirst({
+      console.log('[Notifications] Looking for task creator with name:', assigneeName);
+
+      // Try to find by firstName first, then by full name
+      let creatorUser = await prisma.user.findFirst({
         where: {
           firstName: {
-            equals: assigneeName, // In this case, assigneeName is actually the creator name
+            equals: assigneeName,
             mode: 'insensitive',
           },
         },
       });
+
+      // If not found by firstName, try searching in firstName + lastName
+      if (!creatorUser) {
+        const users = await prisma.user.findMany({
+          select: { id: true, firstName: true, lastName: true }
+        });
+        creatorUser = users.find(u =>
+          `${u.firstName} ${u.lastName}`.toLowerCase().trim() === assigneeName.toLowerCase().trim() ||
+          u.firstName?.toLowerCase().trim() === assigneeName.toLowerCase().trim()
+        ) as typeof creatorUser;
+        console.log('[Notifications] Searched all users, found:', creatorUser?.id || 'none');
+      }
 
       if (creatorUser && creatorUser.id !== senderId) {
         console.log('[Notifications] Creating task_comment notification for recipientId:', creatorUser.id, 'from senderId:', senderId);
@@ -166,6 +181,8 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
           resourceType: 'task',
         });
         console.log('[Notifications] Created task_comment notification:', notification?.id);
+      } else {
+        console.log('[Notifications] Creator not found or is the sender. creatorUser:', creatorUser?.id, 'senderId:', senderId);
       }
     }
 

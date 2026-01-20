@@ -20,6 +20,7 @@ const DEFAULT_USER_PERMISSIONS = [
   'cuentas-cobro',
   'crm',
   'terceros',
+  'calendario',
 ];
 
 export class AuthService {

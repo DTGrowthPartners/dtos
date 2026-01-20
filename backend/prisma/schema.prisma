@@ -75,6 +75,7 @@ model Client {
   sharedWith  ClientShare[]  @relation("ClientShares")
   terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
   accounts    Account[]      @relation("AccountClient")  // Cuentas por cobrar/pagar
+  calendarEvents CalendarEvent[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -258,6 +259,7 @@ model Deal {
   notes             String?
   activities        DealActivity[]
   reminders         DealReminder[]
+  calendarEvents    CalendarEvent[]
 
   // Soft delete
   deletedAt         DateTime?
@@ -365,6 +367,7 @@ model Tercero {
 
   // Relaciones con CRM
   deals           Deal[]    @relation("DealTercero")
+  calendarEvents  CalendarEvent[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -469,4 +472,48 @@ model AccountPayment {
 
   notes           String?
   createdAt       DateTime  @default(now())
+}
+
+// Calendar Events for meetings/appointments with clients/prospects
+model CalendarEvent {
+  id              String    @id @default(cuid())
+  title           String
+  description     String?
+
+  // Date/time
+  start           DateTime
+  end             DateTime
+  allDay          Boolean   @default(false)
+
+  // Type: meeting, call, presentation, follow_up, other
+  type            String    @default("meeting")
+
+  // Location (can be physical address or video link)
+  location        String?
+
+  // Color for calendar display
+  color           String?
+
+  // Related entities (optional)
+  clientId        String?
+  client          Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  dealId          String?
+  deal            Deal?     @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  terceroId       String?
+  tercero         Tercero?  @relation(fields: [terceroId], references: [id], onDelete: SetNull)
+
+  // Attendees (comma-separated user names or emails)
+  attendees       String?
+
+  // Reminders
+  reminder        Int?      // Minutes before event to remind
+
+  // Status: scheduled, completed, cancelled
+  status          String    @default("scheduled")
+
+  // Created by
+  createdBy       String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

@@ -13,6 +13,7 @@ import {
   X,
   Target,
   UsersRound,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
   { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
+  { title: 'Calendario', path: '/calendario', icon: CalendarDays, permission: 'calendario' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
 ];
