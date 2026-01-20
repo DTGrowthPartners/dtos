@@ -137,48 +137,54 @@ type TaskView = 'active' | 'archived' | 'deleted';
 type DateFilter = 'all' | 'today' | 'week' | 'month' | 'overdue';
 
 // Helper functions for date filtering - defined at module level to avoid hoisting issues
+// These compare only the date portion (year, month, day), ignoring time
+const getDateOnly = (timestamp: number): Date => {
+  const d = new Date(timestamp);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+};
+
+const getTodayOnly = (): Date => {
+  const today = new Date();
+  return new Date(today.getFullYear(), today.getMonth(), today.getDate());
+};
+
 const isToday = (timestamp: number | undefined) => {
   if (!timestamp) return false;
-  const today = new Date();
-  const date = new Date(timestamp);
-  return date.toDateString() === today.toDateString();
+  const taskDate = getDateOnly(timestamp);
+  const today = getTodayOnly();
+  return taskDate.getTime() === today.getTime();
 };
 
 const isThisWeek = (timestamp: number | undefined) => {
   if (!timestamp) return false;
-  const today = new Date();
-  const date = new Date(timestamp);
+  const today = getTodayOnly();
+  const taskDate = getDateOnly(timestamp);
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
-  startOfWeek.setHours(0, 0, 0, 0);
   const endOfWeek = new Date(startOfWeek);
   endOfWeek.setDate(startOfWeek.getDate() + 7);
-  return date >= startOfWeek && date < endOfWeek;
+  return taskDate >= startOfWeek && taskDate < endOfWeek;
 };
 
 const isThisMonth = (timestamp: number | undefined) => {
   if (!timestamp) return false;
   const today = new Date();
-  const date = new Date(timestamp);
-  return date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+  const taskDate = new Date(timestamp);
+  return taskDate.getMonth() === today.getMonth() && taskDate.getFullYear() === today.getFullYear();
 };
 
 const isOverdue = (timestamp: number | undefined) => {
   if (!timestamp) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDate = new Date(timestamp);
-  dueDate.setHours(0, 0, 0, 0);
-  return dueDate < today;
+  const today = getTodayOnly();
+  const taskDate = getDateOnly(timestamp);
+  return taskDate.getTime() < today.getTime();
 };
 
 const getDaysOverdue = (timestamp: number | undefined) => {
   if (!timestamp) return 0;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const dueDate = new Date(timestamp);
-  dueDate.setHours(0, 0, 0, 0);
-  const diffTime = today.getTime() - dueDate.getTime();
+  const today = getTodayOnly();
+  const taskDate = getDateOnly(timestamp);
+  const diffTime = today.getTime() - taskDate.getTime();
   const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
   return diffDays > 0 ? diffDays : 0;
 };
@@ -505,6 +511,13 @@ export default function Tareas() {
       }
     };
 
+    // Helper to parse date string as local date (not UTC)
+    const parseLocalDate = (dateStr: string): number => {
+      const [year, month, day] = dateStr.split('-').map(Number);
+      // Create date at noon local time to avoid timezone issues
+      return new Date(year, month - 1, day, 12, 0, 0).getTime();
+    };
+
     const taskData = {
       title: formData.title.trim(),
       description: formData.description.trim(),
@@ -514,8 +527,8 @@ export default function Tareas() {
       creator: formData.creator,
       projectId: formData.projectId,
       type: formData.type || undefined,
-      dueDate: formData.dueDate ? new Date(formData.dueDate).getTime() : undefined,
-      startDate: formData.startDate ? new Date(formData.startDate).getTime() : undefined,
+      dueDate: formData.dueDate ? parseLocalDate(formData.dueDate) : undefined,
+      startDate: formData.startDate ? parseLocalDate(formData.startDate) : undefined,
       images: formData.images,
       recurrence: formData.isRecurring ? {
         enabled: true,

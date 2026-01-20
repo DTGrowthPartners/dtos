@@ -106,8 +106,9 @@ const Calendario = () => {
   // Fetch events
   const fetchEvents = async () => {
     try {
-      const response = await apiClient.get<{ data: CalendarEvent[] }>('/api/calendar');
-      setEvents(response.data || []);
+      const response = await apiClient.get<CalendarEvent[]>('/api/calendar');
+      // API returns array directly, not wrapped in { data: [...] }
+      setEvents(Array.isArray(response) ? response : []);
     } catch (error) {
       console.error('Error fetching events:', error);
       // Don't show error toast, just set empty events
