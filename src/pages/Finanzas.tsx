@@ -1192,11 +1192,11 @@ export default function Finanzas() {
               </div>
               <div className="space-y-1.5 sm:space-y-2">
                 {topIncome.length > 0 ? (
-                  topIncome.slice(0, 3).map((item, idx) => (
+                  topIncome.map((item, idx) => (
                     <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-lg bg-success/5 hover:bg-success/10 transition-colors gap-1">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs sm:text-sm font-medium text-foreground break-words">{item.descripcion}</p>
-                        <p className="text-xs text-muted-foreground break-words">{item.entidad}</p>
+                        <p className="text-xs text-muted-foreground break-words">{item.fecha} • {item.entidad}</p>
                       </div>
                       <span className="text-xs sm:text-sm font-bold text-success whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
@@ -1214,11 +1214,11 @@ export default function Finanzas() {
               </div>
               <div className="space-y-1.5 sm:space-y-2">
                 {topExpenses.length > 0 ? (
-                  topExpenses.slice(0, 3).map((item, idx) => (
+                  topExpenses.map((item, idx) => (
                     <div key={idx} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 rounded-lg bg-destructive/5 hover:bg-destructive/10 transition-colors gap-1">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs sm:text-sm font-medium text-foreground break-words">{item.descripcion}</p>
-                        <p className="text-xs text-muted-foreground break-words">{item.entidad}</p>
+                        <p className="text-xs text-muted-foreground break-words">{item.fecha} • {item.entidad}</p>
                       </div>
                       <span className="text-xs sm:text-sm font-bold text-destructive whitespace-nowrap">${item.importe.toLocaleString()}</span>
                     </div>
