@@ -514,6 +514,77 @@ export const accountService = {
 
     return invoice;
   },
+
+  // Get pending receivables from ClientServices (services assigned to clients)
+  async getPendingFromClientServices() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Get all active client services with their client and service details
+    const clientServices = await prisma.clientService.findMany({
+      where: {
+        estado: 'activo',
+      },
+      include: {
+        client: {
+          select: {
+            id: true,
+            name: true,
+            logo: true,
+            email: true,
+            nit: true,
+          },
+        },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            price: true,
+            currency: true,
+            icon: true,
+          },
+        },
+      },
+      orderBy: { fechaProximoCobro: 'asc' },
+    });
+
+    // Map to a format compatible with accounts display
+    return clientServices.map(cs => {
+      const price = cs.precioCliente ?? cs.service.price;
+      const currency = cs.moneda || cs.service.currency || 'COP';
+      const nextDueDate = cs.fechaProximoCobro;
+      const isOverdue = nextDueDate ? new Date(nextDueDate) < today : false;
+      const isDueToday = nextDueDate ?
+        new Date(nextDueDate).toDateString() === today.toDateString() : false;
+      const isDueSoon = nextDueDate ?
+        new Date(nextDueDate) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : false;
+
+      return {
+        id: `cs_${cs.clientId}_${cs.serviceId}`,
+        clientServiceId: cs.id,
+        type: 'client_service' as const,
+        client: cs.client,
+        service: cs.service,
+        entityName: cs.client.name,
+        entityLogo: cs.client.logo,
+        concept: cs.service.name,
+        description: cs.service.description,
+        amount: price,
+        currency,
+        frecuencia: cs.frecuencia,
+        fechaInicio: cs.fechaInicio,
+        fechaProximoCobro: cs.fechaProximoCobro,
+        fechaVencimiento: cs.fechaVencimiento,
+        notas: cs.notas,
+        estado: cs.estado,
+        isOverdue,
+        isDueToday,
+        isDueSoon,
+        canGenerateInvoice: isDueToday || isOverdue || isDueSoon,
+      };
+    });
+  },
 };
 
 export default accountService;

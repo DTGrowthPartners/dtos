@@ -15,6 +15,7 @@ import {
   X,
   AlertTriangle,
   Building2,
+  Package,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,6 +103,43 @@ interface AccountsSummary {
   balance: number;
 }
 
+interface PendingClientService {
+  id: string;
+  clientServiceId: string;
+  type: 'client_service';
+  client: {
+    id: string;
+    name: string;
+    logo?: string;
+    email?: string;
+    nit?: string;
+  };
+  service: {
+    id: string;
+    name: string;
+    description?: string;
+    price: number;
+    currency: string;
+    icon?: string;
+  };
+  entityName: string;
+  entityLogo?: string;
+  concept: string;
+  description?: string;
+  amount: number;
+  currency: string;
+  frecuencia: string;
+  fechaInicio: string;
+  fechaProximoCobro?: string;
+  fechaVencimiento?: string;
+  notas?: string;
+  estado: string;
+  isOverdue: boolean;
+  isDueToday: boolean;
+  isDueSoon: boolean;
+  canGenerateInvoice: boolean;
+}
+
 const FREQUENCIES = [
   { value: 'daily', label: 'Diario' },
   { value: 'weekly', label: 'Semanal' },
@@ -126,13 +164,16 @@ const CATEGORIES = [
 export function AccountsPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [pendingServices, setPendingServices] = useState<PendingClientService[]>([]);
   const [summary, setSummary] = useState<AccountsSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'receivable' | 'payable'>('receivable');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<Account | null>(null);
+  const [selectedServiceForInvoice, setSelectedServiceForInvoice] = useState<PendingClientService | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -168,14 +209,16 @@ export function AccountsPanel() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [accountsData, summaryData, clientsData] = await Promise.all([
+      const [accountsData, summaryData, clientsData, pendingServicesData] = await Promise.all([
         apiClient.get<Account[]>('/api/accounts'),
         apiClient.get<AccountsSummary>('/api/accounts/summary'),
         apiClient.get<Client[]>('/api/clients'),
+        apiClient.get<PendingClientService[]>('/api/accounts/pending-services'),
       ]);
       setAccounts(accountsData);
       setSummary(summaryData);
       setClients(clientsData);
+      setPendingServices(pendingServicesData);
     } catch (error) {
       console.error('Error fetching accounts:', error);
       toast({
@@ -448,17 +491,54 @@ export function AccountsPanel() {
           </div>
         </div>
 
-        <TabsContent value="receivable" className="mt-4">
-          <AccountsList
-            accounts={filteredAccounts}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onPayment={openPaymentDialog}
-            formatCurrency={formatCurrency}
-            formatDate={formatDate}
-            isOverdue={isOverdue}
-            type="receivable"
-          />
+        <TabsContent value="receivable" className="mt-4 space-y-6">
+          {/* Servicios de Clientes Pendientes */}
+          {pendingServices.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <Package className="h-4 w-4" />
+                <span>Servicios de Clientes ({pendingServices.length})</span>
+              </div>
+              <ClientServicesList
+                services={pendingServices}
+                onGenerateInvoice={(service) => {
+                  setSelectedServiceForInvoice(service);
+                  setIsInvoiceDialogOpen(true);
+                }}
+                formatCurrency={formatCurrency}
+                formatDate={formatDate}
+              />
+            </div>
+          )}
+
+          {/* Cuentas por Cobrar Manuales */}
+          {filteredAccounts.length > 0 && (
+            <div className="space-y-3">
+              {pendingServices.length > 0 && (
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <Building2 className="h-4 w-4" />
+                  <span>Otras Cuentas por Cobrar ({filteredAccounts.length})</span>
+                </div>
+              )}
+              <AccountsList
+                accounts={filteredAccounts}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onPayment={openPaymentDialog}
+                formatCurrency={formatCurrency}
+                formatDate={formatDate}
+                isOverdue={isOverdue}
+                type="receivable"
+              />
+            </div>
+          )}
+
+          {pendingServices.length === 0 && filteredAccounts.length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No hay cuentas por cobrar</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="payable" className="mt-4">
@@ -803,6 +883,83 @@ export function AccountsPanel() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Generation Dialog for Client Services */}
+      <Dialog open={isInvoiceDialogOpen} onOpenChange={setIsInvoiceDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Generar Cuenta de Cobro</DialogTitle>
+            <DialogDescription>
+              {selectedServiceForInvoice?.client.name} - {selectedServiceForInvoice?.service.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border p-4 bg-muted/50">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Cliente</p>
+                  <p className="font-medium">{selectedServiceForInvoice?.client.name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">NIT</p>
+                  <p className="font-medium">{selectedServiceForInvoice?.client.nit || 'No registrado'}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Servicio</p>
+                  <p className="font-medium">{selectedServiceForInvoice?.service.name}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Monto</p>
+                  <p className="font-medium text-success">
+                    {selectedServiceForInvoice && formatCurrency(selectedServiceForInvoice.amount, selectedServiceForInvoice.currency)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Frecuencia</p>
+                  <p className="font-medium capitalize">{selectedServiceForInvoice?.frecuencia}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Fecha Cobro</p>
+                  <p className="font-medium">
+                    {selectedServiceForInvoice?.fechaProximoCobro && formatDate(selectedServiceForInvoice.fechaProximoCobro)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Button
+                className="w-full"
+                onClick={() => {
+                  // Navigate to invoice generation page with pre-filled data
+                  const params = new URLSearchParams({
+                    clientId: selectedServiceForInvoice?.client.id || '',
+                    clientName: selectedServiceForInvoice?.client.name || '',
+                    clientNit: selectedServiceForInvoice?.client.nit || '',
+                    serviceName: selectedServiceForInvoice?.service.name || '',
+                    amount: String(selectedServiceForInvoice?.amount || 0),
+                    currency: selectedServiceForInvoice?.currency || 'COP',
+                  });
+                  window.location.href = `/cuentas-cobro?${params.toString()}`;
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Ir a Generar Cuenta de Cobro
+              </Button>
+              <p className="text-xs text-center text-muted-foreground">
+                Serás redirigido a la página de cuentas de cobro con los datos pre-cargados
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInvoiceDialogOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -928,6 +1085,128 @@ function AccountsList({
               <Badge variant="outline" className="flex items-center gap-1">
                 <Clock className="h-3 w-3" />
                 {account._count.payments} pago(s)
+              </Badge>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Sub-component for client services list
+function ClientServicesList({
+  services,
+  onGenerateInvoice,
+  formatCurrency,
+  formatDate,
+}: {
+  services: PendingClientService[];
+  onGenerateInvoice: (service: PendingClientService) => void;
+  formatCurrency: (amount: number, currency?: string) => string;
+  formatDate: (date: string) => string;
+}) {
+  const FRECUENCIA_LABELS: Record<string, string> = {
+    mensual: 'Mensual',
+    trimestral: 'Trimestral',
+    semestral: 'Semestral',
+    anual: 'Anual',
+    unico: 'Único',
+  };
+
+  return (
+    <div className="space-y-3">
+      {services.map((service) => (
+        <div
+          key={service.id}
+          className={`rounded-xl border p-4 transition-all hover:shadow-md ${
+            service.isOverdue
+              ? 'border-destructive/50 bg-destructive/5'
+              : service.isDueToday
+              ? 'border-warning/50 bg-warning/5'
+              : service.isDueSoon
+              ? 'border-primary/30 bg-primary/5'
+              : 'border-border bg-card'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              {service.client.logo ? (
+                <img
+                  src={service.client.logo}
+                  alt=""
+                  className="h-10 w-10 rounded-lg object-contain bg-muted p-1"
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="font-medium truncate">{service.client.name}</p>
+                <p className="text-sm text-muted-foreground truncate">{service.service.name}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="text-right">
+                <p className="font-bold text-success">
+                  {formatCurrency(service.amount, service.currency)}
+                </p>
+                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <RefreshCcw className="h-3 w-3" />
+                  <span>{FRECUENCIA_LABELS[service.frecuencia] || service.frecuencia}</span>
+                </div>
+              </div>
+
+              {service.canGenerateInvoice && (
+                <Button
+                  size="sm"
+                  variant={service.isOverdue ? 'destructive' : service.isDueToday ? 'default' : 'outline'}
+                  onClick={() => onGenerateInvoice(service)}
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Cobrar
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {/* Due date and badges */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            {service.fechaProximoCobro && (
+              <Badge
+                variant={
+                  service.isOverdue
+                    ? 'destructive'
+                    : service.isDueToday
+                    ? 'default'
+                    : 'secondary'
+                }
+                className="flex items-center gap-1"
+              >
+                {service.isOverdue ? (
+                  <AlertTriangle className="h-3 w-3" />
+                ) : service.isDueToday ? (
+                  <Clock className="h-3 w-3" />
+                ) : (
+                  <Calendar className="h-3 w-3" />
+                )}
+                {service.isOverdue
+                  ? 'Vencido: '
+                  : service.isDueToday
+                  ? 'Hoy: '
+                  : 'Próximo: '}
+                {formatDate(service.fechaProximoCobro)}
+              </Badge>
+            )}
+            <Badge variant="outline" className="flex items-center gap-1">
+              <Package className="h-3 w-3" />
+              Servicio Asignado
+            </Badge>
+            {service.notas && (
+              <Badge variant="outline" className="max-w-[200px] truncate">
+                {service.notas}
               </Badge>
             )}
           </div>

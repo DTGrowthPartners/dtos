@@ -198,3 +198,14 @@ export const createInvoiceFromAccount = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+// Get pending receivables from ClientServices
+export const getPendingFromClientServices = async (_req: Request, res: Response) => {
+  try {
+    const pendingServices = await accountService.getPendingFromClientServices();
+    res.json(pendingServices);
+  } catch (error: any) {
+    console.error('Error getting pending client services:', error);
+    res.status(500).json({ error: error.message });
+  }
+};

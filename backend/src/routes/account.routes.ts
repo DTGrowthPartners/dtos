@@ -14,6 +14,7 @@ import {
   getClientBalances,
   getAccountsByClient,
   createInvoiceFromAccount,
+  getPendingFromClientServices,
 } from '../controllers/account.controller';
 
 const router = Router();
@@ -25,6 +26,7 @@ router.use(authMiddleware);
 router.get('/summary', getSummary);
 router.get('/overdue', getOverdue);
 router.get('/client-balances', getClientBalances);
+router.get('/pending-services', getPendingFromClientServices);
 
 // Client-specific accounts
 router.get('/by-client/:clientId', getAccountsByClient);
