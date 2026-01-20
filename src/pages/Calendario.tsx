@@ -106,7 +106,7 @@ const Calendario = () => {
   // Fetch events
   const fetchEvents = async () => {
     try {
-      const response = await apiClient.get('/calendar');
+      const response = await apiClient.get<{ data: CalendarEvent[] }>('/api/calendar');
       setEvents(response.data || []);
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -120,8 +120,8 @@ const Calendario = () => {
   // Fetch clients
   const fetchClients = async () => {
     try {
-      const response = await apiClient.get('/clients');
-      setClients(response.data || []);
+      const response = await apiClient.get<Client[]>('/api/clients');
+      setClients(response || []);
     } catch (error) {
       console.error('Error fetching clients:', error);
     }
@@ -130,8 +130,8 @@ const Calendario = () => {
   // Fetch deals
   const fetchDeals = async () => {
     try {
-      const response = await apiClient.get('/crm/deals');
-      setDeals(response.data || []);
+      const response = await apiClient.get<Deal[]>('/api/crm/deals');
+      setDeals(response || []);
     } catch (error) {
       console.error('Error fetching deals:', error);
     }
@@ -140,8 +140,8 @@ const Calendario = () => {
   // Fetch terceros
   const fetchTerceros = async () => {
     try {
-      const response = await apiClient.get('/terceros');
-      setTerceros(response.data || []);
+      const response = await apiClient.get<Tercero[]>('/api/terceros');
+      setTerceros(response || []);
     } catch (error) {
       console.error('Error fetching terceros:', error);
     }
@@ -150,8 +150,8 @@ const Calendario = () => {
   // Fetch users for attendees
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.get('/users');
-      setUsers(response.data || []);
+      const response = await apiClient.get<User[]>('/api/users');
+      setUsers(response || []);
     } catch (error) {
       console.error('Error fetching users:', error);
     }
@@ -222,7 +222,7 @@ const Calendario = () => {
   const handleEventDrop = async (dropInfo: EventDropArg) => {
     const { event } = dropInfo;
     try {
-      await apiClient.put(`/calendar/${event.id}`, {
+      await apiClient.put(`/api/calendar/${event.id}`, {
         start: event.start?.toISOString(),
         end: event.end?.toISOString(),
       });
@@ -269,9 +269,9 @@ const Calendario = () => {
       };
 
       if (isEditing) {
-        await apiClient.put(`/calendar/${selectedEvent?.id}`, eventData);
+        await apiClient.put(`/api/calendar/${selectedEvent?.id}`, eventData);
       } else {
-        await apiClient.post('/calendar', eventData);
+        await apiClient.post('/api/calendar', eventData);
       }
 
       toast({
@@ -297,7 +297,7 @@ const Calendario = () => {
     if (!selectedEvent) return;
 
     try {
-      await apiClient.delete(`/calendar/${selectedEvent.id}`);
+      await apiClient.delete(`/api/calendar/${selectedEvent.id}`);
 
       toast({
         title: 'Evento eliminado',
