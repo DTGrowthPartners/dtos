@@ -170,6 +170,11 @@ export default function Dashboard() {
     [allTasks]
   );
 
+  const teamInProgressTasks = useMemo(() =>
+    allTasks.filter(t => t.status === 'IN_PROGRESS').length,
+    [allTasks]
+  );
+
   const teamCompletedTasks = useMemo(() =>
     allTasks.filter(t => t.status === 'DONE').length,
     [allTasks]
@@ -419,7 +424,7 @@ export default function Dashboard() {
             title="Beneficio Neto"
             value={isLoading ? '...' : `$${(monthlyIncome - monthlyExpenses).toLocaleString()}`}
             icon={BarChart3}
-            variant={monthlyIncome - monthlyExpenses >= 0 ? 'success' : 'danger'}
+            variant={monthlyIncome - monthlyExpenses >= 0 ? 'success' : 'warning'}
           />
           <StatCard
             title="MRR Servicios"
@@ -448,6 +453,13 @@ export default function Dashboard() {
             subtitle="pendientes"
             icon={CheckSquare}
             variant="warning"
+          />
+          <StatCard
+            title="En Progreso"
+            value={isLoading ? '...' : teamInProgressTasks}
+            subtitle="trabajando ahora"
+            icon={Clock}
+            variant="primary"
           />
           <StatCard
             title="Completadas"
@@ -631,7 +643,7 @@ export default function Dashboard() {
           title="Mi Productividad"
           value={isLoading ? '...' : `${productivityPercentage}%`}
           icon={TrendingUp}
-          variant={productivityPercentage >= 70 ? 'success' : productivityPercentage >= 40 ? 'warning' : 'danger'}
+          variant={productivityPercentage >= 70 ? 'success' : productivityPercentage >= 40 ? 'warning' : 'default'}
         />
       </div>
 
@@ -674,11 +686,7 @@ export default function Dashboard() {
                           <Badge variant="outline" className="text-[10px] px-1.5 flex-shrink-0">
                             {getPriorityLabel(task.priority)}
                           </Badge>
-                          {task.client && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[100px]">
-                              {task.client}
-                            </span>
-                          )}
+
                         </div>
                       </div>
                       {dueDateInfo && (

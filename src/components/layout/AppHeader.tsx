@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, User, ChevronRight, Moon, Sun, LogOut, Command } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,10 @@ export function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isDark, setIsDark] = useState(false);
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  });
   const currentPath = pathNames[location.pathname] || 'Dashboard';
   const user = authService.getUser();
   const isMisTareasView = location.pathname === '/mis-tareas';
@@ -42,9 +45,19 @@ export function AppHeader() {
   const teamMember = TEAM_MEMBERS.find(m => m.name.toLowerCase() === user?.firstName?.toLowerCase());
   const userRole = teamMember?.role || user?.role || 'Usuario';
 
+  // Sincronizar clase dark en el documento al montar
+  useEffect(() => {
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDark]);
+
   const toggleTheme = () => {
-    setIsDark(!isDark);
-    document.documentElement.classList.toggle('dark');
+    const newIsDark = !isDark;
+    setIsDark(newIsDark);
+    localStorage.setItem('theme', newIsDark ? 'dark' : 'light');
   };
 
   const handleLogout = async () => {

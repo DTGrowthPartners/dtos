@@ -137,6 +137,14 @@ export interface TaskComment {
   createdAt: number;
 }
 
+export interface TaskChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: number;
+  completedAt?: number;
+}
+
 export interface Task {
   id: string;
   title: string;
@@ -164,6 +172,8 @@ export interface Task {
   recurrence?: RecurrenceConfig;
   isRecurringInstance?: boolean; // true if this task was generated from a recurring template
   recurringTemplateId?: string; // ID of the original recurring task template
+  // Checklist/subtasks fields
+  checklist?: TaskChecklistItem[];
 }
 
 export interface PomodoroSession {

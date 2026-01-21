@@ -114,6 +114,7 @@ import {
   type Project,
   type ProjectFolder,
   type TaskComment,
+  type TaskChecklistItem,
   type RecurrenceConfig,
   type RecurrenceFrequency,
   TaskStatus,
@@ -262,6 +263,7 @@ export default function Tareas() {
   const [selectedImage, setSelectedImage] = useState('');
   const [commentsModalOpen, setCommentsModalOpen] = useState(false);
   const [selectedTaskForComments, setSelectedTaskForComments] = useState<Task | null>(null);
+  const [checklistInput, setChecklistInput] = useState('');
 
   // New project form
   const [newProjectName, setNewProjectName] = useState('');
@@ -304,6 +306,7 @@ export default function Tareas() {
     dueDate: '',
     startDate: '',
     images: [] as string[],
+    checklist: [] as TaskChecklistItem[],
     // Recurrence fields
     isRecurring: false,
     recurrenceFrequency: 'weekly' as RecurrenceFrequency,
@@ -349,6 +352,7 @@ export default function Tareas() {
           dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
           startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
           images: task.images || [],
+          checklist: task.checklist || [],
           isRecurring: task.recurrence?.enabled || false,
           recurrenceFrequency: task.recurrence?.frequency || 'weekly',
           recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
@@ -507,14 +511,15 @@ export default function Tareas() {
       now.setHours(9, 0, 0, 0); // Default to 9 AM
 
       switch (formData.recurrenceFrequency) {
-        case 'daily':
+        case 'daily': {
           // Next day
           const tomorrow = new Date(now);
           tomorrow.setDate(tomorrow.getDate() + 1);
           return tomorrow.getTime();
+        }
 
         case 'weekly':
-        case 'biweekly':
+        case 'biweekly': {
           // Find next occurrence of the selected day
           const targetDay = formData.recurrenceDayOfWeek;
           const currentDay = now.getDay();
@@ -526,8 +531,9 @@ export default function Tareas() {
           const nextWeekday = new Date(now);
           nextWeekday.setDate(now.getDate() + daysUntilTarget);
           return nextWeekday.getTime();
+        }
 
-        case 'monthly':
+        case 'monthly': {
           // Find next occurrence of the selected day of month
           const targetDayOfMonth = formData.recurrenceDayOfMonth;
           const nextMonth = new Date(now);
@@ -536,6 +542,7 @@ export default function Tareas() {
           }
           nextMonth.setDate(targetDayOfMonth);
           return nextMonth.getTime();
+        }
 
         default:
           return now.getTime();
@@ -561,6 +568,7 @@ export default function Tareas() {
       dueDate: formData.dueDate ? parseLocalDate(formData.dueDate) : undefined,
       startDate: formData.startDate ? parseLocalDate(formData.startDate) : undefined,
       images: formData.images,
+      checklist: formData.checklist,
       recurrence: formData.isRecurring ? {
         enabled: true,
         frequency: formData.recurrenceFrequency,
@@ -1016,6 +1024,7 @@ export default function Tareas() {
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
       startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
       images: task.images || [],
+      checklist: task.checklist || [],
       isRecurring: task.recurrence?.enabled || false,
       recurrenceFrequency: task.recurrence?.frequency || 'weekly',
       recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
@@ -1039,6 +1048,7 @@ export default function Tareas() {
       dueDate: '',
       startDate: '',
       images: task.images || [],
+      checklist: [],
       isRecurring: false,
       recurrenceFrequency: 'weekly',
       recurrenceDayOfWeek: 1,
@@ -1201,6 +1211,7 @@ export default function Tareas() {
       dueDate: '',
       startDate: '',
       images: [],
+      checklist: [],
       isRecurring: false,
       recurrenceFrequency: 'weekly',
       recurrenceDayOfWeek: 1,
@@ -3112,6 +3123,99 @@ export default function Tareas() {
                   <Button type="button" variant="outline" onClick={() => setIsProjectDialogOpen(true)}>
                     <Plus className="h-4 w-4" />
                   </Button>
+                </div>
+              </div>
+
+              {/* Checklist Section */}
+              <div className="space-y-2">
+                <Label>Lista de verificación (tipo WhatsApp)</Label>
+                <div className="space-y-2 border rounded-md p-3 bg-muted/20">
+                  {formData.checklist.map((item, idx) => (
+                    <div key={item.id} className="flex items-center gap-2">
+                      <div
+                        className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer ${
+                          item.completed
+                            ? 'bg-primary border-primary'
+                            : 'border-muted-foreground'
+                        }`}
+                        onClick={() => {
+                          const newChecklist = [...formData.checklist];
+                          newChecklist[idx] = {
+                            ...item,
+                            completed: !item.completed,
+                            completedAt: !item.completed ? Date.now() : undefined,
+                          };
+                          setFormData({ ...formData, checklist: newChecklist });
+                        }}
+                      >
+                        {item.completed && <span className="text-white text-xs">✓</span>}
+                      </div>
+                      <span className={`flex-1 text-sm ${item.completed ? 'line-through text-muted-foreground' : ''}`}>
+                        {item.text}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0"
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            checklist: formData.checklist.filter((_, i) => i !== idx),
+                          });
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                  
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Agregar item a la lista..."
+                      value={checklistInput}
+                      onChange={(e) => setChecklistInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && checklistInput.trim()) {
+                          e.preventDefault();
+                          const newItem: TaskChecklistItem = {
+                            id: crypto.randomUUID(),
+                            text: checklistInput.trim(),
+                            completed: false,
+                            createdAt: Date.now(),
+                          };
+                          setFormData({
+                            ...formData,
+                            checklist: [...formData.checklist, newItem],
+                          });
+                          setChecklistInput('');
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (checklistInput.trim()) {
+                          const newItem: TaskChecklistItem = {
+                            id: crypto.randomUUID(),
+                            text: checklistInput.trim(),
+                            completed: false,
+                            createdAt: Date.now(),
+                          };
+                          setFormData({
+                            ...formData,
+                            checklist: [...formData.checklist, newItem],
+                          });
+                          setChecklistInput('');
+                        }
+                      }}
+                      disabled={!checklistInput.trim()}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
 

@@ -1,22 +1,10 @@
 import { useState, useEffect } from 'react';
-import { X, Send, MessageCircle, User } from 'lucide-react';
+import { X, Send, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-interface TaskComment {
-  id: string;
-  text: string;
-  author: string;
-  createdAt: string;
-}
-
-interface Task {
-  id: string;
-  title: string;
-  comments?: TaskComment[];
-}
+import { Task } from '@/types/taskTypes';
 
 interface CommentsModalProps {
   isOpen: boolean;
@@ -69,7 +57,7 @@ export default function CommentsModal({
     }
   };
 
-  const formatDate = (date: string) => {
+  const formatDate = (date: number | string) => {
     return new Date(date).toLocaleString('es-ES', {
       year: 'numeric',
       month: 'short',
