@@ -298,6 +298,9 @@ export default function Tareas() {
 
   const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
 
+  // Check if user is admin - admins can see ALL tasks from all team members
+  const isAdmin = user?.role?.toLowerCase() === 'admin';
+
   // Helper to get user photo by name (matches firstName with team member name)
   const getUserPhoto = (assigneeName: string | undefined): string | undefined => {
     if (!assigneeName) return undefined;
@@ -1841,15 +1844,16 @@ export default function Tareas() {
   };
 
   // Debug: Log user info to console
-  console.log('User:', user?.firstName, '-> Mapped to:', loggedUserName);
+  console.log('User:', user?.firstName, '-> Mapped to:', loggedUserName, '| Admin:', isAdmin);
 
   // Filter tasks - only show tasks where user is creator or assignee
+  // Admins can see ALL tasks from all team members
   const filteredTasks = tasks.filter((task) => {
     // First filter by logged user (must be creator or assignee)
+    // Admins bypass this filter and see all tasks
     // If loggedUserName is undefined (no match found), show all tasks as fallback
-    const isUserTask = loggedUserName
-      ? (task.assignee === loggedUserName || task.creator === loggedUserName)
-      : true; // If no match or no user logged, show all (fallback)
+    const isUserTask = isAdmin || !loggedUserName ||
+      (task.assignee === loggedUserName || task.creator === loggedUserName);
 
     if (!isUserTask) return false;
 
@@ -1887,11 +1891,11 @@ export default function Tareas() {
   };
 
   // Helper to count tasks by project (excludes completed tasks)
+  // Admins see counts for ALL tasks, regular users only their own
   const getTaskCountByProject = (projectId: string) => {
     return tasks.filter(t => {
-      const isUserTask = loggedUserName
-        ? (t.assignee === loggedUserName || t.creator === loggedUserName)
-        : true;
+      const isUserTask = isAdmin || !loggedUserName ||
+        (t.assignee === loggedUserName || t.creator === loggedUserName);
       // Don't count completed tasks
       const isNotDone = t.status !== TaskStatus.DONE;
       return isUserTask && t.projectId === projectId && isNotDone;
@@ -1899,11 +1903,11 @@ export default function Tareas() {
   };
 
   // Get counts for date filters (only active, non-completed tasks, respecting current filters)
+  // Admins see counts for ALL tasks
   const getDateFilterCounts = () => {
     const activeTasks = tasks.filter(t => {
-      const isUserTask = loggedUserName
-        ? (t.assignee === loggedUserName || t.creator === loggedUserName)
-        : true;
+      const isUserTask = isAdmin || !loggedUserName ||
+        (t.assignee === loggedUserName || t.creator === loggedUserName);
       const matchesProject = filterProject === 'all' || t.projectId === filterProject;
       const matchesAssignee = filterAssignee === 'all' || t.assignee === filterAssignee;
       const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
