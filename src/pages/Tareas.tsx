@@ -207,6 +207,22 @@ const getDaysOverdue = (timestamp: number | undefined) => {
   return diffDays > 0 ? diffDays : 0;
 };
 
+// Helper to check if a timestamp has a non-default time (not noon)
+const hasTime = (timestamp: number | undefined): boolean => {
+  if (!timestamp) return false;
+  const date = new Date(timestamp);
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  // Consider noon (12:00) as no time set (default)
+  return !(hours === 12 && minutes === 0);
+};
+
+// Format time from timestamp
+const formatTime = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+};
+
 export default function Tareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -304,7 +320,9 @@ export default function Tareas() {
     projectId: '',
     type: '' as TaskType | '',
     dueDate: '',
+    dueTime: '',
     startDate: '',
+    startTime: '',
     images: [] as string[],
     checklist: [] as TaskChecklistItem[],
     // Recurrence fields
@@ -350,7 +368,9 @@ export default function Tareas() {
           projectId: task.projectId,
           type: task.type || '',
           dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+          dueTime: task.dueDate ? new Date(task.dueDate).toTimeString().slice(0, 5) : '',
           startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
+          startTime: task.startDate ? new Date(task.startDate).toTimeString().slice(0, 5) : '',
           images: task.images || [],
           checklist: task.checklist || [],
           isRecurring: task.recurrence?.enabled || false,
@@ -549,10 +569,14 @@ export default function Tareas() {
       }
     };
 
-    // Helper to parse date string as local date (not UTC)
-    const parseLocalDate = (dateStr: string): number => {
+    // Helper to parse date and time string as local date (not UTC)
+    const parseLocalDateTime = (dateStr: string, timeStr?: string): number => {
       const [year, month, day] = dateStr.split('-').map(Number);
-      // Create date at noon local time to avoid timezone issues
+      if (timeStr) {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return new Date(year, month - 1, day, hours, minutes, 0).getTime();
+      }
+      // Default to noon if no time specified to avoid timezone issues
       return new Date(year, month - 1, day, 12, 0, 0).getTime();
     };
 
@@ -565,8 +589,8 @@ export default function Tareas() {
       creator: formData.creator,
       projectId: formData.projectId,
       type: formData.type || undefined,
-      dueDate: formData.dueDate ? parseLocalDate(formData.dueDate) : undefined,
-      startDate: formData.startDate ? parseLocalDate(formData.startDate) : undefined,
+      dueDate: formData.dueDate ? parseLocalDateTime(formData.dueDate, formData.dueTime) : undefined,
+      startDate: formData.startDate ? parseLocalDateTime(formData.startDate, formData.startTime) : undefined,
       images: formData.images,
       checklist: formData.checklist,
       recurrence: formData.isRecurring ? {
@@ -1022,7 +1046,9 @@ export default function Tareas() {
       projectId: task.projectId,
       type: task.type || '',
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      dueTime: task.dueDate ? new Date(task.dueDate).toTimeString().slice(0, 5) : '',
       startDate: task.startDate ? new Date(task.startDate).toISOString().split('T')[0] : '',
+      startTime: task.startDate ? new Date(task.startDate).toTimeString().slice(0, 5) : '',
       images: task.images || [],
       checklist: task.checklist || [],
       isRecurring: task.recurrence?.enabled || false,
@@ -1046,7 +1072,9 @@ export default function Tareas() {
       projectId: task.projectId,
       type: task.type || '',
       dueDate: '',
+      dueTime: '',
       startDate: '',
+      startTime: '',
       images: task.images || [],
       checklist: [],
       isRecurring: false,
@@ -1209,7 +1237,9 @@ export default function Tareas() {
       projectId: filterProject !== 'all' ? filterProject : '',
       type: '',
       dueDate: '',
+      dueTime: '',
       startDate: '',
+      startTime: '',
       images: [],
       checklist: [],
       isRecurring: false,
@@ -2719,14 +2749,17 @@ export default function Tareas() {
                                 {isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? (
                                   <span>{getDaysOverdue(task.dueDate)}d vencida</span>
                                 ) : isToday(task.dueDate) ? (
-                                  'Hoy'
+                                  <>Hoy{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
                                 ) : isTomorrow(task.dueDate) ? (
-                                  'Mañana'
+                                  <>Mañana{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
                                 ) : (
-                                  new Date(task.dueDate).toLocaleDateString('es-ES', {
-                                    day: '2-digit',
-                                    month: 'short',
-                                  })
+                                  <>
+                                    {new Date(task.dueDate).toLocaleDateString('es-ES', {
+                                      day: '2-digit',
+                                      month: 'short',
+                                    })}
+                                    {hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}
+                                  </>
                                 )}
                               </span>
                             )}
@@ -3364,25 +3397,47 @@ export default function Tareas() {
                 </div>
               </div>
 
-              {/* Row 3: Dates */}
+              {/* Row 3: Dates and Times */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Fecha de inicio</Label>
-                  <Input
-                    type="date"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                    disabled={isSaving}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      value={formData.startDate}
+                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      disabled={isSaving}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="time"
+                      value={formData.startTime}
+                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      disabled={isSaving || !formData.startDate}
+                      className="w-28"
+                      placeholder="--:--"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha límite</Label>
-                  <Input
-                    type="date"
-                    value={formData.dueDate}
-                    onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                    disabled={isSaving}
-                  />
+                  <div className="flex gap-2">
+                    <Input
+                      type="date"
+                      value={formData.dueDate}
+                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                      disabled={isSaving}
+                      className="flex-1"
+                    />
+                    <Input
+                      type="time"
+                      value={formData.dueTime}
+                      onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                      disabled={isSaving || !formData.dueDate}
+                      className="w-28"
+                      placeholder="--:--"
+                    />
+                  </div>
                 </div>
               </div>
 
