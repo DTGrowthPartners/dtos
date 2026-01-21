@@ -128,6 +128,15 @@ import {
   type TeamMemberName,
 } from '@/types/taskTypes';
 import { useAuthStore } from '@/lib/auth';
+import { apiClient } from '@/lib/api';
+
+// User interface for team members with photos
+interface TeamUser {
+  id: string;
+  firstName: string;
+  lastName: string;
+  photoUrl?: string;
+}
 
 const PRIORITY_COLORS = {
   LOW: 'bg-emerald-100 text-emerald-800 border-emerald-300',
@@ -251,6 +260,7 @@ export default function Tareas() {
     taskCount: 0,
   });
   const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
   const { toast } = useToast();
   const { user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -273,6 +283,18 @@ export default function Tareas() {
   };
 
   const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
+
+  // Helper to get user photo by name (matches firstName with team member name)
+  const getUserPhoto = (assigneeName: string | undefined): string | undefined => {
+    if (!assigneeName) return undefined;
+    const normalizedName = assigneeName.toLowerCase().trim();
+    const teamUser = teamUsers.find(u =>
+      u.firstName.toLowerCase() === normalizedName ||
+      u.firstName.toLowerCase().startsWith(normalizedName) ||
+      normalizedName.startsWith(u.firstName.toLowerCase())
+    );
+    return teamUser?.photoUrl;
+  };
 
   // Image and Comments modals
   const [imageModalOpen, setImageModalOpen] = useState(false);
@@ -460,13 +482,17 @@ export default function Tareas() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [tasksData, projectsData, archivedData, deletedData, foldersData] = await Promise.all([
+      const [tasksData, projectsData, archivedData, deletedData, foldersData, usersData] = await Promise.all([
         loadTasks(),
         loadProjects(),
         loadCompletedTasks(),
         loadDeletedTasks(),
         loadProjectFolders(),
+        apiClient.get<TeamUser[]>('/api/users').catch(() => []),
       ]);
+
+      // Store team users for photos
+      setTeamUsers(usersData);
 
       // Process recurring tasks
       await processRecurringTasks(tasksData);
@@ -2543,9 +2569,17 @@ export default function Tareas() {
                           <div className="flex items-center gap-2">
                             <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[task.priority].split(' ')[0]}`}></span>
                             <span className="text-sm flex-1 truncate">{task.title}</span>
-                            <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                              {assignee?.initials}
-                            </div>
+                            {getUserPhoto(task.assignee) ? (
+                              <img
+                                src={getUserPhoto(task.assignee)}
+                                alt={task.assignee}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                {assignee?.initials}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -2591,9 +2625,17 @@ export default function Tareas() {
                             <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
                               {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
                             </span>
-                            <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                              {assignee?.initials}
-                            </div>
+                            {getUserPhoto(task.assignee) ? (
+                              <img
+                                src={getUserPhoto(task.assignee)}
+                                alt={task.assignee}
+                                className="w-7 h-7 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                {assignee?.initials}
+                              </div>
+                            )}
                             <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                               <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
                                 <Edit className="h-3 w-3" />
@@ -2785,9 +2827,17 @@ export default function Tareas() {
                                 <span className="text-[10px] ml-0.5">{task.comments.length}</span>
                               )}
                             </Button>
-                            <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                              {assignee?.initials}
-                            </div>
+                            {getUserPhoto(task.assignee) ? (
+                              <img
+                                src={getUserPhoto(task.assignee)}
+                                alt={task.assignee}
+                                className="w-6 h-6 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                {assignee?.initials}
+                              </div>
+                            )}
                           </div>
                         </div>
                           </Card>
@@ -2997,9 +3047,17 @@ export default function Tareas() {
                         <span>
                           Completada: {task.completedAt ? new Date(task.completedAt).toLocaleDateString('es-ES') : 'N/A'}
                         </span>
-                        <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                          {assignee?.initials}
-                        </div>
+                        {getUserPhoto(task.assignee) ? (
+                          <img
+                            src={getUserPhoto(task.assignee)}
+                            alt={task.assignee}
+                            className="w-6 h-6 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                            {assignee?.initials}
+                          </div>
+                        )}
                       </div>
                     </Card>
                   );
@@ -3074,9 +3132,17 @@ export default function Tareas() {
                         <span>
                           Eliminada: {task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('es-ES') : 'N/A'}
                         </span>
-                        <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                          {assignee?.initials}
-                        </div>
+                        {getUserPhoto(task.assignee) ? (
+                          <img
+                            src={getUserPhoto(task.assignee)}
+                            alt={task.assignee}
+                            className="w-6 h-6 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                            {assignee?.initials}
+                          </div>
+                        )}
                       </div>
                     </Card>
                   );

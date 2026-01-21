@@ -43,7 +43,7 @@ export const TRACKING_PRESETS: { id: TrackingPreset; label: string; minutes: num
   { id: 'LONG_BREAK', label: 'Pausa larga', minutes: 15 },
 ];
 
-export type TeamMemberName = 'Dairo' | 'Stiven' | 'Mariana' | 'Jose' | 'Anderson' | 'Edgardo';
+export type TeamMemberName = 'Lía' | 'Dairo' | 'Stiven' | 'Mariana' | 'Jose' | 'Anderson' | 'Edgardo';
 
 export interface TeamMember {
   name: TeamMemberName;
@@ -53,7 +53,8 @@ export interface TeamMember {
 }
 
 export const TEAM_MEMBERS: TeamMember[] = [
-  { name: 'Dairo', role: 'CEO', initials: 'DA', color: 'bg-purple-500' },
+  { name: 'Lía', role: 'CEO', initials: 'LI', color: 'bg-purple-500' },
+  { name: 'Dairo', role: 'Usuario', initials: 'DA', color: 'bg-indigo-500' },
   { name: 'Stiven', role: 'Dev', initials: 'ST', color: 'bg-blue-500' },
   { name: 'Mariana', role: 'Designer', initials: 'MA', color: 'bg-pink-500' },
   { name: 'Jose', role: 'Freelancer', initials: 'JO', color: 'bg-orange-500' },
