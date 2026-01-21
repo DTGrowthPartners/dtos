@@ -224,3 +224,34 @@ export interface DragItem {
 }
 
 export type NewColumn = Omit<BoardColumn, 'id' | 'createdAt'>;
+
+// ============= PROJECT NOTE COLUMNS =============
+
+export type NoteItemType = 'text' | 'image' | 'link';
+
+export interface ProjectNoteColumn {
+  id: string;
+  projectId: string;           // Asociación al proyecto
+  name: string;
+  color: string;               // Ej: 'bg-purple-500'
+  icon?: string;               // Nombre del ícono de Lucide (opcional)
+  order: number;
+  createdAt: number;
+  updatedAt?: number;
+}
+
+export interface NoteItem {
+  id: string;
+  columnId: string;            // A qué columna pertenece
+  projectId: string;           // Redundante pero útil para queries
+  type: NoteItemType;
+  content: string;             // Texto, URL de imagen (base64), o URL de enlace
+  title?: string;              // Título opcional (para links o notas con título)
+  description?: string;        // Descripción opcional para links
+  order: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type NewProjectNoteColumn = Omit<ProjectNoteColumn, 'id' | 'createdAt'>;
+export type NewNoteItem = Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>;

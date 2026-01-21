@@ -108,6 +108,15 @@ import {
   permanentlyDeleteTask,
   sendTaskNotification,
   sendHighPriorityTaskToWhatsApp,
+  loadProjectNoteColumns,
+  createProjectNoteColumn,
+  updateProjectNoteColumn,
+  deleteProjectNoteColumn,
+  loadAllNoteItemsForProject,
+  createNoteItem,
+  updateNoteItem,
+  deleteNoteItem,
+  moveNoteItemToColumn,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -117,6 +126,8 @@ import {
   type TaskChecklistItem,
   type RecurrenceConfig,
   type RecurrenceFrequency,
+  type ProjectNoteColumn,
+  type NoteItem,
   TaskStatus,
   Priority,
   TASK_TYPES,
@@ -127,6 +138,9 @@ import {
   type TaskType,
   type TeamMemberName,
 } from '@/types/taskTypes';
+import NoteColumn from '@/components/notes/NoteColumn';
+import NoteColumnModal from '@/components/notes/NoteColumnModal';
+import NoteItemModal from '@/components/notes/NoteItemModal';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 
@@ -332,6 +346,17 @@ export default function Tareas() {
   const [editingChatLink, setEditingChatLink] = useState(false);
   const [chatLinkDraft, setChatLinkDraft] = useState('');
 
+  // Note Columns states
+  const [noteColumns, setNoteColumns] = useState<ProjectNoteColumn[]>([]);
+  const [noteItems, setNoteItems] = useState<NoteItem[]>([]);
+  const [isNoteColumnModalOpen, setIsNoteColumnModalOpen] = useState(false);
+  const [editingNoteColumn, setEditingNoteColumn] = useState<ProjectNoteColumn | null>(null);
+  const [isNoteItemModalOpen, setIsNoteItemModalOpen] = useState(false);
+  const [editingNoteItem, setEditingNoteItem] = useState<NoteItem | null>(null);
+  const [selectedNoteColumnId, setSelectedNoteColumnId] = useState<string | null>(null);
+  const [draggedNoteItem, setDraggedNoteItem] = useState<string | null>(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -406,6 +431,35 @@ export default function Tareas() {
       }
     }
   }, [tasks, isLoading, searchParams, setSearchParams]);
+
+  // Load note columns when project filter changes
+  useEffect(() => {
+    const loadNotes = async () => {
+      if (filterProject === 'all') {
+        setNoteColumns([]);
+        setNoteItems([]);
+        return;
+      }
+
+      try {
+        const [columns, items] = await Promise.all([
+          loadProjectNoteColumns(filterProject),
+          loadAllNoteItemsForProject(filterProject),
+        ]);
+        setNoteColumns(columns);
+        setNoteItems(items);
+      } catch (error) {
+        console.error('Error loading notes:', error);
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar las notas del proyecto',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    loadNotes();
+  }, [filterProject, toast]);
 
   // Process recurring tasks and create new instances if needed
   const processRecurringTasks = async (tasksData: Task[]) => {
@@ -1057,6 +1111,167 @@ export default function Tareas() {
   // Get projects without folder
   const getProjectsWithoutFolder = () => {
     return projects.filter(p => !p.folderId);
+  };
+
+  // ============= NOTE COLUMN HANDLERS =============
+
+  const handleAddNoteColumn = () => {
+    setEditingNoteColumn(null);
+    setIsNoteColumnModalOpen(true);
+  };
+
+  const handleEditNoteColumn = (column: ProjectNoteColumn) => {
+    setEditingNoteColumn(column);
+    setIsNoteColumnModalOpen(true);
+  };
+
+  const handleSaveNoteColumn = async (data: { name: string; color: string }) => {
+    if (filterProject === 'all') return;
+
+    setIsSavingNote(true);
+    try {
+      if (editingNoteColumn) {
+        await updateProjectNoteColumn(editingNoteColumn.id, data);
+        setNoteColumns(prev => prev.map(col =>
+          col.id === editingNoteColumn.id ? { ...col, ...data } : col
+        ));
+        toast({ title: 'Columna actualizada' });
+      } else {
+        const newColumnId = await createProjectNoteColumn({
+          ...data,
+          projectId: filterProject,
+          order: noteColumns.length,
+        });
+        const newColumn: ProjectNoteColumn = {
+          id: newColumnId,
+          ...data,
+          projectId: filterProject,
+          order: noteColumns.length,
+          createdAt: Date.now(),
+        };
+        setNoteColumns(prev => [...prev, newColumn]);
+        toast({ title: 'Columna creada' });
+      }
+      setIsNoteColumnModalOpen(false);
+      setEditingNoteColumn(null);
+    } catch (error) {
+      console.error('Error saving note column:', error);
+      toast({ title: 'Error', description: 'No se pudo guardar la columna', variant: 'destructive' });
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleDeleteNoteColumn = async (columnId: string) => {
+    if (!confirm('¿Se eliminará esta columna y todas sus notas. Continuar?')) return;
+
+    try {
+      await deleteProjectNoteColumn(columnId);
+      setNoteColumns(prev => prev.filter(col => col.id !== columnId));
+      setNoteItems(prev => prev.filter(item => item.columnId !== columnId));
+      toast({ title: 'Columna eliminada' });
+    } catch (error) {
+      console.error('Error deleting note column:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar la columna', variant: 'destructive' });
+    }
+  };
+
+  // ============= NOTE ITEM HANDLERS =============
+
+  const handleAddNoteItem = (columnId: string) => {
+    setSelectedNoteColumnId(columnId);
+    setEditingNoteItem(null);
+    setIsNoteItemModalOpen(true);
+  };
+
+  const handleEditNoteItem = (item: NoteItem) => {
+    setSelectedNoteColumnId(item.columnId);
+    setEditingNoteItem(item);
+    setIsNoteItemModalOpen(true);
+  };
+
+  const handleSaveNoteItem = async (data: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
+    setIsSavingNote(true);
+    try {
+      if (editingNoteItem) {
+        await updateNoteItem(editingNoteItem.id, data);
+        setNoteItems(prev => prev.map(item =>
+          item.id === editingNoteItem.id ? { ...item, ...data, updatedAt: Date.now() } : item
+        ));
+        toast({ title: 'Nota actualizada' });
+      } else {
+        const columnItems = noteItems.filter(i => i.columnId === data.columnId);
+        const newItemId = await createNoteItem({
+          ...data,
+          order: columnItems.length,
+        });
+        const newItem: NoteItem = {
+          id: newItemId,
+          ...data,
+          order: columnItems.length,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        setNoteItems(prev => [...prev, newItem]);
+        toast({ title: 'Nota creada' });
+      }
+      setIsNoteItemModalOpen(false);
+      setEditingNoteItem(null);
+      setSelectedNoteColumnId(null);
+    } catch (error) {
+      console.error('Error saving note item:', error);
+      toast({ title: 'Error', description: 'No se pudo guardar la nota', variant: 'destructive' });
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
+  const handleDeleteNoteItem = async (itemId: string) => {
+    try {
+      await deleteNoteItem(itemId);
+      setNoteItems(prev => prev.filter(item => item.id !== itemId));
+      toast({ title: 'Nota eliminada' });
+    } catch (error) {
+      console.error('Error deleting note item:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar la nota', variant: 'destructive' });
+    }
+  };
+
+  // Drag and drop for note items
+  const handleNoteItemDrop = async (e: React.DragEvent, targetColumnId: string) => {
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData('noteItemId');
+
+    if (!itemId) return;
+
+    const item = noteItems.find(i => i.id === itemId);
+    if (!item || item.columnId === targetColumnId) {
+      setDraggedNoteItem(null);
+      return;
+    }
+
+    try {
+      const targetColumnItems = noteItems.filter(i => i.columnId === targetColumnId);
+      const newOrder = targetColumnItems.length;
+
+      await moveNoteItemToColumn(itemId, targetColumnId, newOrder);
+
+      setNoteItems(prev => prev.map(i =>
+        i.id === itemId ? { ...i, columnId: targetColumnId, order: newOrder } : i
+      ));
+
+      toast({ title: 'Nota movida' });
+    } catch (error) {
+      console.error('Error moving note item:', error);
+      toast({ title: 'Error', description: 'No se pudo mover la nota', variant: 'destructive' });
+    }
+
+    setDraggedNoteItem(null);
+  };
+
+  // Helper to get items for a note column
+  const getNoteItemsForColumn = (columnId: string) => {
+    return noteItems.filter(item => item.columnId === columnId).sort((a, b) => a.order - b.order);
   };
 
   const handleEdit = (task: Task) => {
@@ -2299,16 +2514,21 @@ export default function Tareas() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl md:text-2xl font-bold text-foreground">
+            <h1 className="text-base md:text-lg font-semibold text-muted-foreground">
               {taskView === 'active' && 'Mis Tareas'}
               {taskView === 'archived' && 'Tareas Archivadas'}
               {taskView === 'deleted' && 'Tareas Eliminadas'}
             </h1>
-            <p className="text-xs md:text-sm text-muted-foreground">
+            <p className="text-sm md:text-base font-medium text-foreground">
               {taskView === 'active' && (
                 <>
-                  {filterProject !== 'all' ? projects.find(p => p.id === filterProject)?.name : 'Todos los proyectos'}
-                  {' · '}{filteredTasks.length} tareas
+                  {filterProject !== 'all' ? (
+                    <span className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${projects.find(p => p.id === filterProject)?.color || 'bg-gray-500'}`} />
+                      {projects.find(p => p.id === filterProject)?.name}
+                    </span>
+                  ) : 'Todos los proyectos'}
+                  <span className="text-muted-foreground font-normal"> · {filteredTasks.length} tareas</span>
                 </>
               )}
               {taskView === 'archived' && `${archivedTasks.length} tareas completadas`}
@@ -2316,24 +2536,24 @@ export default function Tareas() {
             </p>
             {/* Project Description */}
             {taskView === 'active' && filterProject !== 'all' && (
-              <div className="mt-2">
+              <div className="mt-3">
                 {editingProjectDescription ? (
                   <div className="flex items-center gap-2">
                     <Input
                       value={projectDescriptionDraft}
                       onChange={(e) => setProjectDescriptionDraft(e.target.value)}
                       placeholder="Objetivos del proyecto..."
-                      className="text-sm h-8 max-w-md"
+                      className="text-sm h-9 max-w-lg"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleSaveProjectDescription();
                         if (e.key === 'Escape') setEditingProjectDescription(false);
                       }}
                       autoFocus
                     />
-                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveProjectDescription}>
+                    <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveProjectDescription}>
                       <CheckSquare className="h-4 w-4" />
                     </Button>
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingProjectDescription(false)}>
+                    <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingProjectDescription(false)}>
                       <X className="h-4 w-4" />
                     </Button>
                   </div>
@@ -2344,12 +2564,12 @@ export default function Tareas() {
                       setProjectDescriptionDraft(currentProject?.description || '');
                       setEditingProjectDescription(true);
                     }}
-                    className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 group"
+                    className="text-sm text-foreground/80 hover:text-foreground flex items-center gap-2 group bg-muted/50 hover:bg-muted px-3 py-1.5 rounded-md transition-colors"
                   >
                     {projects.find(p => p.id === filterProject)?.description || (
-                      <span className="italic opacity-50">Click para agregar objetivos del proyecto...</span>
+                      <span className="italic text-muted-foreground">Click para agregar objetivos del proyecto...</span>
                     )}
-                    <Edit className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Edit className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </button>
                 )}
               </div>
@@ -2978,6 +3198,51 @@ export default function Tareas() {
               </div>
             );
           })}
+
+          {/* Note Columns - Only show when a specific project is selected */}
+          {filterProject !== 'all' && (
+            <>
+              {/* Separator between task columns and note columns */}
+              {noteColumns.length > 0 && (
+                <div className="w-px bg-border/50 mx-2 self-stretch flex-shrink-0" />
+              )}
+
+              {/* Note Columns */}
+              {noteColumns.map((column) => {
+                const columnItems = getNoteItemsForColumn(column.id);
+
+                return (
+                  <NoteColumn
+                    key={column.id}
+                    column={column}
+                    items={columnItems}
+                    onEditColumn={handleEditNoteColumn}
+                    onDeleteColumn={handleDeleteNoteColumn}
+                    onAddItem={handleAddNoteItem}
+                    onEditItem={handleEditNoteItem}
+                    onDeleteItem={handleDeleteNoteItem}
+                    onDropItem={handleNoteItemDrop}
+                    onImageClick={(img) => {
+                      setSelectedImage(img);
+                      setImageModalOpen(true);
+                    }}
+                    draggedItemId={draggedNoteItem}
+                  />
+                );
+              })}
+
+              {/* Add Note Column Button */}
+              <div className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0">
+                <button
+                  onClick={handleAddNoteColumn}
+                  className="w-full h-32 border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Plus className="h-6 w-6" />
+                  <span className="text-sm font-medium">Agregar columna</span>
+                </button>
+              </div>
+            </>
+          )}
           </div>
         </div>
         )}
@@ -3783,6 +4048,33 @@ export default function Tareas() {
         }}
         task={selectedTaskForComments}
         onSaveComment={handleSaveComment}
+      />
+
+      {/* Note Column Modal */}
+      <NoteColumnModal
+        isOpen={isNoteColumnModalOpen}
+        onClose={() => {
+          setIsNoteColumnModalOpen(false);
+          setEditingNoteColumn(null);
+        }}
+        onSave={handleSaveNoteColumn}
+        editingColumn={editingNoteColumn}
+        isSaving={isSavingNote}
+      />
+
+      {/* Note Item Modal */}
+      <NoteItemModal
+        isOpen={isNoteItemModalOpen}
+        onClose={() => {
+          setIsNoteItemModalOpen(false);
+          setEditingNoteItem(null);
+          setSelectedNoteColumnId(null);
+        }}
+        onSave={handleSaveNoteItem}
+        editingItem={editingNoteItem}
+        columnId={selectedNoteColumnId || ''}
+        projectId={filterProject}
+        isSaving={isSavingNote}
       />
 
       {/* Delete Project Confirmation Dialog */}

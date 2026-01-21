@@ -8,11 +8,12 @@ import {
   doc,
   query,
   orderBy,
+  where,
   arrayUnion,
   increment,
   getDoc
 } from 'firebase/firestore';
-import type { Task, Project, ProjectFolder, BoardColumn, PomodoroSession } from '@/types/taskTypes';
+import type { Task, Project, ProjectFolder, BoardColumn, PomodoroSession, ProjectNoteColumn, NoteItem } from '@/types/taskTypes';
 import { apiClient } from './api';
 
 const TASKS_COLLECTION = 'tasks';
@@ -21,6 +22,8 @@ const PROJECT_FOLDERS_COLLECTION = 'project_folders';
 const COMPLETED_TASKS_COLLECTION = 'completed_tasks';
 const DELETED_TASKS_COLLECTION = 'deleted_tasks';
 const COLUMNS_COLLECTION = 'board_columns';
+const PROJECT_NOTE_COLUMNS_COLLECTION = 'project_note_columns';
+const NOTE_ITEMS_COLLECTION = 'note_items';
 
 // Helper to sanitize payload (remove undefined values)
 const sanitizePayload = (payload: Record<string, unknown>): Record<string, unknown> => {
@@ -427,4 +430,105 @@ export const sendHighPriorityTaskToWhatsApp = async (params: WhatsAppTaskPayload
     console.error('Failed to send high priority task to WhatsApp webhook:', error);
     return false;
   }
+};
+
+// ============= PROJECT NOTE COLUMNS =============
+
+export const loadProjectNoteColumns = async (projectId: string): Promise<ProjectNoteColumn[]> => {
+  const q = query(
+    collection(db, PROJECT_NOTE_COLUMNS_COLLECTION),
+    where('projectId', '==', projectId)
+  );
+  const querySnapshot = await getDocs(q);
+  const columns = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as ProjectNoteColumn));
+  // Sort in client to avoid needing composite index
+  return columns.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
+export const createProjectNoteColumn = async (column: Omit<ProjectNoteColumn, 'id' | 'createdAt'>): Promise<string> => {
+  const payload = sanitizePayload({ ...column, createdAt: Date.now() });
+  const docRef = await addDoc(collection(db, PROJECT_NOTE_COLUMNS_COLLECTION), payload);
+  return docRef.id;
+};
+
+export const updateProjectNoteColumn = async (id: string, column: Partial<ProjectNoteColumn>): Promise<void> => {
+  const payload = sanitizePayload({ ...column, updatedAt: Date.now() });
+  const columnRef = doc(db, PROJECT_NOTE_COLUMNS_COLLECTION, id);
+  await updateDoc(columnRef, payload);
+};
+
+export const deleteProjectNoteColumn = async (id: string): Promise<void> => {
+  // Primero eliminar todos los items de esta columna
+  const itemsQuery = query(
+    collection(db, NOTE_ITEMS_COLLECTION),
+    where('columnId', '==', id)
+  );
+  const itemsSnapshot = await getDocs(itemsQuery);
+  const deletePromises = itemsSnapshot.docs.map(docSnap =>
+    deleteDoc(doc(db, NOTE_ITEMS_COLLECTION, docSnap.id))
+  );
+  await Promise.all(deletePromises);
+
+  // Luego eliminar la columna
+  await deleteDoc(doc(db, PROJECT_NOTE_COLUMNS_COLLECTION, id));
+};
+
+export const updateNoteColumnOrder = async (columnId: string, order: number): Promise<void> => {
+  const columnRef = doc(db, PROJECT_NOTE_COLUMNS_COLLECTION, columnId);
+  await updateDoc(columnRef, { order, updatedAt: Date.now() });
+};
+
+// ============= NOTE ITEMS =============
+
+export const loadNoteItems = async (columnId: string): Promise<NoteItem[]> => {
+  const q = query(
+    collection(db, NOTE_ITEMS_COLLECTION),
+    where('columnId', '==', columnId)
+  );
+  const querySnapshot = await getDocs(q);
+  const items = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as NoteItem));
+  // Sort in client to avoid needing composite index
+  return items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
+export const loadAllNoteItemsForProject = async (projectId: string): Promise<NoteItem[]> => {
+  const q = query(
+    collection(db, NOTE_ITEMS_COLLECTION),
+    where('projectId', '==', projectId)
+  );
+  const querySnapshot = await getDocs(q);
+  const items = querySnapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as NoteItem));
+  // Sort in client to avoid needing composite index
+  return items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+};
+
+export const createNoteItem = async (item: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> => {
+  const now = Date.now();
+  const payload = sanitizePayload({ ...item, createdAt: now, updatedAt: now });
+  const docRef = await addDoc(collection(db, NOTE_ITEMS_COLLECTION), payload);
+  return docRef.id;
+};
+
+export const updateNoteItem = async (id: string, item: Partial<NoteItem>): Promise<void> => {
+  const payload = sanitizePayload({ ...item, updatedAt: Date.now() });
+  const itemRef = doc(db, NOTE_ITEMS_COLLECTION, id);
+  await updateDoc(itemRef, payload);
+};
+
+export const deleteNoteItem = async (id: string): Promise<void> => {
+  await deleteDoc(doc(db, NOTE_ITEMS_COLLECTION, id));
+};
+
+export const updateNoteItemOrder = async (itemId: string, order: number): Promise<void> => {
+  const itemRef = doc(db, NOTE_ITEMS_COLLECTION, itemId);
+  await updateDoc(itemRef, { order, updatedAt: Date.now() });
+};
+
+export const moveNoteItemToColumn = async (itemId: string, newColumnId: string, newOrder: number): Promise<void> => {
+  const itemRef = doc(db, NOTE_ITEMS_COLLECTION, itemId);
+  await updateDoc(itemRef, {
+    columnId: newColumnId,
+    order: newOrder,
+    updatedAt: Date.now()
+  });
 };
