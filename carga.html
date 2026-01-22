@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cargando... Por favor espere...</title>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            background: linear-gradient(to bottom, #d4d4d4 0%, #e8e8e8 50%, #c0c0c0 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: wait;
+        }
+
+        .container {
+            background: #f0f0f0;
+            border: 3px outset #ffffff;
+            padding: 30px 50px;
+            text-align: center;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            font-size: 16px;
+            color: #000080;
+            margin-bottom: 20px;
+            font-weight: normal;
+        }
+
+        /* GIF de carga feo estilo Windows XP */
+        .loader-gif {
+            width: 32px;
+            height: 32px;
+            margin: 20px auto;
+            border: 3px solid #0055aa;
+            border-top: 3px solid transparent;
+            border-radius: 50%;
+            animation: spinSlow 3s linear infinite;
+        }
+
+        @keyframes spinSlow {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Barra de progreso horrible estilo Windows */
+        .progress-wrapper {
+            width: 300px;
+            height: 20px;
+            background: #ffffff;
+            border: 2px inset #808080;
+            margin: 20px auto;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: repeating-linear-gradient(
+                90deg,
+                #00aa00,
+                #00aa00 10px,
+                #008800 10px,
+                #008800 20px
+            );
+            animation: loadForever 15s ease-out forwards;
+        }
+
+        @keyframes loadForever {
+            0% { width: 0%; }
+            30% { width: 45%; }
+            50% { width: 52%; }
+            70% { width: 67%; }
+            85% { width: 78%; }
+            95% { width: 89%; }
+            100% { width: 91%; }
+        }
+
+        .percentage {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #333;
+            margin-top: 5px;
+        }
+
+        .status-text {
+            font-size: 11px;
+            color: #666;
+            margin-top: 15px;
+            font-family: 'MS Sans Serif', Arial, sans-serif;
+        }
+
+        .blinking {
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0; }
+        }
+
+        /* Pop-up de error molesto */
+        .error-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #ece9d8;
+            border: 2px solid #0055e5;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.4);
+            z-index: 100;
+            display: none;
+            animation: popIn 0.1s ease-out;
+        }
+
+        .error-popup.show {
+            display: block;
+        }
+
+        @keyframes popIn {
+            from { transform: translate(-50%, -50%) scale(0.8); }
+            to { transform: translate(-50%, -50%) scale(1); }
+        }
+
+        .error-header {
+            background: linear-gradient(to right, #0a246a, #a6caf0);
+            color: white;
+            padding: 3px 8px;
+            font-size: 12px;
+            font-family: 'Tahoma', sans-serif;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .error-close {
+            background: #d4d0c8;
+            border: 1px outset #fff;
+            width: 16px;
+            height: 14px;
+            font-size: 10px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .error-body {
+            padding: 20px 30px;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .error-icon {
+            font-size: 32px;
+        }
+
+        .error-text {
+            font-size: 11px;
+            font-family: 'Tahoma', sans-serif;
+            color: #000;
+            max-width: 250px;
+        }
+
+        .error-buttons {
+            padding: 10px 20px;
+            text-align: center;
+            border-top: 1px solid #808080;
+        }
+
+        .error-btn {
+            background: #d4d0c8;
+            border: 2px outset #fff;
+            padding: 4px 20px;
+            font-size: 11px;
+            font-family: 'Tahoma', sans-serif;
+            cursor: pointer;
+            margin: 0 5px;
+        }
+
+        .error-btn:active {
+            border: 2px inset #fff;
+        }
+
+        /* Segundo popup */
+        .error-popup-2 {
+            top: 45%;
+            left: 55%;
+        }
+
+        /* Footer de IE */
+        .ie-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #ece9d8;
+            border-top: 2px solid #fff;
+            padding: 3px 10px;
+            display: flex;
+            align-items: center;
+            font-size: 11px;
+            font-family: 'Tahoma', sans-serif;
+        }
+
+        .ie-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .ie-icon {
+            width: 16px;
+            height: 16px;
+            background: #ffcc00;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        /* Plugin flash faltante */
+        .plugin-missing {
+            background: #ffffcc;
+            border: 1px solid #cc9900;
+            padding: 8px 15px;
+            margin-top: 20px;
+            font-size: 11px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .plugin-icon {
+            font-size: 20px;
+        }
+
+        /* Cursor de espera en todo */
+        * {
+            cursor: wait !important;
+        }
+
+        .frozen {
+            animation-play-state: paused !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⏳ La página se está cargando, por favor espere...</h1>
+        
+        <div class="loader-gif" id="loader"></div>
+        
+        <div class="progress-wrapper">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+        
+        <div class="percentage" id="percentage">Cargando... 0%</div>
+        
+        <div class="status-text">
+            <span class="blinking">●</span> Descargando datos del servidor<span class="blinking">...</span>
+        </div>
+
+        <div class="plugin-missing">
+            <span class="plugin-icon">🧩</span>
+            <span>Se requiere Adobe Flash Player para visualizar este contenido. <a href="#" style="color: blue;">Descargar plugin</a></span>
+        </div>
+    </div>
+
+    <!-- Error popup 1 -->
+    <div class="error-popup" id="error1">
+        <div class="error-header">
+            <span>Internet Explorer</span>
+            <button class="error-close" onclick="closeError(1)">✕</button>
+        </div>
+        <div class="error-body">
+            <span class="error-icon">⚠️</span>
+            <span class="error-text">
+                La página web no responde.<br><br>
+                Puede esperar a que responda o cerrar la página.
+            </span>
+        </div>
+        <div class="error-buttons">
+            <button class="error-btn" onclick="closeError(1)">Esperar</button>
+            <button class="error-btn" onclick="closeError(1)">Cerrar página</button>
+        </div>
+    </div>
+
+    <!-- Error popup 2 -->
+    <div class="error-popup error-popup-2" id="error2">
+        <div class="error-header">
+            <span>Error de Script</span>
+            <button class="error-close" onclick="closeError(2)">✕</button>
+        </div>
+        <div class="error-body">
+            <span class="error-icon">❌</span>
+            <span class="error-text">
+                Se ha producido un error en el script de esta página.<br><br>
+                Línea: 847<br>
+                Error: Object expected
+            </span>
+        </div>
+        <div class="error-buttons">
+            <button class="error-btn" onclick="closeError(2)">Sí</button>
+            <button class="error-btn" onclick="closeError(2)">No</button>
+        </div>
+    </div>
+
+    <!-- Barra de estado IE -->
+    <div class="ie-footer">
+        <div class="ie-status">
+            <div class="ie-icon">⚠</div>
+            <span id="ieStatus">Abriendo página...</span>
+        </div>
+    </div>
+
+    <script>
+        let progress = 0;
+        const percentageEl = document.getElementById('percentage');
+        const ieStatus = document.getElementById('ieStatus');
+        const loader = document.getElementById('loader');
+        
+        const statusMessages = [
+            "Conectando con el servidor...",
+            "Descargando datos...",
+            "Cargando imágenes (1 de 47)...",
+            "Ejecutando scripts...",
+            "Cargando imágenes (3 de 47)...",
+            "Esperando respuesta del servidor...",
+            "Cargando recursos adicionales...",
+            "Cargando imágenes (5 de 47)...",
+            "El servidor no responde...",
+            "Reintentando conexión...",
+            "Cargando imágenes (7 de 47)...",
+            "Tiempo de espera excedido...",
+            "Reintentando...",
+        ];
+
+        let msgIndex = 0;
+
+        function updateProgress() {
+            if (progress < 91) {
+                // Incrementos muy lentos y erráticos
+                const increment = Math.random() * 2;
+                progress = Math.min(progress + increment, 91);
+                percentageEl.textContent = `Cargando... ${Math.floor(progress)}%`;
+                
+                // Velocidad muy lenta
+                const delay = Math.random() * 800 + 400;
+                setTimeout(updateProgress, delay);
+
+                // A veces se "congela"
+                if (Math.random() > 0.85) {
+                    loader.classList.add('frozen');
+                    setTimeout(() => loader.classList.remove('frozen'), 2000);
+                }
+            } else {
+                // Se queda en 91% para siempre
+                percentageEl.textContent = "Cargando... 91%";
+            }
+        }
+
+        function updateStatus() {
+            ieStatus.textContent = statusMessages[msgIndex % statusMessages.length];
+            msgIndex++;
+            setTimeout(updateStatus, 3000);
+        }
+
+        function showErrors() {
+            setTimeout(() => {
+                document.getElementById('error1').classList.add('show');
+            }, 5000);
+
+            setTimeout(() => {
+                document.getElementById('error2').classList.add('show');
+            }, 9000);
+        }
+
+        function closeError(num) {
+            document.getElementById('error' + num).classList.remove('show');
+            // Vuelve a aparecer después de un rato
+            setTimeout(() => {
+                document.getElementById('error' + num).classList.add('show');
+            }, 8000);
+        }
+
+        updateProgress();
+        updateStatus();
+        showErrors();
+    </script>
+</body>
+</html>

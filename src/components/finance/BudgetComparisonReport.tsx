@@ -138,8 +138,11 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       spending[cat] = 0;
     });
 
-    // Sum up actual spending
+    // Sum up actual spending (excluding "AJUSTE SALDO" - it's just a balance adjustment)
     currentMonthGastos.forEach(g => {
+      // Skip "AJUSTE SALDO" category
+      if (g.categoria === 'AJUSTE SALDO') return;
+
       const budgetCategory = categoryMapping[g.categoria] || g.categoria;
       if (spending[budgetCategory] !== undefined) {
         spending[budgetCategory] += g.importe;
@@ -213,7 +216,10 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         return normalized.startsWith(yearMonthPrefix);
       });
 
-      const actual = monthGastos.reduce((sum, g) => sum + g.importe, 0);
+      // Exclude "AJUSTE SALDO" from actual totals
+      const actual = monthGastos
+        .filter(g => g.categoria !== 'AJUSTE SALDO')
+        .reduce((sum, g) => sum + g.importe, 0);
 
       return {
         month: monthNames[idx],

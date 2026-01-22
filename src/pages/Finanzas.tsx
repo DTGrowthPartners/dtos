@@ -401,9 +401,13 @@ export default function Finanzas() {
     });
   }, [gastos, filterCategory, filterType, filterDateFrom, filterDateTo, gastosSearchTerm]);
 
-  // Calculate filtered totals
-  const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
-  const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
+  // Calculate filtered totals (excluding "AJUSTE SALDO" - it's just a balance adjustment)
+  const filteredTotalIncome = filteredIngresos
+    .filter(t => t.categoria !== 'AJUSTE SALDO')
+    .reduce((sum, t) => sum + t.importe, 0);
+  const filteredTotalExpenses = filteredGastos
+    .filter(t => t.categoria !== 'AJUSTE SALDO')
+    .reduce((sum, t) => sum + t.importe, 0);
 
   // Helper to filter transactions by date range
   const filterByDateRange = (transactions: Transaction[], from: string, to: string) => {
@@ -447,22 +451,25 @@ export default function Finanzas() {
     const yearIngresos = filterByDateRange(ingresos, firstDayYearStr, todayStr);
     const yearGastos = filterByDateRange(gastos, firstDayYearStr, todayStr);
 
+    // Helper to exclude "AJUSTE SALDO" from totals
+    const excludeAjuste = (arr: Transaction[]) => arr.filter(t => t.categoria !== 'AJUSTE SALDO');
+
     return {
       today: {
-        income: todayIngresos.reduce((sum, t) => sum + t.importe, 0),
-        expenses: todayGastos.reduce((sum, t) => sum + t.importe, 0),
+        income: excludeAjuste(todayIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: excludeAjuste(todayGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       week: {
-        income: weekIngresos.reduce((sum, t) => sum + t.importe, 0),
-        expenses: weekGastos.reduce((sum, t) => sum + t.importe, 0),
+        income: excludeAjuste(weekIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: excludeAjuste(weekGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       month: {
-        income: monthIngresos.reduce((sum, t) => sum + t.importe, 0),
-        expenses: monthGastos.reduce((sum, t) => sum + t.importe, 0),
+        income: excludeAjuste(monthIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: excludeAjuste(monthGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       year: {
-        income: yearIngresos.reduce((sum, t) => sum + t.importe, 0),
-        expenses: yearGastos.reduce((sum, t) => sum + t.importe, 0),
+        income: excludeAjuste(yearIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: excludeAjuste(yearGastos).reduce((sum, t) => sum + t.importe, 0),
       },
     };
   }, [ingresos, gastos]);
@@ -480,12 +487,13 @@ export default function Finanzas() {
       .slice(0, 5);
   }, [filteredIngresos]);
 
-  // Filtered expense categories for PieChart
+  // Filtered expense categories for PieChart (excluding "AJUSTE SALDO")
   const filteredExpenseCategories = useMemo(() => {
     const categoryMap = new Map<string, number>();
 
     filteredGastos.forEach(t => {
-      if (t.categoria) {
+      // Exclude "AJUSTE SALDO" from categories
+      if (t.categoria && t.categoria !== 'AJUSTE SALDO') {
         const current = categoryMap.get(t.categoria) || 0;
         categoryMap.set(t.categoria, current + t.importe);
       }

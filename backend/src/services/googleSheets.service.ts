@@ -129,8 +129,13 @@ export class GoogleSheetsService {
           entidad: String(row[5] || ''),
         }));
 
-      const totalIncome = ingresos.reduce((sum, item) => sum + item.importe, 0);
-      const totalExpenses = gastos.reduce((sum, item) => sum + item.importe, 0);
+      // Excluir "AJUSTE SALDO" de los totales (es solo un ajuste contable)
+      const totalIncome = ingresos
+        .filter(item => item.categoria !== 'AJUSTE SALDO')
+        .reduce((sum, item) => sum + item.importe, 0);
+      const totalExpenses = gastos
+        .filter(item => item.categoria !== 'AJUSTE SALDO')
+        .reduce((sum, item) => sum + item.importe, 0);
 
       console.log('Google Sheets data extracted:');
       console.log('Ingresos:', ingresos);
@@ -256,6 +261,8 @@ export class GoogleSheetsService {
     const categoryMap = new Map<string, number>();
 
     gastos.forEach((gasto) => {
+      // Excluir "AJUSTE SALDO" de las categorías (es solo un ajuste contable)
+      if (gasto.categoria === 'AJUSTE SALDO') return;
       const category = gasto.categoria || 'Otros';
       const current = categoryMap.get(category) || 0;
       categoryMap.set(category, current + gasto.importe);
