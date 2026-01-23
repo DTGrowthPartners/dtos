@@ -598,19 +598,23 @@ export default function Finanzas() {
       .slice(0, 6);
   }, [filteredIngresos, filteredGastos]);
 
-  // Group by entity
+  // Group by entity (excluding AJUSTE SALDO)
   const entityStats = useMemo(() => {
     const stats = new Map<string, { income: number; expenses: number }>();
 
-    ingresos.forEach(t => {
-      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
-      stats.set(t.entidad, { ...current, income: current.income + t.importe });
-    });
+    ingresos
+      .filter(t => t.categoria !== 'AJUSTE SALDO')
+      .forEach(t => {
+        const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+        stats.set(t.entidad, { ...current, income: current.income + t.importe });
+      });
 
-    gastos.forEach(t => {
-      const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
-      stats.set(t.entidad, { ...current, expenses: current.expenses + t.importe });
-    });
+    gastos
+      .filter(t => t.categoria !== 'AJUSTE SALDO')
+      .forEach(t => {
+        const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
+        stats.set(t.entidad, { ...current, expenses: current.expenses + t.importe });
+      });
 
     return Array.from(stats.entries())
       .map(([name, data]) => ({

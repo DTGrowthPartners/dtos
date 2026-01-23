@@ -51,22 +51,28 @@ export function BriefEditor({ brief, onSave, onImageClick }: BriefEditorProps) {
     hasChanges.current = false;
   }, [brief.id]);
 
-  // Auto-save function using refs to get latest values
-  const performSave = useCallback(async () => {
-    if (!hasChanges.current) return;
-
+  // Manual save function
+  const handleManualSave = useCallback(async () => {
     setSaving(true);
     try {
-      await onSave({ title: titleRef.current, blocks: blocksRef.current });
+      const dataToSave = { title: titleRef.current, blocks: blocksRef.current };
+      console.log('Saving brief data:', dataToSave);
+      await onSave(dataToSave);
       hasChanges.current = false;
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      console.error('Error auto-saving brief:', error);
+      console.error('Error saving brief:', error);
     } finally {
       setSaving(false);
     }
   }, [onSave]);
+
+  // Auto-save function using refs to get latest values
+  const performSave = useCallback(async () => {
+    if (!hasChanges.current) return;
+    await handleManualSave();
+  }, [handleManualSave]);
 
   // Trigger auto-save when content changes
   useEffect(() => {
@@ -223,18 +229,27 @@ export function BriefEditor({ brief, onSave, onImageClick }: BriefEditorProps) {
           placeholder="Titulo del brief..."
           className="flex-1 text-xl font-semibold border-none shadow-none focus-visible:ring-0 px-0"
         />
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          {saving && (
-            <>
+        <div className="flex items-center gap-2">
+          {saving ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Guardando...</span>
-            </>
-          )}
-          {saved && !saving && (
-            <>
-              <Check className="h-4 w-4 text-green-500" />
-              <span className="text-green-500">Guardado</span>
-            </>
+            </div>
+          ) : saved ? (
+            <div className="flex items-center gap-2 text-sm text-green-500">
+              <Check className="h-4 w-4" />
+              <span>Guardado</span>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleManualSave}
+              className="gap-2"
+            >
+              <Save className="h-4 w-4" />
+              Guardar
+            </Button>
           )}
         </div>
       </div>
