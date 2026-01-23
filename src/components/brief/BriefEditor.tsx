@@ -32,42 +32,60 @@ export function BriefEditor({ brief, onSave, onImageClick }: BriefEditorProps) {
   const [activeBlockIndex, setActiveBlockIndex] = useState<number | null>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
   const editorRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef(title);
+  const blocksRef = useRef(blocks);
+  const hasChanges = useRef(false);
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    titleRef.current = title;
+    blocksRef.current = blocks;
+  }, [title, blocks]);
 
   // Update local state when brief changes
   useEffect(() => {
     setTitle(brief.title);
     setBlocks(brief.blocks);
+    titleRef.current = brief.title;
+    blocksRef.current = brief.blocks;
+    hasChanges.current = false;
   }, [brief.id]);
 
-  // Auto-save with debounce
-  const triggerAutoSave = useCallback(() => {
+  // Auto-save function using refs to get latest values
+  const performSave = useCallback(async () => {
+    if (!hasChanges.current) return;
+
+    setSaving(true);
+    try {
+      await onSave({ title: titleRef.current, blocks: blocksRef.current });
+      hasChanges.current = false;
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      console.error('Error auto-saving brief:', error);
+    } finally {
+      setSaving(false);
+    }
+  }, [onSave]);
+
+  // Trigger auto-save when content changes
+  useEffect(() => {
+    hasChanges.current = true;
+
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
 
-    saveTimeoutRef.current = setTimeout(async () => {
-      setSaving(true);
-      try {
-        await onSave({ title, blocks });
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-      } catch (error) {
-        console.error('Error auto-saving brief:', error);
-      } finally {
-        setSaving(false);
-      }
-    }, 2000);
-  }, [title, blocks, onSave]);
+    saveTimeoutRef.current = setTimeout(() => {
+      performSave();
+    }, 1500);
 
-  // Trigger auto-save when content changes
-  useEffect(() => {
-    triggerAutoSave();
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
     };
-  }, [title, blocks, triggerAutoSave]);
+  }, [title, blocks, performSave]);
 
   // Handle drag and drop
   const handleDragEnd = (result: DropResult) => {
