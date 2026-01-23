@@ -99,6 +99,11 @@ const roleConfig: Record<string, { label: string; className: string }> = {
   user: { label: 'Usuario', className: 'bg-success/10 text-success border-success/20' },
   specialist: { label: 'Especialista', className: 'bg-success/10 text-success border-success/20' },
   designer: { label: 'Diseñador', className: 'bg-warning/10 text-warning border-warning/20' },
+  dev: { label: 'Desarrollador', className: 'bg-chart-1/10 text-chart-1 border-chart-1/20' },
+  contador: { label: 'Contador', className: 'bg-chart-2/10 text-chart-2 border-chart-2/20' },
+  comercial: { label: 'Comercial', className: 'bg-chart-3/10 text-chart-3 border-chart-3/20' },
+  soporte: { label: 'Soporte', className: 'bg-chart-5/10 text-chart-5 border-chart-5/20' },
+  marketing: { label: 'Marketing', className: 'bg-pink-500/10 text-pink-500 border-pink-500/20' },
 };
 
 export default function Equipo() {

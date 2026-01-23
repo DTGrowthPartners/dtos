@@ -27,6 +27,95 @@ async function main() {
     },
   });
 
+  // Roles adicionales
+  const devRole = await prisma.role.upsert({
+    where: { id: 'dev' },
+    update: {},
+    create: {
+      id: 'dev',
+      name: 'dev',
+      description: 'Desarrollador',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
+  const contadorRole = await prisma.role.upsert({
+    where: { id: 'contador' },
+    update: {},
+    create: {
+      id: 'contador',
+      name: 'contador',
+      description: 'Contador',
+      permissions: ['read:model', 'create:model'],
+    },
+  });
+
+  const comercialRole = await prisma.role.upsert({
+    where: { id: 'comercial' },
+    update: {},
+    create: {
+      id: 'comercial',
+      name: 'comercial',
+      description: 'Comercial/Ventas',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
+  const managerRole = await prisma.role.upsert({
+    where: { id: 'manager' },
+    update: {},
+    create: {
+      id: 'manager',
+      name: 'manager',
+      description: 'Manager/Gerente',
+      permissions: ['read:model', 'create:model', 'update:model', 'delete:model'],
+    },
+  });
+
+  const designerRole = await prisma.role.upsert({
+    where: { id: 'designer' },
+    update: {},
+    create: {
+      id: 'designer',
+      name: 'designer',
+      description: 'Diseñador',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
+  const soporteRole = await prisma.role.upsert({
+    where: { id: 'soporte' },
+    update: {},
+    create: {
+      id: 'soporte',
+      name: 'soporte',
+      description: 'Soporte técnico',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
+  const marketingRole = await prisma.role.upsert({
+    where: { id: 'marketing' },
+    update: {},
+    create: {
+      id: 'marketing',
+      name: 'marketing',
+      description: 'Marketing',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
+  const specialistRole = await prisma.role.upsert({
+    where: { id: 'specialist' },
+    update: {},
+    create: {
+      id: 'specialist',
+      name: 'specialist',
+      description: 'Especialista',
+      permissions: ['read:model', 'create:model', 'update:model'],
+    },
+  });
+
   // Crear usuario admin
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@dtos.com' },
@@ -372,6 +461,7 @@ async function main() {
   }
 
   console.log('Seed completado');
+  console.log('Roles creados: admin, user, dev, contador, comercial, manager, designer, soporte, marketing, specialist');
   console.log('Admin:', adminUser.email);
   console.log('Dairo:', dairoUser.email);
   console.log('Tareas creadas: 6');
