@@ -56,13 +56,16 @@ export function BriefEditor({ brief, onSave, onImageClick }: BriefEditorProps) {
     setSaving(true);
     try {
       const dataToSave = { title: titleRef.current, blocks: blocksRef.current };
-      console.log('Saving brief data:', dataToSave);
+      console.log('BriefEditor: Preparing to save:', JSON.stringify(dataToSave, null, 2));
       await onSave(dataToSave);
+      console.log('BriefEditor: Save completed successfully');
       hasChanges.current = false;
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      console.error('Error saving brief:', error);
+      console.error('BriefEditor: Error saving brief:', error);
+      // Re-throw to let parent handle toast notification
+      throw error;
     } finally {
       setSaving(false);
     }

@@ -85,6 +85,12 @@ interface FinanceResponse {
   gastos: Transaction[];
 }
 
+// Helper to check if a category is AJUSTE SALDO (case-insensitive, trim whitespace)
+const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  return categoria.trim().toUpperCase() === 'AJUSTE SALDO';
+};
+
 // Helper function to format currency in a compact way
 const formatCompactCurrency = (value: number): string => {
   const absValue = Math.abs(value);
@@ -341,7 +347,7 @@ export default function Finanzas() {
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
     [...ingresos, ...gastos].forEach(t => {
-      if (t.categoria && t.categoria !== 'AJUSTE SALDO') cats.add(t.categoria);
+      if (t.categoria && !isAjusteSaldo(t.categoria)) cats.add(t.categoria);
     });
     return ['todas', ...Array.from(cats)];
   }, [ingresos, gastos]);
@@ -350,7 +356,7 @@ export default function Finanzas() {
   const filteredIngresos = useMemo(() => {
     return ingresos.filter(t => {
       // Always exclude AJUSTE SALDO - it's just a balance adjustment
-      if (t.categoria === 'AJUSTE SALDO') return false;
+      if (isAjusteSaldo(t.categoria)) return false;
       if (filterType === 'gastos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
@@ -379,7 +385,7 @@ export default function Finanzas() {
   const filteredGastos = useMemo(() => {
     return gastos.filter(t => {
       // Always exclude AJUSTE SALDO - it's just a balance adjustment
-      if (t.categoria === 'AJUSTE SALDO') return false;
+      if (isAjusteSaldo(t.categoria)) return false;
       if (filterType === 'ingresos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
@@ -410,12 +416,24 @@ export default function Finanzas() {
   const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
 
   // Calculate base totals (all transactions excluding AJUSTE SALDO, no other filters)
-  const baseTotalIncome = useMemo(() =>
-    ingresos.filter(t => t.categoria !== 'AJUSTE SALDO').reduce((sum, t) => sum + t.importe, 0),
-    [ingresos]
-  );
+  const baseTotalIncome = useMemo(() => {
+    const filtered = ingresos.filter(t => !isAjusteSaldo(t.categoria));
+    const total = filtered.reduce((sum, t) => sum + t.importe, 0);
+    // Debug log to verify calculation
+    const excluded = ingresos.filter(t => isAjusteSaldo(t.categoria));
+    console.log('Finanzas Debug - Income calculation:', {
+      totalTransactions: ingresos.length,
+      excludedAjusteSaldo: excluded.length,
+      excludedCategories: excluded.map(t => t.categoria),
+      excludedAmount: excluded.reduce((sum, t) => sum + t.importe, 0),
+      includedTransactions: filtered.length,
+      baseTotalIncome: total,
+    });
+    return total;
+  }, [ingresos]);
+
   const baseTotalExpenses = useMemo(() =>
-    gastos.filter(t => t.categoria !== 'AJUSTE SALDO').reduce((sum, t) => sum + t.importe, 0),
+    gastos.filter(t => !isAjusteSaldo(t.categoria)).reduce((sum, t) => sum + t.importe, 0),
     [gastos]
   );
 
@@ -462,7 +480,7 @@ export default function Finanzas() {
     const yearGastos = filterByDateRange(gastos, firstDayYearStr, todayStr);
 
     // Helper to exclude "AJUSTE SALDO" from totals
-    const excludeAjuste = (arr: Transaction[]) => arr.filter(t => t.categoria !== 'AJUSTE SALDO');
+    const excludeAjuste = (arr: Transaction[]) => arr.filter(t => !isAjusteSaldo(t.categoria));
 
     return {
       today: {
@@ -503,7 +521,7 @@ export default function Finanzas() {
 
     filteredGastos.forEach(t => {
       // Exclude "AJUSTE SALDO" from categories
-      if (t.categoria && t.categoria !== 'AJUSTE SALDO') {
+      if (t.categoria && !isAjusteSaldo(t.categoria)) {
         const current = categoryMap.get(t.categoria) || 0;
         categoryMap.set(t.categoria, current + t.importe);
       }
@@ -603,14 +621,14 @@ export default function Finanzas() {
     const stats = new Map<string, { income: number; expenses: number }>();
 
     ingresos
-      .filter(t => t.categoria !== 'AJUSTE SALDO')
+      .filter(t => !isAjusteSaldo(t.categoria))
       .forEach(t => {
         const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
         stats.set(t.entidad, { ...current, income: current.income + t.importe });
       });
 
     gastos
-      .filter(t => t.categoria !== 'AJUSTE SALDO')
+      .filter(t => !isAjusteSaldo(t.categoria))
       .forEach(t => {
         const current = stats.get(t.entidad) || { income: 0, expenses: 0 };
         stats.set(t.entidad, { ...current, expenses: current.expenses + t.importe });

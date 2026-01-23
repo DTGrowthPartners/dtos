@@ -209,11 +209,20 @@ export default function Brief() {
     if (!selectedBriefId) return;
 
     try {
+      console.log('Brief.tsx: Saving updates for brief', selectedBriefId, updates);
       await updateBrief(selectedBriefId, updates);
+      console.log('Brief.tsx: Firestore update successful');
+
+      // Update briefs list
       setBriefs((prev) =>
         prev.map((b) =>
           b.id === selectedBriefId ? { ...b, ...updates, updatedAt: Date.now() } : b
         )
+      );
+
+      // Also update selectedBrief to keep it in sync
+      setSelectedBrief((prev) =>
+        prev ? { ...prev, ...updates, updatedAt: Date.now() } : prev
       );
     } catch (error) {
       console.error('Error saving brief:', error);
