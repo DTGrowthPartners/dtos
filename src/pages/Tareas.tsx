@@ -297,6 +297,7 @@ export default function Tareas() {
     return member?.name;
   };
 
+  // Get current logged-in user name as identified in our TEAM_MEMBERS system
   const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
 
   // Check if user is admin - admins can see ALL tasks from all team members
@@ -1889,12 +1890,19 @@ export default function Tareas() {
   // Filter tasks - only show tasks where user is creator or assignee
   // Admins can see ALL tasks from all team members
   const filteredTasks = tasks.filter((task) => {
-    // First filter by logged user (must be creator or assignee)
-    // Admins bypass this filter and see all tasks
-    // If loggedUserName is undefined (no match found), show all tasks as fallback
-    const isUserTask = isAdmin || !loggedUserName ||
-      (task.assignee === loggedUserName || task.creator === loggedUserName);
+    // SECURITY FILTER:
+    // 1. Admins see everything.
+    // 2. Regular users see tasks where they are the assignee OR the creator.
+    // 3. If we can't identify the user (loggedUserName is undefined), and they aren't admin,
+    //    they shouldn't see anything (unless we want to matching by email as fallback).
 
+    let isUserTask = isAdmin;
+
+    if (!isUserTask && loggedUserName) {
+      isUserTask = (task.assignee === loggedUserName || task.creator === loggedUserName);
+    }
+
+    // If we still haven't identified it as a user task, and user is NOT admin, reject.
     if (!isUserTask) return false;
 
     const matchesSearch =
@@ -1934,8 +1942,13 @@ export default function Tareas() {
   // Admins see counts for ALL tasks, regular users only their own
   const getTaskCountByProject = (projectId: string) => {
     return tasks.filter(t => {
-      const isUserTask = isAdmin || !loggedUserName ||
-        (t.assignee === loggedUserName || t.creator === loggedUserName);
+      let isUserTask = isAdmin;
+      if (!isUserTask && loggedUserName) {
+        isUserTask = (t.assignee === loggedUserName || t.creator === loggedUserName);
+      }
+
+      if (!isUserTask) return false;
+
       // Don't count completed tasks
       const isNotDone = t.status !== TaskStatus.DONE;
       return isUserTask && t.projectId === projectId && isNotDone;
@@ -1946,8 +1959,13 @@ export default function Tareas() {
   // Admins see counts for ALL tasks
   const getDateFilterCounts = () => {
     const activeTasks = tasks.filter(t => {
-      const isUserTask = isAdmin || !loggedUserName ||
-        (t.assignee === loggedUserName || t.creator === loggedUserName);
+      let isUserTask = isAdmin;
+      if (!isUserTask && loggedUserName) {
+        isUserTask = (t.assignee === loggedUserName || t.creator === loggedUserName);
+      }
+
+      if (!isUserTask) return false;
+
       const matchesProject = filterProject === 'all' || t.projectId === filterProject;
       const matchesAssignee = filterAssignee === 'all' || t.assignee === filterAssignee;
       const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
@@ -2066,9 +2084,8 @@ export default function Tareas() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setFilterProject('all')}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                      filterProject === 'all' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    }`}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${filterProject === 'all' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
                   >
                     <LayoutGrid className="h-4 w-4" />
                   </button>
@@ -2082,9 +2099,8 @@ export default function Tareas() {
                     <TooltipTrigger asChild>
                       <button
                         onClick={() => setFilterProject(project.id)}
-                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                          filterProject === project.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                        }`}
+                        className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${filterProject === project.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                          }`}
                       >
                         <div className={`w-4 h-4 rounded-full ${project.color}`}></div>
                       </button>
@@ -2144,11 +2160,10 @@ export default function Tareas() {
               <div className="space-y-1 overflow-y-auto flex-1">
                 <button
                   onClick={() => setFilterProject('all')}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
-                    filterProject === 'all'
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterProject === 'all'
                       ? 'bg-primary text-primary-foreground'
                       : 'hover:bg-muted'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <LayoutGrid className="h-3 w-3" />
@@ -2220,11 +2235,10 @@ export default function Tareas() {
                             onDragEnd={handleProjectDragEnd}
                             onDragOver={handleProjectDragOver}
                             onDrop={(e) => handleProjectDrop(e, project.id)}
-                            className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${
-                              filterProject === project.id
+                            className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
                                 ? 'bg-primary text-primary-foreground'
                                 : 'hover:bg-muted'
-                            } ${draggedProject === project.id ? 'opacity-50' : ''}`}
+                              } ${draggedProject === project.id ? 'opacity-50' : ''}`}
                           >
                             <button
                               onClick={() => setFilterProject(project.id)}
@@ -2241,11 +2255,10 @@ export default function Tareas() {
                                 <DropdownMenuTrigger asChild>
                                   <button
                                     onClick={(e) => e.stopPropagation()}
-                                    className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${
-                                      filterProject === project.id
+                                    className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
                                         ? 'hover:bg-primary-foreground/20 text-primary-foreground'
                                         : 'hover:bg-muted'
-                                    }`}
+                                      }`}
                                     draggable={false}
                                   >
                                     <MoreVertical className="h-3 w-3" />
@@ -2287,11 +2300,10 @@ export default function Tareas() {
                       onDragEnd={handleProjectDragEnd}
                       onDragOver={handleProjectDragOver}
                       onDrop={(e) => handleProjectDrop(e, project.id)}
-                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${
-                        filterProject === project.id
+                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
                           ? 'bg-primary text-primary-foreground'
                           : 'hover:bg-muted'
-                      } ${draggedProject === project.id ? 'opacity-50' : ''}`}
+                        } ${draggedProject === project.id ? 'opacity-50' : ''}`}
                     >
                       <button
                         onClick={() => setFilterProject(project.id)}
@@ -2308,11 +2320,10 @@ export default function Tareas() {
                           <DropdownMenuTrigger asChild>
                             <button
                               onClick={(e) => e.stopPropagation()}
-                              className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${
-                                filterProject === project.id
+                              className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
                                   ? 'hover:bg-primary-foreground/20 text-primary-foreground'
                                   : 'hover:bg-muted'
-                              }`}
+                                }`}
                               draggable={false}
                             >
                               <MoreVertical className="h-3 w-3" />
@@ -2434,9 +2445,8 @@ export default function Tareas() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setTaskView('active')}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                      taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    }`}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
                   >
                     <CheckCircle2 className="h-4 w-4" />
                   </button>
@@ -2447,9 +2457,8 @@ export default function Tareas() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setTaskView('archived')}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                      taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    }`}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
                   >
                     <Archive className="h-4 w-4" />
                   </button>
@@ -2460,9 +2469,8 @@ export default function Tareas() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={() => setTaskView('deleted')}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                      taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    }`}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -2479,9 +2487,8 @@ export default function Tareas() {
               <div className="space-y-1">
                 <button
                   onClick={() => setTaskView('active')}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
-                    taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  }`}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${taskView === 'active' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-3 w-3" />
@@ -2491,9 +2498,8 @@ export default function Tareas() {
                 </button>
                 <button
                   onClick={() => setTaskView('archived')}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
-                    taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  }`}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${taskView === 'archived' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Archive className="h-3 w-3" />
@@ -2503,9 +2509,8 @@ export default function Tareas() {
                 </button>
                 <button
                   onClick={() => setTaskView('deleted')}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
-                    taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  }`}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${taskView === 'deleted' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Trash2 className="h-3 w-3" />
@@ -2768,11 +2773,10 @@ export default function Tareas() {
           <div className="flex flex-wrap gap-1.5 md:gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setDateFilter('all')}
-              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                dateFilter === 'all'
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'all'
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted hover:bg-muted/80'
-              }`}
+                }`}
             >
               <LayoutGrid className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span>Todas</span>
@@ -2782,11 +2786,10 @@ export default function Tareas() {
             </button>
             <button
               onClick={() => setDateFilter('today')}
-              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                dateFilter === 'today'
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'today'
                   ? 'bg-blue-500 text-white'
                   : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300'
-              }`}
+                }`}
             >
               <Calendar className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span className="hidden sm:inline">
@@ -2799,11 +2802,10 @@ export default function Tareas() {
             </button>
             <button
               onClick={() => setDateFilter('week')}
-              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                dateFilter === 'week'
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'week'
                   ? 'bg-purple-500 text-white'
                   : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-300'
-              }`}
+                }`}
             >
               <CalendarDays className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span className="hidden sm:inline">Esta </span><span>Semana</span>
@@ -2813,11 +2815,10 @@ export default function Tareas() {
             </button>
             <button
               onClick={() => setDateFilter('month')}
-              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                dateFilter === 'month'
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'month'
                   ? 'bg-emerald-500 text-white'
                   : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300'
-              }`}
+                }`}
             >
               <CalendarRange className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span className="hidden sm:inline">Este </span><span>Mes</span>
@@ -2827,11 +2828,10 @@ export default function Tareas() {
             </button>
             <button
               onClick={() => setDateFilter('overdue')}
-              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${
-                dateFilter === 'overdue'
+              className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'overdue'
                   ? 'bg-red-500 text-white'
                   : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
-              }`}
+                }`}
             >
               <AlertCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
               <span>Vencidas</span>
@@ -2844,508 +2844,502 @@ export default function Tareas() {
 
         {/* Active Tasks - Kanban Board */}
         {taskView === 'active' && (
-        <div className="flex-1 overflow-x-auto pb-4">
-          <div className="flex gap-3 md:gap-4 h-full min-w-max md:min-w-0">
-          {DEFAULT_COLUMNS.map((column) => {
-            const columnTasks = getTasksByColumn(column.status);
-            const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
-
-            return (
-              <div
-                key={column.id}
-                className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-3 md:p-4"
-                onDragOver={handleDragOver}
-                onDrop={(e) => handleDrop(e, column.status)}
-              >
-                {/* Column Header */}
-                <div className="flex items-center gap-2 mb-3 md:mb-4">
-                  <StatusIcon className={`h-4 w-4 md:h-5 md:w-5 ${column.color}`} />
-                  <h2 className="font-semibold text-base md:text-lg truncate">
-                    {column.name}
-                    <span className="ml-2 text-xs md:text-sm text-muted-foreground">
-                      ({columnTasks.length})
-                    </span>
-                  </h2>
-                </div>
-
-                {/* Tasks */}
-                <div className={`space-y-3 flex-1 overflow-y-auto ${viewMode === 'compact' ? 'space-y-1' : ''}`}>
-                  {columnTasks.map((task) => {
-                    const project = getProject(task.projectId);
-                    const assignee = getTeamMember(task.assignee);
-
-                    if (viewMode === 'compact') {
-                      // Compact View
-                      return (
-                        <div
-                          key={task.id}
-                          draggable={true}
-                          onDragStart={(e) => handleDragStart(e, task.id)}
-                          onDragEnd={handleDragEnd}
-                          onClick={() => handleEdit(task)}
-                          className={`p-2 bg-card rounded border-l-4 cursor-pointer hover:shadow transition-all ${
-                            draggedTask === task.id ? 'opacity-50' : ''
-                          } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[task.priority].split(' ')[0]}`}></span>
-                            <span className="text-sm flex-1 truncate">{task.title}</span>
-                            {getUserPhoto(task.assignee) ? (
-                              <img
-                                src={getUserPhoto(task.assignee)}
-                                alt={task.assignee}
-                                className="w-6 h-6 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                                {assignee?.initials}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    if (viewMode === 'list') {
-                      // List View
-                      return (
-                        <div
-                          key={task.id}
-                          draggable={true}
-                          onDragStart={(e) => handleDragStart(e, task.id)}
-                          onDragEnd={handleDragEnd}
-                          onClick={() => handleEdit(task)}
-                          className={`p-3 bg-card rounded-lg border cursor-pointer hover:shadow transition-all ${
-                            draggedTask === task.id ? 'opacity-50' : ''
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleComplete(task);
-                              }}
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                task.status === TaskStatus.DONE
-                                  ? 'bg-emerald-500 border-emerald-500 text-white'
-                                  : 'border-muted-foreground'
-                              }`}
-                            >
-                              {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
-                            </button>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium truncate ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                                {task.title}
-                              </p>
-                              {project && (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
-                                  {project.name}
-                                </span>
-                              )}
-                            </div>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
-                              {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
-                            </span>
-                            {getUserPhoto(task.assignee) ? (
-                              <img
-                                src={getUserPhoto(task.assignee)}
-                                alt={task.assignee}
-                                className="w-7 h-7 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                                {assignee?.initials}
-                              </div>
-                            )}
-                            <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
-                                <Edit className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDuplicate(task)}>
-                                <Copy className="h-3 w-3" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(task)}>
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-
-                    // Card View (default)
-                    return (
-                      <ContextMenu key={task.id}>
-                        <ContextMenuTrigger asChild>
-                          <Card
-                            draggable={true}
-                            onDragStart={(e) => handleDragStart(e, task.id)}
-                            onDragEnd={handleDragEnd}
-                            onClick={() => handleEdit(task)}
-                            className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${
-                              draggedTask === task.id ? 'opacity-50 scale-105' : ''
-                            } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
-                          >
-                        {/* Task Header */}
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-start gap-2 flex-1 min-w-0">
-                            {/* Drag Handle */}
-                            <div className="flex-shrink-0 mt-0.5 text-muted-foreground/50 cursor-grab">
-                              <GripVertical className="h-4 w-4" />
-                            </div>
-                            <button
-                              draggable={false}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleToggleComplete(task);
-                              }}
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
-                                task.status === TaskStatus.DONE
-                                  ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
-                                  : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
-                              }`}
-                            >
-                              {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
-                            </button>
-                            <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                              {task.title}
-                            </h3>
-                          </div>
-                          <div className="flex gap-1 flex-shrink-0" draggable={false} onDragStart={(e) => e.preventDefault()}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              draggable={false}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEdit(task);
-                              }}
-                            >
-                              <Edit className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              draggable={false}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDuplicate(task);
-                              }}
-                            >
-                              <Copy className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              draggable={false}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(task);
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        </div>
-
-                        {/* Description */}
-                        {task.description && (
-                          <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                            {task.description}
-                          </p>
-                        )}
-
-                        {/* Project & Type */}
-                        <div className="flex flex-wrap gap-1 mb-2">
-                          {project && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
-                              {project.name}
-                            </span>
-                          )}
-                          {task.type && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                              {task.type}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Images */}
-                        {task.images && task.images.length > 0 && (
-                          <div className="flex gap-1 mb-2 flex-wrap">
-                            {task.images.slice(0, 3).map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img}
-                                alt={`Image ${idx + 1}`}
-                                className="w-12 h-12 object-cover rounded border cursor-pointer hover:scale-110 transition-transform"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setSelectedImage(img);
-                                  setImageModalOpen(true);
-                                }}
-                              />
-                            ))}
-                            {task.images.length > 3 && (
-                              <div className="w-12 h-12 bg-muted border rounded flex items-center justify-center text-xs">
-                                +{task.images.length - 3}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Footer */}
-                        <div className="flex items-center justify-between pt-2 border-t">
-                          <div className="flex gap-2 items-center">
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-full ${
-                                PRIORITY_COLORS[task.priority]
-                              }`}
-                            >
-                              {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
-                            </span>
-                            {task.dueDate && (
-                              <span className={`text-xs flex items-center gap-1 ${isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
-                                <Calendar className="h-3 w-3" />
-                                {isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? (
-                                  <span>{getDaysOverdue(task.dueDate)}d vencida</span>
-                                ) : isToday(task.dueDate) ? (
-                                  <>Hoy{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
-                                ) : isTomorrow(task.dueDate) ? (
-                                  <>Mañana{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
-                                ) : (
-                                  <>
-                                    {new Date(task.dueDate).toLocaleDateString('es-ES', {
-                                      day: '2-digit',
-                                      month: 'short',
-                                    })}
-                                    {hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}
-                                  </>
-                                )}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex gap-1 items-center">
-                            {task.images && task.images.length > 0 && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <ImageIcon className="h-3 w-3" />
-                                {task.images.length}
-                              </div>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleAddComment(task);
-                              }}
-                            >
-                              <MessageCircle className="h-3 w-3" />
-                              {task.comments && task.comments.length > 0 && (
-                                <span className="text-[10px] ml-0.5">{task.comments.length}</span>
-                              )}
-                            </Button>
-                            {getUserPhoto(task.assignee) ? (
-                              <img
-                                src={getUserPhoto(task.assignee)}
-                                alt={task.assignee}
-                                className="w-6 h-6 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                                {assignee?.initials}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                          </Card>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent className="w-56">
-                          <ContextMenuItem onClick={() => handleEdit(task)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
-                          </ContextMenuItem>
-                          <ContextMenuItem onClick={() => handleDuplicate(task)}>
-                            <Copy className="mr-2 h-4 w-4" />
-                            Duplicar
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <ArrowRight className="mr-2 h-4 w-4" />
-                              Cambiar estado
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent>
-                              <ContextMenuItem
-                                onClick={() => handleQuickStatusChange(task, TaskStatus.TODO)}
-                                disabled={task.status === TaskStatus.TODO}
-                              >
-                                <Circle className="mr-2 h-4 w-4" />
-                                Por hacer
-                                {task.status === TaskStatus.TODO && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onClick={() => handleQuickStatusChange(task, TaskStatus.IN_PROGRESS)}
-                                disabled={task.status === TaskStatus.IN_PROGRESS}
-                              >
-                                <Clock className="mr-2 h-4 w-4" />
-                                En progreso
-                                {task.status === TaskStatus.IN_PROGRESS && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onClick={() => handleQuickStatusChange(task, TaskStatus.DONE)}
-                                disabled={task.status === TaskStatus.DONE}
-                              >
-                                <CheckCircle2 className="mr-2 h-4 w-4" />
-                                Completada
-                                {task.status === TaskStatus.DONE && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <Flag className="mr-2 h-4 w-4" />
-                              Cambiar prioridad
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent>
-                              <ContextMenuItem
-                                onClick={() => handleQuickPriorityChange(task, Priority.HIGH)}
-                                disabled={task.priority === Priority.HIGH}
-                              >
-                                <span className="mr-2 w-3 h-3 rounded-full bg-red-500" />
-                                Alta
-                                {task.priority === Priority.HIGH && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onClick={() => handleQuickPriorityChange(task, Priority.MEDIUM)}
-                                disabled={task.priority === Priority.MEDIUM}
-                              >
-                                <span className="mr-2 w-3 h-3 rounded-full bg-yellow-500" />
-                                Media
-                                {task.priority === Priority.MEDIUM && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                onClick={() => handleQuickPriorityChange(task, Priority.LOW)}
-                                disabled={task.priority === Priority.LOW}
-                              >
-                                <span className="mr-2 w-3 h-3 rounded-full bg-emerald-500" />
-                                Baja
-                                {task.priority === Priority.LOW && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                              </ContextMenuItem>
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
-                          <ContextMenuSub>
-                            <ContextMenuSubTrigger>
-                              <FolderOpen className="mr-2 h-4 w-4" />
-                              Mover a proyecto
-                            </ContextMenuSubTrigger>
-                            <ContextMenuSubContent className="max-h-60 overflow-y-auto">
-                              {projects.map((p) => (
-                                <ContextMenuItem
-                                  key={p.id}
-                                  onClick={() => handleQuickProjectChange(task, p.id)}
-                                  disabled={task.projectId === p.id}
-                                >
-                                  <span className={`mr-2 w-3 h-3 rounded-full ${p.color}`} />
-                                  {p.name}
-                                  {task.projectId === p.id && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
-                                </ContextMenuItem>
-                              ))}
-                            </ContextMenuSubContent>
-                          </ContextMenuSub>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem onClick={() => handleAddComment(task)}>
-                            <MessageCircle className="mr-2 h-4 w-4" />
-                            Agregar comentario
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                          <ContextMenuItem
-                            onClick={() => handleToggleComplete(task)}
-                            className={task.status === TaskStatus.DONE ? "text-amber-600 focus:text-amber-600" : "text-emerald-600 focus:text-emerald-600"}
-                          >
-                            {task.status === TaskStatus.DONE ? (
-                              <>
-                                <RotateCcw className="mr-2 h-4 w-4" />
-                                Restaurar tarea
-                              </>
-                            ) : (
-                              <>
-                                <Archive className="mr-2 h-4 w-4" />
-                                Archivar (completar)
-                              </>
-                            )}
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => handleDelete(task)}
-                            className="text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Eliminar
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    );
-                  })}
-
-                  {columnTasks.length === 0 && (
-                    <div className="h-32 border-2 border-dashed rounded-lg flex items-center justify-center text-muted-foreground text-sm">
-                      Arrastra tareas aquí
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-
-          {/* Note Columns - Only show when a specific project is selected */}
-          {filterProject !== 'all' && (
-            <>
-              {/* Separator between task columns and note columns */}
-              {noteColumns.length > 0 && (
-                <div className="w-px bg-border/50 mx-2 self-stretch flex-shrink-0" />
-              )}
-
-              {/* Note Columns */}
-              {noteColumns.map((column) => {
-                const columnItems = getNoteItemsForColumn(column.id);
+          <div className="flex-1 overflow-x-auto pb-4">
+            <div className="flex gap-3 md:gap-4 h-full min-w-max md:min-w-0">
+              {DEFAULT_COLUMNS.map((column) => {
+                const columnTasks = getTasksByColumn(column.status);
+                const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
 
                 return (
-                  <NoteColumn
+                  <div
                     key={column.id}
-                    column={column}
-                    items={columnItems}
-                    onEditColumn={handleEditNoteColumn}
-                    onDeleteColumn={handleDeleteNoteColumn}
-                    onAddItem={handleAddNoteItem}
-                    onEditItem={handleEditNoteItem}
-                    onDeleteItem={handleDeleteNoteItem}
-                    onDropItem={handleNoteItemDrop}
-                    onImageClick={(img) => {
-                      setSelectedImage(img);
-                      setImageModalOpen(true);
-                    }}
-                    draggedItemId={draggedNoteItem}
-                  />
+                    className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-3 md:p-4"
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, column.status)}
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center gap-2 mb-3 md:mb-4">
+                      <StatusIcon className={`h-4 w-4 md:h-5 md:w-5 ${column.color}`} />
+                      <h2 className="font-semibold text-base md:text-lg truncate">
+                        {column.name}
+                        <span className="ml-2 text-xs md:text-sm text-muted-foreground">
+                          ({columnTasks.length})
+                        </span>
+                      </h2>
+                    </div>
+
+                    {/* Tasks */}
+                    <div className={`space-y-3 flex-1 overflow-y-auto ${viewMode === 'compact' ? 'space-y-1' : ''}`}>
+                      {columnTasks.map((task) => {
+                        const project = getProject(task.projectId);
+                        const assignee = getTeamMember(task.assignee);
+
+                        if (viewMode === 'compact') {
+                          // Compact View
+                          return (
+                            <div
+                              key={task.id}
+                              draggable={true}
+                              onDragStart={(e) => handleDragStart(e, task.id)}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => handleEdit(task)}
+                              className={`p-2 bg-card rounded border-l-4 cursor-pointer hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                                } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[task.priority].split(' ')[0]}`}></span>
+                                <span className="text-sm flex-1 truncate">{task.title}</span>
+                                {getUserPhoto(task.assignee) ? (
+                                  <img
+                                    src={getUserPhoto(task.assignee)}
+                                    alt={task.assignee}
+                                    className="w-6 h-6 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                    {assignee?.initials}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (viewMode === 'list') {
+                          // List View
+                          return (
+                            <div
+                              key={task.id}
+                              draggable={true}
+                              onDragStart={(e) => handleDragStart(e, task.id)}
+                              onDragEnd={handleDragEnd}
+                              onClick={() => handleEdit(task)}
+                              className={`p-3 bg-card rounded-lg border cursor-pointer hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                                }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleComplete(task);
+                                  }}
+                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${task.status === TaskStatus.DONE
+                                      ? 'bg-emerald-500 border-emerald-500 text-white'
+                                      : 'border-muted-foreground'
+                                    }`}
+                                >
+                                  {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
+                                </button>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-sm font-medium truncate ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
+                                    {task.title}
+                                  </p>
+                                  {project && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
+                                      {project.name}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
+                                  {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
+                                </span>
+                                {getUserPhoto(task.assignee) ? (
+                                  <img
+                                    src={getUserPhoto(task.assignee)}
+                                    alt={task.assignee}
+                                    className="w-7 h-7 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                    {assignee?.initials}
+                                  </div>
+                                )}
+                                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDuplicate(task)}>
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(task)}>
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Card View (default)
+                        return (
+                          <ContextMenu key={task.id}>
+                            <ContextMenuTrigger asChild>
+                              <Card
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, task.id)}
+                                onDragEnd={handleDragEnd}
+                                onClick={() => handleEdit(task)}
+                                className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${draggedTask === task.id ? 'opacity-50 scale-105' : ''
+                                  } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
+                              >
+                                {/* Task Header */}
+                                <div className="flex items-start justify-between mb-2">
+                                  <div className="flex items-start gap-2 flex-1 min-w-0">
+                                    {/* Drag Handle */}
+                                    <div className="flex-shrink-0 mt-0.5 text-muted-foreground/50 cursor-grab">
+                                      <GripVertical className="h-4 w-4" />
+                                    </div>
+                                    <button
+                                      draggable={false}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleToggleComplete(task);
+                                      }}
+                                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${task.status === TaskStatus.DONE
+                                          ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
+                                          : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
+                                        }`}
+                                    >
+                                      {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
+                                    </button>
+                                    <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
+                                      {task.title}
+                                    </h3>
+                                  </div>
+                                  <div className="flex gap-1 flex-shrink-0" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      draggable={false}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleEdit(task);
+                                      }}
+                                    >
+                                      <Edit className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      draggable={false}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDuplicate(task);
+                                      }}
+                                    >
+                                      <Copy className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      draggable={false}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(task);
+                                      }}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Description */}
+                                {task.description && (
+                                  <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
+                                    {task.description}
+                                  </p>
+                                )}
+
+                                {/* Project & Type */}
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                  {project && (
+                                    <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
+                                      {project.name}
+                                    </span>
+                                  )}
+                                  {task.type && (
+                                    <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                                      {task.type}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Images */}
+                                {task.images && task.images.length > 0 && (
+                                  <div className="flex gap-1 mb-2 flex-wrap">
+                                    {task.images.slice(0, 3).map((img, idx) => (
+                                      <img
+                                        key={idx}
+                                        src={img}
+                                        alt={`Image ${idx + 1}`}
+                                        className="w-12 h-12 object-cover rounded border cursor-pointer hover:scale-110 transition-transform"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedImage(img);
+                                          setImageModalOpen(true);
+                                        }}
+                                      />
+                                    ))}
+                                    {task.images.length > 3 && (
+                                      <div className="w-12 h-12 bg-muted border rounded flex items-center justify-center text-xs">
+                                        +{task.images.length - 3}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Footer */}
+                                <div className="flex items-center justify-between pt-2 border-t">
+                                  <div className="flex gap-2 items-center">
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]
+                                        }`}
+                                    >
+                                      {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
+                                    </span>
+                                    {task.dueDate && (
+                                      <span className={`text-xs flex items-center gap-1 ${isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                                        <Calendar className="h-3 w-3" />
+                                        {isOverdue(task.dueDate) && task.status !== TaskStatus.DONE ? (
+                                          <span>{getDaysOverdue(task.dueDate)}d vencida</span>
+                                        ) : isToday(task.dueDate) ? (
+                                          <>Hoy{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
+                                        ) : isTomorrow(task.dueDate) ? (
+                                          <>Mañana{hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}</>
+                                        ) : (
+                                          <>
+                                            {new Date(task.dueDate).toLocaleDateString('es-ES', {
+                                              day: '2-digit',
+                                              month: 'short',
+                                            })}
+                                            {hasTime(task.dueDate) && ` ${formatTime(task.dueDate)}`}
+                                          </>
+                                        )}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex gap-1 items-center">
+                                    {task.images && task.images.length > 0 && (
+                                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                        <ImageIcon className="h-3 w-3" />
+                                        {task.images.length}
+                                      </div>
+                                    )}
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleAddComment(task);
+                                      }}
+                                    >
+                                      <MessageCircle className="h-3 w-3" />
+                                      {task.comments && task.comments.length > 0 && (
+                                        <span className="text-[10px] ml-0.5">{task.comments.length}</span>
+                                      )}
+                                    </Button>
+                                    {getUserPhoto(task.assignee) ? (
+                                      <img
+                                        src={getUserPhoto(task.assignee)}
+                                        alt={task.assignee}
+                                        className="w-6 h-6 rounded-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                        {assignee?.initials}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </Card>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-56">
+                              <ContextMenuItem onClick={() => handleEdit(task)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Editar
+                              </ContextMenuItem>
+                              <ContextMenuItem onClick={() => handleDuplicate(task)}>
+                                <Copy className="mr-2 h-4 w-4" />
+                                Duplicar
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger>
+                                  <ArrowRight className="mr-2 h-4 w-4" />
+                                  Cambiar estado
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickStatusChange(task, TaskStatus.TODO)}
+                                    disabled={task.status === TaskStatus.TODO}
+                                  >
+                                    <Circle className="mr-2 h-4 w-4" />
+                                    Por hacer
+                                    {task.status === TaskStatus.TODO && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickStatusChange(task, TaskStatus.IN_PROGRESS)}
+                                    disabled={task.status === TaskStatus.IN_PROGRESS}
+                                  >
+                                    <Clock className="mr-2 h-4 w-4" />
+                                    En progreso
+                                    {task.status === TaskStatus.IN_PROGRESS && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickStatusChange(task, TaskStatus.DONE)}
+                                    disabled={task.status === TaskStatus.DONE}
+                                  >
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
+                                    Completada
+                                    {task.status === TaskStatus.DONE && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger>
+                                  <Flag className="mr-2 h-4 w-4" />
+                                  Cambiar prioridad
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickPriorityChange(task, Priority.HIGH)}
+                                    disabled={task.priority === Priority.HIGH}
+                                  >
+                                    <span className="mr-2 w-3 h-3 rounded-full bg-red-500" />
+                                    Alta
+                                    {task.priority === Priority.HIGH && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickPriorityChange(task, Priority.MEDIUM)}
+                                    disabled={task.priority === Priority.MEDIUM}
+                                  >
+                                    <span className="mr-2 w-3 h-3 rounded-full bg-yellow-500" />
+                                    Media
+                                    {task.priority === Priority.MEDIUM && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                  <ContextMenuItem
+                                    onClick={() => handleQuickPriorityChange(task, Priority.LOW)}
+                                    disabled={task.priority === Priority.LOW}
+                                  >
+                                    <span className="mr-2 w-3 h-3 rounded-full bg-emerald-500" />
+                                    Baja
+                                    {task.priority === Priority.LOW && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                  </ContextMenuItem>
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
+                              <ContextMenuSub>
+                                <ContextMenuSubTrigger>
+                                  <FolderOpen className="mr-2 h-4 w-4" />
+                                  Mover a proyecto
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent className="max-h-60 overflow-y-auto">
+                                  {projects.map((p) => (
+                                    <ContextMenuItem
+                                      key={p.id}
+                                      onClick={() => handleQuickProjectChange(task, p.id)}
+                                      disabled={task.projectId === p.id}
+                                    >
+                                      <span className={`mr-2 w-3 h-3 rounded-full ${p.color}`} />
+                                      {p.name}
+                                      {task.projectId === p.id && <CheckCircle2 className="ml-auto h-4 w-4 text-emerald-500" />}
+                                    </ContextMenuItem>
+                                  ))}
+                                </ContextMenuSubContent>
+                              </ContextMenuSub>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem onClick={() => handleAddComment(task)}>
+                                <MessageCircle className="mr-2 h-4 w-4" />
+                                Agregar comentario
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onClick={() => handleToggleComplete(task)}
+                                className={task.status === TaskStatus.DONE ? "text-amber-600 focus:text-amber-600" : "text-emerald-600 focus:text-emerald-600"}
+                              >
+                                {task.status === TaskStatus.DONE ? (
+                                  <>
+                                    <RotateCcw className="mr-2 h-4 w-4" />
+                                    Restaurar tarea
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="mr-2 h-4 w-4" />
+                                    Archivar (completar)
+                                  </>
+                                )}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => handleDelete(task)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Eliminar
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+                        );
+                      })}
+
+                      {columnTasks.length === 0 && (
+                        <div className="h-32 border-2 border-dashed rounded-lg flex items-center justify-center text-muted-foreground text-sm">
+                          Arrastra tareas aquí
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
 
-              {/* Add Note Column Button */}
-              <div className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0">
-                <button
-                  onClick={handleAddNoteColumn}
-                  className="w-full h-32 border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
-                >
-                  <Plus className="h-6 w-6" />
-                  <span className="text-sm font-medium">Agregar columna</span>
-                </button>
-              </div>
-            </>
-          )}
+              {/* Note Columns - Only show when a specific project is selected */}
+              {filterProject !== 'all' && (
+                <>
+                  {/* Separator between task columns and note columns */}
+                  {noteColumns.length > 0 && (
+                    <div className="w-px bg-border/50 mx-2 self-stretch flex-shrink-0" />
+                  )}
+
+                  {/* Note Columns */}
+                  {noteColumns.map((column) => {
+                    const columnItems = getNoteItemsForColumn(column.id);
+
+                    return (
+                      <NoteColumn
+                        key={column.id}
+                        column={column}
+                        items={columnItems}
+                        onEditColumn={handleEditNoteColumn}
+                        onDeleteColumn={handleDeleteNoteColumn}
+                        onAddItem={handleAddNoteItem}
+                        onEditItem={handleEditNoteItem}
+                        onDeleteItem={handleDeleteNoteItem}
+                        onDropItem={handleNoteItemDrop}
+                        onImageClick={(img) => {
+                          setSelectedImage(img);
+                          setImageModalOpen(true);
+                        }}
+                        draggedItemId={draggedNoteItem}
+                      />
+                    );
+                  })}
+
+                  {/* Add Note Column Button */}
+                  <div className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0">
+                    <button
+                      onClick={handleAddNoteColumn}
+                      className="w-full h-32 border-2 border-dashed border-muted-foreground/30 rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                    >
+                      <Plus className="h-6 w-6" />
+                      <span className="text-sm font-medium">Agregar columna</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
         )}
 
         {/* Archived Tasks View */}
@@ -3530,8 +3524,8 @@ export default function Tareas() {
               {editingTask
                 ? 'Actualiza la información de la tarea'
                 : duplicatingTask
-                ? 'Crea una copia de la tarea'
-                : 'Completa los datos de la nueva tarea'}
+                  ? 'Crea una copia de la tarea'
+                  : 'Completa los datos de la nueva tarea'}
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit}>
@@ -3598,11 +3592,10 @@ export default function Tareas() {
                   {formData.checklist.map((item, idx) => (
                     <div key={item.id} className="flex items-center gap-2">
                       <div
-                        className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer ${
-                          item.completed
+                        className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer ${item.completed
                             ? 'bg-primary border-primary'
                             : 'border-muted-foreground'
-                        }`}
+                          }`}
                         onClick={() => {
                           const newChecklist = [...formData.checklist];
                           newChecklist[idx] = {
@@ -3634,7 +3627,7 @@ export default function Tareas() {
                       </Button>
                     </div>
                   ))}
-                  
+
                   <div className="flex gap-2">
                     <Input
                       placeholder="Agregar item a la lista..."
