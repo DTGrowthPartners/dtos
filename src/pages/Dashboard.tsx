@@ -102,12 +102,19 @@ export default function Dashboard() {
   // Check if user is admin
   const isAdmin = authUser?.role?.toLowerCase() === 'admin';
 
-  // Map user firstName to team member name
-  const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
+  // Normalize string removing accents for comparison
+  const normalizeString = (str: string): string => {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  };
+
+  // Map user firstName to team member name (flexible matching with accent support)
+  const getTeamMemberNameFromUser = (firstName: string | undefined): string | undefined => {
     if (!firstName) return undefined;
-    const normalizedName = firstName.toLowerCase().trim();
-    const member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
-    return member?.name;
+    const normalizedInput = normalizeString(firstName);
+    // Try to find a matching team member (handles accents like Lía vs Lia)
+    const member = TEAM_MEMBERS.find(m => normalizeString(m.name) === normalizedInput);
+    // Return the matched team member name, or fallback to the original firstName
+    return member?.name || firstName;
   };
 
   const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName);
@@ -115,7 +122,8 @@ export default function Dashboard() {
   // Filter tasks for current user (only assigned tasks, not created by)
   const myTasks = useMemo(() => {
     if (!loggedUserName) return allTasks;
-    return allTasks.filter(t => t.assignee === loggedUserName);
+    const normalizedUserName = normalizeString(loggedUserName);
+    return allTasks.filter(t => t.assignee && normalizeString(t.assignee) === normalizedUserName);
   }, [allTasks, loggedUserName]);
 
   const myPendingTasks = useMemo(() =>
@@ -134,11 +142,16 @@ export default function Dashboard() {
   // Tasks I created (assigned to others)
   const tasksICreated = useMemo(() => {
     if (!loggedUserName) return [];
-    return allTasks.filter(t =>
-      t.creator === loggedUserName &&
-      t.assignee !== loggedUserName &&
-      t.status !== 'DONE'
-    ).sort((a, b) => {
+    const normalizedUserName = normalizeString(loggedUserName);
+    return allTasks.filter(t => {
+      const normalizedCreator = t.creator ? normalizeString(t.creator) : '';
+      const normalizedAssignee = t.assignee ? normalizeString(t.assignee) : '';
+      return (
+        normalizedCreator === normalizedUserName &&
+        normalizedAssignee !== normalizedUserName &&
+        t.status !== 'DONE'
+      );
+    }).sort((a, b) => {
       // Sort by due date first, then by priority
       if (a.dueDate && b.dueDate) {
         return a.dueDate - b.dueDate;

@@ -620,10 +620,16 @@ export default function Tareas() {
 
     setIsSaving(true);
 
-    // Calculate next occurrence for recurring tasks
+    // Calculate next occurrence for recurring tasks (preserves task time)
     const calculateNextOccurrence = (): number => {
       const now = new Date();
-      now.setHours(9, 0, 0, 0); // Default to 9 AM
+      // Use task's dueTime if set, otherwise default to 9 AM
+      if (formData.dueTime) {
+        const [hours, minutes] = formData.dueTime.split(':').map(Number);
+        now.setHours(hours, minutes, 0, 0);
+      } else {
+        now.setHours(9, 0, 0, 0);
+      }
 
       switch (formData.recurrenceFrequency) {
         case 'daily': {

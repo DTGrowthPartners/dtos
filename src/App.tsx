@@ -19,6 +19,7 @@ import Finanzas from "@/pages/Finanzas";
 import CRM from "@/pages/CRM";
 import Terceros from "@/pages/Terceros";
 import Calendario from "@/pages/Calendario";
+import Brief from "@/pages/Brief";
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
 import Login from "@/pages/Login";
@@ -53,6 +54,7 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
               <Route path="/calendario" element={<ProtectedRoute requiredPermission="calendario"><Calendario /></ProtectedRoute>} />
+              <Route path="/brief" element={<ProtectedRoute requiredPermission="brief"><Brief /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />
