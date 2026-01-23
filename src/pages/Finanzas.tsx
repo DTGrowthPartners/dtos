@@ -405,13 +405,19 @@ export default function Finanzas() {
     });
   }, [gastos, filterCategory, filterType, filterDateFrom, filterDateTo, gastosSearchTerm]);
 
-  // Calculate filtered totals (excluding "AJUSTE SALDO" - it's just a balance adjustment)
-  const filteredTotalIncome = filteredIngresos
-    .filter(t => t.categoria !== 'AJUSTE SALDO')
-    .reduce((sum, t) => sum + t.importe, 0);
-  const filteredTotalExpenses = filteredGastos
-    .filter(t => t.categoria !== 'AJUSTE SALDO')
-    .reduce((sum, t) => sum + t.importe, 0);
+  // Calculate filtered totals (filteredIngresos/filteredGastos already exclude AJUSTE SALDO)
+  const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
+  const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
+
+  // Calculate base totals (all transactions excluding AJUSTE SALDO, no other filters)
+  const baseTotalIncome = useMemo(() =>
+    ingresos.filter(t => t.categoria !== 'AJUSTE SALDO').reduce((sum, t) => sum + t.importe, 0),
+    [ingresos]
+  );
+  const baseTotalExpenses = useMemo(() =>
+    gastos.filter(t => t.categoria !== 'AJUSTE SALDO').reduce((sum, t) => sum + t.importe, 0),
+    [gastos]
+  );
 
   // Helper to filter transactions by date range
   const filterByDateRange = (transactions: Transaction[], from: string, to: string) => {
@@ -638,9 +644,9 @@ export default function Finanzas() {
     ? ((currentMonth.expenses - previousMonth.expenses) / previousMonth.expenses) * 100
     : 0;
 
-  // Use filtered totals for display
-  const displayIncome = hasActiveFilters ? filteredTotalIncome : totalIncome;
-  const displayExpenses = hasActiveFilters ? filteredTotalExpenses : totalExpenses;
+  // Use filtered totals for display (always use frontend-calculated totals to ensure AJUSTE SALDO is excluded)
+  const displayIncome = hasActiveFilters ? filteredTotalIncome : baseTotalIncome;
+  const displayExpenses = hasActiveFilters ? filteredTotalExpenses : baseTotalExpenses;
   const netProfit = displayIncome - displayExpenses;
   const profitMargin = displayIncome > 0 ? (netProfit / displayIncome) * 100 : 0;
 
@@ -986,7 +992,7 @@ export default function Finanzas() {
               <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayIncome)}</p>
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: {formatCompactCurrency(totalIncome)}
+                  Total: {formatCompactCurrency(baseTotalIncome)}
                 </p>
               )}
             </div>
@@ -1005,7 +1011,7 @@ export default function Finanzas() {
               <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayExpenses)}</p>
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: {formatCompactCurrency(totalExpenses)}
+                  Total: {formatCompactCurrency(baseTotalExpenses)}
                 </p>
               )}
             </div>
@@ -1100,7 +1106,7 @@ export default function Finanzas() {
               <div className="mt-3 sm:mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-destructive">Total Gastos:</span>
-                  <span className="text-lg font-bold text-destructive">${(hasActiveFilters ? filteredTotalExpenses : totalExpenses).toLocaleString()}</span>
+                  <span className="text-lg font-bold text-destructive">${(hasActiveFilters ? filteredTotalExpenses : baseTotalExpenses).toLocaleString()}</span>
                 </div>
               </div>
               {/* Lista de categorías sin scroll */}

@@ -139,16 +139,14 @@ export default function Dashboard() {
     [myTasks]
   );
 
-  // Tasks I created (assigned to others)
+  // Tasks I created (assigned to anyone - shows all tasks user created)
   const tasksICreated = useMemo(() => {
     if (!loggedUserName) return [];
     const normalizedUserName = normalizeString(loggedUserName);
     return allTasks.filter(t => {
       const normalizedCreator = t.creator ? normalizeString(t.creator) : '';
-      const normalizedAssignee = t.assignee ? normalizeString(t.assignee) : '';
       return (
         normalizedCreator === normalizedUserName &&
-        normalizedAssignee !== normalizedUserName &&
         t.status !== 'DONE'
       );
     }).sort((a, b) => {
