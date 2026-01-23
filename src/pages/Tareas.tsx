@@ -41,6 +41,7 @@ import {
   Folder,
   FolderPlus,
   ChevronDown,
+  BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -349,6 +350,10 @@ export default function Tareas() {
   const [editingChatLink, setEditingChatLink] = useState(false);
   const [chatLinkDraft, setChatLinkDraft] = useState('');
 
+  // Edit project ads manager link
+  const [editingAdsManagerLink, setEditingAdsManagerLink] = useState(false);
+  const [adsManagerLinkDraft, setAdsManagerLinkDraft] = useState('');
+
   // Note Columns states
   const [noteColumns, setNoteColumns] = useState<ProjectNoteColumn[]>([]);
   const [noteItems, setNoteItems] = useState<NoteItem[]>([]);
@@ -471,10 +476,17 @@ export default function Tareas() {
     today.setHours(0, 0, 0, 0);
     const todayTimestamp = today.getTime();
 
+    // Helper to compare only dates (ignoring time)
+    const isSameDayOrPast = (timestamp: number): boolean => {
+      const targetDate = new Date(timestamp);
+      targetDate.setHours(0, 0, 0, 0);
+      return targetDate.getTime() <= todayTimestamp;
+    };
+
     for (const task of tasksData) {
       if (task.recurrence?.enabled && task.recurrence.nextOccurrence) {
-        // Check if it's time to create a new instance
-        if (task.recurrence.nextOccurrence <= todayTimestamp) {
+        // Check if it's time to create a new instance (compare dates only, not exact timestamps)
+        if (isSameDayOrPast(task.recurrence.nextOccurrence)) {
           try {
             // Create new task instance
             const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
@@ -827,6 +839,28 @@ export default function Tareas() {
       });
     } catch (error) {
       console.error('Error updating chat link:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el link',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSaveAdsManagerLink = async () => {
+    if (filterProject === 'all') return;
+
+    try {
+      await updateProject(filterProject, { adsManagerLink: adsManagerLinkDraft });
+      setProjects(prev => prev.map(p =>
+        p.id === filterProject ? { ...p, adsManagerLink: adsManagerLinkDraft } : p
+      ));
+      setEditingAdsManagerLink(false);
+      toast({
+        title: 'Link de Ads Manager actualizado',
+      });
+    } catch (error) {
+      console.error('Error updating Ads Manager link:', error);
       toast({
         title: 'Error',
         description: 'No se pudo actualizar el link',
@@ -2630,6 +2664,63 @@ export default function Tareas() {
                         </button>
                       </TooltipTrigger>
                       <TooltipContent>Configurar link de WhatsApp del proyecto</TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
+              </div>
+            )}
+            {/* Ads Manager Link */}
+            {taskView === 'active' && filterProject !== 'all' && (
+              <div className="mt-2 flex items-center gap-2">
+                {editingAdsManagerLink ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={adsManagerLinkDraft}
+                      onChange={(e) => setAdsManagerLinkDraft(e.target.value)}
+                      placeholder="https://adsmanager.facebook.com/..."
+                      className="text-sm h-8 w-80"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveAdsManagerLink();
+                        if (e.key === 'Escape') setEditingAdsManagerLink(false);
+                      }}
+                      autoFocus
+                    />
+                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveAdsManagerLink}>
+                      <CheckSquare className="h-4 w-4" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingAdsManagerLink(false)}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {projects.find(p => p.id === filterProject)?.adsManagerLink ? (
+                      <a
+                        href={projects.find(p => p.id === filterProject)?.adsManagerLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5" />
+                        Ads Manager
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            const currentProject = projects.find(p => p.id === filterProject);
+                            setAdsManagerLinkDraft(currentProject?.adsManagerLink || '');
+                            setEditingAdsManagerLink(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                        >
+                          <Link className="h-3 w-3" />
+                          {projects.find(p => p.id === filterProject)?.adsManagerLink ? 'Editar link' : 'Agregar Ads Manager'}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Configurar link de Ads Manager del cliente</TooltipContent>
                     </Tooltip>
                   </div>
                 )}

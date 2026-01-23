@@ -77,6 +77,7 @@ export interface Project {
   order?: number;
   description?: string;
   chatLink?: string; // Link al grupo de WhatsApp u otro canal de comunicacion
+  adsManagerLink?: string; // Link al Ads Manager del cliente
   archived?: boolean;
   folderId?: string; // ID of parent folder (for grouping projects)
 }
