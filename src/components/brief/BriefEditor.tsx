@@ -115,11 +115,14 @@ export function BriefEditor({ brief, onSave, onImageClick }: BriefEditorProps) {
 
   // Handle block changes
   const handleBlockChange = (blockId: string, updates: Partial<BriefBlock>) => {
-    setBlocks((prev) =>
-      prev.map((block) =>
+    console.log('BriefEditor: Block changed', { blockId, updates });
+    setBlocks((prev) => {
+      const newBlocks = prev.map((block) =>
         block.id === blockId ? { ...block, ...updates } : block
-      )
-    );
+      );
+      console.log('BriefEditor: New blocks state', newBlocks);
+      return newBlocks;
+    });
   };
 
   // Delete block

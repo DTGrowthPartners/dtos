@@ -28,10 +28,20 @@ export function EditableContent({
 }: EditableContentProps) {
   const ref = useRef<HTMLDivElement>(null);
   const lastValueRef = useRef(value);
+  const isInitializedRef = useRef(false);
+
+  // Set initial content on mount
+  useEffect(() => {
+    if (ref.current && !isInitializedRef.current) {
+      ref.current.innerText = value;
+      lastValueRef.current = value;
+      isInitializedRef.current = true;
+    }
+  }, []);
 
   // Sync content when value changes externally
   useEffect(() => {
-    if (ref.current && value !== lastValueRef.current) {
+    if (ref.current && isInitializedRef.current && value !== lastValueRef.current) {
       // Only update if the value actually changed from outside
       const currentContent = ref.current.innerText;
       if (currentContent !== value) {
