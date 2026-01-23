@@ -6,7 +6,7 @@ import type { BriefBlock } from '@/types/briefTypes';
 
 interface ParagraphBlockProps {
   block: BriefBlock;
-  onChange: (content: string) => void;
+  onChange: (updates: Partial<BriefBlock>) => void;
   onDelete: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   dragHandleProps?: Record<string, unknown>;
@@ -41,7 +41,7 @@ export function ParagraphBlock({
       {/* Paragraph content */}
       <EditableContent
         value={block.content}
-        onChange={onChange}
+        onChange={(content) => onChange({ content })}
         placeholder="Escribe algo o usa '/' para comandos..."
         className="text-base leading-relaxed"
         onKeyDown={onKeyDown}

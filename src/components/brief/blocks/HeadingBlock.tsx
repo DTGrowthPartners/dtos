@@ -6,7 +6,7 @@ import type { BriefBlock } from '@/types/briefTypes';
 
 interface HeadingBlockProps {
   block: BriefBlock;
-  onChange: (content: string) => void;
+  onChange: (updates: Partial<BriefBlock>) => void;
   onDelete: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   dragHandleProps?: Record<string, unknown>;
@@ -55,7 +55,7 @@ export function HeadingBlock({
       {/* Heading content */}
       <EditableContent
         value={block.content}
-        onChange={onChange}
+        onChange={(content) => onChange({ content })}
         placeholder={HEADING_PLACEHOLDERS[headingType]}
         className={cn(HEADING_STYLES[headingType])}
         onKeyDown={onKeyDown}
