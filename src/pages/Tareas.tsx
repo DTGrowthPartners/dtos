@@ -280,25 +280,41 @@ export default function Tareas() {
   const { user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Map user firstName to team member name (flexible matching)
-  const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
-    if (!firstName) return undefined;
-    const normalizedName = firstName.toLowerCase().trim();
-    // Try exact match first
-    let member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
-    // If no exact match, try if user name starts with team member name (e.g., "DAIRO T." starts with "dairo")
-    if (!member) {
-      member = TEAM_MEMBERS.find(m => normalizedName.startsWith(m.name.toLowerCase()));
+  // Normalize string removing accents for comparison
+  const normalizeString = (str: string): string => {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  };
+
+  // Map user firstName or email to team member name (flexible matching)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
+    if (!firstName && !email) return undefined;
+
+    // Try matching by first name first
+    if (firstName) {
+      const normalizedInput = normalizeString(firstName);
+      const memberByFirstName = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === normalizedInput ||
+        normalizedInput.startsWith(normalizeString(m.name)) ||
+        normalizeString(m.name).startsWith(normalizedInput)
+      );
+      if (memberByFirstName) return memberByFirstName.name;
     }
-    // If still no match, try if team member name is contained in user name
-    if (!member) {
-      member = TEAM_MEMBERS.find(m => normalizedName.includes(m.name.toLowerCase()));
+
+    // Try matching by email prefix if first name matching failed
+    if (email) {
+      const emailPrefix = normalizeString(email.split('@')[0]);
+      const memberByEmail = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === emailPrefix ||
+        emailPrefix.includes(normalizeString(m.name))
+      );
+      if (memberByEmail) return memberByEmail.name;
     }
-    return member?.name;
+
+    return undefined;
   };
 
   // Get current logged-in user name as identified in our TEAM_MEMBERS system
-  const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
+  const loggedUserName = getTeamMemberNameFromUser(user?.firstName, user?.email);
 
   // Check if user is admin - admins can see ALL tasks from all team members
   const isAdmin = user?.role?.toLowerCase() === 'admin';
@@ -306,12 +322,13 @@ export default function Tareas() {
   // Helper to get user photo by name (matches firstName with team member name)
   const getUserPhoto = (assigneeName: string | undefined): string | undefined => {
     if (!assigneeName) return undefined;
-    const normalizedName = assigneeName.toLowerCase().trim();
-    const teamUser = teamUsers.find(u =>
-      u.firstName.toLowerCase() === normalizedName ||
-      u.firstName.toLowerCase().startsWith(normalizedName) ||
-      normalizedName.startsWith(u.firstName.toLowerCase())
-    );
+    const normalizedName = normalizeString(assigneeName);
+    const teamUser = teamUsers.find(u => {
+      const normalizedUserFirstName = normalizeString(u.firstName);
+      return normalizedUserFirstName === normalizedName ||
+        normalizedUserFirstName.startsWith(normalizedName) ||
+        normalizedName.startsWith(normalizedUserFirstName);
+    });
     return teamUser?.photoUrl;
   };
 
@@ -2161,8 +2178,8 @@ export default function Tareas() {
                 <button
                   onClick={() => setFilterProject('all')}
                   className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterProject === 'all'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'hover:bg-muted'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-muted'
                     }`}
                 >
                   <div className="flex items-center gap-2">
@@ -2236,8 +2253,8 @@ export default function Tareas() {
                             onDragOver={handleProjectDragOver}
                             onDrop={(e) => handleProjectDrop(e, project.id)}
                             className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
-                                ? 'bg-primary text-primary-foreground'
-                                : 'hover:bg-muted'
+                              ? 'bg-primary text-primary-foreground'
+                              : 'hover:bg-muted'
                               } ${draggedProject === project.id ? 'opacity-50' : ''}`}
                           >
                             <button
@@ -2256,8 +2273,8 @@ export default function Tareas() {
                                   <button
                                     onClick={(e) => e.stopPropagation()}
                                     className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
-                                        ? 'hover:bg-primary-foreground/20 text-primary-foreground'
-                                        : 'hover:bg-muted'
+                                      ? 'hover:bg-primary-foreground/20 text-primary-foreground'
+                                      : 'hover:bg-muted'
                                       }`}
                                     draggable={false}
                                   >
@@ -2301,8 +2318,8 @@ export default function Tareas() {
                       onDragOver={handleProjectDragOver}
                       onDrop={(e) => handleProjectDrop(e, project.id)}
                       className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
-                          ? 'bg-primary text-primary-foreground'
-                          : 'hover:bg-muted'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'hover:bg-muted'
                         } ${draggedProject === project.id ? 'opacity-50' : ''}`}
                     >
                       <button
@@ -2321,8 +2338,8 @@ export default function Tareas() {
                             <button
                               onClick={(e) => e.stopPropagation()}
                               className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
-                                  ? 'hover:bg-primary-foreground/20 text-primary-foreground'
-                                  : 'hover:bg-muted'
+                                ? 'hover:bg-primary-foreground/20 text-primary-foreground'
+                                : 'hover:bg-muted'
                                 }`}
                               draggable={false}
                             >
@@ -2774,8 +2791,8 @@ export default function Tareas() {
             <button
               onClick={() => setDateFilter('all')}
               className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'all'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted hover:bg-muted/80'
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted hover:bg-muted/80'
                 }`}
             >
               <LayoutGrid className="h-3 w-3 md:h-3.5 md:w-3.5" />
@@ -2787,8 +2804,8 @@ export default function Tareas() {
             <button
               onClick={() => setDateFilter('today')}
               className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'today'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300'
+                ? 'bg-blue-500 text-white'
+                : 'bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300'
                 }`}
             >
               <Calendar className="h-3 w-3 md:h-3.5 md:w-3.5" />
@@ -2803,8 +2820,8 @@ export default function Tareas() {
             <button
               onClick={() => setDateFilter('week')}
               className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'week'
-                  ? 'bg-purple-500 text-white'
-                  : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-300'
+                ? 'bg-purple-500 text-white'
+                : 'bg-purple-50 text-purple-700 hover:bg-purple-100 dark:bg-purple-950 dark:text-purple-300'
                 }`}
             >
               <CalendarDays className="h-3 w-3 md:h-3.5 md:w-3.5" />
@@ -2816,8 +2833,8 @@ export default function Tareas() {
             <button
               onClick={() => setDateFilter('month')}
               className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'month'
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950 dark:text-emerald-300'
                 }`}
             >
               <CalendarRange className="h-3 w-3 md:h-3.5 md:w-3.5" />
@@ -2829,8 +2846,8 @@ export default function Tareas() {
             <button
               onClick={() => setDateFilter('overdue')}
               className={`flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-lg text-xs md:text-sm transition-colors whitespace-nowrap ${dateFilter === 'overdue'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
+                ? 'bg-red-500 text-white'
+                : 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-950 dark:text-red-300'
                 }`}
             >
               <AlertCircle className="h-3 w-3 md:h-3.5 md:w-3.5" />
@@ -2924,8 +2941,8 @@ export default function Tareas() {
                                     handleToggleComplete(task);
                                   }}
                                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${task.status === TaskStatus.DONE
-                                      ? 'bg-emerald-500 border-emerald-500 text-white'
-                                      : 'border-muted-foreground'
+                                    ? 'bg-emerald-500 border-emerald-500 text-white'
+                                    : 'border-muted-foreground'
                                     }`}
                                 >
                                   {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
@@ -2996,8 +3013,8 @@ export default function Tareas() {
                                         handleToggleComplete(task);
                                       }}
                                       className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${task.status === TaskStatus.DONE
-                                          ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
-                                          : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
+                                        ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
+                                        : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
                                         }`}
                                     >
                                       {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
@@ -3593,8 +3610,8 @@ export default function Tareas() {
                     <div key={item.id} className="flex items-center gap-2">
                       <div
                         className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer ${item.completed
-                            ? 'bg-primary border-primary'
-                            : 'border-muted-foreground'
+                          ? 'bg-primary border-primary'
+                          : 'border-muted-foreground'
                           }`}
                         onClick={() => {
                           const newChecklist = [...formData.checklist];
