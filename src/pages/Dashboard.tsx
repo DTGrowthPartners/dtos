@@ -617,6 +617,109 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Admin Personal Tasks Section */}
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* My Pending Tasks */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Mis Tareas Pendientes ({myPendingTasks.length})
+                </span>
+                <Link to="/tareas">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                    Ver todas <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                {myPendingTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Sin tareas pendientes</p>
+                ) : (
+                  myPendingTasks.slice(0, 5).map((task) => {
+                    const dueDateInfo = formatDueDate(task.dueDate);
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-2 p-2 rounded-lg border hover:bg-muted/50 cursor-pointer"
+                        onClick={() => navigate(`/tareas?taskId=${task.id}`)}
+                      >
+                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{task.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className="text-[10px] px-1.5">
+                              {task.status === 'IN_PROGRESS' ? 'En progreso' : 'Pendiente'}
+                            </Badge>
+                            {dueDateInfo && (
+                              <span className={`text-[10px] ${dueDateInfo.isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                {dueDateInfo.text}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Tasks I Created (Assigned to Others) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Tareas que Asigne ({tasksICreated.length})
+                </span>
+                <Link to="/tareas">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs">
+                    Ver todas <ArrowRight className="ml-1 h-3 w-3" />
+                  </Button>
+                </Link>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 max-h-[250px] overflow-y-auto">
+                {tasksICreated.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">Sin tareas asignadas a otros</p>
+                ) : (
+                  tasksICreated.slice(0, 5).map((task) => {
+                    const dueDateInfo = formatDueDate(task.dueDate);
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-2 p-2 rounded-lg border hover:bg-muted/50 cursor-pointer"
+                        onClick={() => navigate(`/tareas?taskId=${task.id}`)}
+                      >
+                        <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${getPriorityColor(task.priority)}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{task.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-[10px] px-1.5">
+                              {task.assignee || 'Sin asignar'}
+                            </Badge>
+                            {dueDateInfo && (
+                              <span className={`text-[10px] ${dueDateInfo.isOverdue ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                {dueDateInfo.text}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

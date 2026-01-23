@@ -337,18 +337,20 @@ export default function Finanzas() {
     }
   };
 
-  // Get all unique categories (must be before any conditional returns)
+  // Get all unique categories (must be before any conditional returns, excluding AJUSTE SALDO)
   const allCategories = useMemo(() => {
     const cats = new Set<string>();
     [...ingresos, ...gastos].forEach(t => {
-      if (t.categoria) cats.add(t.categoria);
+      if (t.categoria && t.categoria !== 'AJUSTE SALDO') cats.add(t.categoria);
     });
     return ['todas', ...Array.from(cats)];
   }, [ingresos, gastos]);
 
-  // Filter transactions with search and date range
+  // Filter transactions with search and date range (excluding AJUSTE SALDO)
   const filteredIngresos = useMemo(() => {
     return ingresos.filter(t => {
+      // Always exclude AJUSTE SALDO - it's just a balance adjustment
+      if (t.categoria === 'AJUSTE SALDO') return false;
       if (filterType === 'gastos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
@@ -376,6 +378,8 @@ export default function Finanzas() {
 
   const filteredGastos = useMemo(() => {
     return gastos.filter(t => {
+      // Always exclude AJUSTE SALDO - it's just a balance adjustment
+      if (t.categoria === 'AJUSTE SALDO') return false;
       if (filterType === 'ingresos') return false;
       if (filterCategory !== 'todas' && t.categoria !== filterCategory) return false;
 
@@ -1055,72 +1059,7 @@ export default function Finanzas() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* Revenue Chart */}
-        <div className="lg:col-span-2 rounded-xl border border-border bg-card p-4 sm:p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2 sm:gap-4">
-            <div>
-              <h3 className="font-semibold text-foreground text-sm sm:text-base">Evolución Financiera</h3>
-              <p className="text-xs sm:text-sm text-muted-foreground">
-                {hasActiveFilters ? 'Datos filtrados' : 'Ingresos vs Gastos'}
-              </p>
-            </div>
-            <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-primary" />
-                <span className="text-muted-foreground">Ingresos</span>
-              </div>
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full bg-destructive" />
-                <span className="text-muted-foreground">Gastos</span>
-              </div>
-            </div>
-          </div>
-          <div className="h-48 sm:h-64 -ml-2 sm:ml-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={hasActiveFilters ? filteredFinanceByMonth : financeData}
-                margin={{ top: 10, right: 5, left: -15, bottom: 0 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="month"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={0}
-                  tick={{ fontSize: 9 }}
-                />
-                <YAxis
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => formatCompactCurrency(value)}
-                  width={45}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                />
-                <Bar dataKey="income" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-          {hasActiveFilters && filteredFinanceByMonth.length === 0 && (
-            <div className="text-center text-muted-foreground text-sm py-8">
-              No hay datos para el período seleccionado
-            </div>
-          )}
-        </div>
-
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Expense Distribution */}
         <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
           <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Distribución de Gastos</h3>

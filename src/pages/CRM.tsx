@@ -387,6 +387,19 @@ export default function CRM() {
     }
   };
 
+  const refreshDeals = async () => {
+    try {
+      const [dealsData, metricsData] = await Promise.all([
+        apiClient.get<Deal[]>('/api/crm/deals'),
+        apiClient.get<PipelineMetrics>('/api/crm/metrics/pipeline'),
+      ]);
+      setDeals(dealsData);
+      setMetrics(metricsData);
+    } catch (error) {
+      console.error('Error refreshing deals:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -1247,6 +1260,91 @@ export default function CRM() {
                       <p>{selectedDeal.notes}</p>
                     </div>
                   )}
+                </div>
+
+                <Separator />
+
+                {/* Follow-up Section */}
+                <div className="space-y-3">
+                  <h4 className="font-medium text-sm">Seguimiento</h4>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        {selectedDeal.nextFollowUp
+                          ? `Programado: ${formatRelativeDate(selectedDeal.nextFollowUp)}`
+                          : 'Sin seguimiento programado'}
+                      </span>
+                    </div>
+                  </div>
+                  {selectedDeal.alerts && selectedDeal.alerts.length > 0 && (
+                    <div className="space-y-1">
+                      {selectedDeal.alerts.map((alert, idx) => (
+                        <div key={idx} className={`text-xs px-2 py-1 rounded ${getAlertSeverityColor(alert.severity)}`}>
+                          <AlertTriangle className="h-3 w-3 inline mr-1" />
+                          {alert.message}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const newDate = prompt(
+                          'Nueva fecha de seguimiento (YYYY-MM-DD):',
+                          selectedDeal.nextFollowUp
+                            ? new Date(selectedDeal.nextFollowUp).toISOString().split('T')[0]
+                            : new Date().toISOString().split('T')[0]
+                        );
+                        if (newDate) {
+                          apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                            nextFollowUp: newDate
+                          }).then(() => {
+                            loadDealDetail(selectedDeal.id);
+                            refreshDeals();
+                            toast({ title: 'Seguimiento actualizado' });
+                          }).catch(() => {
+                            toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Calendar className="h-4 w-4" />
+                      {selectedDeal.nextFollowUp ? 'Reprogramar' : 'Programar'}
+                    </Button>
+                    {selectedDeal.nextFollowUp && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            // Clear follow-up and log activity
+                            await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                              nextFollowUp: null,
+                              lastInteractionAt: new Date().toISOString()
+                            });
+                            await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+                              type: 'note',
+                              title: 'Seguimiento completado',
+                              description: 'Se marco el seguimiento como completado'
+                            });
+                            loadDealDetail(selectedDeal.id);
+                            refreshDeals();
+                            toast({ title: 'Seguimiento completado', description: 'Se ha registrado el contacto' });
+                          } catch {
+                            toast({ title: 'Error', description: 'No se pudo completar', variant: 'destructive' });
+                          }
+                        }}
+                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                      >
+                        <CheckSquare className="h-4 w-4" />
+                        Marcar Contactado
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 <Separator />
