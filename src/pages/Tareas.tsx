@@ -563,7 +563,25 @@ export default function Tareas() {
               recurringTemplateId: task.id,
             };
 
-            await createTask(newTaskData);
+            const newInstanceId = await createTask(newTaskData);
+
+            // Send WhatsApp notification for high priority recurring tasks
+            if (task.priority === Priority.HIGH) {
+              const project = projects.find(p => p.id === task.projectId);
+              sendHighPriorityTaskToWhatsApp({
+                id: newInstanceId,
+                titulo: task.title,
+                descripcion: task.description || '',
+                prioridad: 'Alta',
+                asignado: task.assignee,
+                creador: task.creator,
+                proyecto: project?.name || 'Sin proyecto',
+                fechaLimite: task.recurrence.nextOccurrence
+                  ? new Date(task.recurrence.nextOccurrence).toISOString().split('T')[0]
+                  : null,
+              });
+              console.log(`[Recurrence] Sent WhatsApp notification for high priority recurring task: ${task.title}`);
+            }
 
             // Calculate next occurrence
             let nextOccurrence: number;
