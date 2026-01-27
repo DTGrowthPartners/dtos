@@ -45,6 +45,9 @@ interface BudgetComparisonReportProps {
 
 type MonthKey = 'enero' | 'febrero' | 'marzo';
 
+// Default values for safe access
+const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
+
 export default function BudgetComparisonReport({ gastos }: BudgetComparisonReportProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -90,11 +93,15 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
   // Calculate Q1 totals
   const q1Totals = useMemo(() => {
-    if (!budgetData) return { proyectado: 0, real: 0, percentUsed: 0 };
+    if (!budgetData?.gastos?.totales) return { proyectado: 0, real: 0, percentUsed: 0 };
 
     const totales = budgetData.gastos.totales;
-    const proyectado = totales.enero.proyectado + totales.febrero.proyectado + totales.marzo.proyectado;
-    const real = totales.enero.real + totales.febrero.real + totales.marzo.real;
+    const enero = totales.enero || DEFAULT_MONTH_TOTALS;
+    const febrero = totales.febrero || DEFAULT_MONTH_TOTALS;
+    const marzo = totales.marzo || DEFAULT_MONTH_TOTALS;
+
+    const proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado;
+    const real = enero.real + febrero.real + marzo.real;
     const percentUsed = proyectado > 0 ? (real / proyectado) * 100 : 0;
 
     return { proyectado, real, percentUsed };
@@ -102,7 +109,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
   // Monthly comparison data for chart
   const monthlyComparisonData = useMemo(() => {
-    if (!budgetData) return [];
+    if (!budgetData?.gastos?.totales) return [];
 
     const months: { key: MonthKey; name: string }[] = [
       { key: 'enero', name: 'Enero' },
@@ -111,7 +118,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     ];
 
     return months.map(({ key, name }) => {
-      const totales = budgetData.gastos.totales[key];
+      const totales = budgetData.gastos.totales[key] || DEFAULT_MONTH_TOTALS;
       const percentUsed = totales.proyectado > 0 ? (totales.real / totales.proyectado) * 100 : 0;
 
       return {
@@ -128,7 +135,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
   // Category breakdown for selected month or Q1
   const categoryBreakdown = useMemo(() => {
-    if (!budgetData) return [];
+    if (!budgetData?.gastos?.categorias) return [];
 
     const categories = budgetData.gastos.categorias;
 
@@ -136,12 +143,17 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       let proyectado: number;
       let real: number;
 
+      const enero = data?.enero || DEFAULT_MONTH_TOTALS;
+      const febrero = data?.febrero || DEFAULT_MONTH_TOTALS;
+      const marzo = data?.marzo || DEFAULT_MONTH_TOTALS;
+
       if (selectedMonth === 'q1') {
-        proyectado = data.enero.proyectado + data.febrero.proyectado + data.marzo.proyectado;
-        real = data.enero.real + data.febrero.real + data.marzo.real;
+        proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado;
+        real = enero.real + febrero.real + marzo.real;
       } else {
-        proyectado = data[selectedMonth].proyectado;
-        real = data[selectedMonth].real;
+        const monthData = data?.[selectedMonth] || DEFAULT_MONTH_TOTALS;
+        proyectado = monthData.proyectado;
+        real = monthData.real;
       }
 
       const diferencia = proyectado - real;
@@ -162,13 +174,13 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
   // Selected period totals
   const selectedPeriodTotals = useMemo(() => {
-    if (!budgetData) return { proyectado: 0, real: 0, percentUsed: 0 };
+    if (!budgetData?.gastos?.totales) return { proyectado: 0, real: 0, percentUsed: 0 };
 
     if (selectedMonth === 'q1') {
       return q1Totals;
     }
 
-    const totales = budgetData.gastos.totales[selectedMonth];
+    const totales = budgetData.gastos.totales[selectedMonth] || DEFAULT_MONTH_TOTALS;
     const percentUsed = totales.proyectado > 0 ? (totales.real / totales.proyectado) * 100 : 0;
 
     return {
