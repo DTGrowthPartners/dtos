@@ -455,66 +455,136 @@ export class GoogleSheetsService {
   }
 
   async getBudgetData(): Promise<{
-    presupuesto: Record<string, Record<string, number>>;
-    totales: Record<string, number>;
+    ingresos: {
+      categorias: Record<string, { proyectado: number; real: number }>;
+      totales: { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } };
+    };
+    gastos: {
+      categorias: Record<string, { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } }>;
+      totales: { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } };
+    };
   }> {
     try {
-      // Read from "Presupuesto" sheet - Columnas: A=Categoría, B=Enero, C=Febrero, D=Marzo
+      // Read from "Presupuesto Q1" sheet - Full data
+      // Structure: A=Categoria, B=Enero Proy, C=Enero Real, D=Feb Proy, E=Feb Real, F=Mar Proy, G=Mar Real, H=Total
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Presupuesto!A2:D13', // Assuming up to 12 categories
+        range: "'Presupuesto Q1'!A1:H70",
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const rows = response.data.values || [];
-      console.log('Budget rows from Google Sheets:', rows);
+      console.log('Budget Q1 rows count:', rows.length);
 
-      const presupuesto: Record<string, Record<string, number>> = {
-        enero: {},
-        febrero: {},
-        marzo: {},
+      // Initialize result structure
+      const result = {
+        ingresos: {
+          categorias: {} as Record<string, { proyectado: number; real: number }>,
+          totales: {
+            enero: { proyectado: 0, real: 0 },
+            febrero: { proyectado: 0, real: 0 },
+            marzo: { proyectado: 0, real: 0 },
+          },
+        },
+        gastos: {
+          categorias: {} as Record<string, { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } }>,
+          totales: {
+            enero: { proyectado: 0, real: 0 },
+            febrero: { proyectado: 0, real: 0 },
+            marzo: { proyectado: 0, real: 0 },
+          },
+        },
       };
 
-      const totales: Record<string, number> = {
-        enero: 0,
-        febrero: 0,
-        marzo: 0,
-      };
+      let currentSection = ''; // 'ingresos' or 'gastos'
 
-      // Parse rows: A=Categoría, B=Enero, C=Febrero, D=Marzo
-      rows.forEach((row: any[]) => {
-        if (row[0]) { // Has category name
-          const categoria = String(row[0]).trim();
-          const enero = row[1] ? Number(row[1]) : 0;
-          const febrero = row[2] ? Number(row[2]) : 0;
-          const marzo = row[3] ? Number(row[3]) : 0;
+      for (const row of rows) {
+        const firstCol = String(row[0] || '').trim().toUpperCase();
 
-          presupuesto.enero[categoria] = enero;
-          presupuesto.febrero[categoria] = febrero;
-          presupuesto.marzo[categoria] = marzo;
-
-          totales.enero += enero;
-          totales.febrero += febrero;
-          totales.marzo += marzo;
+        // Detect section changes
+        if (firstCol.includes('INGRESOS PROYECTADOS')) {
+          currentSection = 'ingresos';
+          continue;
         }
-      });
+        if (firstCol.includes('GASTOS OPERATIVOS')) {
+          currentSection = 'gastos';
+          continue;
+        }
 
-      console.log('Budget data parsed:', presupuesto, totales);
+        // Skip headers and section titles
+        if (!row[0] || firstCol === 'FUENTE' || firstCol.includes('CLIENTES RECURRENTES') ||
+            firstCol.includes('PROYECTOS PUNTUALES') || firstCol.includes('COSTOS FIJOS') ||
+            firstCol.includes('COSTOS VARIABLES') || firstCol.includes('RESULTADO')) {
+          continue;
+        }
 
-      return { presupuesto, totales };
+        const categoria = String(row[0]).trim();
+        const eneroProyectado = typeof row[1] === 'number' ? row[1] : 0;
+        const eneroReal = typeof row[2] === 'number' ? row[2] : 0;
+        const febreroProyectado = typeof row[3] === 'number' ? row[3] : 0;
+        const febreroReal = typeof row[4] === 'number' ? row[4] : 0;
+        const marzoProyectado = typeof row[5] === 'number' ? row[5] : 0;
+        const marzoReal = typeof row[6] === 'number' ? row[6] : 0;
+
+        // Handle TOTAL INGRESOS
+        if (firstCol === 'TOTAL INGRESOS') {
+          result.ingresos.totales = {
+            enero: { proyectado: eneroProyectado, real: eneroReal },
+            febrero: { proyectado: febreroProyectado, real: febreroReal },
+            marzo: { proyectado: marzoProyectado, real: marzoReal },
+          };
+          continue;
+        }
+
+        // Handle TOTAL GASTOS
+        if (firstCol === 'TOTAL GASTOS') {
+          result.gastos.totales = {
+            enero: { proyectado: eneroProyectado, real: eneroReal },
+            febrero: { proyectado: febreroProyectado, real: febreroReal },
+            marzo: { proyectado: marzoProyectado, real: marzoReal },
+          };
+          continue;
+        }
+
+        // Skip subtotals
+        if (firstCol.includes('SUBTOTAL')) {
+          continue;
+        }
+
+        // Add to appropriate section
+        if (currentSection === 'gastos' && categoria && (eneroProyectado > 0 || eneroReal > 0 || febreroProyectado > 0 || marzoProyectado > 0)) {
+          result.gastos.categorias[categoria] = {
+            enero: { proyectado: eneroProyectado, real: eneroReal },
+            febrero: { proyectado: febreroProyectado, real: febreroReal },
+            marzo: { proyectado: marzoProyectado, real: marzoReal },
+          };
+        }
+      }
+
+      console.log('Budget Q1 data parsed - Gastos categories:', Object.keys(result.gastos.categorias).length);
+      console.log('Budget Q1 totales ingresos:', result.ingresos.totales);
+      console.log('Budget Q1 totales gastos:', result.gastos.totales);
+
+      return result;
     } catch (error) {
       console.error('Error fetching budget data from Google Sheets:', error);
       // Return empty budget data on error
       return {
-        presupuesto: {
-          enero: {},
-          febrero: {},
-          marzo: {},
+        ingresos: {
+          categorias: {},
+          totales: {
+            enero: { proyectado: 0, real: 0 },
+            febrero: { proyectado: 0, real: 0 },
+            marzo: { proyectado: 0, real: 0 },
+          },
         },
-        totales: {
-          enero: 0,
-          febrero: 0,
-          marzo: 0,
+        gastos: {
+          categorias: {},
+          totales: {
+            enero: { proyectado: 0, real: 0 },
+            febrero: { proyectado: 0, real: 0 },
+            marzo: { proyectado: 0, real: 0 },
+          },
         },
       };
     }
