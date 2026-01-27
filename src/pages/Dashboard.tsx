@@ -220,13 +220,15 @@ export default function Dashboard() {
 
   // Team workload (for admin)
   const teamWorkload = useMemo(() => {
-    const workloadMap = new Map<string, { pending: number, completed: number }>();
+    const workloadMap = new Map<string, { pending: number, inProgress: number, completed: number }>();
 
     allTasks.forEach(task => {
       if (task.assignee) {
-        const current = workloadMap.get(task.assignee) || { pending: 0, completed: 0 };
+        const current = workloadMap.get(task.assignee) || { pending: 0, inProgress: 0, completed: 0 };
         if (task.status === 'DONE') {
           current.completed++;
+        } else if (task.status === 'IN_PROGRESS') {
+          current.inProgress++;
         } else {
           current.pending++;
         }
@@ -238,8 +240,9 @@ export default function Dashboard() {
       .map(([name, data]) => ({
         name,
         pending: data.pending,
+        inProgress: data.inProgress,
         completed: data.completed,
-        total: data.pending + data.completed
+        total: data.pending + data.inProgress + data.completed
       }))
       .sort((a, b) => b.total - a.total)
       .slice(0, 6);
@@ -561,6 +564,7 @@ export default function Dashboard() {
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
                     />
                     <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="inProgress" name="En Curso" stackId="a" fill="#3b82f6" />
                     <Bar dataKey="completed" name="Completadas" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
