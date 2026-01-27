@@ -1916,7 +1916,14 @@ export default function Tareas() {
     let isUserTask = isAdmin;
 
     if (!isUserTask && loggedUserName) {
-      isUserTask = (task.assignee === loggedUserName || task.creator === loggedUserName);
+      const normalizedLoggedUser = normalizeString(loggedUserName);
+      const normalizedAssignee = task.assignee ? normalizeString(task.assignee) : '';
+      const normalizedCreator = task.creator ? normalizeString(task.creator) : '';
+
+      isUserTask = normalizedAssignee === normalizedLoggedUser ||
+        normalizedCreator === normalizedLoggedUser ||
+        normalizedAssignee.includes(normalizedLoggedUser) ||
+        normalizedLoggedUser.includes(normalizedAssignee);
     }
 
     // If we still haven't identified it as a user task, and user is NOT admin, reject.

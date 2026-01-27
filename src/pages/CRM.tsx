@@ -42,6 +42,9 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
+import { createTask, sendTaskNotification, loadProjects } from '@/lib/firestoreTaskService';
+import { useAuthStore } from '@/lib/auth';
+import { Priority as TaskPriority, TEAM_MEMBERS, TaskStatus, type TeamMemberName, type Project as FirestoreProject } from '@/types/taskTypes';
 
 // Source Icons
 const ShopifyIcon = ({ className }: { className?: string }) => (
@@ -301,7 +304,44 @@ export default function CRM() {
   const [deletedDeals, setDeletedDeals] = useState<Deal[]>([]);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
+  const { user: authUser } = useAuthStore();
+  const [firestoreProjects, setFirestoreProjects] = useState<FirestoreProject[]>([]);
   const { toast } = useToast();
+
+  // Normalize string removing accents for comparison
+  const normalizeString = (str: string): string => {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  };
+
+  // Map user firstName or email to team member name (flexible matching)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
+    if (!firstName && !email) return undefined;
+
+    // Try matching by first name first
+    if (firstName) {
+      const normalizedInput = normalizeString(firstName);
+      const memberByFirstName = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === normalizedInput ||
+        normalizedInput.startsWith(normalizeString(m.name)) ||
+        normalizeString(m.name).startsWith(normalizedInput)
+      );
+      if (memberByFirstName) return memberByFirstName.name;
+    }
+
+    // Try matching by email prefix if first name matching failed
+    if (email) {
+      const emailPrefix = normalizeString(email.split('@')[0]);
+      const memberByEmail = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === emailPrefix ||
+        emailPrefix.includes(normalizeString(m.name))
+      );
+      if (memberByEmail) return memberByEmail.name;
+    }
+
+    return undefined;
+  };
+
+  const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName, authUser?.email);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -350,16 +390,18 @@ export default function CRM() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [stagesData, dealsData, servicesData, metricsData] = await Promise.all([
+      const [stagesData, dealsData, servicesData, metricsData, fProjects] = await Promise.all([
         apiClient.get<DealStage[]>('/api/crm/stages'),
         apiClient.get<Deal[]>('/api/crm/deals'),
         apiClient.get<Service[]>('/api/services'),
         apiClient.get<PipelineMetrics>('/api/crm/metrics/pipeline'),
+        loadProjects(),
       ]);
       setStages(stagesData);
       setDeals(dealsData);
       setServices(servicesData);
       setMetrics(metricsData);
+      setFirestoreProjects(fProjects);
       if (stagesData.length > 0 && !formData.stageId) {
         setFormData(prev => ({ ...prev, stageId: stagesData[0].id }));
       }
@@ -518,32 +560,57 @@ export default function CRM() {
   const handleCreateTask = async () => {
     if (!selectedDeal || !taskFormData.title) return;
     try {
-      // Create task with deal context in title/description
-      const taskPayload = {
+      // Find a suitable project for the task (CRM, Ventas, or Interno)
+      const targetProject = firestoreProjects.find(p =>
+        normalizeString(p.name).includes('crm') ||
+        normalizeString(p.name).includes('ventas') ||
+        normalizeString(p.name).includes('interno')
+      ) || firestoreProjects[0];
+
+      if (!targetProject) {
+        toast({ title: 'Error', description: 'No se encontro un proyecto en Tareas para asignar esta tarea', variant: 'destructive' });
+        return;
+      }
+
+      // Map priority
+      let priority = TaskPriority.MEDIUM;
+      if (taskFormData.priority === 'high' || taskFormData.priority === 'urgente') priority = TaskPriority.HIGH;
+      if (taskFormData.priority === 'low') priority = TaskPriority.LOW;
+
+      // Create task in Firestore
+      const taskData = {
         title: taskFormData.title,
         description: `[CRM - ${selectedDeal.name}${selectedDeal.company ? ` / ${selectedDeal.company}` : ''}]\n${taskFormData.description || ''}`.trim(),
-        priority: taskFormData.priority,
-        dueDate: taskFormData.dueDate || undefined,
-        status: 'pending',
+        status: TaskStatus.TODO,
+        priority,
+        assignee: loggedUserName || 'Stiven' as TeamMemberName,
+        creator: loggedUserName || 'Dairo' as TeamMemberName,
+        projectId: targetProject.id,
+        dueDate: taskFormData.dueDate ? new Date(taskFormData.dueDate).getTime() : undefined,
       };
 
-      await apiClient.post('/api/tasks', taskPayload);
+      const newTaskId = await createTask(taskData);
 
-      // Log activity on the deal
-      await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
-        type: 'note',
-        title: 'Tarea creada',
-        description: taskFormData.title,
-      });
+      // Send notification if someone else is creator/assignee (not likely here if both are me)
+      if (loggedUserName) {
+        // Also log activity on the deal (Backend Postgres)
+        await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+          dealId: selectedDeal.id,
+          type: 'note',
+          title: 'Tarea creada',
+          description: `${taskFormData.title} (Ver en Tareas)`,
+        });
+      }
 
-      toast({ title: 'Tarea creada', description: 'La tarea se agrego correctamente' });
+      toast({ title: 'Tarea creada', description: 'La tarea se agrego a la sección de Tareas' });
       setIsTaskDialogOpen(false);
       setTaskFormData({ title: '', description: '', priority: 'medium', dueDate: '' });
       loadDealDetail(selectedDeal.id);
     } catch (error) {
+      console.error('Error creating task:', error);
       toast({
         title: 'Error',
-        description: 'No se pudo crear la tarea',
+        description: 'No se pudo crear la tarea en Firestore',
         variant: 'destructive',
       });
     }

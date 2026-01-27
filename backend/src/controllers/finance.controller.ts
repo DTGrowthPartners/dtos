@@ -45,6 +45,49 @@ export class FinanceController {
     }
   }
 
+  async addIncome(req: Request, res: Response) {
+    try {
+      const { fecha, importe, descripcion, categoria, cuenta, entidad } = req.body;
+
+      // Validar campos requeridos
+      if (!fecha || !importe || !descripcion || !categoria) {
+        return res.status(400).json({
+          message: 'Campos requeridos: fecha, importe, descripcion, categoria',
+        });
+      }
+
+      await googleSheetsService.addIncome({
+        fecha,
+        importe: Number(importe),
+        descripcion,
+        categoria,
+        cuenta: cuenta || '',
+        entidad: entidad || '',
+      });
+
+      res.json({ message: 'Ingreso agregado correctamente' });
+    } catch (error) {
+      console.error('Error in addIncome:', error);
+      res.status(500).json({
+        message: 'Error al agregar ingreso',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  async getBudget(req: Request, res: Response) {
+    try {
+      const budgetData = await googleSheetsService.getBudgetData();
+      res.json(budgetData);
+    } catch (error) {
+      console.error('Error in getBudget:', error);
+      res.status(500).json({
+        message: 'Error al obtener datos del presupuesto',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   // ==================== TERCEROS ====================
 
   async getTerceros(req: Request, res: Response) {

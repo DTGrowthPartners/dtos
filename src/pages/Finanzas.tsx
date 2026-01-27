@@ -36,6 +36,7 @@ const EXPENSE_CATEGORIES = [
   'Freelancers',
   'Comisiones de Cierre',
   'Honorarios Contador',
+  'REEMBOLSO',
   'REEMBOLSO INVERSIÓN PUBLICIDAD',
   'TRASLADO DE NEQUI',
   'TRASLADO DE DAVIPLATA',
@@ -48,11 +49,18 @@ const EXPENSE_CATEGORIES = [
 const INCOME_CATEGORIES = [
   'PAGO DE CLIENTE',
   'INVERSIÓN PUBLICIDAD DE CLIENTE',
+  'REEMBOLSO',
   'TRASLADO DE NEQUI',
   'TRASLADO DE DAVIPLATA',
   'TRASLADO DE BANCOLOMBIA',
   'TRASLADO DE RAPPICUENTA',
   'AJUSTE SALDO',
+];
+
+// Bancos preestablecidos para entradas
+const PRESET_BANKS = [
+  'Bancolombia *5993',
+  'Bancolombia *7710',
 ];
 
 interface FinanceData {
@@ -131,11 +139,22 @@ export default function Finanzas() {
 
   // Modals
   const [showAddExpenseModal, setShowAddExpenseModal] = useState(false);
+  const [showAddIncomeModal, setShowAddIncomeModal] = useState(false);
   const [showTercerosModal, setShowTercerosModal] = useState(false);
   const [showNominaModal, setShowNominaModal] = useState(false);
 
   // Form states
   const [expenseForm, setExpenseForm] = useState({
+    fecha: new Date().toISOString().split('T')[0],
+    importe: '',
+    descripcion: '',
+    categoria: '',
+    cuenta: '',
+    entidad: '',
+  });
+
+  // Form state for income
+  const [incomeForm, setIncomeForm] = useState({
     fecha: new Date().toISOString().split('T')[0],
     importe: '',
     descripcion: '',
@@ -704,6 +723,25 @@ export default function Finanzas() {
     }
   };
 
+  const handleAddIncome = async () => {
+    try {
+      await apiClient.post('/api/finance/income', incomeForm);
+      toast({
+        title: 'Éxito',
+        description: 'Ingreso agregado correctamente',
+      });
+      setShowAddIncomeModal(false);
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error adding income:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo agregar el ingreso',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -758,6 +796,14 @@ export default function Finanzas() {
                 >
                   <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
                   Actualizar
+                </Button>
+                <Button
+                  variant="default"
+                  onClick={() => setShowAddIncomeModal(true)}
+                  className="w-full sm:w-auto"
+                >
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Agregar Ingreso
                 </Button>
                 <Button
                   variant="default"
@@ -1384,6 +1430,103 @@ export default function Finanzas() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Add Income Modal */}
+      {showAddIncomeModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-foreground">Agregar Ingreso</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowAddIncomeModal(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Fecha</label>
+                <Input
+                  type="date"
+                  value={incomeForm.fecha}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, fecha: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Importe</label>
+                <Input
+                  type="number"
+                  value={incomeForm.importe}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, importe: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Descripción</label>
+                <Input
+                  value={incomeForm.descripcion}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, descripcion: e.target.value })}
+                  placeholder="Descripción del ingreso"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
+                <Select
+                  value={incomeForm.categoria}
+                  onValueChange={(value) => setIncomeForm({ ...incomeForm, categoria: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una categoría" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INCOME_CATEGORIES.map((cat) => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Cuenta (Banco)</label>
+                <Select
+                  value={incomeForm.cuenta}
+                  onValueChange={(value) => setIncomeForm({ ...incomeForm, cuenta: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRESET_BANKS.map((bank) => (
+                      <SelectItem key={bank} value={bank}>{bank}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground mb-2 block">Entidad</label>
+                <Input
+                  value={incomeForm.entidad}
+                  onChange={(e) => setIncomeForm({ ...incomeForm, entidad: e.target.value })}
+                  placeholder="Ej: Cliente X"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setShowAddIncomeModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleAddIncome}>
+                <DollarSign className="h-4 w-4 mr-2" />
+                Agregar Ingreso
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Expense Modal */}
       {showAddExpenseModal && (

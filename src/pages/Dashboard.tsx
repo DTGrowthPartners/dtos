@@ -96,7 +96,7 @@ export default function Dashboard() {
   const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
-  const [topClients, setTopClients] = useState<{name: string, total: number}[]>([]);
+  const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Check if user is admin
@@ -107,23 +107,50 @@ export default function Dashboard() {
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   };
 
-  // Map user firstName to team member name (flexible matching with accent support)
-  const getTeamMemberNameFromUser = (firstName: string | undefined): string | undefined => {
-    if (!firstName) return undefined;
-    const normalizedInput = normalizeString(firstName);
-    // Try to find a matching team member (handles accents like Lía vs Lia)
-    const member = TEAM_MEMBERS.find(m => normalizeString(m.name) === normalizedInput);
-    // Return the matched team member name, or fallback to the original firstName
-    return member?.name || firstName;
+  // Map user firstName or email to team member name (flexible matching)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
+    if (!firstName && !email) return undefined;
+
+    // Try matching by first name first
+    if (firstName) {
+      const normalizedInput = normalizeString(firstName);
+      const memberByFirstName = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === normalizedInput ||
+        normalizedInput.startsWith(normalizeString(m.name)) ||
+        normalizeString(m.name).startsWith(normalizedInput)
+      );
+      if (memberByFirstName) return memberByFirstName.name as TeamMemberName;
+    }
+
+    // Try matching by email prefix if first name matching failed
+    if (email) {
+      const emailPrefix = normalizeString(email.split('@')[0]);
+      const memberByEmail = TEAM_MEMBERS.find(m =>
+        normalizeString(m.name) === emailPrefix ||
+        emailPrefix.includes(normalizeString(m.name))
+      );
+      if (memberByEmail) return memberByEmail.name as TeamMemberName;
+    }
+
+    return undefined;
   };
 
-  const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName);
+  const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName, authUser?.email);
 
+  // Filter tasks for current user (only assigned tasks, not created by)
   // Filter tasks for current user (only assigned tasks, not created by)
   const myTasks = useMemo(() => {
     if (!loggedUserName) return allTasks;
-    const normalizedUserName = normalizeString(loggedUserName);
-    return allTasks.filter(t => t.assignee && normalizeString(t.assignee) === normalizedUserName);
+    const normalizedLoggedUser = normalizeString(loggedUserName);
+    return allTasks.filter(t => {
+      if (!t.assignee) return false;
+      const normalizedAssignee = normalizeString(t.assignee);
+      // Perfect match
+      if (normalizedAssignee === normalizedLoggedUser) return true;
+      // Fuzzy match for common names or partial entries
+      return normalizedAssignee.includes(normalizedLoggedUser) ||
+        normalizedLoggedUser.includes(normalizedAssignee);
+    });
   }, [allTasks, loggedUserName]);
 
   const myPendingTasks = useMemo(() =>
@@ -389,20 +416,25 @@ export default function Dashboard() {
     if (!dueDate) return null;
     const date = new Date(dueDate);
     const now = new Date();
-    const diffDays = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    now.setHours(0, 0, 0, 0); // Compare dates without time
+    const taskDate = new Date(dueDate);
+    taskDate.setHours(0, 0, 0, 0);
+
+    const diffTime = taskDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
     const dateStr = date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
 
     if (diffDays < 0) {
-      return { text: `Vencida ${dateStr}`, className: 'text-red-500 font-medium' };
+      return { text: `Vencida ${dateStr}`, className: 'text-red-500 font-medium', isOverdue: true };
     } else if (diffDays === 0) {
-      return { text: 'Hoy', className: 'text-orange-500 font-medium' };
+      return { text: 'Hoy', className: 'text-orange-500 font-medium', isOverdue: false };
     } else if (diffDays === 1) {
-      return { text: 'Mañana', className: 'text-yellow-500' };
+      return { text: 'Mañana', className: 'text-yellow-500', isOverdue: false };
     } else if (diffDays <= 3) {
-      return { text: dateStr, className: 'text-yellow-500' };
+      return { text: dateStr, className: 'text-yellow-500', isOverdue: false };
     }
-    return { text: dateStr, className: 'text-muted-foreground' };
+    return { text: dateStr, className: 'text-muted-foreground', isOverdue: false };
   };
 
   // ==================== ADMIN DASHBOARD ====================
@@ -497,7 +529,7 @@ export default function Dashboard() {
                   <BarChart data={incomeByMonth}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
                       formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}

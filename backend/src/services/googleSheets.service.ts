@@ -376,6 +376,150 @@ export class GoogleSheetsService {
     }
   }
 
+  async addIncome(income: {
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+  }): Promise<void> {
+    try {
+      // Parse YYYY-MM-DD and create date with current time
+      const [year, month, day] = income.fecha.split('-').map(Number);
+      const now = new Date();
+      const fechaConHora = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+
+      // Convert to Excel serial number for proper formatting in Google Sheets
+      const serialDate = this.dateToSerialNumber(fechaConHora);
+
+      // First, get the sheet ID for "Entradas"
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const entradasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Entradas'
+      );
+
+      if (!entradasSheet) {
+        throw new Error('No se encontró la hoja "Entradas"');
+      }
+
+      const sheetId = entradasSheet.properties?.sheetId;
+
+      // Insert a new row at position 2 (after header row 1)
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [
+            {
+              insertDimension: {
+                range: {
+                  sheetId: sheetId,
+                  dimension: 'ROWS',
+                  startIndex: 1, // After row 1 (header)
+                  endIndex: 2,   // Insert 1 row
+                },
+                inheritFromBefore: false,
+              },
+            },
+          ],
+        },
+      });
+
+      // Now update the newly inserted row (row 2) with data
+      const values = [[
+        serialDate,
+        income.importe,
+        income.descripcion,
+        income.categoria,
+        income.cuenta,
+        income.entidad,
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Entradas!A2:F2',
+        valueInputOption: 'RAW',
+        requestBody: {
+          values,
+        },
+      });
+
+      console.log('Income added successfully at row 2:', income, 'Serial date:', serialDate);
+    } catch (error) {
+      console.error('Error adding income to Google Sheets:', error);
+      throw new Error('No se pudo agregar el ingreso a Google Sheets');
+    }
+  }
+
+  async getBudgetData(): Promise<{
+    presupuesto: Record<string, Record<string, number>>;
+    totales: Record<string, number>;
+  }> {
+    try {
+      // Read from "Presupuesto" sheet - Columnas: A=Categoría, B=Enero, C=Febrero, D=Marzo
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Presupuesto!A2:D13', // Assuming up to 12 categories
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const rows = response.data.values || [];
+      console.log('Budget rows from Google Sheets:', rows);
+
+      const presupuesto: Record<string, Record<string, number>> = {
+        enero: {},
+        febrero: {},
+        marzo: {},
+      };
+
+      const totales: Record<string, number> = {
+        enero: 0,
+        febrero: 0,
+        marzo: 0,
+      };
+
+      // Parse rows: A=Categoría, B=Enero, C=Febrero, D=Marzo
+      rows.forEach((row: any[]) => {
+        if (row[0]) { // Has category name
+          const categoria = String(row[0]).trim();
+          const enero = row[1] ? Number(row[1]) : 0;
+          const febrero = row[2] ? Number(row[2]) : 0;
+          const marzo = row[3] ? Number(row[3]) : 0;
+
+          presupuesto.enero[categoria] = enero;
+          presupuesto.febrero[categoria] = febrero;
+          presupuesto.marzo[categoria] = marzo;
+
+          totales.enero += enero;
+          totales.febrero += febrero;
+          totales.marzo += marzo;
+        }
+      });
+
+      console.log('Budget data parsed:', presupuesto, totales);
+
+      return { presupuesto, totales };
+    } catch (error) {
+      console.error('Error fetching budget data from Google Sheets:', error);
+      // Return empty budget data on error
+      return {
+        presupuesto: {
+          enero: {},
+          febrero: {},
+          marzo: {},
+        },
+        totales: {
+          enero: 0,
+          febrero: 0,
+          marzo: 0,
+        },
+      };
+    }
+  }
+
   // ==================== TERCEROS (Third Parties) ====================
 
   async getTerceros(): Promise<Tercero[]> {
@@ -654,85 +798,6 @@ export class GoogleSheetsService {
       }
     } catch (error) {
       console.error(`Error ensuring sheet ${sheetName} exists:`, error);
-    }
-  }
-
-  // Add income to Entradas sheet
-  async addIncome(income: {
-    fecha: string;
-    importe: number;
-    descripcion: string;
-    categoria: string;
-    cuenta: string;
-    entidad: string;
-  }): Promise<void> {
-    try {
-      // Parse YYYY-MM-DD and create date with current time
-      const [year, month, day] = income.fecha.split('-').map(Number);
-      const now = new Date();
-      const fechaConHora = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
-
-      // Convert to Excel serial number for proper formatting in Google Sheets
-      const serialDate = this.dateToSerialNumber(fechaConHora);
-
-      // First, get the sheet ID for "Entradas"
-      const spreadsheet = await this.sheets.spreadsheets.get({
-        spreadsheetId: SPREADSHEET_ID,
-      });
-
-      const entradasSheet = spreadsheet.data.sheets?.find(
-        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Entradas'
-      );
-
-      if (!entradasSheet) {
-        throw new Error('No se encontró la hoja "Entradas"');
-      }
-
-      const sheetId = entradasSheet.properties?.sheetId;
-
-      // Insert a new row at position 2 (after header row 1)
-      await this.sheets.spreadsheets.batchUpdate({
-        spreadsheetId: SPREADSHEET_ID,
-        requestBody: {
-          requests: [
-            {
-              insertDimension: {
-                range: {
-                  sheetId: sheetId,
-                  dimension: 'ROWS',
-                  startIndex: 1, // After row 1 (header)
-                  endIndex: 2,   // Insert 1 row
-                },
-                inheritFromBefore: false,
-              },
-            },
-          ],
-        },
-      });
-
-      // Now update the newly inserted row (row 2) with data
-      const values = [[
-        serialDate,
-        income.importe,
-        income.descripcion,
-        income.categoria,
-        income.cuenta,
-        income.entidad,
-      ]];
-
-      await this.sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:F2',
-        valueInputOption: 'RAW',
-        requestBody: {
-          values,
-        },
-      });
-
-      console.log('Income added successfully at row 2:', income, 'Serial date:', serialDate);
-    } catch (error) {
-      console.error('Error adding income to Google Sheets:', error);
-      throw new Error('No se pudo agregar el ingreso a Google Sheets');
     }
   }
 

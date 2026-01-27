@@ -13,6 +13,14 @@ router.post('/expense', authMiddleware, (req, res) =>
   financeController.addExpense(req, res)
 );
 
+router.post('/income', authMiddleware, (req, res) =>
+  financeController.addIncome(req, res)
+);
+
+router.get('/budget', authMiddleware, (req, res) =>
+  financeController.getBudget(req, res)
+);
+
 // Terceros (Third Parties)
 router.get('/terceros', authMiddleware, (req, res) =>
   financeController.getTerceros(req, res)
