@@ -19,6 +19,7 @@ import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
 import InvoicesPanel from '@/components/finance/InvoicesPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
+import IncomeReport from '@/components/finance/IncomeReport';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -842,7 +843,24 @@ export default function Finanzas() {
           </TabsContent>
 
           <TabsContent value="reportes" className="mt-6">
-            <BudgetComparisonReport gastos={gastos} />
+            <Tabs defaultValue="gastos" className="w-full">
+              <TabsList className="mb-6">
+                <TabsTrigger value="gastos" className="flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4" />
+                  Gastos
+                </TabsTrigger>
+                <TabsTrigger value="ingresos" className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4" />
+                  Ingresos
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="gastos">
+                <BudgetComparisonReport gastos={gastos} />
+              </TabsContent>
+              <TabsContent value="ingresos">
+                <IncomeReport ingresos={ingresos} />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="resumen" className="mt-6 space-y-6">
