@@ -1,9 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, UserCircle } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import {
@@ -16,7 +22,6 @@ import {
   markMessagesAsRead,
   getOrCreateDirectRoom,
   subscribeToUserRooms,
-  getDirectRoomId,
 } from '@/lib/chatService';
 import type { ChatMessage, UserPresence, ChatRoom } from '@/types/chatTypes';
 
@@ -59,6 +64,8 @@ export default function LiveChat() {
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
   const [directRooms, setDirectRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [showNewChatDialog, setShowNewChatDialog] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const { user } = useAuthStore();
@@ -112,6 +119,7 @@ export default function LiveChat() {
 
     // Subscribe to user's direct rooms
     const unsubRooms = subscribeToUserRooms(user.id, (rooms) => {
+      console.log('Direct rooms updated:', rooms);
       setDirectRooms(rooms);
       // Subscribe to unread counts for each direct room
       rooms.forEach((room) => {
@@ -141,7 +149,7 @@ export default function LiveChat() {
           lastMessageIdRef.current &&
           lastMessageIdRef.current !== lastMsg.id &&
           lastMsg.senderId !== user.id &&
-          (!isOpen || isMinimized || view !== 'chat' || activeRoomId !== lastMsg.roomId)
+          (!isOpen || isMinimized || view !== 'chat')
         ) {
           // Show browser notification
           showNotification(
@@ -201,38 +209,45 @@ export default function LiveChat() {
     setView('chat');
   };
 
-  const openDirectChat = async (targetUser: TeamUser) => {
+  const startDirectChat = async (targetUser: TeamUser) => {
     if (!user) return;
+    setShowNewChatDialog(false);
+
     const currentUser = teamUsers.find((u) => u.id === user.id);
     const currentUserName = currentUser?.firstName || 'Usuario';
-    const roomId = await getOrCreateDirectRoom(
-      user.id,
-      currentUserName,
-      targetUser.id,
-      targetUser.firstName
-    );
 
-    // Add room to directRooms if not already there
-    const existingRoom = directRooms.find(r => r.id === roomId);
-    if (!existingRoom) {
-      const newRoom: ChatRoom = {
-        id: roomId,
-        name: `${currentUserName} & ${targetUser.firstName}`,
-        type: 'direct',
-        participants: [user.id, targetUser.id],
-        participantNames: {
-          [user.id]: currentUserName,
-          [targetUser.id]: targetUser.firstName,
-        },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
-      setDirectRooms(prev => [newRoom, ...prev]);
+    try {
+      const roomId = await getOrCreateDirectRoom(
+        user.id,
+        currentUserName,
+        targetUser.id,
+        targetUser.firstName
+      );
+
+      // Add room to directRooms if not already there
+      const existingRoom = directRooms.find(r => r.id === roomId);
+      if (!existingRoom) {
+        const newRoom: ChatRoom = {
+          id: roomId,
+          name: `${currentUserName} & ${targetUser.firstName}`,
+          type: 'direct',
+          participants: [user.id, targetUser.id],
+          participantNames: {
+            [user.id]: currentUserName,
+            [targetUser.id]: targetUser.firstName,
+          },
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        setDirectRooms(prev => [newRoom, ...prev]);
+      }
+
+      setActiveRoomId(roomId);
+      setActiveRoomName(targetUser.firstName);
+      setView('chat');
+    } catch (error) {
+      console.error('Error creating direct room:', error);
     }
-
-    setActiveRoomId(roomId);
-    setActiveRoomName(targetUser.firstName);
-    setView('chat');
   };
 
   const openExistingDirectChat = (room: ChatRoom) => {
@@ -248,18 +263,33 @@ export default function LiveChat() {
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
+    return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  };
 
-    if (isToday) {
-      return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const formatDateSeparator = (timestamp: number) => {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) {
+      return 'Hoy';
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return 'Ayer';
+    } else {
+      return date.toLocaleDateString('es-CO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      });
     }
-    return date.toLocaleDateString('es-CO', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  };
+
+  const shouldShowDateSeparator = (currentMsg: ChatMessage, prevMsg?: ChatMessage) => {
+    if (!prevMsg) return true;
+    const currentDate = new Date(currentMsg.createdAt).toDateString();
+    const prevDate = new Date(prevMsg.createdAt).toDateString();
+    return currentDate !== prevDate;
   };
 
   const getInitials = (name: string) => {
@@ -294,6 +324,12 @@ export default function LiveChat() {
 
   // Get other users for starting new direct chats (exclude current user)
   const otherUsers = teamUsers.filter((u) => u.id !== user?.id);
+
+  // Filter users by search query
+  const filteredUsers = otherUsers.filter((u) =>
+    u.firstName.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+    u.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+  );
 
   if (!user) return null;
 
@@ -339,9 +375,9 @@ export default function LiveChat() {
 
       {/* Chat Window */}
       {isOpen && !isMinimized && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 h-[500px] bg-background border border-border rounded-xl shadow-2xl overflow-hidden transition-all duration-200">
+        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 h-[520px] bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
+          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {view === 'chat' && (
                 <Button
@@ -364,6 +400,17 @@ export default function LiveChat() {
               )}
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
+              {view === 'list' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={() => setShowNewChatDialog(true)}
+                  title="Nuevo chat"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -385,39 +432,40 @@ export default function LiveChat() {
 
           {view === 'list' ? (
             /* Conversation List */
-            <ScrollArea className="h-[calc(100%-56px)]">
-                  <div className="p-2">
-                    {/* General Chat */}
-                    <button
-                      onClick={openGeneralChat}
-                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
-                    >
-                      <div className="relative">
-                        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-                          <Users className="h-5 w-5" />
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="font-medium">Chat General</span>
-                          {unreadCounts[GENERAL_ROOM_ID] > 0 && (
-                            <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center">
-                              {unreadCounts[GENERAL_ROOM_ID]}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground truncate">
-                          Chat grupal del equipo
-                        </p>
-                      </div>
-                    </button>
+            <ScrollArea className="flex-1">
+              <div className="p-2">
+                {/* General Chat */}
+                <button
+                  onClick={openGeneralChat}
+                  className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                >
+                  <div className="relative">
+                    <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
+                      <Users className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Chat General</span>
+                      {unreadCounts[GENERAL_ROOM_ID] > 0 && (
+                        <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center">
+                          {unreadCounts[GENERAL_ROOM_ID]}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">
+                      Chat grupal del equipo
+                    </p>
+                  </div>
+                </button>
 
-                    {/* Divider */}
+                {/* Direct Rooms */}
+                {directRooms.length > 0 && (
+                  <>
                     <div className="my-2 px-3">
                       <p className="text-xs text-muted-foreground font-medium">Mensajes directos</p>
                     </div>
 
-                    {/* Direct Rooms */}
                     {directRooms.map((room) => {
                       const otherUserId = room.participants.find((p) => p !== user.id);
                       const otherUser = teamUsers.find((u) => u.id === otherUserId);
@@ -471,144 +519,208 @@ export default function LiveChat() {
                         </button>
                       );
                     })}
+                  </>
+                )}
 
-                    {/* Divider for new chats */}
-                    <div className="my-2 px-3">
-                      <p className="text-xs text-muted-foreground font-medium">Iniciar conversacion</p>
+                {/* Empty state for direct rooms */}
+                {directRooms.length === 0 && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No hay chats directos</p>
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setShowNewChatDialog(true)}
+                      className="text-primary"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Iniciar un chat
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          ) : (
+            /* Chat View */
+            <>
+              {/* Messages */}
+              <ScrollArea className="flex-1">
+                <div className="p-3 space-y-2">
+                  {messages.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                      <p>No hay mensajes aun</p>
+                      <p className="text-xs">Se el primero en escribir!</p>
                     </div>
+                  ) : (
+                    messages.map((message, idx) => {
+                      const isMe = message.senderId === user.id;
+                      const prevMessage = messages[idx - 1];
+                      const showDateSeparator = shouldShowDateSeparator(message, prevMessage);
+                      const showAvatar = idx === 0 || messages[idx - 1].senderId !== message.senderId || showDateSeparator;
 
-                    {/* Other users to start new chats */}
-                    {otherUsers
-                      .filter((u) => !directRooms.some((r) => r.participants.includes(u.id)))
-                      .map((u) => {
-                        const isOnline = presence[u.id]?.status === 'online';
-                        const isAway = presence[u.id]?.status === 'away';
+                      return (
+                        <div key={message.id}>
+                          {/* Date Separator */}
+                          {showDateSeparator && (
+                            <div className="flex items-center justify-center my-3">
+                              <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
+                                {formatDateSeparator(message.createdAt)}
+                              </span>
+                            </div>
+                          )}
 
-                        return (
-                          <button
-                            key={u.id}
-                            onClick={() => openDirectChat(u)}
-                            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
-                          >
-                            <div className="relative">
-                              {u.photoUrl ? (
+                          {/* Message */}
+                          <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
+                            {showAvatar ? (
+                              message.senderPhoto ? (
                                 <img
-                                  src={u.photoUrl}
-                                  alt={u.firstName}
-                                  className="h-10 w-10 rounded-full object-cover"
+                                  src={message.senderPhoto}
+                                  alt={message.senderName}
+                                  className="h-7 w-7 rounded-full object-cover flex-shrink-0"
                                 />
                               ) : (
                                 <div
-                                  className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white ${getColorFromName(
-                                    u.firstName
+                                  className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getColorFromName(
+                                    message.senderName
                                   )}`}
                                 >
-                                  {getInitials(u.firstName)}
+                                  {getInitials(message.senderName)}
                                 </div>
-                              )}
-                              <span
-                                className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${
-                                  isOnline ? 'bg-green-500' : isAway ? 'bg-yellow-500' : 'bg-gray-400'
-                                }`}
-                              />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <span className="font-medium">{u.firstName}</span>
-                              <p className="text-xs text-muted-foreground">
-                                {isOnline ? 'En linea' : isAway ? 'Ausente' : 'Desconectado'}
-                              </p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                  </div>
-                </ScrollArea>
-              ) : (
-                /* Chat View */
-                <>
-                  {/* Messages */}
-                  <ScrollArea className="flex-1 h-[calc(100%-120px)]">
-                    <div className="p-3 space-y-3">
-                      {messages.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground text-sm">
-                          <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p>No hay mensajes aun</p>
-                          <p className="text-xs">Se el primero en escribir!</p>
-                        </div>
-                      ) : (
-                        messages.map((message, idx) => {
-                          const isMe = message.senderId === user.id;
-                          const showAvatar =
-                            idx === 0 || messages[idx - 1].senderId !== message.senderId;
-
-                          return (
-                            <div
-                              key={message.id}
-                              className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}
-                            >
-                              {showAvatar ? (
-                                message.senderPhoto ? (
-                                  <img
-                                    src={message.senderPhoto}
-                                    alt={message.senderName}
-                                    className="h-7 w-7 rounded-full object-cover flex-shrink-0"
-                                  />
-                                ) : (
-                                  <div
-                                    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getColorFromName(
-                                      message.senderName
-                                    )}`}
-                                  >
-                                    {getInitials(message.senderName)}
-                                  </div>
-                                )
-                              ) : (
-                                <div className="w-7 flex-shrink-0" />
-                              )}
-                              <div className={`flex flex-col ${isMe ? 'items-end' : ''} max-w-[75%]`}>
-                                {showAvatar && activeRoomId === GENERAL_ROOM_ID && (
-                                  <span className="text-xs text-muted-foreground mb-0.5">
+                              )
+                            ) : (
+                              <div className="w-7 flex-shrink-0" />
+                            )}
+                            <div className={`flex flex-col ${isMe ? 'items-end' : ''} max-w-[75%]`}>
+                              {showAvatar && (
+                                <div className={`flex items-center gap-2 mb-0.5 ${isMe ? 'flex-row-reverse' : ''}`}>
+                                  <span className="text-xs font-medium text-muted-foreground">
                                     {isMe ? 'Tu' : message.senderName}
                                   </span>
-                                )}
-                                <div
-                                  className={`px-3 py-2 rounded-2xl text-sm ${
-                                    isMe
-                                      ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                                      : 'bg-muted rounded-tl-sm'
-                                  }`}
-                                >
-                                  {message.text}
+                                  <span className="text-[10px] text-muted-foreground/70">
+                                    {formatTime(message.createdAt)}
+                                  </span>
                                 </div>
-                                <span className="text-[10px] text-muted-foreground mt-0.5">
+                              )}
+                              <div
+                                className={`px-3 py-2 rounded-2xl text-sm ${
+                                  isMe
+                                    ? 'bg-primary text-primary-foreground rounded-tr-md'
+                                    : 'bg-muted rounded-tl-md'
+                                }`}
+                              >
+                                {message.text}
+                              </div>
+                              {!showAvatar && (
+                                <span className="text-[10px] text-muted-foreground/70 mt-0.5">
                                   {formatTime(message.createdAt)}
                                 </span>
-                              </div>
+                              )}
                             </div>
-                          );
-                        })
-                      )}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  </ScrollArea>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
 
-                  {/* Input */}
-                  <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2">
-                    <Input
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      placeholder="Escribe un mensaje..."
-                      className="flex-1"
-                      disabled={isLoading}
-                    />
-                    <Button type="submit" size="sm" disabled={!newMessage.trim() || isLoading}>
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </form>
-                </>
-              )}
+              {/* Input */}
+              <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2 flex-shrink-0 bg-background">
+                <Input
+                  value={newMessage}
+                  onChange={(e) => setNewMessage(e.target.value)}
+                  placeholder="Escribe un mensaje..."
+                  className="flex-1"
+                  disabled={isLoading}
+                />
+                <Button type="submit" size="icon" disabled={!newMessage.trim() || isLoading}>
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </>
+          )}
         </div>
       )}
+
+      {/* New Chat Dialog */}
+      <Dialog open={showNewChatDialog} onOpenChange={setShowNewChatDialog}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Nuevo chat</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar usuario..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-1">
+                {filteredUsers.map((u) => {
+                  const isOnline = presence[u.id]?.status === 'online';
+                  const isAway = presence[u.id]?.status === 'away';
+                  const hasExistingChat = directRooms.some(r => r.participants.includes(u.id));
+
+                  return (
+                    <button
+                      key={u.id}
+                      onClick={() => startDirectChat(u)}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                    >
+                      <div className="relative">
+                        {u.photoUrl ? (
+                          <img
+                            src={u.photoUrl}
+                            alt={u.firstName}
+                            className="h-10 w-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div
+                            className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white ${getColorFromName(
+                              u.firstName
+                            )}`}
+                          >
+                            {getInitials(u.firstName)}
+                          </div>
+                        )}
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${
+                            isOnline ? 'bg-green-500' : isAway ? 'bg-yellow-500' : 'bg-gray-400'
+                          }`}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{u.firstName}</span>
+                          {hasExistingChat && (
+                            <Badge variant="secondary" className="text-xs">
+                              Chat existente
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {isOnline ? 'En linea' : isAway ? 'Ausente' : 'Desconectado'}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+                {filteredUsers.length === 0 && (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p className="text-sm">No se encontraron usuarios</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </div>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
