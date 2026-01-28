@@ -166,7 +166,7 @@ const STATUS_ICONS = {
 };
 
 type ViewMode = 'card' | 'list' | 'compact';
-type TaskView = 'active' | 'archived' | 'deleted';
+type TaskView = 'active' | 'archived' | 'deleted' | 'calendar';
 type DateFilter = 'all' | 'today' | 'week' | 'month' | 'overdue';
 
 // Helper functions for date filtering - defined at module level to avoid hoisting issues
@@ -268,6 +268,8 @@ export default function Tareas() {
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [calendarDate, setCalendarDate] = useState(new Date());
+  const [calendarViewType, setCalendarViewType] = useState<'week' | 'month'>('week');
   const [deleteProjectDialog, setDeleteProjectDialog] = useState<{ open: boolean; projectId: string | null; projectName: string; taskCount: number }>({
     open: false,
     projectId: null,
@@ -2614,6 +2616,18 @@ export default function Tareas() {
                 </TooltipTrigger>
                 <TooltipContent side="right">Eliminadas ({deletedTasks.length})</TooltipContent>
               </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setTaskView('calendar')}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${taskView === 'calendar' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                      }`}
+                  >
+                    <CalendarDays className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Calendario</TooltipContent>
+              </Tooltip>
             </div>
           ) : (
             <>
@@ -2655,13 +2669,23 @@ export default function Tareas() {
                   </div>
                   <span className="text-xs opacity-70">{deletedTasks.length}</span>
                 </button>
+                <button
+                  onClick={() => setTaskView('calendar')}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${taskView === 'calendar' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="h-3 w-3" />
+                    <span>Calendario</span>
+                  </div>
+                </button>
               </div>
             </>
           )}
         </div>
 
         {/* New Task Button */}
-        {taskView === 'active' && (
+        {(taskView === 'active' || taskView === 'calendar') && (
           <div className="space-y-2">
             {sidebarCollapsed ? (
               <Tooltip delayDuration={0}>
@@ -3644,6 +3668,348 @@ export default function Tareas() {
                     </Card>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Calendar View */}
+        {taskView === 'calendar' && (
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Calendar Header */}
+            <div className="flex items-center justify-between mb-4 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const newDate = new Date(calendarDate);
+                    if (calendarViewType === 'week') {
+                      newDate.setDate(newDate.getDate() - 7);
+                    } else {
+                      newDate.setMonth(newDate.getMonth() - 1);
+                    }
+                    setCalendarDate(newDate);
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setCalendarDate(new Date())}
+                  className="px-4"
+                >
+                  Hoy
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => {
+                    const newDate = new Date(calendarDate);
+                    if (calendarViewType === 'week') {
+                      newDate.setDate(newDate.getDate() + 7);
+                    } else {
+                      newDate.setMonth(newDate.getMonth() + 1);
+                    }
+                    setCalendarDate(newDate);
+                  }}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <h2 className="text-lg font-semibold ml-2">
+                  {calendarViewType === 'week' ? (
+                    (() => {
+                      const startOfWeek = new Date(calendarDate);
+                      const day = startOfWeek.getDay();
+                      const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+                      startOfWeek.setDate(diff);
+                      const endOfWeek = new Date(startOfWeek);
+                      endOfWeek.setDate(endOfWeek.getDate() + 6);
+
+                      if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
+                        return `${startOfWeek.getDate()} - ${endOfWeek.getDate()} de ${startOfWeek.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}`;
+                      }
+                      return `${startOfWeek.getDate()} ${startOfWeek.toLocaleDateString('es-ES', { month: 'short' })} - ${endOfWeek.getDate()} ${endOfWeek.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' })}`;
+                    })()
+                  ) : (
+                    calendarDate.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
+                  )}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={calendarViewType === 'week' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCalendarViewType('week')}
+                >
+                  <CalendarDays className="h-4 w-4 mr-1" />
+                  Semana
+                </Button>
+                <Button
+                  variant={calendarViewType === 'month' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setCalendarViewType('month')}
+                >
+                  <CalendarRange className="h-4 w-4 mr-1" />
+                  Mes
+                </Button>
+              </div>
+            </div>
+
+            {/* Calendar Grid */}
+            {calendarViewType === 'week' ? (
+              // Weekly View
+              <div className="flex-1 overflow-hidden flex flex-col border rounded-xl bg-card">
+                {/* Week Header */}
+                <div className="grid grid-cols-7 border-b bg-muted/30">
+                  {(() => {
+                    const startOfWeek = new Date(calendarDate);
+                    const day = startOfWeek.getDay();
+                    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+                    startOfWeek.setDate(diff);
+
+                    return Array.from({ length: 7 }, (_, i) => {
+                      const dayDate = new Date(startOfWeek);
+                      dayDate.setDate(dayDate.getDate() + i);
+                      const isToday = dayDate.toDateString() === new Date().toDateString();
+                      const dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+                      return (
+                        <div
+                          key={i}
+                          className={`p-2 md:p-3 text-center border-r last:border-r-0 ${isToday ? 'bg-primary/10' : ''}`}
+                        >
+                          <div className="text-xs text-muted-foreground">{dayNames[i]}</div>
+                          <div className={`text-lg md:text-xl font-bold mt-1 ${isToday ? 'text-primary' : ''}`}>
+                            {dayDate.getDate()}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Week Body */}
+                <div className="flex-1 grid grid-cols-7 overflow-hidden">
+                  {(() => {
+                    const startOfWeek = new Date(calendarDate);
+                    const day = startOfWeek.getDay();
+                    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+                    startOfWeek.setDate(diff);
+
+                    return Array.from({ length: 7 }, (_, i) => {
+                      const dayDate = new Date(startOfWeek);
+                      dayDate.setDate(dayDate.getDate() + i);
+                      const dateStr = dayDate.toISOString().split('T')[0];
+                      const isToday = dayDate.toDateString() === new Date().toDateString();
+                      const isWeekend = i >= 5;
+
+                      // Get tasks for this day
+                      const dayTasks = tasks.filter(task => {
+                        if (!task.dueDate) return false;
+                        return task.dueDate === dateStr;
+                      });
+
+                      return (
+                        <div
+                          key={i}
+                          className={`border-r last:border-r-0 p-1 md:p-2 overflow-y-auto ${
+                            isToday ? 'bg-primary/5' : isWeekend ? 'bg-muted/20' : ''
+                          }`}
+                        >
+                          <div className="space-y-1">
+                            {dayTasks.slice(0, 10).map((task) => {
+                              const project = getProject(task.projectId);
+                              const StatusIcon = STATUS_ICONS[task.status as keyof typeof STATUS_ICONS] || Circle;
+                              const statusColor = task.status === 'DONE' ? 'text-green-500' :
+                                                  task.status === 'IN_PROGRESS' ? 'text-blue-500' : 'text-muted-foreground';
+
+                              return (
+                                <div
+                                  key={task.id}
+                                  onClick={() => {
+                                    setEditingTask(task);
+                                    setFormData({
+                                      title: task.title,
+                                      description: task.description || '',
+                                      status: task.status,
+                                      priority: task.priority,
+                                      assignee: task.assignee as TeamMemberName,
+                                      creator: task.creator as TeamMemberName,
+                                      projectId: task.projectId,
+                                      type: task.type || '',
+                                      dueDate: task.dueDate || '',
+                                      dueTime: task.dueTime || '',
+                                      startDate: task.startDate || '',
+                                      startTime: task.startTime || '',
+                                      images: task.images || [],
+                                      checklist: task.checklist || [],
+                                      recurrence: task.recurrence,
+                                    });
+                                    setIsDialogOpen(true);
+                                  }}
+                                  className={`group p-1.5 md:p-2 rounded-lg text-xs cursor-pointer transition-all hover:shadow-md hover:scale-[1.02] ${
+                                    project?.color ? `${project.color.replace('bg-', 'bg-')}/20 border-l-2 ${project.color.replace('bg-', 'border-')}` : 'bg-muted/50'
+                                  } ${task.priority === 'high' ? 'ring-1 ring-red-400/50' : ''}`}
+                                >
+                                  <div className="flex items-start gap-1">
+                                    <StatusIcon className={`h-3 w-3 mt-0.5 flex-shrink-0 ${statusColor}`} />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-medium truncate text-[11px] md:text-xs">
+                                        {task.title}
+                                      </p>
+                                      {task.dueTime && (
+                                        <p className="text-[10px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                                          <Clock className="h-2.5 w-2.5" />
+                                          {task.dueTime}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {getUserPhoto(task.assignee) && (
+                                    <img
+                                      src={getUserPhoto(task.assignee)}
+                                      alt={task.assignee}
+                                      className="w-4 h-4 rounded-full object-cover mt-1 hidden md:block"
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {dayTasks.length > 10 && (
+                              <div className="text-[10px] text-muted-foreground text-center py-1">
+                                +{dayTasks.length - 10} más
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            ) : (
+              // Monthly View
+              <div className="flex-1 overflow-hidden flex flex-col border rounded-xl bg-card">
+                {/* Month Header */}
+                <div className="grid grid-cols-7 border-b bg-muted/30">
+                  {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((dayName, i) => (
+                    <div key={i} className="p-2 text-center text-xs font-medium text-muted-foreground border-r last:border-r-0">
+                      {dayName}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Month Grid */}
+                <div className="flex-1 overflow-y-auto">
+                  {(() => {
+                    const year = calendarDate.getFullYear();
+                    const month = calendarDate.getMonth();
+                    const firstDayOfMonth = new Date(year, month, 1);
+                    const lastDayOfMonth = new Date(year, month + 1, 0);
+
+                    // Get the Monday of the first week
+                    const startDay = new Date(firstDayOfMonth);
+                    const dayOfWeek = startDay.getDay();
+                    const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+                    startDay.setDate(startDay.getDate() + diff);
+
+                    // Calculate number of weeks needed
+                    const endDay = new Date(lastDayOfMonth);
+                    const endDayOfWeek = endDay.getDay();
+                    if (endDayOfWeek !== 0) {
+                      endDay.setDate(endDay.getDate() + (7 - endDayOfWeek));
+                    }
+
+                    const weeks: Date[][] = [];
+                    const current = new Date(startDay);
+
+                    while (current <= endDay) {
+                      const week: Date[] = [];
+                      for (let i = 0; i < 7; i++) {
+                        week.push(new Date(current));
+                        current.setDate(current.getDate() + 1);
+                      }
+                      weeks.push(week);
+                    }
+
+                    return weeks.map((week, weekIndex) => (
+                      <div key={weekIndex} className="grid grid-cols-7 border-b last:border-b-0" style={{ minHeight: '100px' }}>
+                        {week.map((dayDate, dayIndex) => {
+                          const dateStr = dayDate.toISOString().split('T')[0];
+                          const isToday = dayDate.toDateString() === new Date().toDateString();
+                          const isCurrentMonth = dayDate.getMonth() === month;
+                          const isWeekend = dayIndex >= 5;
+
+                          const dayTasks = tasks.filter(task => {
+                            if (!task.dueDate) return false;
+                            return task.dueDate === dateStr;
+                          });
+
+                          return (
+                            <div
+                              key={dayIndex}
+                              className={`border-r last:border-r-0 p-1 ${
+                                isToday ? 'bg-primary/10' :
+                                !isCurrentMonth ? 'bg-muted/30 opacity-50' :
+                                isWeekend ? 'bg-muted/10' : ''
+                              }`}
+                            >
+                              <div className={`text-xs font-medium mb-1 ${
+                                isToday ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center' : ''
+                              }`}>
+                                {dayDate.getDate()}
+                              </div>
+                              <div className="space-y-0.5">
+                                {dayTasks.slice(0, 3).map((task) => {
+                                  const project = getProject(task.projectId);
+                                  return (
+                                    <div
+                                      key={task.id}
+                                      onClick={() => {
+                                        setEditingTask(task);
+                                        setFormData({
+                                          title: task.title,
+                                          description: task.description || '',
+                                          status: task.status,
+                                          priority: task.priority,
+                                          assignee: task.assignee as TeamMemberName,
+                                          creator: task.creator as TeamMemberName,
+                                          projectId: task.projectId,
+                                          type: task.type || '',
+                                          dueDate: task.dueDate || '',
+                                          dueTime: task.dueTime || '',
+                                          startDate: task.startDate || '',
+                                          startTime: task.startTime || '',
+                                          images: task.images || [],
+                                          checklist: task.checklist || [],
+                                          recurrence: task.recurrence,
+                                        });
+                                        setIsDialogOpen(true);
+                                      }}
+                                      className={`text-[10px] p-1 rounded truncate cursor-pointer transition-colors hover:opacity-80 ${
+                                        project?.color ? `${project.color} text-white` : 'bg-muted'
+                                      }`}
+                                      title={task.title}
+                                    >
+                                      {task.dueTime && <span className="opacity-75">{task.dueTime} </span>}
+                                      {task.title}
+                                    </div>
+                                  );
+                                })}
+                                {dayTasks.length > 3 && (
+                                  <div className="text-[10px] text-muted-foreground text-center">
+                                    +{dayTasks.length - 3} más
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ));
+                  })()}
+                </div>
               </div>
             )}
           </div>
