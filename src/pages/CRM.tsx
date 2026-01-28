@@ -42,6 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
+import ClientsGlobe from '@/components/crm/ClientsGlobe';
 import { createTask, sendTaskNotification, loadProjects } from '@/lib/firestoreTaskService';
 import { useAuthStore } from '@/lib/auth';
 import { Priority as TaskPriority, TEAM_MEMBERS, TaskStatus, type TeamMemberName, type Project as FirestoreProject } from '@/types/taskTypes';
@@ -876,6 +877,35 @@ export default function CRM() {
           </Card>
         </div>
       )}
+
+      {/* Global Map */}
+      <ClientsGlobe
+        clients={deals.map(deal => ({
+          id: deal.id,
+          name: deal.contactName || deal.company,
+          company: deal.company,
+          location: {
+            lat: 0,
+            lng: 0,
+            city: deal.city || 'Cartagena',
+            country: deal.country || 'Colombia',
+          },
+          value: deal.estimatedValue,
+          status: (() => {
+            const dealStage = stages.find(s => s.id === deal.stageId);
+            if (dealStage?.slug === 'ganado') return 'won' as const;
+            if (dealStage?.slug === 'propuesta' || dealStage?.slug === 'negociacion') return 'active' as const;
+            return 'prospect' as const;
+          })(),
+        }))}
+        onClientClick={(client) => {
+          const deal = deals.find(d => d.id === client.id);
+          if (deal) {
+            setSelectedDeal(deal);
+            setIsDealSheetOpen(true);
+          }
+        }}
+      />
 
       {/* Search */}
       <div className="relative">
