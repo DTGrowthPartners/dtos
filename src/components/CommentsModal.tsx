@@ -6,11 +6,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Task } from '@/types/taskTypes';
 
+interface TeamUser {
+  id: string;
+  firstName: string;
+  lastName?: string;
+  photoUrl?: string;
+}
+
 interface CommentsModalProps {
   isOpen: boolean;
   onClose: () => void;
   task: Task | null;
   onSaveComment: (taskId: string, comment: { text: string; author: string }) => void;
+  teamUsers?: TeamUser[];
+  currentUserName?: string;
 }
 
 export default function CommentsModal({
@@ -18,16 +27,41 @@ export default function CommentsModal({
   onClose,
   task,
   onSaveComment,
+  teamUsers = [],
+  currentUserName = 'Usuario',
 }: CommentsModalProps) {
   const [newComment, setNewComment] = useState('');
-  const [author, setAuthor] = useState('Usuario');
+  const [author, setAuthor] = useState(currentUserName);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Helper to normalize strings for comparison
+  const normalizeString = (str: string): string => {
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+  };
+
+  // Get user photo by name
+  const getUserPhoto = (userName: string): string | undefined => {
+    if (!userName) return undefined;
+    const normalizedName = normalizeString(userName);
+    const teamUser = teamUsers.find(u => {
+      const normalizedUserFirstName = normalizeString(u.firstName);
+      return normalizedUserFirstName === normalizedName ||
+        normalizedUserFirstName.startsWith(normalizedName) ||
+        normalizedName.startsWith(normalizedUserFirstName);
+    });
+    return teamUser?.photoUrl;
+  };
 
   useEffect(() => {
     if (isOpen) {
       setNewComment('');
+      setAuthor(currentUserName);
     }
-  }, [isOpen]);
+  }, [isOpen, currentUserName]);
 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
@@ -123,13 +157,21 @@ export default function CommentsModal({
                   className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50"
                 >
                   <div className="flex items-start gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${getColorFromName(
-                        comment.author
-                      )}`}
-                    >
-                      {getInitials(comment.author)}
-                    </div>
+                    {getUserPhoto(comment.author) ? (
+                      <img
+                        src={getUserPhoto(comment.author)}
+                        alt={comment.author}
+                        className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getColorFromName(
+                          comment.author
+                        )}`}
+                      >
+                        {getInitials(comment.author)}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-medium text-slate-200">
@@ -171,13 +213,21 @@ export default function CommentsModal({
             </div>
 
             <div className="flex gap-3">
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${getColorFromName(
-                  author
-                )} flex-shrink-0`}
-              >
-                {getInitials(author)}
-              </div>
+              {getUserPhoto(author) ? (
+                <img
+                  src={getUserPhoto(author)}
+                  alt={author}
+                  className="w-8 h-8 rounded-full object-cover flex-shrink-0"
+                />
+              ) : (
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${getColorFromName(
+                    author
+                  )} flex-shrink-0`}
+                >
+                  {getInitials(author)}
+                </div>
+              )}
               <div className="flex-1">
                 <Textarea
                   value={newComment}

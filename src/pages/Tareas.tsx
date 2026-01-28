@@ -3928,7 +3928,17 @@ export default function Tareas() {
                       {TEAM_MEMBERS.map((member) => (
                         <SelectItem key={member.name} value={member.name}>
                           <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${member.color}`}></div>
+                            {getUserPhoto(member.name) ? (
+                              <img
+                                src={getUserPhoto(member.name)}
+                                alt={member.name}
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className={`w-5 h-5 rounded-full ${member.color} flex items-center justify-center text-white text-[10px]`}>
+                                {member.initials}
+                              </div>
+                            )}
                             {member.name} ({member.role})
                           </div>
                         </SelectItem>
@@ -3949,7 +3959,17 @@ export default function Tareas() {
                       {TEAM_MEMBERS.map((member) => (
                         <SelectItem key={member.name} value={member.name}>
                           <div className="flex items-center gap-2">
-                            <div className={`w-3 h-3 rounded-full ${member.color}`}></div>
+                            {getUserPhoto(member.name) ? (
+                              <img
+                                src={getUserPhoto(member.name)}
+                                alt={member.name}
+                                className="w-5 h-5 rounded-full object-cover"
+                              />
+                            ) : (
+                              <div className={`w-5 h-5 rounded-full ${member.color} flex items-center justify-center text-white text-[10px]`}>
+                                {member.initials}
+                              </div>
+                            )}
                             {member.name}
                           </div>
                         </SelectItem>
@@ -4279,6 +4299,8 @@ export default function Tareas() {
         }}
         task={selectedTaskForComments}
         onSaveComment={handleSaveComment}
+        teamUsers={teamUsers}
+        currentUserName={loggedUserName || 'Usuario'}
       />
 
       {/* Note Column Modal */}
