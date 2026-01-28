@@ -14,6 +14,7 @@ import {
   getDoc,
   setDoc,
   arrayUnion,
+  getDocs,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { ChatMessage, ChatRoom, UserPresence } from '@/types/chatTypes';
@@ -22,6 +23,12 @@ const MESSAGES_COLLECTION = 'chat_messages';
 const ROOMS_COLLECTION = 'chat_rooms';
 const PRESENCE_COLLECTION = 'user_presence';
 const GENERAL_ROOM_ID = 'general';
+
+// Generate a deterministic room ID for direct messages
+export const getDirectRoomId = (userId1: string, userId2: string): string => {
+  const sorted = [userId1, userId2].sort();
+  return `dm_${sorted[0]}_${sorted[1]}`;
+};
 
 // Initialize the general chat room if it doesn't exist
 export const initializeGeneralRoom = async () => {
@@ -161,6 +168,79 @@ export const subscribeToUnreadCount = (
 // Delete a message (only sender can delete)
 export const deleteMessage = async (messageId: string) => {
   await deleteDoc(doc(db, MESSAGES_COLLECTION, messageId));
+};
+
+// Create or get a direct message room
+export const getOrCreateDirectRoom = async (
+  currentUserId: string,
+  currentUserName: string,
+  otherUserId: string,
+  otherUserName: string
+): Promise<string> => {
+  const roomId = getDirectRoomId(currentUserId, otherUserId);
+  const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+  const roomSnap = await getDoc(roomRef);
+
+  if (!roomSnap.exists()) {
+    await setDoc(roomRef, {
+      id: roomId,
+      name: `${currentUserName} & ${otherUserName}`,
+      type: 'direct',
+      participants: [currentUserId, otherUserId],
+      participantNames: {
+        [currentUserId]: currentUserName,
+        [otherUserId]: otherUserName,
+      },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  return roomId;
+};
+
+// Subscribe to user's direct message rooms
+export const subscribeToUserRooms = (
+  userId: string,
+  callback: (rooms: ChatRoom[]) => void
+) => {
+  const q = query(
+    collection(db, ROOMS_COLLECTION),
+    where('participants', 'array-contains', userId),
+    where('type', '==', 'direct')
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const rooms: ChatRoom[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as ChatRoom[];
+
+    // Sort by last message time
+    rooms.sort((a, b) => (b.lastMessage?.createdAt || b.updatedAt) - (a.lastMessage?.createdAt || a.updatedAt));
+    callback(rooms);
+  });
+};
+
+// Get unread count for a specific room
+export const getUnreadCountForRoom = async (
+  roomId: string,
+  userId: string
+): Promise<number> => {
+  const q = query(
+    collection(db, MESSAGES_COLLECTION),
+    where('roomId', '==', roomId)
+  );
+
+  const snapshot = await getDocs(q);
+  let count = 0;
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data();
+    if (!data.readBy?.includes(userId) && data.senderId !== userId) {
+      count++;
+    }
+  });
+  return count;
 };
 
 // Setup presence on page visibility change

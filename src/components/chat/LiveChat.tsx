@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2 } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -14,8 +14,11 @@ import {
   setupPresenceListeners,
   initializeGeneralRoom,
   markMessagesAsRead,
+  getOrCreateDirectRoom,
+  subscribeToUserRooms,
+  getDirectRoomId,
 } from '@/lib/chatService';
-import type { ChatMessage, UserPresence } from '@/types/chatTypes';
+import type { ChatMessage, UserPresence, ChatRoom } from '@/types/chatTypes';
 
 interface TeamUser {
   id: string;
@@ -24,6 +27,8 @@ interface TeamUser {
   email: string;
   photoUrl?: string;
 }
+
+type ChatView = 'list' | 'chat';
 
 const GENERAL_ROOM_ID = 'general';
 
@@ -44,12 +49,15 @@ const showNotification = (title: string, body: string, icon?: string) => {
 export default function LiveChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [view, setView] = useState<ChatView>('list');
+  const [activeRoomId, setActiveRoomId] = useState<string>(GENERAL_ROOM_ID);
+  const [activeRoomName, setActiveRoomName] = useState<string>('Chat General');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [presence, setPresence] = useState<Record<string, UserPresence>>({});
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
-  const [showUsers, setShowUsers] = useState(false);
+  const [directRooms, setDirectRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
@@ -61,10 +69,10 @@ export default function LiveChat() {
   };
 
   useEffect(() => {
-    if (isOpen && !isMinimized) {
+    if (isOpen && !isMinimized && view === 'chat') {
       scrollToBottom();
     }
-  }, [messages, isOpen, isMinimized]);
+  }, [messages, isOpen, isMinimized, view]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -92,8 +100,40 @@ export default function LiveChat() {
     // Setup presence
     const cleanupPresence = setupPresenceListeners(user.id);
 
-    // Subscribe to messages
-    const unsubMessages = subscribeToMessages(GENERAL_ROOM_ID, (msgs) => {
+    // Subscribe to presence
+    const unsubPresence = subscribeToPresence((p) => {
+      setPresence(p);
+    });
+
+    // Subscribe to general room unread count
+    const unsubGeneralUnread = subscribeToUnreadCount(GENERAL_ROOM_ID, user.id, (count) => {
+      setUnreadCounts((prev) => ({ ...prev, [GENERAL_ROOM_ID]: count }));
+    });
+
+    // Subscribe to user's direct rooms
+    const unsubRooms = subscribeToUserRooms(user.id, (rooms) => {
+      setDirectRooms(rooms);
+      // Subscribe to unread counts for each direct room
+      rooms.forEach((room) => {
+        subscribeToUnreadCount(room.id, user.id, (count) => {
+          setUnreadCounts((prev) => ({ ...prev, [room.id]: count }));
+        });
+      });
+    });
+
+    return () => {
+      cleanupPresence();
+      unsubPresence();
+      unsubGeneralUnread();
+      unsubRooms();
+    };
+  }, [user]);
+
+  // Subscribe to messages when active room changes
+  useEffect(() => {
+    if (!user || !activeRoomId) return;
+
+    const unsubMessages = subscribeToMessages(activeRoomId, (msgs) => {
       // Check for new messages to show notifications
       if (msgs.length > 0) {
         const lastMsg = msgs[msgs.length - 1];
@@ -101,7 +141,7 @@ export default function LiveChat() {
           lastMessageIdRef.current &&
           lastMessageIdRef.current !== lastMsg.id &&
           lastMsg.senderId !== user.id &&
-          (!isOpen || isMinimized)
+          (!isOpen || isMinimized || view !== 'chat' || activeRoomId !== lastMsg.roomId)
         ) {
           // Show browser notification
           showNotification(
@@ -115,27 +155,14 @@ export default function LiveChat() {
       setMessages(msgs);
     });
 
-    // Subscribe to presence
-    const unsubPresence = subscribeToPresence((p) => {
-      setPresence(p);
-    });
-
-    // Subscribe to unread count
-    const unsubUnread = subscribeToUnreadCount(GENERAL_ROOM_ID, user.id, (count) => {
-      setUnreadCount(count);
-    });
-
     return () => {
-      cleanupPresence();
       unsubMessages();
-      unsubPresence();
-      unsubUnread();
     };
-  }, [user, isOpen, isMinimized]);
+  }, [user, activeRoomId, isOpen, isMinimized, view]);
 
-  // Mark messages as read when opening chat
+  // Mark messages as read when viewing chat
   useEffect(() => {
-    if (isOpen && !isMinimized && user && messages.length > 0) {
+    if (isOpen && !isMinimized && view === 'chat' && user && messages.length > 0) {
       const unreadIds = messages
         .filter((m) => !m.readBy?.includes(user.id) && m.senderId !== user.id)
         .map((m) => m.id);
@@ -144,7 +171,7 @@ export default function LiveChat() {
         markMessagesAsRead(unreadIds, user.id);
       }
     }
-  }, [isOpen, isMinimized, messages, user]);
+  }, [isOpen, isMinimized, view, messages, user]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,7 +181,7 @@ export default function LiveChat() {
     try {
       const currentUser = teamUsers.find((u) => u.id === user.id);
       await sendMessage(
-        GENERAL_ROOM_ID,
+        activeRoomId,
         newMessage.trim(),
         user.id,
         currentUser?.firstName || user.email?.split('@')[0] || 'Usuario',
@@ -166,6 +193,37 @@ export default function LiveChat() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const openGeneralChat = () => {
+    setActiveRoomId(GENERAL_ROOM_ID);
+    setActiveRoomName('Chat General');
+    setView('chat');
+  };
+
+  const openDirectChat = async (targetUser: TeamUser) => {
+    if (!user) return;
+    const currentUser = teamUsers.find((u) => u.id === user.id);
+    const roomId = await getOrCreateDirectRoom(
+      user.id,
+      currentUser?.firstName || 'Usuario',
+      targetUser.id,
+      targetUser.firstName
+    );
+    setActiveRoomId(roomId);
+    setActiveRoomName(targetUser.firstName);
+    setView('chat');
+  };
+
+  const openExistingDirectChat = (room: ChatRoom) => {
+    if (!user) return;
+    const otherUserId = room.participants.find((p) => p !== user.id);
+    const otherUserName = otherUserId && room.participantNames
+      ? room.participantNames[otherUserId]
+      : 'Chat';
+    setActiveRoomId(room.id);
+    setActiveRoomName(otherUserName || 'Chat');
+    setView('chat');
   };
 
   const formatTime = (timestamp: number) => {
@@ -208,9 +266,14 @@ export default function LiveChat() {
     return colors[index % colors.length];
   };
 
+  const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
+
   const onlineUsers = teamUsers.filter(
     (u) => presence[u.id]?.status === 'online' || presence[u.id]?.status === 'away'
   );
+
+  // Get other users for starting new direct chats (exclude current user)
+  const otherUsers = teamUsers.filter((u) => u.id !== user?.id);
 
   if (!user) return null;
 
@@ -223,9 +286,9 @@ export default function LiveChat() {
           className="fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center"
         >
           <MessageCircle className="h-6 w-6" />
-          {unreadCount > 0 && (
+          {totalUnread > 0 && (
             <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
-              {unreadCount > 9 ? '9+' : unreadCount}
+              {totalUnread > 9 ? '9+' : totalUnread}
             </span>
           )}
         </button>
@@ -241,23 +304,27 @@ export default function LiveChat() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
             <div className="flex items-center gap-2">
+              {view === 'chat' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={() => setView('list')}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
               <MessageCircle className="h-5 w-5" />
-              <span className="font-semibold">Chat del Equipo</span>
-              {onlineUsers.length > 0 && (
+              <span className="font-semibold">
+                {view === 'list' ? 'Chat' : activeRoomName}
+              </span>
+              {view === 'list' && onlineUsers.length > 0 && (
                 <Badge variant="secondary" className="text-xs">
                   {onlineUsers.length} online
                 </Badge>
               )}
             </div>
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
-                onClick={() => setShowUsers(!showUsers)}
-              >
-                <Users className="h-4 w-4" />
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
@@ -279,136 +346,230 @@ export default function LiveChat() {
 
           {!isMinimized && (
             <>
-              {/* Users Panel */}
-              {showUsers && (
-                <div className="border-b p-3 bg-muted/50">
-                  <p className="text-xs text-muted-foreground mb-2">Usuarios en linea</p>
-                  <div className="flex flex-wrap gap-2">
-                    {teamUsers.map((u) => {
-                      const userPresence = presence[u.id];
-                      const isOnline = userPresence?.status === 'online';
-                      const isAway = userPresence?.status === 'away';
+              {view === 'list' ? (
+                /* Conversation List */
+                <ScrollArea className="h-[calc(100%-56px)]">
+                  <div className="p-2">
+                    {/* General Chat */}
+                    <button
+                      onClick={openGeneralChat}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                    >
+                      <div className="relative">
+                        <div className="h-10 w-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
+                          <Users className="h-5 w-5" />
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-medium">Chat General</span>
+                          {unreadCounts[GENERAL_ROOM_ID] > 0 && (
+                            <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center">
+                              {unreadCounts[GENERAL_ROOM_ID]}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          Chat grupal del equipo
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="my-2 px-3">
+                      <p className="text-xs text-muted-foreground font-medium">Mensajes directos</p>
+                    </div>
+
+                    {/* Direct Rooms */}
+                    {directRooms.map((room) => {
+                      const otherUserId = room.participants.find((p) => p !== user.id);
+                      const otherUser = teamUsers.find((u) => u.id === otherUserId);
+                      const otherUserName = room.participantNames?.[otherUserId || ''] || 'Usuario';
+                      const isOnline = otherUserId ? presence[otherUserId]?.status === 'online' : false;
+                      const isAway = otherUserId ? presence[otherUserId]?.status === 'away' : false;
 
                       return (
-                        <div
-                          key={u.id}
-                          className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-background text-xs"
+                        <button
+                          key={room.id}
+                          onClick={() => openExistingDirectChat(room)}
+                          className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
                         >
                           <div className="relative">
-                            {u.photoUrl ? (
+                            {otherUser?.photoUrl ? (
                               <img
-                                src={u.photoUrl}
-                                alt={u.firstName}
-                                className="h-5 w-5 rounded-full object-cover"
+                                src={otherUser.photoUrl}
+                                alt={otherUserName}
+                                className="h-10 w-10 rounded-full object-cover"
                               />
                             ) : (
                               <div
-                                className={`h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${getColorFromName(
-                                  u.firstName
+                                className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white ${getColorFromName(
+                                  otherUserName
                                 )}`}
                               >
-                                {getInitials(u.firstName)}
+                                {getInitials(otherUserName)}
                               </div>
                             )}
                             <span
-                              className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-background ${
-                                isOnline
-                                  ? 'bg-green-500'
-                                  : isAway
-                                  ? 'bg-yellow-500'
-                                  : 'bg-gray-400'
+                              className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${
+                                isOnline ? 'bg-green-500' : isAway ? 'bg-yellow-500' : 'bg-gray-400'
                               }`}
                             />
                           </div>
-                          <span className={isOnline || isAway ? '' : 'text-muted-foreground'}>
-                            {u.firstName}
-                          </span>
-                        </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{otherUserName}</span>
+                              {unreadCounts[room.id] > 0 && (
+                                <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center">
+                                  {unreadCounts[room.id]}
+                                </Badge>
+                              )}
+                            </div>
+                            {room.lastMessage && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {room.lastMessage.text}
+                              </p>
+                            )}
+                          </div>
+                        </button>
                       );
                     })}
-                  </div>
-                </div>
-              )}
 
-              {/* Messages */}
-              <ScrollArea className="flex-1 h-[calc(100%-120px)]">
-                <div className="p-3 space-y-3">
-                  {messages.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p>No hay mensajes aun</p>
-                      <p className="text-xs">Se el primero en escribir!</p>
+                    {/* Divider for new chats */}
+                    <div className="my-2 px-3">
+                      <p className="text-xs text-muted-foreground font-medium">Iniciar conversacion</p>
                     </div>
-                  ) : (
-                    messages.map((message, idx) => {
-                      const isMe = message.senderId === user.id;
-                      const showAvatar =
-                        idx === 0 || messages[idx - 1].senderId !== message.senderId;
 
-                      return (
-                        <div
-                          key={message.id}
-                          className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}
-                        >
-                          {showAvatar ? (
-                            message.senderPhoto ? (
-                              <img
-                                src={message.senderPhoto}
-                                alt={message.senderName}
-                                className="h-7 w-7 rounded-full object-cover flex-shrink-0"
+                    {/* Other users to start new chats */}
+                    {otherUsers
+                      .filter((u) => !directRooms.some((r) => r.participants.includes(u.id)))
+                      .map((u) => {
+                        const isOnline = presence[u.id]?.status === 'online';
+                        const isAway = presence[u.id]?.status === 'away';
+
+                        return (
+                          <button
+                            key={u.id}
+                            onClick={() => openDirectChat(u)}
+                            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                          >
+                            <div className="relative">
+                              {u.photoUrl ? (
+                                <img
+                                  src={u.photoUrl}
+                                  alt={u.firstName}
+                                  className="h-10 w-10 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold text-white ${getColorFromName(
+                                    u.firstName
+                                  )}`}
+                                >
+                                  {getInitials(u.firstName)}
+                                </div>
+                              )}
+                              <span
+                                className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-background ${
+                                  isOnline ? 'bg-green-500' : isAway ? 'bg-yellow-500' : 'bg-gray-400'
+                                }`}
                               />
-                            ) : (
-                              <div
-                                className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getColorFromName(
-                                  message.senderName
-                                )}`}
-                              >
-                                {getInitials(message.senderName)}
-                              </div>
-                            )
-                          ) : (
-                            <div className="w-7 flex-shrink-0" />
-                          )}
-                          <div className={`flex flex-col ${isMe ? 'items-end' : ''} max-w-[75%]`}>
-                            {showAvatar && (
-                              <span className="text-xs text-muted-foreground mb-0.5">
-                                {isMe ? 'Tú' : message.senderName}
-                              </span>
-                            )}
-                            <div
-                              className={`px-3 py-2 rounded-2xl text-sm ${
-                                isMe
-                                  ? 'bg-primary text-primary-foreground rounded-tr-sm'
-                                  : 'bg-muted rounded-tl-sm'
-                              }`}
-                            >
-                              {message.text}
                             </div>
-                            <span className="text-[10px] text-muted-foreground mt-0.5">
-                              {formatTime(message.createdAt)}
-                            </span>
-                          </div>
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{u.firstName}</span>
+                              <p className="text-xs text-muted-foreground">
+                                {isOnline ? 'En linea' : isAway ? 'Ausente' : 'Desconectado'}
+                              </p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </ScrollArea>
+              ) : (
+                /* Chat View */
+                <>
+                  {/* Messages */}
+                  <ScrollArea className="flex-1 h-[calc(100%-120px)]">
+                    <div className="p-3 space-y-3">
+                      {messages.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground text-sm">
+                          <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No hay mensajes aun</p>
+                          <p className="text-xs">Se el primero en escribir!</p>
                         </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-              </ScrollArea>
+                      ) : (
+                        messages.map((message, idx) => {
+                          const isMe = message.senderId === user.id;
+                          const showAvatar =
+                            idx === 0 || messages[idx - 1].senderId !== message.senderId;
 
-              {/* Input */}
-              <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2">
-                <Input
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Escribe un mensaje..."
-                  className="flex-1"
-                  disabled={isLoading}
-                />
-                <Button type="submit" size="sm" disabled={!newMessage.trim() || isLoading}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </form>
+                          return (
+                            <div
+                              key={message.id}
+                              className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}
+                            >
+                              {showAvatar ? (
+                                message.senderPhoto ? (
+                                  <img
+                                    src={message.senderPhoto}
+                                    alt={message.senderName}
+                                    className="h-7 w-7 rounded-full object-cover flex-shrink-0"
+                                  />
+                                ) : (
+                                  <div
+                                    className={`h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 ${getColorFromName(
+                                      message.senderName
+                                    )}`}
+                                  >
+                                    {getInitials(message.senderName)}
+                                  </div>
+                                )
+                              ) : (
+                                <div className="w-7 flex-shrink-0" />
+                              )}
+                              <div className={`flex flex-col ${isMe ? 'items-end' : ''} max-w-[75%]`}>
+                                {showAvatar && activeRoomId === GENERAL_ROOM_ID && (
+                                  <span className="text-xs text-muted-foreground mb-0.5">
+                                    {isMe ? 'Tu' : message.senderName}
+                                  </span>
+                                )}
+                                <div
+                                  className={`px-3 py-2 rounded-2xl text-sm ${
+                                    isMe
+                                      ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                                      : 'bg-muted rounded-tl-sm'
+                                  }`}
+                                >
+                                  {message.text}
+                                </div>
+                                <span className="text-[10px] text-muted-foreground mt-0.5">
+                                  {formatTime(message.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  </ScrollArea>
+
+                  {/* Input */}
+                  <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2">
+                    <Input
+                      value={newMessage}
+                      onChange={(e) => setNewMessage(e.target.value)}
+                      placeholder="Escribe un mensaje..."
+                      className="flex-1"
+                      disabled={isLoading}
+                    />
+                    <Button type="submit" size="sm" disabled={!newMessage.trim() || isLoading}>
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </form>
+                </>
+              )}
             </>
           )}
         </div>

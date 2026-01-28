@@ -13,6 +13,7 @@ export interface ChatRoom {
   name: string;
   type: 'general' | 'direct';
   participants: string[];
+  participantNames?: Record<string, string>;
   lastMessage?: {
     text: string;
     senderName: string;
