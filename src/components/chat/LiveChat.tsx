@@ -297,49 +297,54 @@ export default function LiveChat() {
       {/* Chat Window */}
       {isOpen && (
         <div
-          className={`fixed bottom-4 right-4 z-50 bg-background border border-border rounded-xl shadow-2xl overflow-hidden transition-all ${
-            isMinimized ? 'w-72 h-12' : 'w-80 sm:w-96 h-[500px]'
+          className={`fixed bottom-4 right-4 z-50 bg-background border border-border rounded-xl shadow-2xl overflow-hidden transition-all duration-200 ${
+            isMinimized ? 'w-64 h-11' : 'w-80 sm:w-96 h-[500px]'
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
-            <div className="flex items-center gap-2">
-              {view === 'chat' && (
+          <div className={`flex items-center justify-between bg-primary text-primary-foreground ${isMinimized ? 'px-3 py-2' : 'px-4 py-3'}`}>
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              {view === 'chat' && !isMinimized && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20 flex-shrink-0"
                   onClick={() => setView('list')}
                 >
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <MessageCircle className="h-5 w-5" />
-              <span className="font-semibold">
-                {view === 'list' ? 'Chat' : activeRoomName}
+              <MessageCircle className={`flex-shrink-0 ${isMinimized ? 'h-4 w-4' : 'h-5 w-5'}`} />
+              <span className={`font-semibold truncate ${isMinimized ? 'text-sm' : ''}`}>
+                {isMinimized ? 'Chat' : (view === 'list' ? 'Chat' : activeRoomName)}
               </span>
-              {view === 'list' && onlineUsers.length > 0 && (
-                <Badge variant="secondary" className="text-xs">
+              {!isMinimized && view === 'list' && onlineUsers.length > 0 && (
+                <Badge variant="secondary" className="text-xs flex-shrink-0">
                   {onlineUsers.length} online
                 </Badge>
               )}
+              {isMinimized && totalUnread > 0 && (
+                <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center flex-shrink-0">
+                  {totalUnread > 9 ? '9+' : totalUnread}
+                </Badge>
+              )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                className={`p-0 text-primary-foreground hover:bg-primary-foreground/20 ${isMinimized ? 'h-6 w-6' : 'h-7 w-7'}`}
                 onClick={() => setIsMinimized(!isMinimized)}
               >
-                {isMinimized ? <Maximize2 className="h-4 w-4" /> : <Minimize2 className="h-4 w-4" />}
+                {isMinimized ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-4 w-4" />}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                className={`p-0 text-primary-foreground hover:bg-primary-foreground/20 ${isMinimized ? 'h-6 w-6' : 'h-7 w-7'}`}
                 onClick={() => setIsOpen(false)}
               >
-                <X className="h-4 w-4" />
+                <X className={isMinimized ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
               </Button>
             </div>
           </div>
