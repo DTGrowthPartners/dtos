@@ -2848,22 +2848,6 @@ export default function Tareas() {
                 </TooltipTrigger>
                 <TooltipContent side="right">Calendario</TooltipContent>
               </Tooltip>
-              <Tooltip delayDuration={0}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => filterProject !== 'all' && setTaskView('brief')}
-                    disabled={filterProject === 'all'}
-                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
-                      taskView === 'brief' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                    } ${filterProject === 'all' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    <FileText className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {filterProject === 'all' ? 'Selecciona un proyecto' : `Briefs (${projectBriefs.length})`}
-                </TooltipContent>
-              </Tooltip>
             </div>
           ) : (
             <>
@@ -2914,19 +2898,6 @@ export default function Tareas() {
                     <CalendarDays className="h-3 w-3" />
                     <span>Calendario</span>
                   </div>
-                </button>
-                <button
-                  onClick={() => filterProject !== 'all' && setTaskView('brief')}
-                  disabled={filterProject === 'all'}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
-                    taskView === 'brief' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
-                  } ${filterProject === 'all' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <div className="flex items-center gap-2">
-                    <FileText className="h-3 w-3" />
-                    <span>Briefs</span>
-                  </div>
-                  <span className="text-xs opacity-70">{projectBriefs.length}</span>
                 </button>
               </div>
             </>
@@ -3143,6 +3114,23 @@ export default function Tareas() {
                       </TooltipTrigger>
                       <TooltipContent>Configurar link de Ads Manager del cliente</TooltipContent>
                     </Tooltip>
+                    {/* Brief Button */}
+                    <button
+                      onClick={() => setTaskView(taskView === 'brief' ? 'active' : 'brief')}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                        taskView === 'brief'
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-violet-500 hover:bg-violet-600 text-white'
+                      }`}
+                    >
+                      <FileText className="h-3.5 w-3.5" />
+                      {taskView === 'brief' ? 'Ver Tareas' : 'Briefs'}
+                      {taskView !== 'brief' && projectBriefs.length > 0 && (
+                        <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-white/20 rounded-full">
+                          {projectBriefs.length}
+                        </span>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>
