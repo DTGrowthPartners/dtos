@@ -25,6 +25,29 @@ const DEFAULT_USER_PERMISSIONS = [
 // Protected routes
 router.use(authMiddleware);
 
+// Get team members for chat (any authenticated user)
+router.get('/team', async (req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        photoUrl: true,
+      },
+      orderBy: {
+        firstName: 'asc',
+      },
+    });
+
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching team:', error);
+    res.status(500).json({ message: 'Error al obtener equipo' });
+  }
+});
+
 // Update own profile (any authenticated user) - must be before /:id routes
 router.put('/profile/me', async (req, res) => {
   try {

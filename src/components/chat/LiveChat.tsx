@@ -81,7 +81,7 @@ export default function LiveChat() {
     // Fetch team users
     const fetchTeamUsers = async () => {
       try {
-        const data = await apiClient.get<TeamUser[]>('/api/team');
+        const data = await apiClient.get<TeamUser[]>('/api/users/team');
         setTeamUsers(data);
       } catch (error) {
         console.error('Error fetching team users:', error);
