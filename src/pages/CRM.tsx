@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +42,6 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
-import ClientsGlobe from '@/components/crm/ClientsGlobe';
 import { createTask, sendTaskNotification, loadProjects } from '@/lib/firestoreTaskService';
 import { useAuthStore } from '@/lib/auth';
 import { Priority as TaskPriority, TEAM_MEMBERS, TaskStatus, type TeamMemberName, type Project as FirestoreProject } from '@/types/taskTypes';
@@ -305,6 +304,9 @@ export default function CRM() {
   const [deletedDeals, setDeletedDeals] = useState<Deal[]>([]);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
+  const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
+  const [dealToConvert, setDealToConvert] = useState<Deal | null>(null);
+  const [convertFormData, setConvertFormData] = useState({ name: '', email: '', phone: '', nit: '', address: '' });
   const { user: authUser } = useAuthStore();
   const [firestoreProjects, setFirestoreProjects] = useState<FirestoreProject[]>([]);
   const { toast } = useToast();
@@ -553,6 +555,65 @@ export default function CRM() {
       toast({
         title: 'Error',
         description: 'No se pudo eliminar el deal',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openConvertDialog = (deal: Deal) => {
+    setDealToConvert(deal);
+    setConvertFormData({
+      name: deal.company || deal.name,
+      email: deal.email || '',
+      phone: deal.phone ? `${deal.phoneCountryCode} ${deal.phone}` : '',
+      nit: '',
+      address: '',
+    });
+    setIsConvertDialogOpen(true);
+  };
+
+  const handleConvertToClient = async () => {
+    if (!dealToConvert || !convertFormData.name || !convertFormData.email) return;
+    try {
+      // Create client
+      await apiClient.post('/api/clients', {
+        name: convertFormData.name,
+        email: convertFormData.email,
+        phone: convertFormData.phone,
+        nit: convertFormData.nit,
+        address: convertFormData.address,
+        logo: dealToConvert.logo || '',
+        status: 'active',
+      });
+
+      // Also create/update tercero as client if name is available
+      if (dealToConvert.name) {
+        try {
+          await apiClient.post('/api/terceros', {
+            nombre: dealToConvert.name,
+            email: dealToConvert.email,
+            telefono: dealToConvert.phone,
+            telefonoCodigo: dealToConvert.phoneCountryCode || '+57',
+            esCliente: true,
+            esProspecto: false,
+            estado: 'activo',
+          });
+        } catch {
+          // Tercero might already exist, that's ok
+        }
+      }
+
+      toast({
+        title: 'Cliente creado',
+        description: `${convertFormData.name} ha sido convertido a cliente exitosamente`,
+      });
+      setIsConvertDialogOpen(false);
+      setDealToConvert(null);
+      setConvertFormData({ name: '', email: '', phone: '', nit: '', address: '' });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo crear el cliente',
         variant: 'destructive',
       });
     }
@@ -878,35 +939,6 @@ export default function CRM() {
         </div>
       )}
 
-      {/* Global Map */}
-      <ClientsGlobe
-        clients={deals.map(deal => ({
-          id: deal.id,
-          name: deal.contactName || deal.company,
-          company: deal.company,
-          location: {
-            lat: 0,
-            lng: 0,
-            city: deal.city || 'Cartagena',
-            country: deal.country || 'Colombia',
-          },
-          value: deal.estimatedValue,
-          status: (() => {
-            const dealStage = stages.find(s => s.id === deal.stageId);
-            if (dealStage?.slug === 'ganado') return 'won' as const;
-            if (dealStage?.slug === 'propuesta' || dealStage?.slug === 'negociacion') return 'active' as const;
-            return 'prospect' as const;
-          })(),
-        }))}
-        onClientClick={(client) => {
-          const deal = deals.find(d => d.id === client.id);
-          if (deal) {
-            setSelectedDeal(deal);
-            setIsDealSheetOpen(true);
-          }
-        }}
-      />
-
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1212,6 +1244,13 @@ export default function CRM() {
                         className="text-green-600"
                       >
                         Marcar como Ganado
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => openConvertDialog(selectedDeal)}
+                        className="text-blue-600"
+                      >
+                        <UserCheck className="h-4 w-4 mr-2" />
+                        Convertir a Cliente
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={() => { setDealToClose(selectedDeal); setIsLostDialogOpen(true); }}
@@ -1954,6 +1993,75 @@ export default function CRM() {
             <Button onClick={handleCreateTask} disabled={!taskFormData.title}>
               <CheckSquare className="h-4 w-4 mr-2" />
               Crear Tarea
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Convert to Client Dialog */}
+      <Dialog open={isConvertDialogOpen} onOpenChange={setIsConvertDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserCheck className="h-5 w-5 text-blue-600" />
+              Convertir a Cliente
+            </DialogTitle>
+            <DialogDescription>
+              Crear una empresa cliente a partir de este prospecto
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nombre de la empresa *</Label>
+              <Input
+                placeholder="Nombre del cliente"
+                value={convertFormData.name}
+                onChange={(e) => setConvertFormData({ ...convertFormData, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                placeholder="cliente@empresa.com"
+                value={convertFormData.email}
+                onChange={(e) => setConvertFormData({ ...convertFormData, email: e.target.value })}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Telefono</Label>
+                <Input
+                  placeholder="+57 300 123 4567"
+                  value={convertFormData.phone}
+                  onChange={(e) => setConvertFormData({ ...convertFormData, phone: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>NIT/RUT</Label>
+                <Input
+                  placeholder="123456789-0"
+                  value={convertFormData.nit}
+                  onChange={(e) => setConvertFormData({ ...convertFormData, nit: e.target.value })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Direccion</Label>
+              <Input
+                placeholder="Direccion de la empresa"
+                value={convertFormData.address}
+                onChange={(e) => setConvertFormData({ ...convertFormData, address: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setIsConvertDialogOpen(false); setDealToConvert(null); }}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConvertToClient} disabled={!convertFormData.name || !convertFormData.email}>
+              <UserCheck className="h-4 w-4 mr-2" />
+              Crear Cliente
             </Button>
           </DialogFooter>
         </DialogContent>

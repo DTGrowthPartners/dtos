@@ -1,0 +1,194 @@
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
+  where,
+  orderBy,
+  limit,
+  onSnapshot,
+  serverTimestamp,
+  Timestamp,
+  getDoc,
+  setDoc,
+  arrayUnion,
+} from 'firebase/firestore';
+import { db } from './firebase';
+import type { ChatMessage, ChatRoom, UserPresence } from '@/types/chatTypes';
+
+const MESSAGES_COLLECTION = 'chat_messages';
+const ROOMS_COLLECTION = 'chat_rooms';
+const PRESENCE_COLLECTION = 'user_presence';
+const GENERAL_ROOM_ID = 'general';
+
+// Initialize the general chat room if it doesn't exist
+export const initializeGeneralRoom = async () => {
+  const roomRef = doc(db, ROOMS_COLLECTION, GENERAL_ROOM_ID);
+  const roomSnap = await getDoc(roomRef);
+
+  if (!roomSnap.exists()) {
+    await setDoc(roomRef, {
+      id: GENERAL_ROOM_ID,
+      name: 'Chat General',
+      type: 'general',
+      participants: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+};
+
+// Send a message to a room
+export const sendMessage = async (
+  roomId: string,
+  text: string,
+  senderId: string,
+  senderName: string,
+  senderPhoto?: string
+): Promise<string> => {
+  const messageData = {
+    text,
+    senderId,
+    senderName,
+    senderPhoto: senderPhoto || null,
+    createdAt: Date.now(),
+    readBy: [senderId],
+    roomId,
+  };
+
+  const docRef = await addDoc(collection(db, MESSAGES_COLLECTION), messageData);
+
+  // Update room's last message
+  const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+  await updateDoc(roomRef, {
+    lastMessage: {
+      text: text.length > 50 ? text.substring(0, 50) + '...' : text,
+      senderName,
+      createdAt: Date.now(),
+    },
+    updatedAt: Date.now(),
+  });
+
+  return docRef.id;
+};
+
+// Subscribe to messages in a room
+export const subscribeToMessages = (
+  roomId: string,
+  callback: (messages: ChatMessage[]) => void,
+  messageLimit: number = 100
+) => {
+  const q = query(
+    collection(db, MESSAGES_COLLECTION),
+    where('roomId', '==', roomId),
+    orderBy('createdAt', 'desc'),
+    limit(messageLimit)
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    const messages: ChatMessage[] = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    })) as ChatMessage[];
+
+    // Reverse to show oldest first
+    callback(messages.reverse());
+  });
+};
+
+// Mark messages as read
+export const markMessagesAsRead = async (messageIds: string[], userId: string) => {
+  for (const id of messageIds) {
+    const messageRef = doc(db, MESSAGES_COLLECTION, id);
+    await updateDoc(messageRef, {
+      readBy: arrayUnion(userId),
+    });
+  }
+};
+
+// Update user presence
+export const updatePresence = async (
+  userId: string,
+  status: 'online' | 'offline' | 'away'
+) => {
+  const presenceRef = doc(db, PRESENCE_COLLECTION, userId);
+  await setDoc(presenceRef, {
+    userId,
+    status,
+    lastSeen: Date.now(),
+  }, { merge: true });
+};
+
+// Subscribe to all users' presence
+export const subscribeToPresence = (
+  callback: (presence: Record<string, UserPresence>) => void
+) => {
+  return onSnapshot(collection(db, PRESENCE_COLLECTION), (snapshot) => {
+    const presence: Record<string, UserPresence> = {};
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data() as UserPresence;
+      presence[doc.id] = data;
+    });
+    callback(presence);
+  });
+};
+
+// Get unread messages count for a user in a room
+export const subscribeToUnreadCount = (
+  roomId: string,
+  userId: string,
+  callback: (count: number) => void
+) => {
+  const q = query(
+    collection(db, MESSAGES_COLLECTION),
+    where('roomId', '==', roomId)
+  );
+
+  return onSnapshot(q, (snapshot) => {
+    let count = 0;
+    snapshot.docs.forEach((doc) => {
+      const data = doc.data();
+      if (!data.readBy?.includes(userId) && data.senderId !== userId) {
+        count++;
+      }
+    });
+    callback(count);
+  });
+};
+
+// Delete a message (only sender can delete)
+export const deleteMessage = async (messageId: string) => {
+  await deleteDoc(doc(db, MESSAGES_COLLECTION, messageId));
+};
+
+// Setup presence on page visibility change
+export const setupPresenceListeners = (userId: string) => {
+  // Set online on load
+  updatePresence(userId, 'online');
+
+  // Handle visibility change
+  const handleVisibility = () => {
+    if (document.hidden) {
+      updatePresence(userId, 'away');
+    } else {
+      updatePresence(userId, 'online');
+    }
+  };
+
+  // Handle before unload
+  const handleUnload = () => {
+    updatePresence(userId, 'offline');
+  };
+
+  document.addEventListener('visibilitychange', handleVisibility);
+  window.addEventListener('beforeunload', handleUnload);
+
+  // Return cleanup function
+  return () => {
+    document.removeEventListener('visibilitychange', handleVisibility);
+    window.removeEventListener('beforeunload', handleUnload);
+    updatePresence(userId, 'offline');
+  };
+};

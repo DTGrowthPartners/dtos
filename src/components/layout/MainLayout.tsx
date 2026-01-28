@@ -5,6 +5,7 @@ import { AppHeader } from './AppHeader';
 import { AppFooter } from './AppFooter';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { CommandPalette } from '@/components/CommandPalette';
+import LiveChat from '@/components/chat/LiveChat';
 
 export function MainLayout() {
   const { collapsed } = useSidebar();
@@ -30,6 +31,9 @@ export function MainLayout() {
         </main>
         <AppFooter />
       </div>
+
+      {/* Live Chat */}
+      <LiveChat />
     </div>
   );
 }

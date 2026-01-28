@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase, ImagePlus, X } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase, ImagePlus, X, ArrowDownToLine, DollarSign, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -84,6 +84,18 @@ interface Tercero {
 
 type ViewMode = '1' | '2' | '3' | 'list';
 
+interface CRMProspect {
+  id: string;
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  phoneCountryCode?: string;
+  logo?: string;
+  estimatedValue?: number;
+  stage?: { name: string; color: string; isWon?: boolean };
+}
+
 export default function Clientes() {
   const [clients, setClients] = useState<Client[]>([]);
   const [terceros, setTerceros] = useState<Tercero[]>([]);
@@ -98,6 +110,10 @@ export default function Clientes() {
   const [showHidden, setShowHidden] = useState(false);
   const [activeTab, setActiveTab] = useState('empresas');
   const [selectedClientForServices, setSelectedClientForServices] = useState<Client | null>(null);
+  const [isImportCRMOpen, setIsImportCRMOpen] = useState(false);
+  const [crmProspects, setCrmProspects] = useState<CRMProspect[]>([]);
+  const [loadingCRM, setLoadingCRM] = useState(false);
+  const [selectedProspects, setSelectedProspects] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -143,6 +159,82 @@ export default function Clientes() {
     } catch (error) {
       console.error('Error fetching terceros:', error);
     }
+  };
+
+  const fetchCRMProspects = async () => {
+    setLoadingCRM(true);
+    try {
+      const data = await apiClient.get<CRMProspect[]>('/api/crm/deals');
+      // Filter out prospects that are already clients (by email match)
+      const existingEmails = new Set(clients.map(c => c.email.toLowerCase()));
+      const filteredProspects = data.filter(p =>
+        p.email && !existingEmails.has(p.email.toLowerCase())
+      );
+      setCrmProspects(filteredProspects);
+    } catch (error) {
+      console.error('Error fetching CRM prospects:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron cargar los prospectos del CRM',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingCRM(false);
+    }
+  };
+
+  const handleOpenImportCRM = () => {
+    setSelectedProspects(new Set());
+    setIsImportCRMOpen(true);
+    fetchCRMProspects();
+  };
+
+  const toggleProspectSelection = (id: string) => {
+    setSelectedProspects(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  };
+
+  const handleImportSelectedProspects = async () => {
+    if (selectedProspects.size === 0) return;
+
+    setIsLoading(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const prospectId of selectedProspects) {
+      const prospect = crmProspects.find(p => p.id === prospectId);
+      if (!prospect) continue;
+
+      try {
+        await apiClient.post('/api/clients', {
+          name: prospect.company || prospect.name,
+          email: prospect.email || '',
+          phone: prospect.phone ? `${prospect.phoneCountryCode || ''} ${prospect.phone}`.trim() : '',
+          logo: prospect.logo || '',
+          status: 'active',
+        });
+        successCount++;
+      } catch (error) {
+        console.error('Error importing prospect:', prospect.name, error);
+        errorCount++;
+      }
+    }
+
+    toast({
+      title: 'Importacion completada',
+      description: `${successCount} clientes importados${errorCount > 0 ? `, ${errorCount} errores` : ''}`,
+    });
+
+    setIsImportCRMOpen(false);
+    setSelectedProspects(new Set());
+    fetchClients();
   };
 
   const toggleOrgExpanded = (orgId: string) => {
@@ -350,6 +442,14 @@ export default function Clientes() {
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Importar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleOpenImportCRM}
+                className="w-full md:w-auto"
+              >
+                <ArrowDownToLine className="h-4 w-4 mr-2" />
+                Desde CRM
               </Button>
               <Button
                 onClick={() => {
@@ -904,6 +1004,110 @@ export default function Clientes() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Import from CRM Dialog */}
+      <Dialog open={isImportCRMOpen} onOpenChange={setIsImportCRMOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowDownToLine className="h-5 w-5" />
+              Importar desde CRM
+            </DialogTitle>
+            <DialogDescription>
+              Selecciona los prospectos que deseas convertir en clientes
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto py-4">
+            {loadingCRM ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : crmProspects.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>No hay prospectos disponibles para importar</p>
+                <p className="text-sm">Los prospectos con email ya existente no se muestran</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {crmProspects.map((prospect) => (
+                  <div
+                    key={prospect.id}
+                    onClick={() => toggleProspectSelection(prospect.id)}
+                    className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                      selectedProspects.has(prospect.id)
+                        ? 'border-primary bg-primary/10'
+                        : 'border-border hover:border-primary/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                        selectedProspects.has(prospect.id)
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-muted-foreground'
+                      }`}>
+                        {selectedProspects.has(prospect.id) && <Check className="h-3 w-3" />}
+                      </div>
+                      {prospect.logo ? (
+                        <img src={prospect.logo} alt="" className="h-10 w-10 rounded-lg object-cover" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                          <Building2 className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{prospect.company || prospect.name}</p>
+                          {prospect.stage && (
+                            <span
+                              className="text-xs px-2 py-0.5 rounded-full"
+                              style={{ backgroundColor: prospect.stage.color + '20', color: prospect.stage.color }}
+                            >
+                              {prospect.stage.name}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          {prospect.email && (
+                            <span className="flex items-center gap-1">
+                              <Mail className="h-3 w-3" />
+                              {prospect.email}
+                            </span>
+                          )}
+                          {prospect.estimatedValue && (
+                            <span className="flex items-center gap-1">
+                              <DollarSign className="h-3 w-3" />
+                              {prospect.estimatedValue.toLocaleString('es-CO')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="border-t pt-4">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {selectedProspects.size} seleccionado(s)
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setIsImportCRMOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleImportSelectedProspects}
+                  disabled={selectedProspects.size === 0 || isLoading}
+                >
+                  {isLoading ? 'Importando...' : `Importar (${selectedProspects.size})`}
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
     </div>
   );
