@@ -42,6 +42,7 @@ import {
   FolderPlus,
   ChevronDown,
   BarChart3,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -144,6 +145,27 @@ import NoteColumnModal from '@/components/notes/NoteColumnModal';
 import NoteItemModal from '@/components/notes/NoteItemModal';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from '@/components/ui/resizable';
+import { BriefList } from '@/components/brief/BriefList';
+import { BriefEditor } from '@/components/brief/BriefEditor';
+import {
+  loadAllBriefs,
+  loadTemplates,
+  createEmptyBrief,
+  createBriefFromTemplate,
+  duplicateBrief,
+  deleteBrief as deleteBriefService,
+  updateBrief,
+  saveBriefAsTemplate,
+  deleteTemplate,
+  getBrief,
+  getTemplate,
+} from '@/lib/briefService';
+import type { Brief as BriefType, BriefTemplate } from '@/types/briefTypes';
 
 // User interface for team members with photos
 interface TeamUser {
@@ -166,7 +188,7 @@ const STATUS_ICONS = {
 };
 
 type ViewMode = 'card' | 'list' | 'compact';
-type TaskView = 'active' | 'archived' | 'deleted' | 'calendar';
+type TaskView = 'active' | 'archived' | 'deleted' | 'calendar' | 'brief';
 type DateFilter = 'all' | 'today' | 'week' | 'month' | 'overdue';
 
 // Helper functions for date filtering - defined at module level to avoid hoisting issues
@@ -334,6 +356,21 @@ export default function Tareas() {
     return teamUser?.photoUrl;
   };
 
+  // Helper to format checklist for WhatsApp description
+  const formatChecklistForWhatsApp = (
+    description: string,
+    checklist?: TaskChecklistItem[]
+  ): string => {
+    if (!checklist || checklist.length === 0) return description;
+
+    const checklistText = checklist
+      .map(item => `${item.completed ? '✅' : '☐'} ${item.text}`)
+      .join('\n');
+
+    const separator = description ? '\n\n---\nLista de tareas:\n' : 'Lista de tareas:\n';
+    return description + separator + checklistText;
+  };
+
   // Image and Comments modals
   const [imageModalOpen, setImageModalOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState('');
@@ -384,6 +421,18 @@ export default function Tareas() {
   const [selectedNoteColumnId, setSelectedNoteColumnId] = useState<string | null>(null);
   const [draggedNoteItem, setDraggedNoteItem] = useState<string | null>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
+
+  // Brief states
+  const [briefs, setBriefs] = useState<BriefType[]>([]);
+  const [briefTemplates, setBriefTemplates] = useState<BriefTemplate[]>([]);
+  const [selectedBriefId, setSelectedBriefId] = useState<string | null>(null);
+  const [selectedBrief, setSelectedBrief] = useState<BriefType | null>(null);
+  const [briefImagePreview, setBriefImagePreview] = useState<string | null>(null);
+  // Brief template dialog states
+  const [briefTemplateDialogOpen, setBriefTemplateDialogOpen] = useState(false);
+  const [briefTemplateName, setBriefTemplateName] = useState('');
+  const [savingBriefTemplate, setSavingBriefTemplate] = useState(false);
+  const [briefToSaveAsTemplate, setBriefToSaveAsTemplate] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -573,7 +622,7 @@ export default function Tareas() {
               sendHighPriorityTaskToWhatsApp({
                 id: newInstanceId,
                 titulo: task.title,
-                descripcion: task.description || '',
+                descripcion: formatChecklistForWhatsApp(task.description || '', task.checklist),
                 prioridad: 'Alta',
                 asignado: task.assignee,
                 creador: task.creator,
@@ -631,13 +680,15 @@ export default function Tareas() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [tasksData, projectsData, archivedData, deletedData, foldersData, usersData] = await Promise.all([
+      const [tasksData, projectsData, archivedData, deletedData, foldersData, usersData, briefsData, briefTemplatesData] = await Promise.all([
         loadTasks(),
         loadProjects(),
         loadCompletedTasks(),
         loadDeletedTasks(),
         loadProjectFolders(),
         apiClient.get<TeamUser[]>('/api/users').catch(() => []),
+        loadAllBriefs(),
+        loadTemplates(),
       ]);
 
       // Store team users for photos
@@ -667,6 +718,9 @@ export default function Tareas() {
         .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
       setProjects(sortedActiveProjects);
       setArchivedProjects(sortedArchivedProjects);
+      // Load briefs data
+      setBriefs(briefsData);
+      setBriefTemplates(briefTemplatesData);
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -843,7 +897,7 @@ export default function Tareas() {
             sendHighPriorityTaskToWhatsApp({
               id: firstInstanceId,
               titulo: taskData.title,
-              descripcion: taskData.description || '',
+              descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
               prioridad: 'Alta',
               asignado: taskData.assignee,
               creador: taskData.creator,
@@ -869,7 +923,7 @@ export default function Tareas() {
             sendHighPriorityTaskToWhatsApp({
               id: newTaskId,
               titulo: taskData.title,
-              descripcion: taskData.description || '',
+              descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
               prioridad: 'Alta',
               asignado: taskData.assignee,
               creador: taskData.creator,
@@ -1444,6 +1498,172 @@ export default function Tareas() {
   const getNoteItemsForColumn = (columnId: string) => {
     return noteItems.filter(item => item.columnId === columnId).sort((a, b) => a.order - b.order);
   };
+
+  // ============= BRIEF HANDLERS =============
+
+  // Computed: briefs for current project
+  const projectBriefs = filterProject !== 'all'
+    ? briefs.filter(b => b.projectId === filterProject)
+    : [];
+
+  // Load selected brief when selectedBriefId changes
+  useEffect(() => {
+    const loadSelectedBrief = async () => {
+      if (!selectedBriefId) {
+        setSelectedBrief(null);
+        return;
+      }
+      try {
+        const brief = await getBrief(selectedBriefId);
+        setSelectedBrief(brief);
+      } catch (error) {
+        console.error('Error loading brief:', error);
+        setSelectedBrief(null);
+      }
+    };
+    loadSelectedBrief();
+  }, [selectedBriefId]);
+
+  // Reset brief selection when switching projects or leaving brief view
+  useEffect(() => {
+    if (taskView !== 'brief') {
+      setSelectedBriefId(null);
+      setSelectedBrief(null);
+    }
+  }, [taskView, filterProject]);
+
+  const handleBriefCreate = useCallback(async (projectId: string) => {
+    if (!user) return;
+    try {
+      const briefId = await createEmptyBrief(projectId, 'Nuevo brief', user.id);
+      const newBrief = await getBrief(briefId);
+      if (newBrief) {
+        setBriefs(prev => [newBrief, ...prev]);
+        setSelectedBriefId(briefId);
+      }
+      toast({ title: 'Brief creado', description: 'Se ha creado un nuevo brief' });
+    } catch (error) {
+      console.error('Error creating brief:', error);
+      toast({ title: 'Error', description: 'No se pudo crear el brief', variant: 'destructive' });
+    }
+  }, [user, toast]);
+
+  const handleBriefCreateFromTemplate = useCallback(async (projectId: string, templateId: string) => {
+    if (!user) return;
+    try {
+      const template = await getTemplate(templateId);
+      const briefId = await createBriefFromTemplate(
+        templateId,
+        projectId,
+        template?.name || 'Brief desde template',
+        user.id
+      );
+      const newBrief = await getBrief(briefId);
+      if (newBrief) {
+        setBriefs(prev => [newBrief, ...prev]);
+        setSelectedBriefId(briefId);
+      }
+      toast({ title: 'Brief creado', description: 'Se ha creado el brief desde el template' });
+    } catch (error) {
+      console.error('Error creating brief from template:', error);
+      toast({ title: 'Error', description: 'No se pudo crear el brief', variant: 'destructive' });
+    }
+  }, [user, toast]);
+
+  const handleBriefDuplicate = useCallback(async (briefId: string) => {
+    try {
+      const newBriefId = await duplicateBrief(briefId);
+      const newBrief = await getBrief(newBriefId);
+      if (newBrief) {
+        setBriefs(prev => [newBrief, ...prev]);
+        setSelectedBriefId(newBriefId);
+      }
+      toast({ title: 'Brief duplicado', description: 'Se ha creado una copia del brief' });
+    } catch (error) {
+      console.error('Error duplicating brief:', error);
+      toast({ title: 'Error', description: 'No se pudo duplicar el brief', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const handleBriefDelete = useCallback(async (briefId: string) => {
+    try {
+      await deleteBriefService(briefId);
+      setBriefs(prev => prev.filter(b => b.id !== briefId));
+      if (selectedBriefId === briefId) {
+        setSelectedBriefId(null);
+        setSelectedBrief(null);
+      }
+      toast({ title: 'Brief eliminado', description: 'El brief ha sido eliminado' });
+    } catch (error) {
+      console.error('Error deleting brief:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar el brief', variant: 'destructive' });
+    }
+  }, [selectedBriefId, toast]);
+
+  const handleBriefSave = useCallback(async (updates: Partial<BriefType>) => {
+    if (!selectedBriefId) return;
+    try {
+      await updateBrief(selectedBriefId, updates);
+      setBriefs(prev =>
+        prev.map(b =>
+          b.id === selectedBriefId ? { ...b, ...updates, updatedAt: Date.now() } : b
+        )
+      );
+      setSelectedBrief(prev =>
+        prev ? { ...prev, ...updates, updatedAt: Date.now() } : prev
+      );
+    } catch (error) {
+      console.error('Error saving brief:', error);
+      throw error;
+    }
+  }, [selectedBriefId]);
+
+  const handleBriefSaveAsTemplate = useCallback((briefId: string) => {
+    setBriefToSaveAsTemplate(briefId);
+    setBriefTemplateName('');
+    setBriefTemplateDialogOpen(true);
+  }, []);
+
+  const confirmBriefSaveAsTemplate = useCallback(async () => {
+    if (!briefToSaveAsTemplate || !briefTemplateName.trim()) return;
+    setSavingBriefTemplate(true);
+    try {
+      const brief = briefs.find(b => b.id === briefToSaveAsTemplate);
+      if (!brief) throw new Error('Brief not found');
+      const templateId = await saveBriefAsTemplate(brief, briefTemplateName.trim());
+      const newTemplate = await getTemplate(templateId);
+      if (newTemplate) {
+        setBriefTemplates(prev => [...prev, newTemplate]);
+      }
+      toast({ title: 'Template creado', description: 'El brief se ha guardado como template' });
+      setBriefTemplateDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving as template:', error);
+      toast({ title: 'Error', description: 'No se pudo guardar el template', variant: 'destructive' });
+    } finally {
+      setSavingBriefTemplate(false);
+    }
+  }, [briefToSaveAsTemplate, briefTemplateName, briefs, toast]);
+
+  const handleBriefDeleteTemplate = useCallback(async (templateId: string) => {
+    try {
+      await deleteTemplate(templateId);
+      setBriefTemplates(prev => prev.filter(t => t.id !== templateId));
+      toast({ title: 'Template eliminado', description: 'El template ha sido eliminado' });
+    } catch (error) {
+      console.error('Error deleting template:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar el template', variant: 'destructive' });
+    }
+  }, [toast]);
+
+  const handleBriefSelectTemplate = useCallback((templateId: string) => {
+    const template = briefTemplates.find(t => t.id === templateId);
+    if (template) {
+      toast({ title: template.name, description: `Template con ${template.blocks.length} bloques` });
+    }
+  }, [briefTemplates, toast]);
+
+  // ============= TASK HANDLERS =============
 
   const handleEdit = (task: Task) => {
     setEditingTask(task);
@@ -2628,6 +2848,22 @@ export default function Tareas() {
                 </TooltipTrigger>
                 <TooltipContent side="right">Calendario</TooltipContent>
               </Tooltip>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => filterProject !== 'all' && setTaskView('brief')}
+                    disabled={filterProject === 'all'}
+                    className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${
+                      taskView === 'brief' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                    } ${filterProject === 'all' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    <FileText className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {filterProject === 'all' ? 'Selecciona un proyecto' : `Briefs (${projectBriefs.length})`}
+                </TooltipContent>
+              </Tooltip>
             </div>
           ) : (
             <>
@@ -2678,6 +2914,19 @@ export default function Tareas() {
                     <CalendarDays className="h-3 w-3" />
                     <span>Calendario</span>
                   </div>
+                </button>
+                <button
+                  onClick={() => filterProject !== 'all' && setTaskView('brief')}
+                  disabled={filterProject === 'all'}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${
+                    taskView === 'brief' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
+                  } ${filterProject === 'all' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3 w-3" />
+                    <span>Briefs</span>
+                  </div>
+                  <span className="text-xs opacity-70">{projectBriefs.length}</span>
                 </button>
               </div>
             </>
@@ -4014,6 +4263,50 @@ export default function Tareas() {
             )}
           </div>
         )}
+
+        {/* Brief View */}
+        {taskView === 'brief' && filterProject !== 'all' && (
+          <div className="flex-1 flex overflow-hidden">
+            <ResizablePanelGroup direction="horizontal">
+              {/* Left Panel - Brief List */}
+              <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                <BriefList
+                  briefs={projectBriefs}
+                  templates={briefTemplates}
+                  projects={projects.filter(p => p.id === filterProject)}
+                  selectedBriefId={selectedBriefId}
+                  onSelectBrief={setSelectedBriefId}
+                  onCreateBrief={handleBriefCreate}
+                  onCreateFromTemplate={handleBriefCreateFromTemplate}
+                  onDuplicateBrief={handleBriefDuplicate}
+                  onDeleteBrief={handleBriefDelete}
+                  onSaveAsTemplate={handleBriefSaveAsTemplate}
+                  onSelectTemplate={handleBriefSelectTemplate}
+                  onDeleteTemplate={handleBriefDeleteTemplate}
+                />
+              </ResizablePanel>
+
+              <ResizableHandle withHandle />
+
+              {/* Right Panel - Brief Editor */}
+              <ResizablePanel defaultSize={75}>
+                {selectedBrief ? (
+                  <BriefEditor
+                    brief={selectedBrief}
+                    onSave={handleBriefSave}
+                    onImageClick={setBriefImagePreview}
+                  />
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                    <FileText className="h-16 w-16 mb-4 opacity-20" />
+                    <p className="text-lg font-medium">Selecciona un brief</p>
+                    <p className="text-sm">o crea uno nuevo desde el panel izquierdo</p>
+                  </div>
+                )}
+              </ResizablePanel>
+            </ResizablePanelGroup>
+          </div>
+        )}
       </div>
 
       {/* Task Dialog */}
@@ -4695,6 +4988,61 @@ export default function Tareas() {
         projectId={filterProject}
         isSaving={isSavingNote}
       />
+
+      {/* Brief Image Preview Dialog */}
+      {briefImagePreview && (
+        <Dialog open={!!briefImagePreview} onOpenChange={() => setBriefImagePreview(null)}>
+          <DialogContent className="max-w-4xl max-h-[90vh] p-0 overflow-hidden">
+            <button
+              onClick={() => setBriefImagePreview(null)}
+              className="absolute top-2 right-2 z-10 p-2 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+            >
+              <X className="h-5 w-5 text-white" />
+            </button>
+            <img
+              src={briefImagePreview}
+              alt="Preview"
+              className="w-full h-full object-contain"
+            />
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Save Brief as Template Dialog */}
+      <Dialog open={briefTemplateDialogOpen} onOpenChange={setBriefTemplateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Guardar como template</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="briefTemplateName">Nombre del template</Label>
+              <Input
+                id="briefTemplateName"
+                value={briefTemplateName}
+                onChange={(e) => setBriefTemplateName(e.target.value)}
+                placeholder="Ej: Instalacion Shopify POS"
+                autoFocus
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBriefTemplateDialogOpen(false)}
+              disabled={savingBriefTemplate}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmBriefSaveAsTemplate}
+              disabled={!briefTemplateName.trim() || savingBriefTemplate}
+            >
+              {savingBriefTemplate ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Project Confirmation Dialog */}
       <Dialog open={deleteProjectDialog.open} onOpenChange={(open) => !open && setDeleteProjectDialog({ open: false, projectId: null, projectName: '', taskCount: 0 })}>
