@@ -204,12 +204,32 @@ export default function LiveChat() {
   const openDirectChat = async (targetUser: TeamUser) => {
     if (!user) return;
     const currentUser = teamUsers.find((u) => u.id === user.id);
+    const currentUserName = currentUser?.firstName || 'Usuario';
     const roomId = await getOrCreateDirectRoom(
       user.id,
-      currentUser?.firstName || 'Usuario',
+      currentUserName,
       targetUser.id,
       targetUser.firstName
     );
+
+    // Add room to directRooms if not already there
+    const existingRoom = directRooms.find(r => r.id === roomId);
+    if (!existingRoom) {
+      const newRoom: ChatRoom = {
+        id: roomId,
+        name: `${currentUserName} & ${targetUser.firstName}`,
+        type: 'direct',
+        participants: [user.id, targetUser.id],
+        participantNames: {
+          [user.id]: currentUserName,
+          [targetUser.id]: targetUser.firstName,
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+      setDirectRooms(prev => [newRoom, ...prev]);
+    }
+
     setActiveRoomId(roomId);
     setActiveRoomName(targetUser.firstName);
     setView('chat');
@@ -294,17 +314,36 @@ export default function LiveChat() {
         </button>
       )}
 
-      {/* Chat Window */}
-      {isOpen && (
-        <div
-          className={`fixed bottom-4 right-4 z-50 bg-background border border-border rounded-xl shadow-2xl overflow-hidden transition-all duration-200 ${
-            isMinimized ? 'w-64 h-11' : 'w-80 sm:w-96 h-[500px]'
-          }`}
+      {/* Minimized Chat Bar */}
+      {isOpen && isMinimized && (
+        <button
+          onClick={() => setIsMinimized(false)}
+          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all"
         >
+          <MessageCircle className="h-4 w-4" />
+          <span className="text-sm font-medium">Chat</span>
+          {totalUnread > 0 && (
+            <span className="h-5 min-w-[20px] px-1.5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+              {totalUnread > 9 ? '9+' : totalUnread}
+            </span>
+          )}
+          <X
+            className="h-4 w-4 ml-1 hover:opacity-70"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(false);
+            }}
+          />
+        </button>
+      )}
+
+      {/* Chat Window */}
+      {isOpen && !isMinimized && (
+        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 h-[500px] bg-background border border-border rounded-xl shadow-2xl overflow-hidden transition-all duration-200">
           {/* Header */}
-          <div className={`flex items-center justify-between bg-primary text-primary-foreground ${isMinimized ? 'px-3 py-2' : 'px-4 py-3'}`}>
+          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              {view === 'chat' && !isMinimized && (
+              {view === 'chat' && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -314,18 +353,13 @@ export default function LiveChat() {
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               )}
-              <MessageCircle className={`flex-shrink-0 ${isMinimized ? 'h-4 w-4' : 'h-5 w-5'}`} />
-              <span className={`font-semibold truncate ${isMinimized ? 'text-sm' : ''}`}>
-                {isMinimized ? 'Chat' : (view === 'list' ? 'Chat' : activeRoomName)}
+              <MessageCircle className="h-5 w-5 flex-shrink-0" />
+              <span className="font-semibold truncate">
+                {view === 'list' ? 'Chat' : activeRoomName}
               </span>
-              {!isMinimized && view === 'list' && onlineUsers.length > 0 && (
+              {view === 'list' && onlineUsers.length > 0 && (
                 <Badge variant="secondary" className="text-xs flex-shrink-0">
                   {onlineUsers.length} online
-                </Badge>
-              )}
-              {isMinimized && totalUnread > 0 && (
-                <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex items-center justify-center flex-shrink-0">
-                  {totalUnread > 9 ? '9+' : totalUnread}
                 </Badge>
               )}
             </div>
@@ -333,27 +367,25 @@ export default function LiveChat() {
               <Button
                 variant="ghost"
                 size="sm"
-                className={`p-0 text-primary-foreground hover:bg-primary-foreground/20 ${isMinimized ? 'h-6 w-6' : 'h-7 w-7'}`}
-                onClick={() => setIsMinimized(!isMinimized)}
+                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                onClick={() => setIsMinimized(true)}
               >
-                {isMinimized ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-4 w-4" />}
+                <Minimize2 className="h-4 w-4" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className={`p-0 text-primary-foreground hover:bg-primary-foreground/20 ${isMinimized ? 'h-6 w-6' : 'h-7 w-7'}`}
+                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                 onClick={() => setIsOpen(false)}
               >
-                <X className={isMinimized ? 'h-3.5 w-3.5' : 'h-4 w-4'} />
+                <X className="h-4 w-4" />
               </Button>
             </div>
           </div>
 
-          {!isMinimized && (
-            <>
-              {view === 'list' ? (
-                /* Conversation List */
-                <ScrollArea className="h-[calc(100%-56px)]">
+          {view === 'list' ? (
+            /* Conversation List */
+            <ScrollArea className="h-[calc(100%-56px)]">
                   <div className="p-2">
                     {/* General Chat */}
                     <button
@@ -575,8 +607,6 @@ export default function LiveChat() {
                   </form>
                 </>
               )}
-            </>
-          )}
         </div>
       )}
     </>
