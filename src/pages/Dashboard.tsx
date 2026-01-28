@@ -13,7 +13,9 @@ import {
   FileText,
   UserCheck,
   BarChart3,
-  PieChart
+  PieChart,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
@@ -98,6 +100,26 @@ export default function Dashboard() {
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Hide/show finances toggle (persisted in localStorage)
+  const [hideFinances, setHideFinances] = useState(() => {
+    const saved = localStorage.getItem('dashboard-hide-finances');
+    return saved === 'true';
+  });
+
+  const toggleHideFinances = () => {
+    setHideFinances(prev => {
+      const newValue = !prev;
+      localStorage.setItem('dashboard-hide-finances', String(newValue));
+      return newValue;
+    });
+  };
+
+  // Format currency with optional masking
+  const formatCurrency = (value: number, mask = false) => {
+    if (mask) return '••••••';
+    return `$${value.toLocaleString()}`;
+  };
 
   // Check if user is admin
   const isAdmin = authUser?.role?.toLowerCase() === 'admin';
@@ -445,37 +467,49 @@ export default function Dashboard() {
     return (
       <div className="space-y-6 animate-fade-in">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Panel de Administración
-          </h1>
-          <p className="text-muted-foreground">Resumen general del negocio</p>
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Panel de Administración
+            </h1>
+            <p className="text-muted-foreground">Resumen general del negocio</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleHideFinances}
+            className="gap-2 text-muted-foreground hover:text-foreground"
+            title={hideFinances ? 'Mostrar valores' : 'Ocultar valores'}
+          >
+            {hideFinances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            <span className="hidden sm:inline">{hideFinances ? 'Mostrar' : 'Ocultar'}</span>
+          </Button>
         </div>
 
         {/* Admin Stats Grid - 8 cards */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <StatCard
             title="Ingresos del Mes"
-            value={isLoading ? '...' : `$${monthlyIncome.toLocaleString()}`}
+            value={isLoading ? '...' : formatCurrency(monthlyIncome, hideFinances)}
             icon={DollarSign}
             variant="success"
           />
           <StatCard
             title="Gastos del Mes"
-            value={isLoading ? '...' : `$${monthlyExpenses.toLocaleString()}`}
+            value={isLoading ? '...' : formatCurrency(monthlyExpenses, hideFinances)}
             icon={TrendingUp}
             variant="warning"
           />
           <StatCard
             title="Beneficio Neto"
-            value={isLoading ? '...' : `$${(monthlyIncome - monthlyExpenses).toLocaleString()}`}
+            value={isLoading ? '...' : formatCurrency(monthlyIncome - monthlyExpenses, hideFinances)}
             icon={BarChart3}
             variant={monthlyIncome - monthlyExpenses >= 0 ? 'success' : 'warning'}
           />
           <StatCard
             title="MRR Servicios"
-            value={isLoading ? '...' : `$${servicesMRR.toLocaleString()}`}
-            subtitle={`${clientsWithServices} clientes`}
+            value={isLoading ? '...' : formatCurrency(servicesMRR, hideFinances)}
+            subtitle={hideFinances ? '•• clientes' : `${clientsWithServices} clientes`}
             icon={TrendingUp}
             variant="primary"
           />
@@ -528,19 +562,28 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="h-[250px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={incomeByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip
-                      formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
-                    />
-                    <Bar dataKey="income" name="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {hideFinances ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <EyeOff className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Valores ocultos</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={incomeByMonth}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                      <Tooltip
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))' }}
+                      />
+                      <Bar dataKey="income" name="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -602,7 +645,7 @@ export default function Dashboard() {
                         <span className="text-sm font-medium truncate max-w-[150px]">{client.name}</span>
                       </div>
                       <span className="text-sm font-semibold text-green-600">
-                        ${client.total.toLocaleString()}
+                        {hideFinances ? '••••••' : `$${client.total.toLocaleString()}`}
                       </span>
                     </div>
                   ))
@@ -643,7 +686,7 @@ export default function Dashboard() {
                     </div>
                     <div className="text-xl font-bold">{stage.count}</div>
                     <div className="text-xs text-muted-foreground">
-                      ${stage.value.toLocaleString()}
+                      {hideFinances ? '••••••' : `$${stage.value.toLocaleString()}`}
                     </div>
                   </div>
                 ))}
