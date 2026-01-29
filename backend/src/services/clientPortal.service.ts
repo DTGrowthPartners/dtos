@@ -1,6 +1,7 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import * as XLSX from 'xlsx';
+import { sendPortalInvitation } from './email.service';
 
 const prisma = new PrismaClient();
 
@@ -401,6 +402,16 @@ export const createInvitation = async (clientId: string, email: string, invitedB
     throw new Error('Este email ya está registrado como usuario del portal');
   }
 
+  // Obtener información del cliente
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
+    select: { name: true },
+  });
+
+  if (!client) {
+    throw new Error('Cliente no encontrado');
+  }
+
   // Crear token único
   const token = randomBytes(32).toString('hex');
 
@@ -408,7 +419,7 @@ export const createInvitation = async (clientId: string, email: string, invitedB
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
-  return prisma.portalInvitation.create({
+  const invitation = await prisma.portalInvitation.create({
     data: {
       clientId,
       email,
@@ -417,6 +428,18 @@ export const createInvitation = async (clientId: string, email: string, invitedB
       invitedBy,
     },
   });
+
+  // Enviar email de invitación
+  try {
+    await sendPortalInvitation(email, client.name, token);
+    console.log(`Invitation email sent to ${email}`);
+  } catch (emailError) {
+    console.error('Error sending invitation email:', emailError);
+    // No lanzamos error para no bloquear la creación de la invitación
+    // El admin puede reenviar el email manualmente si falla
+  }
+
+  return invitation;
 };
 
 export const validateInvitation = async (token: string) => {
