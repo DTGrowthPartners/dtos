@@ -26,9 +26,15 @@ export default function ProtectedRoute({ children, requiredPermission }: Protect
     return <Navigate to="/login" replace />;
   }
 
+  const userRole = user?.role?.toLowerCase();
+
+  // Client users should only access the portal, not the main app
+  if (userRole === 'client') {
+    return <Navigate to="/portal/dashboard" replace />;
+  }
+
   // Verificar permisos si se requiere uno específico
   if (requiredPermission) {
-    const userRole = user?.role?.toLowerCase();
     const userPermissions = user?.permissions || [];
 
     // Admin siempre tiene acceso a todo
