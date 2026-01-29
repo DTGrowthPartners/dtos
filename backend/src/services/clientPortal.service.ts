@@ -1,7 +1,26 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import * as XLSX from 'xlsx';
 
 const prisma = new PrismaClient();
+
+// ==================== SERVICIOS DEL SISTEMA ====================
+
+// Obtener todos los servicios del sistema (para seleccionar en el portal)
+export const getAllServices = async () => {
+  return prisma.service.findMany({
+    where: { status: 'active' },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      icon: true,
+      price: true,
+      currency: true,
+    },
+    orderBy: { order: 'asc' },
+  });
+};
 
 // ==================== PORTAL (para clientes) ====================
 
@@ -122,6 +141,11 @@ export const getClientSalesBudget = async (clientId: string, year: number) => {
 export const getClientServices = async (clientId: string) => {
   const services = await prisma.portalServiceStatus.findMany({
     where: { clientId },
+    include: {
+      service: {
+        select: { id: true, name: true, description: true, icon: true },
+      },
+    },
     orderBy: [{ status: 'asc' }, { updatedAt: 'desc' }],
   });
 
@@ -292,6 +316,7 @@ export const deleteSalesBudget = async (id: string) => {
 // ==================== CRUD Servicios ====================
 
 export const createServiceStatus = async (clientId: string, data: {
+  serviceId?: string; // ID del servicio del sistema (opcional)
   name: string;
   status?: string;
   progress?: number;
@@ -303,6 +328,7 @@ export const createServiceStatus = async (clientId: string, data: {
   return prisma.portalServiceStatus.create({
     data: {
       clientId,
+      serviceId: data.serviceId,
       name: data.name,
       status: data.status || 'active',
       progress: data.progress || 0,
@@ -311,10 +337,16 @@ export const createServiceStatus = async (clientId: string, data: {
       deliverables: data.deliverables,
       notes: data.notes,
     },
+    include: {
+      service: {
+        select: { id: true, name: true, description: true, icon: true },
+      },
+    },
   });
 };
 
 export const updateServiceStatus = async (id: string, data: {
+  serviceId?: string | null;
   name?: string;
   status?: string;
   progress?: number;
@@ -326,6 +358,11 @@ export const updateServiceStatus = async (id: string, data: {
   return prisma.portalServiceStatus.update({
     where: { id },
     data,
+    include: {
+      service: {
+        select: { id: true, name: true, description: true, icon: true },
+      },
+    },
   });
 };
 
@@ -467,5 +504,85 @@ export const listPendingInvitations = async (clientId: string) => {
       expiresAt: { gt: new Date() },
     },
     orderBy: { createdAt: 'desc' },
+  });
+};
+
+// ==================== EXCEL FILES ====================
+
+// Subir y parsear archivo Excel
+export const uploadExcelFile = async (
+  clientId: string,
+  uploadedBy: string,
+  fileBuffer: Buffer,
+  fileName: string,
+  name: string,
+  description?: string
+) => {
+  // Parsear el archivo Excel
+  const workbook = XLSX.read(fileBuffer, { type: 'buffer' });
+  const sheetNames = workbook.SheetNames;
+
+  // Convertir cada hoja a JSON
+  const data: Record<string, any[]> = {};
+  for (const sheetName of sheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    data[sheetName] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+  }
+
+  return prisma.portalExcelFile.create({
+    data: {
+      clientId,
+      name,
+      fileName,
+      data: data as any,
+      sheetNames,
+      description,
+      uploadedBy,
+    },
+  });
+};
+
+// Obtener archivos Excel de un cliente
+export const getClientExcelFiles = async (clientId: string) => {
+  return prisma.portalExcelFile.findMany({
+    where: { clientId },
+    select: {
+      id: true,
+      name: true,
+      fileName: true,
+      sheetNames: true,
+      description: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+  });
+};
+
+// Obtener un archivo Excel específico con datos
+export const getExcelFile = async (id: string, clientId?: string) => {
+  const where: Prisma.PortalExcelFileWhereInput = { id };
+  if (clientId) where.clientId = clientId;
+
+  return prisma.portalExcelFile.findFirst({
+    where,
+  });
+};
+
+// Eliminar archivo Excel
+export const deleteExcelFile = async (id: string) => {
+  return prisma.portalExcelFile.delete({
+    where: { id },
+  });
+};
+
+// Actualizar archivo Excel
+export const updateExcelFile = async (id: string, data: {
+  name?: string;
+  description?: string;
+}) => {
+  return prisma.portalExcelFile.update({
+    where: { id },
+    data,
   });
 };

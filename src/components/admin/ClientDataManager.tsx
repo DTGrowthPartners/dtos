@@ -39,6 +39,10 @@ import {
   Trash2,
   UserPlus,
   Mail,
+  FileSpreadsheet,
+  Upload,
+  Eye,
+  X,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
@@ -80,6 +84,8 @@ interface ClientDetail {
   }>;
   portalServices: Array<{
     id: string;
+    serviceId: string | null;
+    service: { id: string; name: string; description: string | null; icon: string } | null;
     name: string;
     status: string;
     progress: number;
@@ -93,6 +99,25 @@ interface ClientDetail {
     expiresAt: string;
     createdAt: string;
   }>;
+}
+
+interface SystemService {
+  id: string;
+  name: string;
+  description: string | null;
+  icon: string;
+  price: number;
+  currency: string;
+}
+
+interface ExcelFile {
+  id: string;
+  name: string;
+  fileName: string;
+  sheetNames: string[];
+  description: string | null;
+  createdAt: string;
+  data?: Record<string, any[][]>;
 }
 
 interface ClientDataManagerProps {
@@ -150,7 +175,9 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
   // Service form state
   const [serviceDialogOpen, setServiceDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
+  const [systemServices, setSystemServices] = useState<SystemService[]>([]);
   const [serviceForm, setServiceForm] = useState({
+    serviceId: '',
     name: '',
     status: 'active',
     progress: '',
@@ -159,9 +186,44 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
     notes: '',
   });
 
+  // Excel files state
+  const [excelFiles, setExcelFiles] = useState<ExcelFile[]>([]);
+  const [excelDialogOpen, setExcelDialogOpen] = useState(false);
+  const [excelViewerOpen, setExcelViewerOpen] = useState(false);
+  const [selectedExcelFile, setSelectedExcelFile] = useState<ExcelFile | null>(null);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const [excelForm, setExcelForm] = useState({
+    name: '',
+    description: '',
+    file: null as File | null,
+  });
+
   useEffect(() => {
     fetchClientDetail();
+    fetchSystemServices();
+    fetchExcelFiles();
   }, [clientId]);
+
+  const fetchSystemServices = async () => {
+    try {
+      const response = await apiClient.get<SystemService[]>('/api/client-portal/services');
+      setSystemServices(response);
+    } catch (err) {
+      console.error('Error fetching system services:', err);
+    }
+  };
+
+  const fetchExcelFiles = async () => {
+    try {
+      const response = await apiClient.get<ExcelFile[]>(
+        `/api/client-portal/admin/clients/${clientId}/excel`
+      );
+      setExcelFiles(response);
+    } catch (err) {
+      console.error('Error fetching excel files:', err);
+    }
+  };
 
   const fetchClientDetail = async () => {
     try {
@@ -332,6 +394,7 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
     if (service) {
       setEditingService(service);
       setServiceForm({
+        serviceId: service.serviceId || '',
         name: service.name,
         status: service.status,
         progress: service.progress.toString(),
@@ -342,6 +405,7 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
     } else {
       setEditingService(null);
       setServiceForm({
+        serviceId: '',
         name: '',
         status: 'active',
         progress: '0',
@@ -353,9 +417,19 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
     setServiceDialogOpen(true);
   };
 
+  const handleServiceSelect = (serviceId: string) => {
+    const selectedService = systemServices.find(s => s.id === serviceId);
+    setServiceForm({
+      ...serviceForm,
+      serviceId,
+      name: selectedService?.name || serviceForm.name,
+    });
+  };
+
   const saveService = async () => {
     try {
       const data = {
+        serviceId: serviceForm.serviceId || undefined,
         name: serviceForm.name,
         status: serviceForm.status,
         progress: parseInt(serviceForm.progress) || 0,
@@ -399,6 +473,89 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
       await apiClient.delete(`/api/client-portal/admin/invitations/${id}`);
       toast({ title: 'Invitación eliminada' });
       fetchClientDetail();
+    } catch (err) {
+      toast({ title: 'Error', variant: 'destructive' });
+    }
+  };
+
+  // Excel handlers
+  const openExcelDialog = () => {
+    setExcelForm({ name: '', description: '', file: null });
+    setExcelDialogOpen(true);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setExcelForm({
+        ...excelForm,
+        file,
+        name: excelForm.name || file.name.replace(/\.[^/.]+$/, ''),
+      });
+    }
+  };
+
+  const uploadExcel = async () => {
+    if (!excelForm.file) return;
+
+    try {
+      setUploadingExcel(true);
+      const formData = new FormData();
+      formData.append('file', excelForm.file);
+      formData.append('name', excelForm.name);
+      if (excelForm.description) {
+        formData.append('description', excelForm.description);
+      }
+
+      await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client-portal/admin/clients/${clientId}/excel`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: formData,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.message || 'Error al subir archivo');
+        }
+        return res.json();
+      });
+
+      toast({ title: 'Archivo Excel subido correctamente' });
+      setExcelDialogOpen(false);
+      fetchExcelFiles();
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Error al subir archivo Excel',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingExcel(false);
+    }
+  };
+
+  const viewExcelFile = async (file: ExcelFile) => {
+    try {
+      const response = await apiClient.get<ExcelFile>(`/api/client-portal/admin/excel/${file.id}`);
+      setSelectedExcelFile(response);
+      setSelectedSheet(response.sheetNames[0] || '');
+      setExcelViewerOpen(true);
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: 'Error al cargar el archivo',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const deleteExcelFile = async (id: string) => {
+    if (!confirm('¿Eliminar este archivo Excel?')) return;
+    try {
+      await apiClient.delete(`/api/client-portal/admin/excel/${id}`);
+      toast({ title: 'Archivo eliminado' });
+      fetchExcelFiles();
     } catch (err) {
       toast({ title: 'Error', variant: 'destructive' });
     }
@@ -515,7 +672,7 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
 
       {/* Data Management Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 w-full max-w-md">
+        <TabsList className="grid grid-cols-4 w-full max-w-xl">
           <TabsTrigger value="campaigns" className="flex items-center gap-2">
             <Target className="h-4 w-4" />
             Campañas
@@ -527,6 +684,10 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
           <TabsTrigger value="services" className="flex items-center gap-2">
             <Briefcase className="h-4 w-4" />
             Servicios
+          </TabsTrigger>
+          <TabsTrigger value="excel" className="flex items-center gap-2">
+            <FileSpreadsheet className="h-4 w-4" />
+            Reportes
           </TabsTrigger>
         </TabsList>
 
@@ -704,7 +865,16 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
                   <TableBody>
                     {client.portalServices.map((service) => (
                       <TableRow key={service.id}>
-                        <TableCell className="font-medium">{service.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {service.service ? (
+                            <div className="flex items-center gap-2">
+                              <Briefcase className="h-4 w-4 text-muted-foreground" />
+                              {service.name}
+                            </div>
+                          ) : (
+                            service.name
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge
                             className={
@@ -737,6 +907,74 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
                             size="icon"
                             className="text-destructive"
                             onClick={() => deleteService(service.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Excel/Reports Tab */}
+        <TabsContent value="excel">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Reportes Excel</CardTitle>
+                <CardDescription>Archivos Excel para visualizar en el portal del cliente</CardDescription>
+              </div>
+              <Button onClick={openExcelDialog}>
+                <Upload className="h-4 w-4 mr-2" />
+                Subir Excel
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {excelFiles.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileSpreadsheet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No hay archivos Excel cargados</p>
+                  <p className="text-sm">Sube un archivo Excel para que el cliente pueda verlo en su portal</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nombre</TableHead>
+                      <TableHead>Archivo</TableHead>
+                      <TableHead>Hojas</TableHead>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead className="text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {excelFiles.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">{file.name}</TableCell>
+                        <TableCell className="text-muted-foreground">{file.fileName}</TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">{file.sheetNames.length} hoja(s)</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(file.createdAt).toLocaleDateString('es-ES')}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => viewExcelFile(file)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-destructive"
+                            onClick={() => deleteExcelFile(file.id)}
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -985,6 +1223,28 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="space-y-2 col-span-2">
+              <Label>Seleccionar Servicio del Sistema</Label>
+              <Select
+                value={serviceForm.serviceId}
+                onValueChange={handleServiceSelect}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar servicio existente (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">-- Servicio personalizado --</SelectItem>
+                  {systemServices.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Puedes seleccionar un servicio existente o escribir uno personalizado
+              </p>
+            </div>
+            <div className="space-y-2 col-span-2">
               <Label>Nombre del Servicio</Label>
               <Input
                 value={serviceForm.name}
@@ -1051,6 +1311,97 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
               Guardar
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Excel Upload Dialog */}
+      <Dialog open={excelDialogOpen} onOpenChange={setExcelDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Subir Archivo Excel</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Archivo Excel</Label>
+              <Input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileChange}
+              />
+              <p className="text-xs text-muted-foreground">
+                Formatos permitidos: .xlsx, .xls, .csv (máx 10MB)
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Nombre del reporte</Label>
+              <Input
+                value={excelForm.name}
+                onChange={(e) => setExcelForm({ ...excelForm, name: e.target.value })}
+                placeholder="Ej: Reporte de Ventas Q1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción (opcional)</Label>
+              <Textarea
+                value={excelForm.description}
+                onChange={(e) => setExcelForm({ ...excelForm, description: e.target.value })}
+                placeholder="Descripción del reporte..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExcelDialogOpen(false)} disabled={uploadingExcel}>
+              Cancelar
+            </Button>
+            <Button onClick={uploadExcel} disabled={!excelForm.file || !excelForm.name || uploadingExcel}>
+              {uploadingExcel ? 'Subiendo...' : 'Subir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Excel Viewer Dialog */}
+      <Dialog open={excelViewerOpen} onOpenChange={setExcelViewerOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh]">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle>{selectedExcelFile?.name}</DialogTitle>
+              {selectedExcelFile && selectedExcelFile.sheetNames.length > 1 && (
+                <Select value={selectedSheet} onValueChange={setSelectedSheet}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {selectedExcelFile.sheetNames.map((sheet) => (
+                      <SelectItem key={sheet} value={sheet}>
+                        {sheet}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          </DialogHeader>
+          <div className="overflow-auto max-h-[70vh]">
+            {selectedExcelFile?.data && selectedSheet && (
+              <table className="w-full border-collapse text-sm">
+                <tbody>
+                  {(selectedExcelFile.data[selectedSheet] || []).map((row, rowIndex) => (
+                    <tr key={rowIndex} className={rowIndex === 0 ? 'bg-muted font-medium' : ''}>
+                      {row.map((cell: any, cellIndex: number) => (
+                        <td
+                          key={cellIndex}
+                          className="border border-border px-3 py-2 whitespace-nowrap"
+                        >
+                          {cell !== null && cell !== undefined ? String(cell) : ''}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -250,3 +250,107 @@ export const listPendingInvitations = async (req: Request, res: Response) => {
     res.status(500).json({ message: error instanceof Error ? error.message : 'Error al listar invitaciones' });
   }
 };
+
+// ==================== SERVICIOS DEL SISTEMA ====================
+
+export const getAllServices = async (req: Request, res: Response) => {
+  try {
+    const services = await ClientPortalService.getAllServices();
+    res.json(services);
+  } catch (error) {
+    console.error('Error getting services:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al obtener servicios' });
+  }
+};
+
+// ==================== EXCEL FILES ====================
+
+export const uploadExcelFile = async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+    const userId = (req as any).user.userId;
+    const { name, description } = req.body;
+
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) {
+      return res.status(400).json({ message: 'No se proporcionó ningún archivo' });
+    }
+
+    const excelFile = await ClientPortalService.uploadExcelFile(
+      clientId,
+      userId,
+      file.buffer,
+      file.originalname,
+      name || file.originalname.replace(/\.[^/.]+$/, ''),
+      description
+    );
+
+    res.status(201).json(excelFile);
+  } catch (error) {
+    console.error('Error uploading Excel file:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al subir archivo Excel' });
+  }
+};
+
+export const getClientExcelFiles = async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+    const files = await ClientPortalService.getClientExcelFiles(clientId);
+    res.json(files);
+  } catch (error) {
+    console.error('Error getting Excel files:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al obtener archivos Excel' });
+  }
+};
+
+export const getExcelFile = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    // Si es portal, usar el clientId del usuario
+    const clientId = (req as any).portalClientId || undefined;
+    const file = await ClientPortalService.getExcelFile(id, clientId);
+
+    if (!file) {
+      return res.status(404).json({ message: 'Archivo no encontrado' });
+    }
+
+    res.json(file);
+  } catch (error) {
+    console.error('Error getting Excel file:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al obtener archivo Excel' });
+  }
+};
+
+export const deleteExcelFile = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await ClientPortalService.deleteExcelFile(id);
+    res.json({ message: 'Archivo eliminado' });
+  } catch (error) {
+    console.error('Error deleting Excel file:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al eliminar archivo' });
+  }
+};
+
+export const updateExcelFile = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const file = await ClientPortalService.updateExcelFile(id, req.body);
+    res.json(file);
+  } catch (error) {
+    console.error('Error updating Excel file:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al actualizar archivo' });
+  }
+};
+
+// Portal: Obtener archivos Excel del cliente logueado
+export const getPortalExcelFiles = async (req: Request, res: Response) => {
+  try {
+    const clientId = (req as any).portalClientId;
+    const files = await ClientPortalService.getClientExcelFiles(clientId);
+    res.json(files);
+  } catch (error) {
+    console.error('Error getting portal Excel files:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al obtener archivos' });
+  }
+};

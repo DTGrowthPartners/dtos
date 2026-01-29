@@ -9,6 +9,7 @@ import {
   Menu,
   X,
   ChevronDown,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
   { title: 'Campañas', path: '/portal/campaigns', icon: Target },
   { title: 'Presupuesto', path: '/portal/budget', icon: DollarSign },
   { title: 'Servicios', path: '/portal/services', icon: Briefcase },
+  { title: 'Reportes', path: '/portal/reports', icon: FileSpreadsheet },
 ];
 
 interface ClientInfo {

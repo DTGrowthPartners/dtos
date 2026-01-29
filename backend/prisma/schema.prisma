@@ -85,6 +85,7 @@ model Client {
   portalBudgets    PortalSalesBudget[]
   portalServices   PortalServiceStatus[]
   portalInvitations PortalInvitation[]
+  portalExcelFiles PortalExcelFile[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -114,6 +115,7 @@ model Service {
   createdByUser User?   @relation("ServiceCreatedBy", fields: [createdBy], references: [id])
   clients     ClientService[]
   deals       Deal[]    // CRM: Deals interesados en este servicio
+  portalStatuses PortalServiceStatus[] // Portal: estado del servicio por cliente
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -580,6 +582,10 @@ model PortalServiceStatus {
   clientId        String
   client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  // Relación con servicio del sistema (opcional para servicios personalizados)
+  serviceId       String?
+  service         Service?  @relation(fields: [serviceId], references: [id])
+
   name            String    // SEO, Social Media, Email Marketing, Web Development, etc.
   status          String    @default("active") // active, paused, pending, completed
   progress        Int       @default(0) // 0-100
@@ -587,6 +593,23 @@ model PortalServiceStatus {
   endDate         DateTime?
   deliverables    String?   // JSON array of deliverables with status
   notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Archivos Excel subidos para visualización en el portal
+model PortalExcelFile {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  name            String    // Nombre del archivo/reporte
+  fileName        String    // Nombre original del archivo
+  data            Json      // Datos del Excel parseados como JSON
+  sheetNames      String[]  // Nombres de las hojas
+  description     String?
+  uploadedBy      String    // userId del admin que subió
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

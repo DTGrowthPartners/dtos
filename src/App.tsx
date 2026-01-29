@@ -33,6 +33,7 @@ import ClientDashboard from "@/pages/portal/ClientDashboard";
 import ClientCampaigns from "@/pages/portal/ClientCampaigns";
 import ClientBudgetSales from "@/pages/portal/ClientBudgetSales";
 import ClientServices from "@/pages/portal/ClientServices";
+import ClientReports from "@/pages/portal/ClientReports";
 
 // Admin
 import ClientsPortalManagement from "@/pages/admin/ClientsPortalManagement";
@@ -57,6 +58,7 @@ const App = () => (
               <Route path="/portal/campaigns" element={<ClientCampaigns />} />
               <Route path="/portal/budget" element={<ClientBudgetSales />} />
               <Route path="/portal/services" element={<ClientServices />} />
+              <Route path="/portal/reports" element={<ClientReports />} />
             </Route>
 
             {/* Main App Routes */}
