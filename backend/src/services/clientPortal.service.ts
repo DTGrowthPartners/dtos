@@ -1,7 +1,8 @@
 import { PrismaClient, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
 import * as XLSX from 'xlsx';
-import { sendPortalInvitation } from './email.service';
+import { sendClientAccessEmail } from './email.service';
+import { admin } from '../app';
 
 const prisma = new PrismaClient();
 
@@ -373,33 +374,16 @@ export const deleteServiceStatus = async (id: string) => {
   });
 };
 
-// ==================== INVITACIONES ====================
+// ==================== CREAR ACCESO AL PORTAL ====================
 
-export const createInvitation = async (clientId: string, email: string, invitedBy: string) => {
-  // Verificar si ya existe una invitación pendiente para este email
-  const existingInvitation = await prisma.portalInvitation.findFirst({
-    where: {
-      clientId,
-      email,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
-    },
-  });
-
-  if (existingInvitation) {
-    throw new Error('Ya existe una invitación pendiente para este email');
-  }
-
-  // Verificar si el email ya está registrado como usuario del portal
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      email,
-      portalClientId: clientId,
-    },
+export const createClientAccess = async (clientId: string, email: string, firstName: string, lastName: string, createdBy: string) => {
+  // Verificar si el email ya está registrado
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
   });
 
   if (existingUser) {
-    throw new Error('Este email ya está registrado como usuario del portal');
+    throw new Error('Este email ya está registrado en el sistema');
   }
 
   // Obtener información del cliente
@@ -412,119 +396,149 @@ export const createInvitation = async (clientId: string, email: string, invitedB
     throw new Error('Cliente no encontrado');
   }
 
-  // Crear token único
-  const token = randomBytes(32).toString('hex');
-
-  // Expira en 7 días
-  const expiresAt = new Date();
-  expiresAt.setDate(expiresAt.getDate() + 7);
-
-  const invitation = await prisma.portalInvitation.create({
-    data: {
-      clientId,
-      email,
-      token,
-      expiresAt,
-      invitedBy,
-    },
-  });
-
-  // Enviar email de invitación
-  try {
-    await sendPortalInvitation(email, client.name, token);
-    console.log(`Invitation email sent to ${email}`);
-  } catch (emailError) {
-    console.error('Error sending invitation email:', emailError);
-    // No lanzamos error para no bloquear la creación de la invitación
-    // El admin puede reenviar el email manualmente si falla
-  }
-
-  return invitation;
-};
-
-export const validateInvitation = async (token: string) => {
-  const invitation = await prisma.portalInvitation.findUnique({
-    where: { token },
-    include: {
-      client: {
-        select: { id: true, name: true, logo: true },
-      },
-    },
-  });
-
-  if (!invitation) {
-    throw new Error('Invitación no encontrada');
-  }
-
-  if (invitation.usedAt) {
-    throw new Error('Esta invitación ya fue utilizada');
-  }
-
-  if (invitation.expiresAt < new Date()) {
-    throw new Error('Esta invitación ha expirado');
-  }
-
-  return invitation;
-};
-
-export const acceptInvitation = async (token: string, userData: {
-  firebaseUid: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  password?: string;
-}) => {
-  // Validar la invitación
-  const invitation = await validateInvitation(token);
-
-  // Verificar que el email coincide
-  if (invitation.email.toLowerCase() !== userData.email.toLowerCase()) {
-    throw new Error('El email no coincide con la invitación');
-  }
-
   // Obtener el rol "client"
-  const clientRole = await prisma.role.findUnique({
-    where: { id: 'client' },
+  let clientRole = await prisma.role.findFirst({
+    where: { name: 'client' },
   });
 
   if (!clientRole) {
-    throw new Error('Rol de cliente no encontrado');
+    // Crear el rol si no existe
+    clientRole = await prisma.role.create({
+      data: {
+        name: 'client',
+        description: 'Usuario del portal de clientes',
+        permissions: ['portal:read'],
+      },
+    });
   }
 
-  // Crear usuario
+  // Generar contraseña temporal aleatoria
+  const tempPassword = randomBytes(16).toString('hex');
+
+  // Crear usuario en Firebase
+  let firebaseUser;
+  try {
+    firebaseUser = await admin.auth().createUser({
+      email,
+      password: tempPassword,
+      displayName: `${firstName} ${lastName}`,
+    });
+  } catch (firebaseError: any) {
+    if (firebaseError.code === 'auth/email-already-exists') {
+      // Si el usuario ya existe en Firebase, obtenerlo
+      firebaseUser = await admin.auth().getUserByEmail(email);
+    } else {
+      throw new Error(`Error al crear usuario en Firebase: ${firebaseError.message}`);
+    }
+  }
+
+  // Crear usuario en nuestra base de datos
   const user = await prisma.user.create({
     data: {
-      email: userData.email,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      password: userData.password,
-      firebaseUid: userData.firebaseUid,
+      email,
+      firstName,
+      lastName,
+      firebaseUid: firebaseUser.uid,
       roleId: clientRole.id,
-      portalClientId: invitation.clientId,
+      portalClientId: clientId,
+    },
+    include: {
+      role: true,
     },
   });
 
-  // Marcar invitación como usada
-  await prisma.portalInvitation.update({
-    where: { id: invitation.id },
-    data: { usedAt: new Date() },
-  });
+  // Generar link de restablecimiento de contraseña
+  const frontendUrl = process.env.FRONTEND_URL || 'https://os.dtgrowthpartners.com';
+  let passwordResetLink;
+  try {
+    passwordResetLink = await admin.auth().generatePasswordResetLink(email, {
+      url: `${frontendUrl}/login`,
+    });
+  } catch (linkError) {
+    console.error('Error generating password reset link:', linkError);
+    // Usar link genérico si falla
+    passwordResetLink = `${frontendUrl}/login`;
+  }
 
-  return user;
+  // Enviar email con credenciales
+  try {
+    await sendClientAccessEmail(email, firstName, client.name, passwordResetLink);
+    console.log(`Access email sent to ${email}`);
+  } catch (emailError) {
+    console.error('Error sending access email:', emailError);
+    // No lanzamos error para no bloquear la creación del usuario
+  }
+
+  return {
+    user,
+    passwordResetLink,
+  };
 };
 
-export const deleteInvitation = async (id: string) => {
-  return prisma.portalInvitation.delete({
-    where: { id },
+// Reenviar email de acceso
+export const resendClientAccessEmail = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      portalClient: { select: { name: true } },
+    },
+  });
+
+  if (!user || !user.portalClientId) {
+    throw new Error('Usuario no encontrado o no es un usuario del portal');
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL || 'https://os.dtgrowthpartners.com';
+  const passwordResetLink = await admin.auth().generatePasswordResetLink(user.email, {
+    url: `${frontendUrl}/login`,
+  });
+
+  await sendClientAccessEmail(
+    user.email,
+    user.firstName,
+    user.portalClient?.name || 'Portal de Clientes',
+    passwordResetLink
+  );
+
+  return { success: true };
+};
+
+// Eliminar usuario del portal
+export const deletePortalUser = async (userId: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new Error('Usuario no encontrado');
+  }
+
+  // Eliminar de Firebase si tiene firebaseUid
+  if (user.firebaseUid) {
+    try {
+      await admin.auth().deleteUser(user.firebaseUid);
+    } catch (firebaseError) {
+      console.error('Error deleting user from Firebase:', firebaseError);
+      // Continuar con la eliminación en nuestra BD
+    }
+  }
+
+  // Eliminar de nuestra base de datos
+  return prisma.user.delete({
+    where: { id: userId },
   });
 };
 
-export const listPendingInvitations = async (clientId: string) => {
-  return prisma.portalInvitation.findMany({
-    where: {
-      clientId,
-      usedAt: null,
-      expiresAt: { gt: new Date() },
+// Listar usuarios del portal de un cliente
+export const listPortalUsers = async (clientId: string) => {
+  return prisma.user.findMany({
+    where: { portalClientId: clientId },
+    select: {
+      id: true,
+      email: true,
+      firstName: true,
+      lastName: true,
+      createdAt: true,
     },
     orderBy: { createdAt: 'desc' },
   });

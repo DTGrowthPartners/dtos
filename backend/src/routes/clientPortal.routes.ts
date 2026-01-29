@@ -24,14 +24,6 @@ const upload = multer({
   },
 });
 
-// ==================== RUTAS PÚBLICAS (para registro) ====================
-
-// Validar invitación (sin auth)
-router.get('/invitations/validate/:token', ClientPortalController.validateInvitation);
-
-// Aceptar invitación y crear cuenta (sin auth, pero requiere token válido)
-router.post('/invitations/accept', ClientPortalController.acceptInvitation);
-
 // ==================== RUTAS DEL PORTAL (para clientes) ====================
 
 // Dashboard del cliente
@@ -68,10 +60,11 @@ router.post('/admin/clients/:clientId/services', authMiddleware, requireAdminRol
 router.put('/admin/services/:id', authMiddleware, requireAdminRole, ClientPortalController.updateServiceStatus);
 router.delete('/admin/services/:id', authMiddleware, requireAdminRole, ClientPortalController.deleteServiceStatus);
 
-// --- Invitaciones ---
-router.get('/admin/clients/:clientId/invitations', authMiddleware, requireAdminRole, ClientPortalController.listPendingInvitations);
-router.post('/admin/clients/:clientId/invite', authMiddleware, requireAdminRole, ClientPortalController.createInvitation);
-router.delete('/admin/invitations/:id', authMiddleware, requireAdminRole, ClientPortalController.deleteInvitation);
+// --- Usuarios del Portal ---
+router.get('/admin/clients/:clientId/users', authMiddleware, requireAdminRole, ClientPortalController.listPortalUsers);
+router.post('/admin/clients/:clientId/access', authMiddleware, requireAdminRole, ClientPortalController.createClientAccess);
+router.post('/admin/users/:userId/resend-access', authMiddleware, requireAdminRole, ClientPortalController.resendClientAccessEmail);
+router.delete('/admin/users/:userId', authMiddleware, requireAdminRole, ClientPortalController.deletePortalUser);
 
 // --- Servicios del Sistema ---
 router.get('/services', authMiddleware, ClientPortalController.getAllServices);

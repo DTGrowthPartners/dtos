@@ -93,12 +93,6 @@ interface ClientDetail {
     endDate: string | null;
     notes: string | null;
   }>;
-  portalInvitations: Array<{
-    id: string;
-    email: string;
-    expiresAt: string;
-    createdAt: string;
-  }>;
 }
 
 interface SystemService {
@@ -122,7 +116,6 @@ interface ExcelFile {
 
 interface ClientDataManagerProps {
   clientId: string;
-  onInvite: (clientId: string) => void;
 }
 
 const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -136,11 +129,20 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps) {
+export function ClientDataManager({ clientId }: ClientDataManagerProps) {
   const { toast } = useToast();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('campaigns');
+
+  // Access dialog state
+  const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+  const [creatingAccess, setCreatingAccess] = useState(false);
+  const [accessForm, setAccessForm] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+  });
 
   // Campaign form state
   const [campaignDialogOpen, setCampaignDialogOpen] = useState(false);
@@ -467,14 +469,61 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
     }
   };
 
-  const deleteInvitation = async (id: string) => {
-    if (!confirm('¿Eliminar esta invitación?')) return;
+  // Access handlers
+  const openAccessDialog = () => {
+    setAccessForm({ email: '', firstName: '', lastName: '' });
+    setAccessDialogOpen(true);
+  };
+
+  const createAccess = async () => {
     try {
-      await apiClient.delete(`/api/client-portal/admin/invitations/${id}`);
-      toast({ title: 'Invitación eliminada' });
+      setCreatingAccess(true);
+      await apiClient.post(`/api/client-portal/admin/clients/${clientId}/access`, accessForm);
+      toast({
+        title: 'Acceso creado',
+        description: 'Se ha enviado un email al usuario con las instrucciones para establecer su contraseña',
+      });
+      setAccessDialogOpen(false);
       fetchClientDetail();
     } catch (err) {
-      toast({ title: 'Error', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Error al crear acceso',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingAccess(false);
+    }
+  };
+
+  const resendAccessEmail = async (userId: string) => {
+    try {
+      await apiClient.post(`/api/client-portal/admin/users/${userId}/resend-access`, {});
+      toast({
+        title: 'Email reenviado',
+        description: 'Se ha enviado nuevamente el email de acceso',
+      });
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Error al reenviar email',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const deletePortalUser = async (userId: string) => {
+    if (!confirm('¿Eliminar este usuario del portal? Esta acción no se puede deshacer.')) return;
+    try {
+      await apiClient.delete(`/api/client-portal/admin/users/${userId}`);
+      toast({ title: 'Usuario eliminado' });
+      fetchClientDetail();
+    } catch (err) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Error al eliminar usuario',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -603,16 +652,16 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
                 <p className="text-muted-foreground">{client.email}</p>
               </div>
             </div>
-            <Button onClick={() => onInvite(clientId)}>
+            <Button onClick={openAccessDialog}>
               <UserPlus className="h-4 w-4 mr-2" />
-              Invitar Usuario
+              Dar Acceso
             </Button>
           </div>
         </CardContent>
       </Card>
 
       {/* Users Section */}
-      {(client.portalUsers.length > 0 || client.portalInvitations.length > 0) && (
+      {client.portalUsers.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -621,51 +670,39 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {client.portalUsers.length > 0 && (
-              <div className="space-y-2 mb-4">
-                {client.portalUsers.map((user) => (
-                  <div
-                    key={user.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                  >
-                    <div>
-                      <p className="font-medium">{user.firstName} {user.lastName}</p>
-                      <p className="text-sm text-muted-foreground">{user.email}</p>
-                    </div>
+            <div className="space-y-2">
+              {client.portalUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                >
+                  <div>
+                    <p className="font-medium">{user.firstName} {user.lastName}</p>
+                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
                     <Badge>Activo</Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => resendAccessEmail(user.id)}
+                      title="Reenviar email de acceso"
+                    >
+                      <Mail className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive"
+                      onClick={() => deletePortalUser(user.id)}
+                      title="Eliminar usuario"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                ))}
-              </div>
-            )}
-            {client.portalInvitations.length > 0 && (
-              <div>
-                <p className="text-sm font-medium mb-2">Invitaciones pendientes</p>
-                {client.portalInvitations.map((inv) => (
-                  <div
-                    key={inv.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-yellow-500/10 border border-yellow-200"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Mail className="h-4 w-4 text-yellow-600" />
-                      <span>{inv.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">
-                        Expira: {new Date(inv.expiresAt).toLocaleDateString('es-ES')}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive"
-                        onClick={() => deleteInvitation(inv.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -1402,6 +1439,58 @@ export function ClientDataManager({ clientId, onInvite }: ClientDataManagerProps
               </table>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Access Dialog */}
+      <Dialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dar Acceso al Portal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-muted-foreground">
+              Ingresa los datos del usuario. Se creará su cuenta y recibirá un email con las instrucciones para establecer su contraseña.
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Nombre</Label>
+                <Input
+                  value={accessForm.firstName}
+                  onChange={(e) => setAccessForm({ ...accessForm, firstName: e.target.value })}
+                  placeholder="Juan"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Apellido</Label>
+                <Input
+                  value={accessForm.lastName}
+                  onChange={(e) => setAccessForm({ ...accessForm, lastName: e.target.value })}
+                  placeholder="Pérez"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Correo electrónico</Label>
+              <Input
+                type="email"
+                value={accessForm.email}
+                onChange={(e) => setAccessForm({ ...accessForm, email: e.target.value })}
+                placeholder="cliente@empresa.com"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAccessDialogOpen(false)} disabled={creatingAccess}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={createAccess}
+              disabled={!accessForm.email || !accessForm.firstName || !accessForm.lastName || creatingAccess}
+            >
+              {creatingAccess ? 'Creando...' : 'Crear Acceso'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

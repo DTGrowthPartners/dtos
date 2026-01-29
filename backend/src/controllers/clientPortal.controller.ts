@@ -186,68 +186,59 @@ export const deleteServiceStatus = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== INVITACIONES ====================
+// ==================== ACCESO AL PORTAL ====================
 
-export const createInvitation = async (req: Request, res: Response) => {
+export const createClientAccess = async (req: Request, res: Response) => {
   try {
     const { clientId } = req.params;
-    const { email } = req.body;
+    const { email, firstName, lastName } = req.body;
     const userId = (req as any).user.userId;
-    const invitation = await ClientPortalService.createInvitation(clientId, email, userId);
-    res.status(201).json(invitation);
-  } catch (error) {
-    console.error('Error creating invitation:', error);
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al crear invitación' });
-  }
-};
 
-export const validateInvitation = async (req: Request, res: Response) => {
-  try {
-    const { token } = req.params;
-    const invitation = await ClientPortalService.validateInvitation(token);
-    res.json(invitation);
-  } catch (error) {
-    console.error('Error validating invitation:', error);
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Invitación inválida' });
-  }
-};
+    if (!email || !firstName || !lastName) {
+      return res.status(400).json({ message: 'Email, nombre y apellido son requeridos' });
+    }
 
-export const acceptInvitation = async (req: Request, res: Response) => {
-  try {
-    const { token, firebaseUid, email, firstName, lastName, password } = req.body;
-    const user = await ClientPortalService.acceptInvitation(token, {
-      firebaseUid,
-      email,
-      firstName,
-      lastName,
-      password,
+    const result = await ClientPortalService.createClientAccess(clientId, email, firstName, lastName, userId);
+    res.status(201).json({
+      message: 'Acceso creado exitosamente',
+      user: result.user,
     });
-    res.status(201).json({ message: 'Cuenta creada exitosamente', userId: user.id });
   } catch (error) {
-    console.error('Error accepting invitation:', error);
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al aceptar invitación' });
+    console.error('Error creating client access:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al crear acceso' });
   }
 };
 
-export const deleteInvitation = async (req: Request, res: Response) => {
+export const resendClientAccessEmail = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
-    await ClientPortalService.deleteInvitation(id);
-    res.json({ message: 'Invitación eliminada' });
+    const { userId } = req.params;
+    await ClientPortalService.resendClientAccessEmail(userId);
+    res.json({ message: 'Email de acceso reenviado' });
   } catch (error) {
-    console.error('Error deleting invitation:', error);
-    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al eliminar invitación' });
+    console.error('Error resending access email:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al reenviar email' });
   }
 };
 
-export const listPendingInvitations = async (req: Request, res: Response) => {
+export const deletePortalUser = async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    await ClientPortalService.deletePortalUser(userId);
+    res.json({ message: 'Usuario eliminado' });
+  } catch (error) {
+    console.error('Error deleting portal user:', error);
+    res.status(400).json({ message: error instanceof Error ? error.message : 'Error al eliminar usuario' });
+  }
+};
+
+export const listPortalUsers = async (req: Request, res: Response) => {
   try {
     const { clientId } = req.params;
-    const invitations = await ClientPortalService.listPendingInvitations(clientId);
-    res.json(invitations);
+    const users = await ClientPortalService.listPortalUsers(clientId);
+    res.json(users);
   } catch (error) {
-    console.error('Error listing invitations:', error);
-    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al listar invitaciones' });
+    console.error('Error listing portal users:', error);
+    res.status(500).json({ message: error instanceof Error ? error.message : 'Error al listar usuarios' });
   }
 };
 
