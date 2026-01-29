@@ -159,6 +159,7 @@ import {
   createEmptyBrief,
   createBriefFromTemplate,
   duplicateBrief,
+  duplicateBriefToProject,
   deleteBrief as deleteBriefService,
   updateBrief,
   saveBriefAsTemplate,
@@ -1585,6 +1586,24 @@ export default function Tareas() {
       toast({ title: 'Error', description: 'No se pudo duplicar el brief', variant: 'destructive' });
     }
   }, [toast]);
+
+  const handleBriefDuplicateToProject = useCallback(async (briefId: string, targetProjectId: string) => {
+    try {
+      const newBriefId = await duplicateBriefToProject(briefId, targetProjectId);
+      const newBrief = await getBrief(newBriefId);
+      if (newBrief) {
+        setBriefs(prev => [newBrief, ...prev]);
+      }
+      const targetProject = projects.find(p => p.id === targetProjectId);
+      toast({
+        title: 'Brief duplicado',
+        description: `Brief copiado a ${targetProject?.name || 'otro proyecto'}`
+      });
+    } catch (error) {
+      console.error('Error duplicating brief to project:', error);
+      toast({ title: 'Error', description: 'No se pudo duplicar el brief', variant: 'destructive' });
+    }
+  }, [projects, toast]);
 
   const handleBriefDelete = useCallback(async (briefId: string) => {
     try {
@@ -4278,11 +4297,13 @@ export default function Tareas() {
                     briefs={projectBriefs}
                     templates={briefTemplates}
                     projects={projects.filter(p => p.id === filterProject)}
+                    allProjects={projects.filter(p => !p.archived)}
                     selectedBriefId={selectedBriefId}
                     onSelectBrief={setSelectedBriefId}
                     onCreateBrief={handleBriefCreate}
                     onCreateFromTemplate={handleBriefCreateFromTemplate}
                     onDuplicateBrief={handleBriefDuplicate}
+                    onDuplicateBriefToProject={handleBriefDuplicateToProject}
                     onDeleteBrief={handleBriefDelete}
                     onSaveAsTemplate={handleBriefSaveAsTemplate}
                     onSelectTemplate={handleBriefSelectTemplate}

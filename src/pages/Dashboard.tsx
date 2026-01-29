@@ -486,8 +486,8 @@ export default function Dashboard() {
           </Button>
         </div>
 
-        {/* Admin Stats Grid - 8 cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        {/* Admin Stats Grid - 10 cards */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Ingresos del Mes"
             value={isLoading ? '...' : formatCurrency(monthlyIncome, hideFinances)}
@@ -547,6 +547,13 @@ export default function Dashboard() {
             subtitle="tareas totales"
             icon={Briefcase}
             variant="success"
+          />
+          <StatCard
+            title="Mi Productividad"
+            value={isLoading ? '...' : `${productivityPercentage}%`}
+            subtitle={`${myCompletedTasks.length} de ${myTasks.length} tareas`}
+            icon={TrendingUp}
+            variant={productivityPercentage >= 70 ? 'success' : productivityPercentage >= 40 ? 'warning' : 'default'}
           />
         </div>
 

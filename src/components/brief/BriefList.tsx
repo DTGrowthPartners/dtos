@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, FileText, Plus, MoreVertical, Copy, Trash2, BookTemplate } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileText, Plus, MoreVertical, Copy, Trash2, BookTemplate, FolderOutput } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
@@ -16,11 +19,13 @@ interface BriefListProps {
   briefs: Brief[];
   templates: BriefTemplate[];
   projects: Project[];
+  allProjects?: Project[]; // All projects for duplicate to other project
   selectedBriefId: string | null;
   onSelectBrief: (briefId: string) => void;
   onCreateBrief: (projectId: string) => void;
   onCreateFromTemplate: (projectId: string, templateId: string) => void;
   onDuplicateBrief: (briefId: string) => void;
+  onDuplicateBriefToProject?: (briefId: string, targetProjectId: string) => void;
   onDeleteBrief: (briefId: string) => void;
   onSaveAsTemplate: (briefId: string) => void;
   onSelectTemplate: (templateId: string) => void;
@@ -31,16 +36,20 @@ export function BriefList({
   briefs,
   templates,
   projects,
+  allProjects,
   selectedBriefId,
   onSelectBrief,
   onCreateBrief,
   onCreateFromTemplate,
   onDuplicateBrief,
+  onDuplicateBriefToProject,
   onDeleteBrief,
   onSaveAsTemplate,
   onSelectTemplate,
   onDeleteTemplate,
 }: BriefListProps) {
+  // Get other projects for duplicate submenu (exclude current project)
+  const otherProjects = (allProjects || []).filter(p => !p.archived && !projects.some(cp => cp.id === p.id));
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set(projects.map(p => p.id)));
   const [expandedTemplates, setExpandedTemplates] = useState(true);
 
@@ -176,6 +185,25 @@ export function BriefList({
                                 <Copy className="h-4 w-4 mr-2" />
                                 Duplicar
                               </DropdownMenuItem>
+                              {otherProjects.length > 0 && onDuplicateBriefToProject && (
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger>
+                                    <FolderOutput className="h-4 w-4 mr-2" />
+                                    Duplicar a otro proyecto
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    {otherProjects.map((proj) => (
+                                      <DropdownMenuItem
+                                        key={proj.id}
+                                        onClick={() => onDuplicateBriefToProject(brief.id, proj.id)}
+                                      >
+                                        <div className={cn('w-2 h-2 rounded-full mr-2', proj.color)} />
+                                        {proj.name}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                              )}
                               <DropdownMenuItem onClick={() => onSaveAsTemplate(brief.id)}>
                                 <BookTemplate className="h-4 w-4 mr-2" />
                                 Guardar como template

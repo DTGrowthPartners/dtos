@@ -273,3 +273,33 @@ export const duplicateBrief = async (
 
   return createBrief(newBrief);
 };
+
+// Duplicate a brief to another project
+export const duplicateBriefToProject = async (
+  briefId: string,
+  targetProjectId: string,
+  newTitle?: string
+): Promise<string> => {
+  const original = await getBrief(briefId);
+  if (!original) {
+    throw new Error('Brief not found');
+  }
+
+  // Create new blocks with new IDs
+  const blocks: BriefBlock[] = original.blocks.map((block, index) => ({
+    ...block,
+    id: generateBlockId(),
+    order: index,
+  }));
+
+  const newBrief: NewBrief = {
+    title: newTitle || `${original.title} (copia)`,
+    description: original.description,
+    projectId: targetProjectId,
+    blocks,
+    isTemplate: false,
+    createdBy: original.createdBy,
+  };
+
+  return createBrief(newBrief);
+};
