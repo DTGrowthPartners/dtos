@@ -129,7 +129,12 @@ export function NotificationsDropdown({ className, isMisTareasView }: Notificati
 
     // Navigate to the linked page
     if (notification.link) {
-      navigate(notification.link);
+      // If it's a task notification with resourceId, append it to open the specific task
+      let targetUrl = notification.link;
+      if (notification.resourceType === 'task' && notification.resourceId) {
+        targetUrl = `${notification.link}?taskId=${notification.resourceId}`;
+      }
+      navigate(targetUrl);
       setIsOpen(false);
     }
   };

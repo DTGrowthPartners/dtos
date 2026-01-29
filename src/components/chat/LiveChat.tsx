@@ -68,6 +68,7 @@ export default function LiveChat() {
   const [userSearchQuery, setUserSearchQuery] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const { user } = useAuthStore();
 
   // Scroll to bottom on new messages
@@ -196,6 +197,10 @@ export default function LiveChat() {
         currentUser?.photoUrl
       );
       setNewMessage('');
+      // Refocus input after sending for continuous typing
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     } catch (error) {
       console.error('Error sending message:', error);
     } finally {
@@ -629,11 +634,13 @@ export default function LiveChat() {
               {/* Input */}
               <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2 flex-shrink-0 bg-background">
                 <Input
+                  ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   placeholder="Escribe un mensaje..."
                   className="flex-1"
                   disabled={isLoading}
+                  autoFocus
                 />
                 <Button type="submit" size="icon" disabled={!newMessage.trim() || isLoading}>
                   <Send className="h-4 w-4" />

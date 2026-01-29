@@ -34,6 +34,7 @@ import {
   GripVertical,
   Flag,
   ArrowRight,
+  ArrowLeft,
   MoreVertical,
   Pencil,
   FolderArchive,
@@ -4254,45 +4255,61 @@ export default function Tareas() {
 
         {/* Brief View */}
         {taskView === 'brief' && filterProject !== 'all' && (
-          <div className="flex-1 flex overflow-hidden">
-            <ResizablePanelGroup direction="horizontal">
-              {/* Left Panel - Brief List */}
-              <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
-                <BriefList
-                  briefs={projectBriefs}
-                  templates={briefTemplates}
-                  projects={projects.filter(p => p.id === filterProject)}
-                  selectedBriefId={selectedBriefId}
-                  onSelectBrief={setSelectedBriefId}
-                  onCreateBrief={handleBriefCreate}
-                  onCreateFromTemplate={handleBriefCreateFromTemplate}
-                  onDuplicateBrief={handleBriefDuplicate}
-                  onDeleteBrief={handleBriefDelete}
-                  onSaveAsTemplate={handleBriefSaveAsTemplate}
-                  onSelectTemplate={handleBriefSelectTemplate}
-                  onDeleteTemplate={handleBriefDeleteTemplate}
-                />
-              </ResizablePanel>
-
-              <ResizableHandle withHandle />
-
-              {/* Right Panel - Brief Editor */}
-              <ResizablePanel defaultSize={75}>
-                {selectedBrief ? (
-                  <BriefEditor
-                    brief={selectedBrief}
-                    onSave={handleBriefSave}
-                    onImageClick={setBriefImagePreview}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Brief Header with Back Button */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b bg-muted/30">
+              <button
+                onClick={() => setTaskView('active')}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Volver a Tareas
+              </button>
+              <span className="text-sm text-muted-foreground">
+                Briefs del proyecto: <span className="font-medium text-foreground">{projects.find(p => p.id === filterProject)?.name}</span>
+              </span>
+            </div>
+            {/* Brief Content */}
+            <div className="flex-1 overflow-hidden">
+              <ResizablePanelGroup direction="horizontal">
+                {/* Left Panel - Brief List */}
+                <ResizablePanel defaultSize={25} minSize={20} maxSize={40}>
+                  <BriefList
+                    briefs={projectBriefs}
+                    templates={briefTemplates}
+                    projects={projects.filter(p => p.id === filterProject)}
+                    selectedBriefId={selectedBriefId}
+                    onSelectBrief={setSelectedBriefId}
+                    onCreateBrief={handleBriefCreate}
+                    onCreateFromTemplate={handleBriefCreateFromTemplate}
+                    onDuplicateBrief={handleBriefDuplicate}
+                    onDeleteBrief={handleBriefDelete}
+                    onSaveAsTemplate={handleBriefSaveAsTemplate}
+                    onSelectTemplate={handleBriefSelectTemplate}
+                    onDeleteTemplate={handleBriefDeleteTemplate}
                   />
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
-                    <FileText className="h-16 w-16 mb-4 opacity-20" />
-                    <p className="text-lg font-medium">Selecciona un brief</p>
-                    <p className="text-sm">o crea uno nuevo desde el panel izquierdo</p>
-                  </div>
-                )}
-              </ResizablePanel>
-            </ResizablePanelGroup>
+                </ResizablePanel>
+
+                <ResizableHandle withHandle />
+
+                {/* Right Panel - Brief Editor */}
+                <ResizablePanel defaultSize={75}>
+                  {selectedBrief ? (
+                    <BriefEditor
+                      brief={selectedBrief}
+                      onSave={handleBriefSave}
+                      onImageClick={setBriefImagePreview}
+                    />
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                      <FileText className="h-16 w-16 mb-4 opacity-20" />
+                      <p className="text-lg font-medium">Selecciona un brief</p>
+                      <p className="text-sm">o crea uno nuevo desde el panel izquierdo</p>
+                    </div>
+                  )}
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </div>
           </div>
         )}
       </div>
