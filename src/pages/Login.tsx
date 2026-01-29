@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { authService } from '@/lib/auth';
+import { authService, useAuthStore } from '@/lib/auth';
 
 // Declare VanillaTilt for TypeScript
 declare global {
@@ -44,11 +44,21 @@ export default function Login() {
 
     try {
       await authService.login(email, password);
+
+      // Get user after login to check role
+      const user = useAuthStore.getState().user;
+
       toast({
         title: 'Inicio de sesión exitoso',
         description: 'Bienvenido de nuevo',
       });
-      navigate('/dashboard');
+
+      // Redirect based on role
+      if (user?.role === 'client') {
+        navigate('/portal/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (error) {
       toast({
         title: 'Error',

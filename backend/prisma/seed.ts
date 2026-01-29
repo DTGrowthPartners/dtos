@@ -116,6 +116,18 @@ async function main() {
     },
   });
 
+  // Rol para clientes del portal
+  const clientRole = await prisma.role.upsert({
+    where: { id: 'client' },
+    update: {},
+    create: {
+      id: 'client',
+      name: 'client',
+      description: 'Cliente del Portal',
+      permissions: ['read:portal'],
+    },
+  });
+
   // Crear usuario admin
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@dtos.com' },
@@ -461,7 +473,7 @@ async function main() {
   }
 
   console.log('Seed completado');
-  console.log('Roles creados: admin, user, dev, contador, comercial, manager, designer, soporte, marketing, specialist');
+  console.log('Roles creados: admin, user, dev, contador, comercial, manager, designer, soporte, marketing, specialist, client');
   console.log('Admin:', adminUser.email);
   console.log('Dairo:', dairoUser.email);
   console.log('Tareas creadas: 6');

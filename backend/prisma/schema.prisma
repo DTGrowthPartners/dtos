@@ -20,6 +20,9 @@ model User {
   roleId        String
   role          Role          @relation(fields: [roleId], references: [id])
   firebaseUid   String?       @unique // Firebase UID for Firebase Auth users
+  // Portal de Clientes: vincula usuario con un Client para acceso al portal
+  portalClientId String?
+  portalClient   Client?       @relation("PortalClientUsers", fields: [portalClientId], references: [id])
   models        Model[]
   clients       Client[]      @relation("ClientCreatedBy")
   sharedClients ClientShare[] @relation("SharedClients")
@@ -76,6 +79,12 @@ model Client {
   terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
   accounts    Account[]      @relation("AccountClient")  // Cuentas por cobrar/pagar
   calendarEvents CalendarEvent[]
+  // Portal de Clientes
+  portalUsers      User[]              @relation("PortalClientUsers")
+  portalCampaigns  PortalCampaign[]
+  portalBudgets    PortalSalesBudget[]
+  portalServices   PortalServiceStatus[]
+  portalInvitations PortalInvitation[]
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -516,4 +525,84 @@ model CalendarEvent {
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+}
+
+// ==================== PORTAL DE CLIENTES ====================
+
+// Campañas de marketing del cliente (visibles en portal)
+model PortalCampaign {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  name            String
+  platform        String    // facebook, google, instagram, tiktok, linkedin, other
+  status          String    @default("active") // active, paused, completed
+  budget          Decimal   @db.Decimal(12, 2)
+  spent           Decimal   @default(0) @db.Decimal(12, 2)
+  impressions     Int       @default(0)
+  clicks          Int       @default(0)
+  conversions     Int       @default(0)
+  ctr             Decimal?  @db.Decimal(5, 2) // Click-through rate
+  cpc             Decimal?  @db.Decimal(10, 2) // Cost per click
+  cpa             Decimal?  @db.Decimal(10, 2) // Cost per acquisition
+  startDate       DateTime
+  endDate         DateTime?
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Presupuesto vs Ventas mensual del cliente
+model PortalSalesBudget {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  month           Int       // 1-12
+  year            Int
+  budget          Decimal   @db.Decimal(12, 2) // Presupuesto de marketing
+  sales           Decimal   @default(0) @db.Decimal(12, 2) // Ventas generadas
+  leads           Int       @default(0) // Leads generados
+  customers       Int       @default(0) // Clientes nuevos
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([clientId, month, year])
+}
+
+// Estado de servicios contratados (para mostrar en portal)
+model PortalServiceStatus {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  name            String    // SEO, Social Media, Email Marketing, Web Development, etc.
+  status          String    @default("active") // active, paused, pending, completed
+  progress        Int       @default(0) // 0-100
+  startDate       DateTime
+  endDate         DateTime?
+  deliverables    String?   // JSON array of deliverables with status
+  notes           String?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// Invitaciones para usuarios del portal de clientes
+model PortalInvitation {
+  id              String    @id @default(cuid())
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  email           String
+  token           String    @unique
+  expiresAt       DateTime
+  usedAt          DateTime?
+  invitedBy       String    // userId del admin que invitó
+
+  createdAt       DateTime  @default(now())
 }

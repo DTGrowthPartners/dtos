@@ -26,6 +26,17 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import NotFound from "@/pages/NotFound";
 
+// Client Portal
+import ClientPortalRoute from "@/components/ClientPortalRoute";
+import { ClientPortalLayout } from "@/components/layout/ClientPortalLayout";
+import ClientDashboard from "@/pages/portal/ClientDashboard";
+import ClientCampaigns from "@/pages/portal/ClientCampaigns";
+import ClientBudgetSales from "@/pages/portal/ClientBudgetSales";
+import ClientServices from "@/pages/portal/ClientServices";
+
+// Admin
+import ClientsPortalManagement from "@/pages/admin/ClientsPortalManagement";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -38,6 +49,17 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+
+            {/* Client Portal Routes */}
+            <Route element={<ClientPortalRoute><ClientPortalLayout /></ClientPortalRoute>}>
+              <Route path="/portal" element={<ClientDashboard />} />
+              <Route path="/portal/dashboard" element={<ClientDashboard />} />
+              <Route path="/portal/campaigns" element={<ClientCampaigns />} />
+              <Route path="/portal/budget" element={<ClientBudgetSales />} />
+              <Route path="/portal/services" element={<ClientServices />} />
+            </Route>
+
+            {/* Main App Routes */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />
@@ -56,6 +78,8 @@ const App = () => (
               <Route path="/calendario" element={<ProtectedRoute requiredPermission="calendario"><Calendario /></ProtectedRoute>} />
               {/* Brief moved to Tareas as a view */}
               <Route path="/perfil" element={<Profile />} />
+              {/* Admin: Portal de Clientes Management */}
+              <Route path="/admin/portal-clientes" element={<ProtectedRoute requiredPermission="admin"><ClientsPortalManagement /></ProtectedRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
