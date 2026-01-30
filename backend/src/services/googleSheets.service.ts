@@ -51,6 +51,12 @@ export interface NominaRecord {
   notas?: string;
 }
 
+// Dinero disponible por cuenta
+export interface CuentaDisponible {
+  cuenta: string;
+  saldo: number;
+}
+
 export class GoogleSheetsService {
   private sheets: any;
   private auth: any;
@@ -905,6 +911,56 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error getting expenses by tercero:', error);
       return [];
+    }
+  }
+
+  // Get available balance by account from "Disponible" sheet
+  async getDisponible(): Promise<{
+    cuentas: CuentaDisponible[];
+    totalDisponible: number;
+  }> {
+    try {
+      // Leer hoja de Disponible - Columnas A:B (Cuenta, Saldo)
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Disponible!A:B',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const rows = response.data.values || [];
+      console.log('Disponible rows:', rows.length);
+
+      // Parsear cuentas - asumiendo que la primera fila puede ser encabezado
+      const cuentas: CuentaDisponible[] = rows
+        .filter((row: (string | number | null)[], index: number) => {
+          // Skip if first cell looks like a header
+          if (index === 0 && row[0] && String(row[0]).toLowerCase().includes('cuenta')) {
+            return false;
+          }
+          // Must have account name and valid balance
+          return row[0] && row[1] !== undefined && row[1] !== null && row[1] !== '';
+        })
+        .map((row: (string | number | null)[]) => ({
+          cuenta: String(row[0]).trim(),
+          saldo: this.parseAmount(row[1]),
+        }))
+        .filter((cuenta: CuentaDisponible) => cuenta.cuenta.length > 0);
+
+      const totalDisponible = cuentas.reduce((sum, cuenta) => sum + cuenta.saldo, 0);
+
+      console.log('Cuentas disponibles:', cuentas);
+      console.log('Total disponible:', totalDisponible);
+
+      return {
+        cuentas,
+        totalDisponible,
+      };
+    } catch (error) {
+      console.error('Error reading Disponible sheet:', error);
+      return {
+        cuentas: [],
+        totalDisponible: 0,
+      };
     }
   }
 }

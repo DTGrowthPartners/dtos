@@ -52,4 +52,9 @@ router.get('/expenses-by-tercero', authMiddleware, (req, res) =>
   financeController.getExpensesByTercero(req, res)
 );
 
+// Disponible (saldo por cuenta)
+router.get('/disponible', authMiddleware, (req, res) =>
+  financeController.getDisponible(req, res)
+);
+
 export default router;

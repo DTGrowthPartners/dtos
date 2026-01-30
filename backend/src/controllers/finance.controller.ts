@@ -251,6 +251,21 @@ export class FinanceController {
       });
     }
   }
+
+  // ==================== DISPONIBLE ====================
+
+  async getDisponible(req: Request, res: Response) {
+    try {
+      const data = await googleSheetsService.getDisponible();
+      res.json(data);
+    } catch (error) {
+      console.error('Error in getDisponible:', error);
+      res.status(500).json({
+        message: 'Error al obtener saldo disponible',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
 }
 
 export const financeController = new FinanceController();

@@ -16,6 +16,8 @@ import {
   PieChart,
   Eye,
   EyeOff,
+  Wallet,
+  Building2,
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
@@ -82,6 +84,16 @@ interface CRMStage {
   order: number;
 }
 
+interface CuentaDisponible {
+  cuenta: string;
+  saldo: number;
+}
+
+interface DisponibleResponse {
+  cuentas: CuentaDisponible[];
+  totalDisponible: number;
+}
+
 export default function Dashboard() {
   const user = authService.getUser();
   const { user: authUser } = useAuthStore();
@@ -99,6 +111,8 @@ export default function Dashboard() {
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
+  const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
+  const [totalDisponible, setTotalDisponible] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   // Hide/show finances toggle (persisted in localStorage)
@@ -362,6 +376,7 @@ export default function Dashboard() {
           apiClient.get<FinanceTransaction[]>('/api/finance/expense').catch(() => []),
           apiClient.get<CRMDeal[]>('/api/crm/deals').catch(() => []),
           apiClient.get<CRMStage[]>('/api/crm/stages').catch(() => []),
+          apiClient.get<DisponibleResponse>('/api/finance/disponible').catch(() => ({ cuentas: [], totalDisponible: 0 })),
         ] : [];
 
         const results = await Promise.all([...basePromises, ...adminPromises]);
@@ -388,12 +403,15 @@ export default function Dashboard() {
           const expenses = results[4] as FinanceTransaction[];
           const deals = results[5] as CRMDeal[];
           const stages = results[6] as CRMStage[];
+          const disponibleData = results[7] as DisponibleResponse;
 
           setMonthlyIncome(financeData.totalIncome || 0);
           setMonthlyExpenses(financeData.totalExpenses || 0);
           setFinanceTransactions(expenses);
           setCrmDeals(deals);
           setCrmStages(stages);
+          setDisponible(disponibleData.cuentas || []);
+          setTotalDisponible(disponibleData.totalDisponible || 0);
 
           // Calculate top clients by income
           const clientIncomeMap = new Map<string, number>();
@@ -556,6 +574,43 @@ export default function Dashboard() {
             variant={productivityPercentage >= 70 ? 'success' : productivityPercentage >= 40 ? 'warning' : 'default'}
           />
         </div>
+
+        {/* Disponible - Dinero en Cuentas */}
+        {disponible.length > 0 && (
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-primary" />
+                  Dinero Disponible
+                </span>
+                <span className="text-2xl font-bold text-primary">
+                  {hideFinances ? '••••••' : `$${totalDisponible.toLocaleString()}`}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                {disponible.map((cuenta, index) => (
+                  <div
+                    key={index}
+                    className="p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-xs font-medium text-muted-foreground truncate">
+                        {cuenta.cuenta}
+                      </span>
+                    </div>
+                    <p className="text-lg font-bold text-foreground">
+                      {hideFinances ? '••••••' : `$${cuenta.saldo.toLocaleString()}`}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Charts Row */}
         <div className="grid gap-6 lg:grid-cols-2">

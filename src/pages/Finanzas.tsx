@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -94,6 +94,16 @@ interface FinanceResponse {
   gastos: Transaction[];
 }
 
+interface CuentaDisponible {
+  cuenta: string;
+  saldo: number;
+}
+
+interface DisponibleResponse {
+  cuentas: CuentaDisponible[];
+  totalDisponible: number;
+}
+
 // Helper to check if a category is AJUSTE SALDO (case-insensitive, trim whitespace)
 const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
   if (!categoria) return false;
@@ -128,6 +138,8 @@ export default function Finanzas() {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [ingresos, setIngresos] = useState<Transaction[]>([]);
   const [gastos, setGastos] = useState<Transaction[]>([]);
+  const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
+  const [totalDisponible, setTotalDisponible] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
   // Filters
@@ -343,7 +355,12 @@ export default function Finanzas() {
   const fetchFinanceData = async () => {
     try {
       setIsLoading(true);
-      const data = await apiClient.get<FinanceResponse>('/api/finance/data');
+
+      // Fetch finance data and disponible in parallel
+      const [data, disponibleData] = await Promise.all([
+        apiClient.get<FinanceResponse>('/api/finance/data'),
+        apiClient.get<DisponibleResponse>('/api/finance/disponible'),
+      ]);
 
       setFinanceData(data.financeByMonth);
       setExpenseCategories(data.expenseCategories);
@@ -351,6 +368,10 @@ export default function Finanzas() {
       setTotalExpenses(data.totalExpenses);
       setIngresos(data.ingresos || []);
       setGastos(data.gastos || []);
+
+      // Set disponible data
+      setDisponible(disponibleData.cuentas || []);
+      setTotalDisponible(disponibleData.totalDisponible || 0);
     } catch (error) {
       console.error('Error fetching finance data:', error);
       toast({
@@ -1149,6 +1170,48 @@ export default function Finanzas() {
           </div>
         </div>
       </div>
+
+      {/* Disponible - Saldo por Cuenta */}
+      {disponible.length > 0 && (
+        <div className="rounded-xl border border-border bg-gradient-to-br from-primary/5 to-primary/10 p-4 sm:p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                <Wallet className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-foreground">Dinero Disponible</h3>
+                <p className="text-xs text-muted-foreground">Saldo actual por cuenta</p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl sm:text-3xl font-bold text-primary">
+                ${totalDisponible.toLocaleString()}
+              </p>
+              <p className="text-xs text-muted-foreground">Total disponible</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+            {disponible.map((cuenta, index) => (
+              <div
+                key={index}
+                className="p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-xs font-medium text-muted-foreground truncate">
+                    {cuenta.cuenta}
+                  </span>
+                </div>
+                <p className="text-lg font-bold text-foreground">
+                  ${cuenta.saldo.toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Charts Row */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
