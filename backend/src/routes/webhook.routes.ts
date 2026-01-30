@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
 import admin from 'firebase-admin';
 import { PrismaClient } from '@prisma/client';
+import { googleSheetsService } from '../services/googleSheets.service';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -683,90 +684,210 @@ router.get('/bot/services', verifyBotApiKey, async (req: Request, res: Response)
 /**
  * GET /api/webhook/bot/finances
  *
- * Resumen financiero: cuentas por cobrar y por pagar.
+ * Resumen financiero COMPLETO con datos de Google Sheets:
+ * - Presupuesto Q1 (proyectado vs real)
+ * - Ingresos y gastos del mes actual
+ * - Gastos por categoría
+ * - Cuentas por cobrar/pagar del sistema
+ *
  * Query params:
- *   - tipo: receivable, payable, all (default: all)
- *   - estado: active, paused, completed (default: active)
+ *   - mes: enero, febrero, marzo (default: mes actual del Q1)
  */
 router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response) => {
   try {
-    const { tipo, type, estado, status } = req.query;
-    const accountType = (tipo || type) as string | undefined;
-    const accountStatus = (estado || status) as string || 'active';
+    const { mes, month } = req.query;
+    const requestedMonth = (mes || month) as string | undefined;
 
-    const whereClause: any = { status: accountStatus };
-    if (accountType && accountType !== 'all') {
-      whereClause.type = accountType;
+    // Obtener datos de Google Sheets
+    const [financeData, budgetData] = await Promise.all([
+      googleSheetsService.getFinanceData(),
+      googleSheetsService.getBudgetData(),
+    ]);
+
+    // Determinar el mes actual del Q1 (enero=0, febrero=1, marzo=2)
+    const now = new Date();
+    const currentMonth = now.getMonth(); // 0-11
+    let mesActual: 'enero' | 'febrero' | 'marzo' = 'enero';
+    if (currentMonth === 1) mesActual = 'febrero';
+    else if (currentMonth >= 2) mesActual = 'marzo';
+
+    // Si se especificó un mes, usarlo
+    if (requestedMonth) {
+      const monthLower = requestedMonth.toLowerCase();
+      if (['enero', 'january', '1'].includes(monthLower)) mesActual = 'enero';
+      else if (['febrero', 'february', '2'].includes(monthLower)) mesActual = 'febrero';
+      else if (['marzo', 'march', '3'].includes(monthLower)) mesActual = 'marzo';
     }
 
+    // Extraer datos del presupuesto Q1
+    const presupuestoMes = {
+      ingresos: budgetData.ingresos.totales[mesActual],
+      gastos: budgetData.gastos.totales[mesActual],
+    };
+
+    // Calcular ejecución del presupuesto
+    const ejecucionIngresos = presupuestoMes.ingresos.proyectado > 0
+      ? Math.round((presupuestoMes.ingresos.real / presupuestoMes.ingresos.proyectado) * 100)
+      : 0;
+    const ejecucionGastos = presupuestoMes.gastos.proyectado > 0
+      ? Math.round((presupuestoMes.gastos.real / presupuestoMes.gastos.proyectado) * 100)
+      : 0;
+
+    // Resultado (utilidad)
+    const utilidadProyectada = presupuestoMes.ingresos.proyectado - presupuestoMes.gastos.proyectado;
+    const utilidadReal = presupuestoMes.ingresos.real - presupuestoMes.gastos.real;
+
+    // Filtrar transacciones del mes actual
+    const mesNumero = mesActual === 'enero' ? '01' : mesActual === 'febrero' ? '02' : '03';
+    const anioActual = now.getFullYear();
+
+    const ingresosDelMes = financeData.ingresos.filter(t => {
+      return t.fecha.startsWith(`${anioActual}-${mesNumero}`) && t.categoria !== 'AJUSTE SALDO';
+    });
+
+    const gastosDelMes = financeData.gastos.filter(t => {
+      return t.fecha.startsWith(`${anioActual}-${mesNumero}`) && t.categoria !== 'AJUSTE SALDO';
+    });
+
+    // Top 5 gastos del mes
+    const topGastos = [...gastosDelMes]
+      .sort((a, b) => b.importe - a.importe)
+      .slice(0, 5);
+
+    // Top 5 ingresos del mes
+    const topIngresos = [...ingresosDelMes]
+      .sort((a, b) => b.importe - a.importe)
+      .slice(0, 5);
+
+    // Gastos por categoría del mes
+    const gastosPorCategoria: Record<string, number> = {};
+    gastosDelMes.forEach(g => {
+      const cat = g.categoria || 'Otros';
+      gastosPorCategoria[cat] = (gastosPorCategoria[cat] || 0) + g.importe;
+    });
+
+    // Obtener cuentas por cobrar/pagar del sistema (Prisma)
     const accounts = await prisma.account.findMany({
-      where: whereClause,
-      include: {
-        client: { select: { id: true, name: true } },
-        payments: {
-          orderBy: { paidAt: 'desc' },
-          take: 5,
-        },
-      },
+      where: { status: 'active' },
+      include: { client: { select: { name: true } } },
       orderBy: { nextDueDate: 'asc' },
     });
 
-    // Calcular totales
-    const receivables = accounts.filter(a => a.type === 'receivable');
-    const payables = accounts.filter(a => a.type === 'payable');
+    const cuentasPorCobrar = accounts.filter(a => a.type === 'receivable');
+    const cuentasPorPagar = accounts.filter(a => a.type === 'payable');
+    const totalPorCobrar = cuentasPorCobrar.reduce((sum, a) => sum + a.amount, 0);
+    const totalPorPagar = cuentasPorPagar.reduce((sum, a) => sum + a.amount, 0);
 
-    const totalReceivable = receivables.reduce((sum, a) => sum + a.amount, 0);
-    const totalPayable = payables.reduce((sum, a) => sum + a.amount, 0);
-
-    // Próximos vencimientos (próximos 7 días)
-    const now = new Date();
+    // Próximos vencimientos (7 días)
     const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    const upcomingDue = accounts.filter(
-      a => a.nextDueDate && a.nextDueDate <= nextWeek && a.nextDueDate >= now
-    );
+    const proximosVencimientos = accounts
+      .filter(a => a.nextDueDate && a.nextDueDate <= nextWeek && a.nextDueDate >= now)
+      .map(a => ({
+        tipo: a.type === 'receivable' ? 'Por Cobrar' : 'Por Pagar',
+        entidad: a.entityName,
+        monto: a.amount,
+        vencimiento: a.nextDueDate?.toISOString().split('T')[0],
+      }));
+
+    // Detalle de gastos por categoría del presupuesto
+    const categoriasPresupuesto = Object.entries(budgetData.gastos.categorias).map(([nombre, datos]) => ({
+      categoria: nombre,
+      proyectado: datos[mesActual].proyectado,
+      real: datos[mesActual].real,
+      ejecucion: datos[mesActual].proyectado > 0
+        ? Math.round((datos[mesActual].real / datos[mesActual].proyectado) * 100)
+        : 0,
+      estado: datos[mesActual].real > datos[mesActual].proyectado ? '🔴 Excedido' :
+              datos[mesActual].real > datos[mesActual].proyectado * 0.8 ? '🟡 Alerta' : '🟢 OK',
+    })).filter(c => c.proyectado > 0 || c.real > 0);
 
     res.json({
       success: true,
-      resumen: {
-        totalPorCobrar: totalReceivable,
-        totalPorPagar: totalPayable,
-        balance: totalReceivable - totalPayable,
-        cuentasPorCobrar: receivables.length,
-        cuentasPorPagar: payables.length,
-        vencimientosProximos: upcomingDue.length,
+      mes: mesActual.charAt(0).toUpperCase() + mesActual.slice(1) + ' 2025',
+
+      // Resumen ejecutivo
+      resumenEjecutivo: {
+        ingresosProyectados: presupuestoMes.ingresos.proyectado,
+        ingresosReales: presupuestoMes.ingresos.real,
+        ejecucionIngresos: `${ejecucionIngresos}%`,
+        gastosProyectados: presupuestoMes.gastos.proyectado,
+        gastosReales: presupuestoMes.gastos.real,
+        ejecucionGastos: `${ejecucionGastos}%`,
+        utilidadProyectada,
+        utilidadReal,
+        estadoUtilidad: utilidadReal >= utilidadProyectada ? '🟢 Cumpliendo' : '🔴 Por debajo',
       },
-      cuentas: accounts.map(acc => ({
-        id: acc.id,
-        tipo: acc.type === 'receivable' ? 'Por Cobrar' : 'Por Pagar',
-        entidad: acc.entityName,
-        cliente: acc.client?.name,
-        concepto: acc.concept,
-        monto: acc.amount,
-        moneda: acc.currency,
-        esRecurrente: acc.isRecurring,
-        frecuencia: acc.frequency,
-        proximoVencimiento: acc.nextDueDate?.toISOString().split('T')[0],
-        estado: acc.status,
-        ultimosPagos: acc.payments.map(p => ({
-          monto: p.amount,
-          fecha: p.paidAt.toISOString().split('T')[0],
-          estado: p.status,
+
+      // Presupuesto trimestral completo
+      presupuestoQ1: {
+        enero: {
+          ingresos: budgetData.ingresos.totales.enero,
+          gastos: budgetData.gastos.totales.enero,
+          utilidad: budgetData.ingresos.totales.enero.real - budgetData.gastos.totales.enero.real,
+        },
+        febrero: {
+          ingresos: budgetData.ingresos.totales.febrero,
+          gastos: budgetData.gastos.totales.febrero,
+          utilidad: budgetData.ingresos.totales.febrero.real - budgetData.gastos.totales.febrero.real,
+        },
+        marzo: {
+          ingresos: budgetData.ingresos.totales.marzo,
+          gastos: budgetData.gastos.totales.marzo,
+          utilidad: budgetData.ingresos.totales.marzo.real - budgetData.gastos.totales.marzo.real,
+        },
+      },
+
+      // Detalle de categorías de gastos vs presupuesto
+      categoriasGastos: categoriasPresupuesto.slice(0, 10),
+
+      // Transacciones del mes
+      transaccionesMes: {
+        totalIngresos: ingresosDelMes.reduce((sum, t) => sum + t.importe, 0),
+        totalGastos: gastosDelMes.reduce((sum, t) => sum + t.importe, 0),
+        cantidadIngresos: ingresosDelMes.length,
+        cantidadGastos: gastosDelMes.length,
+        topIngresos: topIngresos.map(t => ({
+          fecha: t.fecha,
+          monto: t.importe,
+          descripcion: t.descripcion,
+          entidad: t.entidad,
+          categoria: t.categoria,
         })),
-      })),
-      proximosVencimientos: upcomingDue.map(acc => ({
-        id: acc.id,
-        tipo: acc.type === 'receivable' ? 'Por Cobrar' : 'Por Pagar',
-        entidad: acc.entityName,
-        concepto: acc.concept,
-        monto: acc.amount,
-        vencimiento: acc.nextDueDate?.toISOString().split('T')[0],
-      })),
+        topGastos: topGastos.map(t => ({
+          fecha: t.fecha,
+          monto: t.importe,
+          descripcion: t.descripcion,
+          entidad: t.entidad,
+          categoria: t.categoria,
+        })),
+        gastosPorCategoria: Object.entries(gastosPorCategoria)
+          .map(([categoria, monto]) => ({ categoria, monto }))
+          .sort((a, b) => b.monto - a.monto),
+      },
+
+      // Cuentas por cobrar/pagar (del sistema)
+      cuentas: {
+        totalPorCobrar,
+        totalPorPagar,
+        balance: totalPorCobrar - totalPorPagar,
+        cantidadPorCobrar: cuentasPorCobrar.length,
+        cantidadPorPagar: cuentasPorPagar.length,
+        proximosVencimientos,
+      },
+
+      // Totales generales (de sheets)
+      totalesGenerales: {
+        totalIngresosHistorico: financeData.totalIncome,
+        totalGastosHistorico: financeData.totalExpenses,
+        beneficioHistorico: financeData.totalIncome - financeData.totalExpenses,
+      },
     });
   } catch (error) {
     console.error('[Bot API] Error obteniendo finanzas:', error);
     res.status(500).json({
       success: false,
       error: 'Error al obtener información financiera',
+      details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
