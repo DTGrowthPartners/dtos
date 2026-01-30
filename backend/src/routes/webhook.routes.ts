@@ -898,6 +898,9 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
 
     res.json({
       success: true,
+      timestamp: new Date().toISOString(),
+      consultadoEn: new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' }),
+      aviso: '⚠️ Estos datos son en TIEMPO REAL de Google Sheets. Si ves datos diferentes, tu caché está desactualizado.',
       mes: mesActual.charAt(0).toUpperCase() + mesActual.slice(1) + ' 2025',
 
       // Resumen ejecutivo
@@ -1287,6 +1290,462 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
     res.status(500).json({
       success: false,
       error: 'Error al obtener deals',
+    });
+  }
+});
+
+/**
+ * PATCH /api/webhook/bot/tasks/:id
+ *
+ * Actualiza una tarea existente en Firestore.
+ *
+ * Body:
+ * {
+ *   "estado": "DONE",           // TODO, IN_PROGRESS, DONE
+ *   "prioridad": "alta",        // baja, media, alta
+ *   "titulo": "Nuevo título",   // opcional
+ *   "descripcion": "...",       // opcional
+ *   "fechaFin": "2025-02-15"    // opcional
+ * }
+ */
+router.patch('/bot/tasks/:id', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      estado,
+      status,
+      prioridad,
+      priority,
+      titulo,
+      title,
+      descripcion,
+      description,
+      fechaFin,
+      dueDate,
+    } = req.body;
+
+    // Verificar que la tarea existe
+    const taskRef = getFirestore().collection('tasks').doc(id);
+    const taskDoc = await taskRef.get();
+
+    if (!taskDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: `Tarea con ID "${id}" no encontrada`,
+      });
+    }
+
+    // Construir objeto de actualización
+    const updateData: Record<string, any> = {
+      updatedAt: Date.now(),
+    };
+
+    // Mapear estado
+    const taskStatus = estado || status;
+    if (taskStatus) {
+      const statusMap: Record<string, string> = {
+        pending: 'TODO',
+        todo: 'TODO',
+        pendiente: 'TODO',
+        in_progress: 'IN_PROGRESS',
+        inprogress: 'IN_PROGRESS',
+        'en progreso': 'IN_PROGRESS',
+        progreso: 'IN_PROGRESS',
+        done: 'DONE',
+        completed: 'DONE',
+        completada: 'DONE',
+        terminada: 'DONE',
+      };
+      updateData.status = statusMap[taskStatus.toLowerCase()] || taskStatus.toUpperCase();
+    }
+
+    // Mapear prioridad
+    const taskPriority = prioridad || priority;
+    if (taskPriority) {
+      const priorityMap: Record<string, string> = {
+        baja: 'LOW',
+        low: 'LOW',
+        media: 'MEDIUM',
+        medium: 'MEDIUM',
+        normal: 'MEDIUM',
+        alta: 'HIGH',
+        high: 'HIGH',
+        urgente: 'HIGH',
+      };
+      updateData.priority = priorityMap[taskPriority.toLowerCase()] || 'MEDIUM';
+    }
+
+    // Otros campos opcionales
+    const taskTitle = titulo || title;
+    if (taskTitle) updateData.title = taskTitle;
+
+    const taskDescription = descripcion || description;
+    if (taskDescription !== undefined) updateData.description = taskDescription;
+
+    const taskDueDate = fechaFin || dueDate;
+    if (taskDueDate) {
+      const date = new Date(taskDueDate);
+      if (!taskDueDate.includes('T')) {
+        date.setHours(12, 0, 0, 0);
+      }
+      updateData.dueDate = date.getTime();
+    }
+
+    // Actualizar en Firestore
+    await taskRef.update(updateData);
+
+    const currentData = taskDoc.data();
+    console.log(`[Bot API] Tarea actualizada: ${id} - ${JSON.stringify(updateData)}`);
+
+    res.json({
+      success: true,
+      message: `Tarea "${currentData?.title}" actualizada`,
+      task: {
+        id,
+        ...currentData,
+        ...updateData,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error actualizando tarea:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al actualizar la tarea',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/crm/deals
+ *
+ * Crea un nuevo deal en el CRM.
+ *
+ * Body:
+ * {
+ *   "nombre": "Nuevo cliente potencial",
+ *   "empresa": "Empresa XYZ",
+ *   "telefono": "3001234567",
+ *   "email": "contacto@empresa.com",
+ *   "valorEstimado": 5000000,
+ *   "servicio": "Marketing Digital",
+ *   "etapa": "nuevo",              // nuevo, contactado, propuesta, negociacion, ganado, perdido
+ *   "prioridad": "media",
+ *   "fuente": "Referido",
+ *   "notas": "Notas adicionales"
+ * }
+ */
+router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const {
+      nombre,
+      name,
+      empresa,
+      company,
+      telefono,
+      phone,
+      email,
+      valorEstimado,
+      estimatedValue,
+      servicio,
+      service,
+      serviceId,
+      etapa,
+      stage,
+      prioridad,
+      priority,
+      fuente,
+      source,
+      notas,
+      notes,
+      propietario,
+      owner,
+    } = req.body;
+
+    // Resolver valores
+    const dealName = nombre || name;
+    const dealCompany = empresa || company;
+    const dealPhone = telefono || phone;
+    const dealEmail = email;
+    const dealValue = valorEstimado || estimatedValue || 0;
+    const dealService = servicio || service;
+    const dealServiceId = serviceId;
+    const dealStageSlug = etapa || stage || 'nuevo';
+    const dealPriority = prioridad || priority || 'media';
+    const dealSource = fuente || source;
+    const dealNotes = notas || notes;
+    const dealOwner = propietario || owner;
+
+    // Validaciones
+    if (!dealName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: nombre del deal',
+      });
+    }
+
+    // Buscar etapa del pipeline
+    let stageRecord = await prisma.dealStage.findFirst({
+      where: {
+        OR: [
+          { slug: dealStageSlug.toLowerCase() },
+          { name: { contains: dealStageSlug, mode: 'insensitive' } },
+        ],
+      },
+    });
+
+    // Si no existe la etapa, usar la primera
+    if (!stageRecord) {
+      stageRecord = await prisma.dealStage.findFirst({
+        orderBy: { position: 'asc' },
+      });
+    }
+
+    if (!stageRecord) {
+      return res.status(400).json({
+        success: false,
+        error: 'No hay etapas configuradas en el CRM',
+      });
+    }
+
+    // Buscar servicio si se especificó
+    let resolvedServiceId: string | undefined;
+    if (dealServiceId) {
+      resolvedServiceId = dealServiceId;
+    } else if (dealService) {
+      const serviceRecord = await prisma.service.findFirst({
+        where: { name: { contains: dealService, mode: 'insensitive' } },
+      });
+      if (serviceRecord) {
+        resolvedServiceId = serviceRecord.id;
+      }
+    }
+
+    // Buscar owner si se especificó
+    let resolvedOwnerId: string | undefined;
+    if (dealOwner) {
+      const ownerRecord = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { firstName: { contains: dealOwner, mode: 'insensitive' } },
+            { email: { contains: dealOwner, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (ownerRecord) {
+        resolvedOwnerId = ownerRecord.id;
+      }
+    }
+
+    // Buscar servicio para el nombre
+    let serviceName: string | undefined;
+    if (resolvedServiceId) {
+      const serviceRecord = await prisma.service.findUnique({ where: { id: resolvedServiceId } });
+      serviceName = serviceRecord?.name;
+    }
+
+    // Buscar owner para el nombre
+    let ownerName: string | undefined;
+    if (resolvedOwnerId) {
+      const ownerRecord = await prisma.user.findUnique({ where: { id: resolvedOwnerId } });
+      ownerName = ownerRecord ? `${ownerRecord.firstName} ${ownerRecord.lastName}` : undefined;
+    }
+
+    // Buscar usuario por defecto para createdBy (Dairo o el primero disponible)
+    let defaultUserId = resolvedOwnerId;
+    if (!defaultUserId) {
+      const defaultUser = await prisma.user.findFirst({
+        where: { firstName: { contains: 'Dairo', mode: 'insensitive' } },
+      });
+      if (defaultUser) {
+        defaultUserId = defaultUser.id;
+      } else {
+        // Si no existe Dairo, usar el primer usuario
+        const anyUser = await prisma.user.findFirst();
+        if (!anyUser) {
+          return res.status(400).json({
+            success: false,
+            error: 'No hay usuarios en el sistema para crear deals',
+          });
+        }
+        defaultUserId = anyUser.id;
+      }
+    }
+
+    // Crear el deal
+    const deal = await prisma.deal.create({
+      data: {
+        name: dealName,
+        company: dealCompany,
+        phone: dealPhone,
+        phoneCountryCode: '+57',
+        email: dealEmail,
+        estimatedValue: Number(dealValue),
+        currency: 'COP',
+        stageId: stageRecord.id,
+        priority: dealPriority.toLowerCase(),
+        source: dealSource,
+        notes: dealNotes,
+        serviceId: resolvedServiceId,
+        ownerId: resolvedOwnerId,
+        createdBy: defaultUserId,
+      },
+    });
+
+    console.log(`[Bot API] Deal creado: ${deal.name} en etapa ${stageRecord.name}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Deal "${deal.name}" creado en etapa "${stageRecord.name}"`,
+      deal: {
+        id: deal.id,
+        nombre: deal.name,
+        empresa: deal.company,
+        telefono: deal.phone,
+        email: deal.email,
+        valorEstimado: deal.estimatedValue,
+        etapa: stageRecord.name,
+        prioridad: deal.priority,
+        fuente: deal.source,
+        servicio: serviceName,
+        propietario: ownerName,
+        creadoEn: deal.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error creando deal:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al crear el deal',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * PATCH /api/webhook/bot/crm/deals/:id
+ *
+ * Actualiza un deal existente.
+ *
+ * Body: (todos opcionales)
+ * {
+ *   "etapa": "propuesta",
+ *   "valorEstimado": 6000000,
+ *   "prioridad": "alta",
+ *   "notas": "Actualización de notas",
+ *   "proximoSeguimiento": "2025-02-01"
+ * }
+ */
+router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      etapa,
+      stage,
+      valorEstimado,
+      estimatedValue,
+      prioridad,
+      priority,
+      notas,
+      notes,
+      proximoSeguimiento,
+      nextFollowUp,
+      probabilidad,
+      probability,
+    } = req.body;
+
+    // Verificar que el deal existe
+    const existingDeal = await prisma.deal.findUnique({
+      where: { id },
+      include: { stage: true },
+    });
+
+    if (!existingDeal) {
+      return res.status(404).json({
+        success: false,
+        error: `Deal con ID "${id}" no encontrado`,
+      });
+    }
+
+    // Construir objeto de actualización
+    const updateData: Record<string, any> = {};
+
+    // Actualizar etapa si se especificó
+    const dealStageSlug = etapa || stage;
+    if (dealStageSlug) {
+      const stageRecord = await prisma.dealStage.findFirst({
+        where: {
+          OR: [
+            { slug: dealStageSlug.toLowerCase() },
+            { name: { contains: dealStageSlug, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (stageRecord) {
+        updateData.stageId = stageRecord.id;
+
+        // Si la etapa es ganado o perdido, marcar fecha de cierre
+        if (stageRecord.isWon || stageRecord.isLost) {
+          updateData.closedAt = new Date();
+        }
+      }
+    }
+
+    // Otros campos
+    const dealValue = valorEstimado || estimatedValue;
+    if (dealValue !== undefined) updateData.estimatedValue = Number(dealValue);
+
+    const dealPriority = prioridad || priority;
+    if (dealPriority) updateData.priority = dealPriority.toLowerCase();
+
+    const dealNotes = notas || notes;
+    if (dealNotes !== undefined) updateData.notes = dealNotes;
+
+    const dealProbability = probabilidad || probability;
+    if (dealProbability !== undefined) updateData.probability = Number(dealProbability);
+
+    const dealFollowUp = proximoSeguimiento || nextFollowUp;
+    if (dealFollowUp) {
+      const date = new Date(dealFollowUp);
+      if (!dealFollowUp.includes('T')) {
+        date.setHours(9, 0, 0, 0); // 9 AM por defecto
+      }
+      updateData.nextFollowUp = date;
+    }
+
+    // Actualizar
+    const updatedDeal = await prisma.deal.update({
+      where: { id },
+      data: updateData,
+      include: {
+        stage: true,
+        service: true,
+        owner: true,
+      },
+    });
+
+    console.log(`[Bot API] Deal actualizado: ${updatedDeal.name}`);
+
+    res.json({
+      success: true,
+      message: `Deal "${updatedDeal.name}" actualizado`,
+      deal: {
+        id: updatedDeal.id,
+        nombre: updatedDeal.name,
+        empresa: updatedDeal.company,
+        etapa: updatedDeal.stage.name,
+        valorEstimado: updatedDeal.estimatedValue,
+        prioridad: updatedDeal.priority,
+        probabilidad: updatedDeal.probability,
+        proximoSeguimiento: updatedDeal.nextFollowUp?.toISOString().split('T')[0],
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error actualizando deal:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al actualizar el deal',
+      details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
