@@ -439,12 +439,9 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
       });
     }
 
-    // Consultar Firestore
-    let query: FirebaseFirestore.Query = getFirestore().collection('tasks')
-      .where('assignee', '==', normalizedUser);
-
+    // Mapear status si se especificó
+    let mappedStatus: string | undefined;
     if (taskStatus) {
-      // Mapear status
       const statusMap: Record<string, string> = {
         pending: 'TODO',
         todo: 'TODO',
@@ -453,24 +450,36 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
         done: 'DONE',
         completed: 'DONE',
       };
-      const mappedStatus = statusMap[taskStatus.toLowerCase()] || taskStatus.toUpperCase();
-      query = query.where('status', '==', mappedStatus);
+      mappedStatus = statusMap[taskStatus.toLowerCase()] || taskStatus.toUpperCase();
     }
 
-    const snapshot = await query.orderBy('createdAt', 'desc').limit(20).get();
+    // Consultar Firestore solo por assignee (evita necesidad de índice compuesto)
+    const snapshot = await getFirestore().collection('tasks')
+      .where('assignee', '==', normalizedUser)
+      .get();
 
-    const tasks = snapshot.docs.map(doc => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        titulo: data.title,
-        descripcion: data.description || '',
-        estado: data.status,
-        prioridad: data.priority,
-        fechaLimite: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : null,
-        creadoEn: new Date(data.createdAt).toISOString(),
-      };
-    });
+    // Filtrar y ordenar en memoria
+    let tasks = snapshot.docs
+      .map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          titulo: data.title,
+          descripcion: data.description || '',
+          estado: data.status,
+          prioridad: data.priority,
+          proyecto: data.projectId,
+          fechaLimite: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : null,
+          creadoEn: data.createdAt,
+        };
+      })
+      .filter(t => !mappedStatus || t.estado === mappedStatus) // Filtrar por status si se especificó
+      .sort((a, b) => b.creadoEn - a.creadoEn) // Ordenar por fecha desc
+      .slice(0, 30) // Limitar a 30 resultados
+      .map(t => ({
+        ...t,
+        creadoEn: new Date(t.creadoEn).toISOString(),
+      }));
 
     res.json({
       success: true,
@@ -483,6 +492,92 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
     res.status(500).json({
       success: false,
       error: 'Error al obtener tareas',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/tasks/all
+ *
+ * Lista las tareas pendientes de TODO el equipo (para notificaciones diarias).
+ * Agrupa por usuario y muestra solo tareas TODO e IN_PROGRESS.
+ */
+router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    // Obtener todas las tareas que no están DONE
+    const snapshot = await getFirestore().collection('tasks')
+      .where('status', 'in', ['TODO', 'IN_PROGRESS'])
+      .get();
+
+    // Agrupar por assignee
+    const tasksByUser: Record<string, any[]> = {};
+    VALID_TEAM_MEMBERS.forEach(member => {
+      tasksByUser[member] = [];
+    });
+
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const assignee = data.assignee;
+
+      if (assignee && tasksByUser[assignee]) {
+        tasksByUser[assignee].push({
+          id: doc.id,
+          titulo: data.title,
+          descripcion: data.description || '',
+          estado: data.status,
+          prioridad: data.priority,
+          fechaLimite: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : null,
+          creadoEn: data.createdAt,
+        });
+      }
+    });
+
+    // Ordenar tareas de cada usuario: primero por prioridad (HIGH > MEDIUM > LOW), luego por fecha
+    const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+
+    Object.keys(tasksByUser).forEach(user => {
+      tasksByUser[user] = tasksByUser[user]
+        .sort((a, b) => {
+          // Primero por prioridad
+          const pDiff = (priorityOrder[a.prioridad] || 1) - (priorityOrder[b.prioridad] || 1);
+          if (pDiff !== 0) return pDiff;
+          // Luego por fecha de creación (más reciente primero)
+          return b.creadoEn - a.creadoEn;
+        })
+        .map(t => ({
+          ...t,
+          creadoEn: new Date(t.creadoEn).toISOString(),
+        }));
+    });
+
+    // Resumen
+    const resumen = VALID_TEAM_MEMBERS.map(member => ({
+      usuario: member,
+      tareasTodo: tasksByUser[member].filter(t => t.estado === 'TODO').length,
+      tareasEnProgreso: tasksByUser[member].filter(t => t.estado === 'IN_PROGRESS').length,
+      total: tasksByUser[member].length,
+      tareasAlta: tasksByUser[member].filter(t => t.prioridad === 'HIGH').length,
+    })).filter(r => r.total > 0);
+
+    const totalTareas = resumen.reduce((sum, r) => sum + r.total, 0);
+    const totalAlta = resumen.reduce((sum, r) => sum + r.tareasAlta, 0);
+
+    res.json({
+      success: true,
+      fecha: new Date().toISOString().split('T')[0],
+      resumenGeneral: {
+        totalTareasPendientes: totalTareas,
+        tareasAltaPrioridad: totalAlta,
+        miembrosConTareas: resumen.length,
+      },
+      resumenPorUsuario: resumen,
+      tareasPorUsuario: tasksByUser,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando todas las tareas:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener tareas del equipo',
     });
   }
 });
