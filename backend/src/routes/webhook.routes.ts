@@ -1514,4 +1514,214 @@ router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, re
   }
 });
 
+/**
+ * POST /api/webhook/bot/sheets/gastos
+ *
+ * Registra un nuevo gasto (salida) en Google Sheets.
+ *
+ * Body:
+ * {
+ *   "fecha": "2025-01-30",          // Fecha del gasto (YYYY-MM-DD)
+ *   "importe": 150000,              // Monto del gasto
+ *   "descripcion": "Compra de...",  // Descripción del gasto
+ *   "categoria": "Herramientas",    // Categoría (Nómina, Arriendo, Herramientas, etc.)
+ *   "cuenta": "Bancolombia",        // Cuenta de pago
+ *   "entidad": "Proveedor X",       // Entidad/tercero
+ *   "terceroId": "T123"             // ID del tercero (opcional)
+ * }
+ */
+router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const {
+      fecha,
+      date,
+      importe,
+      monto,
+      amount,
+      descripcion,
+      description,
+      categoria,
+      category,
+      cuenta,
+      account,
+      entidad,
+      entity,
+      terceroId,
+      tercero,
+    } = req.body;
+
+    // Resolver valores con fallbacks
+    const expenseDate = fecha || date;
+    const expenseAmount = importe || monto || amount;
+    const expenseDescription = descripcion || description || '';
+    const expenseCategory = categoria || category || 'Otros';
+    const expenseAccount = cuenta || account || 'Principal';
+    const expenseEntity = entidad || entity || 'DT Growth Partners';
+    const expenseTerceroId = terceroId || tercero;
+
+    // Validaciones
+    if (!expenseDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: fecha (formato YYYY-MM-DD)',
+      });
+    }
+
+    if (!expenseAmount || isNaN(Number(expenseAmount))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: importe (número válido)',
+      });
+    }
+
+    // Validar formato de fecha
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(expenseDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Formato de fecha inválido. Use YYYY-MM-DD (ej: 2025-01-30)',
+      });
+    }
+
+    // Registrar el gasto
+    await googleSheetsService.addExpense({
+      fecha: expenseDate,
+      importe: Number(expenseAmount),
+      descripcion: expenseDescription,
+      categoria: expenseCategory,
+      cuenta: expenseAccount,
+      entidad: expenseEntity,
+      terceroId: expenseTerceroId,
+    });
+
+    console.log(`[Bot API] Gasto registrado: $${expenseAmount} - ${expenseDescription}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Gasto registrado: $${Number(expenseAmount).toLocaleString('es-CO')} en ${expenseCategory}`,
+      gasto: {
+        fecha: expenseDate,
+        importe: Number(expenseAmount),
+        descripcion: expenseDescription,
+        categoria: expenseCategory,
+        cuenta: expenseAccount,
+        entidad: expenseEntity,
+        terceroId: expenseTerceroId,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error registrando gasto:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al registrar el gasto en Google Sheets',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/sheets/ingresos
+ *
+ * Registra un nuevo ingreso (entrada) en Google Sheets.
+ *
+ * Body:
+ * {
+ *   "fecha": "2025-01-30",          // Fecha del ingreso (YYYY-MM-DD)
+ *   "importe": 500000,              // Monto del ingreso
+ *   "descripcion": "Pago cliente",  // Descripción del ingreso
+ *   "categoria": "PAGO DE CLIENTE", // Categoría
+ *   "cuenta": "Bancolombia",        // Cuenta donde se recibe
+ *   "entidad": "Cliente X",         // Cliente/entidad que paga
+ *   "terceroId": "T456"             // ID del tercero (opcional)
+ * }
+ */
+router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const {
+      fecha,
+      date,
+      importe,
+      monto,
+      amount,
+      descripcion,
+      description,
+      categoria,
+      category,
+      cuenta,
+      account,
+      entidad,
+      entity,
+      terceroId,
+      tercero,
+    } = req.body;
+
+    // Resolver valores con fallbacks
+    const incomeDate = fecha || date;
+    const incomeAmount = importe || monto || amount;
+    const incomeDescription = descripcion || description || '';
+    const incomeCategory = categoria || category || 'PAGO DE CLIENTE';
+    const incomeAccount = cuenta || account || 'Principal';
+    const incomeEntity = entidad || entity || '';
+    const incomeTerceroId = terceroId || tercero;
+
+    // Validaciones
+    if (!incomeDate) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: fecha (formato YYYY-MM-DD)',
+      });
+    }
+
+    if (!incomeAmount || isNaN(Number(incomeAmount))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: importe (número válido)',
+      });
+    }
+
+    // Validar formato de fecha
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(incomeDate)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Formato de fecha inválido. Use YYYY-MM-DD (ej: 2025-01-30)',
+      });
+    }
+
+    // Registrar el ingreso
+    await googleSheetsService.addIncome({
+      fecha: incomeDate,
+      importe: Number(incomeAmount),
+      descripcion: incomeDescription,
+      categoria: incomeCategory,
+      cuenta: incomeAccount,
+      entidad: incomeEntity,
+      terceroId: incomeTerceroId,
+    });
+
+    console.log(`[Bot API] Ingreso registrado: $${incomeAmount} - ${incomeDescription}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Ingreso registrado: $${Number(incomeAmount).toLocaleString('es-CO')} de ${incomeEntity || 'Sin entidad'}`,
+      ingreso: {
+        fecha: incomeDate,
+        importe: Number(incomeAmount),
+        descripcion: incomeDescription,
+        categoria: incomeCategory,
+        cuenta: incomeAccount,
+        entidad: incomeEntity,
+        terceroId: incomeTerceroId,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error registrando ingreso:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al registrar el ingreso en Google Sheets',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;
