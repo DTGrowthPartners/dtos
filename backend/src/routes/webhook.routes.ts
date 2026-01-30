@@ -947,6 +947,7 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
           descripcion: t.descripcion,
           entidad: t.entidad,
           categoria: t.categoria,
+          terceroId: t.terceroId,
         })),
         topGastos: topGastos.map(t => ({
           fecha: t.fecha,
@@ -954,11 +955,46 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
           descripcion: t.descripcion,
           entidad: t.entidad,
           categoria: t.categoria,
+          terceroId: t.terceroId,
         })),
         gastosPorCategoria: Object.entries(gastosPorCategoria)
           .map(([categoria, monto]) => ({ categoria, monto }))
           .sort((a, b) => b.monto - a.monto),
       },
+
+      // Análisis por tercero (gastos agrupados por entidad/tercero)
+      gastosPorTercero: (() => {
+        const terceroMap: Record<string, { total: number; count: number; terceroId?: string }> = {};
+        gastosDelMes.forEach(g => {
+          const key = g.entidad || 'Sin Entidad';
+          if (!terceroMap[key]) {
+            terceroMap[key] = { total: 0, count: 0, terceroId: g.terceroId };
+          }
+          terceroMap[key].total += g.importe;
+          terceroMap[key].count += 1;
+        });
+        return Object.entries(terceroMap)
+          .map(([nombre, data]) => ({ nombre, ...data }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10);
+      })(),
+
+      // Ingresos por tercero/cliente
+      ingresosPorTercero: (() => {
+        const terceroMap: Record<string, { total: number; count: number; terceroId?: string }> = {};
+        ingresosDelMes.forEach(i => {
+          const key = i.entidad || 'Sin Entidad';
+          if (!terceroMap[key]) {
+            terceroMap[key] = { total: 0, count: 0, terceroId: i.terceroId };
+          }
+          terceroMap[key].total += i.importe;
+          terceroMap[key].count += 1;
+        });
+        return Object.entries(terceroMap)
+          .map(([nombre, data]) => ({ nombre, ...data }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 10);
+      })(),
 
       // Cuentas por cobrar/pagar (del sistema)
       cuentas: {
@@ -1251,6 +1287,229 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
     res.status(500).json({
       success: false,
       error: 'Error al obtener deals',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/sheets/terceros
+ *
+ * Lista terceros desde Google Sheets (proveedores, empleados, freelancers, clientes).
+ * Esta es la fuente de verdad para contabilidad.
+ *
+ * Query params:
+ *   - tipo: cliente, proveedor, empleado, freelancer (default: all)
+ *   - estado: activo, inactivo (default: activo)
+ */
+router.get('/bot/sheets/terceros', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { tipo, type, estado, status } = req.query;
+    const terceroType = (tipo || type) as string | undefined;
+    const terceroStatus = (estado || status) as string | undefined;
+
+    let terceros = await googleSheetsService.getTerceros();
+
+    // Filtrar por tipo si se especificó
+    if (terceroType && terceroType !== 'all') {
+      terceros = terceros.filter(t => t.tipo.toLowerCase() === terceroType.toLowerCase());
+    }
+
+    // Filtrar por estado (default: activo)
+    const statusFilter = terceroStatus?.toLowerCase() || 'activo';
+    if (statusFilter !== 'all') {
+      terceros = terceros.filter(t => t.estado === statusFilter);
+    }
+
+    // Resumen por tipo
+    const resumenPorTipo = {
+      clientes: terceros.filter(t => t.tipo === 'cliente').length,
+      proveedores: terceros.filter(t => t.tipo === 'proveedor').length,
+      empleados: terceros.filter(t => t.tipo === 'empleado').length,
+      freelancers: terceros.filter(t => t.tipo === 'freelancer').length,
+    };
+
+    res.json({
+      success: true,
+      count: terceros.length,
+      resumenPorTipo,
+      terceros: terceros.map(t => ({
+        id: t.id,
+        tipo: t.tipo,
+        nombre: t.nombre,
+        nit: t.nit,
+        email: t.email,
+        telefono: t.telefono,
+        direccion: t.direccion,
+        categoria: t.categoria,
+        cuentaBancaria: t.cuentaBancaria,
+        salarioBase: t.salarioBase,
+        cargo: t.cargo,
+        estado: t.estado,
+        createdAt: t.createdAt,
+      })),
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando terceros de Sheets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener terceros de Google Sheets',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/sheets/nomina
+ *
+ * Lista registros de nómina desde Google Sheets.
+ */
+router.get('/bot/sheets/nomina', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const nomina = await googleSheetsService.getNomina();
+
+    // Totales por concepto
+    const totalesPorConcepto: Record<string, number> = {};
+    nomina.forEach(record => {
+      const concepto = record.concepto || 'salario';
+      totalesPorConcepto[concepto] = (totalesPorConcepto[concepto] || 0) + record.totalPagado;
+    });
+
+    // Total general
+    const totalPagado = nomina.reduce((sum, r) => sum + r.totalPagado, 0);
+    const totalDeducciones = nomina.reduce((sum, r) => sum + r.deducciones, 0);
+    const totalBonificaciones = nomina.reduce((sum, r) => sum + r.bonificaciones, 0);
+
+    res.json({
+      success: true,
+      count: nomina.length,
+      resumen: {
+        totalPagado,
+        totalDeducciones,
+        totalBonificaciones,
+        totalesPorConcepto,
+      },
+      registros: nomina.map(r => ({
+        id: r.id,
+        fecha: r.fecha,
+        terceroId: r.terceroId,
+        terceroNombre: r.terceroNombre,
+        concepto: r.concepto,
+        salarioBase: r.salarioBase,
+        deducciones: r.deducciones,
+        bonificaciones: r.bonificaciones,
+        totalPagado: r.totalPagado,
+        notas: r.notas,
+      })),
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando nómina de Sheets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener nómina de Google Sheets',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/sheets/transacciones
+ *
+ * Lista todas las transacciones (entradas y salidas) desde Google Sheets.
+ * Query params:
+ *   - tipo: entrada, salida, all (default: all)
+ *   - categoria: filtrar por categoría
+ *   - terceroId: filtrar por terceroId
+ *   - limit: número máximo de resultados (default: 50)
+ */
+router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { tipo, type, categoria, category, terceroId, tercero, limit } = req.query;
+    const transactionType = (tipo || type) as string | undefined;
+    const categoryFilter = (categoria || category) as string | undefined;
+    const terceroFilter = (terceroId || tercero) as string | undefined;
+    const limitNum = parseInt((limit as string) || '50', 10);
+
+    const financeData = await googleSheetsService.getFinanceData();
+
+    let transacciones: Array<{
+      tipo: 'entrada' | 'salida';
+      fecha: string;
+      importe: number;
+      descripcion: string;
+      categoria: string;
+      cuenta: string;
+      entidad: string;
+      terceroId?: string;
+    }> = [];
+
+    // Agregar ingresos
+    if (!transactionType || transactionType === 'all' || transactionType === 'entrada') {
+      financeData.ingresos.forEach(t => {
+        transacciones.push({
+          tipo: 'entrada',
+          fecha: t.fecha,
+          importe: t.importe,
+          descripcion: t.descripcion,
+          categoria: t.categoria,
+          cuenta: t.cuenta,
+          entidad: t.entidad,
+          terceroId: t.terceroId,
+        });
+      });
+    }
+
+    // Agregar gastos
+    if (!transactionType || transactionType === 'all' || transactionType === 'salida') {
+      financeData.gastos.forEach(t => {
+        transacciones.push({
+          tipo: 'salida',
+          fecha: t.fecha,
+          importe: t.importe,
+          descripcion: t.descripcion,
+          categoria: t.categoria,
+          cuenta: t.cuenta,
+          entidad: t.entidad,
+          terceroId: t.terceroId,
+        });
+      });
+    }
+
+    // Filtrar por categoría
+    if (categoryFilter) {
+      transacciones = transacciones.filter(t =>
+        t.categoria.toLowerCase().includes(categoryFilter.toLowerCase())
+      );
+    }
+
+    // Filtrar por terceroId
+    if (terceroFilter) {
+      transacciones = transacciones.filter(t =>
+        t.terceroId === terceroFilter ||
+        t.entidad.toLowerCase().includes(terceroFilter.toLowerCase())
+      );
+    }
+
+    // Ordenar por fecha (más reciente primero)
+    transacciones.sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+    // Limitar resultados
+    const totalCount = transacciones.length;
+    transacciones = transacciones.slice(0, limitNum);
+
+    res.json({
+      success: true,
+      count: transacciones.length,
+      totalCount,
+      resumen: {
+        totalEntradas: financeData.totalIncome,
+        totalSalidas: financeData.totalExpenses,
+        balance: financeData.totalIncome - financeData.totalExpenses,
+      },
+      transacciones,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando transacciones de Sheets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener transacciones de Google Sheets',
     });
   }
 });

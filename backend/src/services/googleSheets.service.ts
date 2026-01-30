@@ -78,19 +78,19 @@ export class GoogleSheetsService {
   }> {
     try {
 
-      // Leer hoja de Entradas (Ingresos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
+      // Leer hoja de Entradas (Ingresos) - Columnas A:G (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, TerceroId)
       // Usamos UNFORMATTED_VALUE para obtener fechas como números seriales y valores sin formato
       // Nota: Las hojas NO tienen encabezados, empiezan desde A1
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A1:F',
+        range: 'Entradas!A1:G',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
-      // Leer hoja de Salidas (Gastos) - Columnas A:F (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad)
+      // Leer hoja de Salidas (Gastos) - Columnas A:G (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, TerceroId)
       const expensesResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A1:F',
+        range: 'Salidas!A1:G',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
@@ -104,7 +104,7 @@ export class GoogleSheetsService {
       console.log('Total expenses rows:', expensesRows.length);
 
       // Parsear ingresos
-      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad
+      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
       const ingresos: TransactionRow[] = incomeRows
         .filter((row: any[]) => row[1]) // check importe exists
         .map((row: any[]) => ({
@@ -114,10 +114,11 @@ export class GoogleSheetsService {
           categoria: String(row[3] || ''),
           cuenta: String(row[4] || ''),
           entidad: String(row[5] || ''),
+          terceroId: row[6] ? String(row[6]) : undefined,
         }));
 
       // Parsear gastos
-      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad
+      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
       const gastos: TransactionRow[] = expensesRows
         .filter((row: any[]) => row[1]) // check importe exists
         .map((row: any[]) => ({
@@ -127,6 +128,7 @@ export class GoogleSheetsService {
           categoria: String(row[3] || ''),
           cuenta: String(row[4] || ''),
           entidad: String(row[5] || ''),
+          terceroId: row[6] ? String(row[6]) : undefined,
         }));
 
       // Excluir "AJUSTE SALDO" de los totales (es solo un ajuste contable)
@@ -305,6 +307,7 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     entidad: string;
+    terceroId?: string;
   }): Promise<void> {
     try {
       // Parse YYYY-MM-DD and create date with current time
@@ -358,11 +361,12 @@ export class GoogleSheetsService {
         expense.categoria,
         expense.cuenta,
         expense.entidad,
+        expense.terceroId || '',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A2:F2',
+        range: 'Salidas!A2:G2',
         valueInputOption: 'RAW',
         requestBody: {
           values,
@@ -383,6 +387,7 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     entidad: string;
+    terceroId?: string;
   }): Promise<void> {
     try {
       // Parse YYYY-MM-DD and create date with current time
@@ -436,11 +441,12 @@ export class GoogleSheetsService {
         income.categoria,
         income.cuenta,
         income.entidad,
+        income.terceroId || '',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:F2',
+        range: 'Entradas!A2:G2',
         valueInputOption: 'RAW',
         requestBody: {
           values,
@@ -820,6 +826,7 @@ export class GoogleSheetsService {
         categoria: 'Nómina',
         cuenta: 'Principal',
         entidad: record.terceroNombre || record.terceroId,
+        terceroId: record.terceroId,
       });
 
       console.log('Nomina record added:', id);
