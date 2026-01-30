@@ -1751,6 +1751,307 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
 });
 
 /**
+ * POST /api/webhook/bot/terceros
+ *
+ * Crea un nuevo tercero en la base de datos.
+ *
+ * Body:
+ * {
+ *   "nombre": "Juan Pérez",
+ *   "email": "juan@email.com",
+ *   "telefono": "3001234567",
+ *   "tipo": "proveedor",              // prospecto, cliente, proveedor, empleado (puede ser múltiple separado por coma)
+ *   "documento": "1234567890",
+ *   "direccion": "Calle 123",
+ *   "cargo": "Gerente",               // solo para empleados
+ *   "salarioBase": 3000000,           // solo para empleados
+ *   "categoriaProveedor": "Software", // solo para proveedores
+ *   "cuentaBancaria": "123456789",
+ *   "clientId": "abc123",             // asociar a un cliente existente
+ *   "notas": "Notas adicionales",
+ *   "tags": ["urgente", "vip"]
+ * }
+ */
+router.post('/bot/terceros', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const {
+      nombre,
+      name,
+      email,
+      telefono,
+      phone,
+      telefonoCodigo,
+      phoneCode,
+      tipo,
+      type,
+      documento,
+      document,
+      direccion,
+      address,
+      cargo,
+      position,
+      salarioBase,
+      salary,
+      categoriaProveedor,
+      providerCategory,
+      cuentaBancaria,
+      bankAccount,
+      clientId,
+      organizacionId,
+      notas,
+      notes,
+      tags,
+    } = req.body;
+
+    // Resolver valores
+    const terceroName = nombre || name;
+    const terceroEmail = email;
+    const terceroPhone = telefono || phone;
+    const terceroPhoneCode = telefonoCodigo || phoneCode || '+57';
+    const terceroTypes = (tipo || type || 'prospecto').toLowerCase().split(',').map((t: string) => t.trim());
+    const terceroDocument = documento || document;
+    const terceroAddress = direccion || address;
+    const terceroCargo = cargo || position;
+    const terceroSalary = salarioBase || salary;
+    const terceroProviderCategory = categoriaProveedor || providerCategory;
+    const terceroBankAccount = cuentaBancaria || bankAccount;
+    const terceroNotes = notas || notes;
+    const terceroTags = tags || [];
+
+    // Validaciones
+    if (!terceroName) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: nombre del tercero',
+      });
+    }
+
+    // Determinar tipos
+    const esProspecto = terceroTypes.includes('prospecto');
+    const esCliente = terceroTypes.includes('cliente');
+    const esProveedor = terceroTypes.includes('proveedor');
+    const esEmpleado = terceroTypes.includes('empleado');
+
+    // Crear el tercero
+    const tercero = await prisma.tercero.create({
+      data: {
+        nombre: terceroName,
+        email: terceroEmail,
+        telefono: terceroPhone,
+        telefonoCodigo: terceroPhoneCode,
+        documento: terceroDocument,
+        direccion: terceroAddress,
+        esProspecto,
+        esCliente,
+        esProveedor,
+        esEmpleado,
+        cargo: terceroCargo,
+        salarioBase: terceroSalary ? Number(terceroSalary) : undefined,
+        categoriaProveedor: terceroProviderCategory,
+        cuentaBancaria: terceroBankAccount,
+        clientId,
+        organizacionId,
+        notas: terceroNotes,
+        tags: Array.isArray(terceroTags) ? terceroTags : [],
+        estado: 'activo',
+      },
+    });
+
+    const tipos = [];
+    if (esProspecto) tipos.push('Prospecto');
+    if (esCliente) tipos.push('Cliente');
+    if (esProveedor) tipos.push('Proveedor');
+    if (esEmpleado) tipos.push('Empleado');
+
+    console.log(`[Bot API] Tercero creado: ${tercero.nombre} (${tipos.join(', ')})`);
+
+    res.status(201).json({
+      success: true,
+      message: `Tercero "${tercero.nombre}" creado como ${tipos.join(', ')}`,
+      tercero: {
+        id: tercero.id,
+        nombre: tercero.nombre,
+        email: tercero.email,
+        telefono: tercero.telefono ? `${tercero.telefonoCodigo}${tercero.telefono}` : null,
+        tipos,
+        documento: tercero.documento,
+        direccion: tercero.direccion,
+        cargo: tercero.cargo,
+        categoriaProveedor: tercero.categoriaProveedor,
+        estado: tercero.estado,
+        creadoEn: tercero.createdAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error creando tercero:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al crear el tercero',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * PATCH /api/webhook/bot/terceros/:id
+ *
+ * Actualiza un tercero existente.
+ *
+ * Body: (todos opcionales)
+ * {
+ *   "nombre": "Nuevo nombre",
+ *   "email": "nuevo@email.com",
+ *   "telefono": "3009876543",
+ *   "tipo": "cliente,proveedor",      // agregar tipos (no reemplaza)
+ *   "quitarTipo": "prospecto",        // quitar tipos
+ *   "estado": "activo",               // activo, inactivo
+ *   "cargo": "Director",
+ *   "notas": "Nuevas notas"
+ * }
+ */
+router.patch('/bot/terceros/:id', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const {
+      nombre,
+      name,
+      email,
+      telefono,
+      phone,
+      tipo,
+      type,
+      quitarTipo,
+      removeType,
+      documento,
+      document,
+      direccion,
+      address,
+      cargo,
+      position,
+      salarioBase,
+      salary,
+      categoriaProveedor,
+      providerCategory,
+      cuentaBancaria,
+      bankAccount,
+      estado,
+      status,
+      notas,
+      notes,
+      tags,
+    } = req.body;
+
+    // Verificar que el tercero existe
+    const existingTercero = await prisma.tercero.findUnique({
+      where: { id },
+    });
+
+    if (!existingTercero) {
+      return res.status(404).json({
+        success: false,
+        error: `Tercero con ID "${id}" no encontrado`,
+      });
+    }
+
+    // Construir objeto de actualización
+    const updateData: Record<string, any> = {};
+
+    // Campos básicos
+    const terceroName = nombre || name;
+    if (terceroName) updateData.nombre = terceroName;
+
+    if (email !== undefined) updateData.email = email;
+
+    const terceroPhone = telefono || phone;
+    if (terceroPhone !== undefined) updateData.telefono = terceroPhone;
+
+    const terceroDocument = documento || document;
+    if (terceroDocument !== undefined) updateData.documento = terceroDocument;
+
+    const terceroAddress = direccion || address;
+    if (terceroAddress !== undefined) updateData.direccion = terceroAddress;
+
+    const terceroCargo = cargo || position;
+    if (terceroCargo !== undefined) updateData.cargo = terceroCargo;
+
+    const terceroSalary = salarioBase || salary;
+    if (terceroSalary !== undefined) updateData.salarioBase = Number(terceroSalary);
+
+    const terceroProviderCategory = categoriaProveedor || providerCategory;
+    if (terceroProviderCategory !== undefined) updateData.categoriaProveedor = terceroProviderCategory;
+
+    const terceroBankAccount = cuentaBancaria || bankAccount;
+    if (terceroBankAccount !== undefined) updateData.cuentaBancaria = terceroBankAccount;
+
+    const terceroStatus = estado || status;
+    if (terceroStatus) updateData.estado = terceroStatus.toLowerCase();
+
+    const terceroNotes = notas || notes;
+    if (terceroNotes !== undefined) updateData.notas = terceroNotes;
+
+    if (tags !== undefined) updateData.tags = Array.isArray(tags) ? tags : [];
+
+    // Agregar tipos
+    const addTypes = (tipo || type);
+    if (addTypes) {
+      const typesToAdd = addTypes.toLowerCase().split(',').map((t: string) => t.trim());
+      if (typesToAdd.includes('prospecto')) updateData.esProspecto = true;
+      if (typesToAdd.includes('cliente')) updateData.esCliente = true;
+      if (typesToAdd.includes('proveedor')) updateData.esProveedor = true;
+      if (typesToAdd.includes('empleado')) updateData.esEmpleado = true;
+    }
+
+    // Quitar tipos
+    const removeTypes = (quitarTipo || removeType);
+    if (removeTypes) {
+      const typesToRemove = removeTypes.toLowerCase().split(',').map((t: string) => t.trim());
+      if (typesToRemove.includes('prospecto')) updateData.esProspecto = false;
+      if (typesToRemove.includes('cliente')) updateData.esCliente = false;
+      if (typesToRemove.includes('proveedor')) updateData.esProveedor = false;
+      if (typesToRemove.includes('empleado')) updateData.esEmpleado = false;
+    }
+
+    // Actualizar
+    const updatedTercero = await prisma.tercero.update({
+      where: { id },
+      data: updateData,
+    });
+
+    const tipos = [];
+    if (updatedTercero.esProspecto) tipos.push('Prospecto');
+    if (updatedTercero.esCliente) tipos.push('Cliente');
+    if (updatedTercero.esProveedor) tipos.push('Proveedor');
+    if (updatedTercero.esEmpleado) tipos.push('Empleado');
+
+    console.log(`[Bot API] Tercero actualizado: ${updatedTercero.nombre}`);
+
+    res.json({
+      success: true,
+      message: `Tercero "${updatedTercero.nombre}" actualizado`,
+      tercero: {
+        id: updatedTercero.id,
+        nombre: updatedTercero.nombre,
+        email: updatedTercero.email,
+        telefono: updatedTercero.telefono ? `${updatedTercero.telefonoCodigo}${updatedTercero.telefono}` : null,
+        tipos,
+        documento: updatedTercero.documento,
+        direccion: updatedTercero.direccion,
+        cargo: updatedTercero.cargo,
+        categoriaProveedor: updatedTercero.categoriaProveedor,
+        estado: updatedTercero.estado,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error actualizando tercero:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al actualizar el tercero',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
  * GET /api/webhook/bot/sheets/terceros
  *
  * Lista terceros desde Google Sheets (proveedores, empleados, freelancers, clientes).
