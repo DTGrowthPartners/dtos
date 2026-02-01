@@ -794,9 +794,10 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
     const requestedMonth = (mes || month) as string | undefined;
 
     // Obtener datos de Google Sheets
-    const [financeData, budgetData] = await Promise.all([
+    const [financeData, budgetData, disponibleData] = await Promise.all([
       googleSheetsService.getFinanceData(),
       googleSheetsService.getBudgetData(),
+      googleSheetsService.getDisponible(),
     ]);
 
     // Determinar el mes actual del Q1 (enero=0, febrero=1, marzo=2)
@@ -1014,6 +1015,17 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
         totalIngresosHistorico: financeData.totalIncome,
         totalGastosHistorico: financeData.totalExpenses,
         beneficioHistorico: financeData.totalIncome - financeData.totalExpenses,
+      },
+
+      // Dinero disponible por cuenta (saldos actuales)
+      disponible: {
+        total: Math.round(disponibleData.totalDisponible),
+        cuentas: disponibleData.cuentas
+          .filter(c => c.saldo > 0)
+          .map(c => ({
+            cuenta: c.cuenta,
+            saldo: Math.round(c.saldo),
+          })),
       },
     });
   } catch (error) {
