@@ -578,32 +578,32 @@ export default function Dashboard() {
         {/* Disponible - Dinero en Cuentas */}
         {disponible.length > 0 && (
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center justify-between">
+            <CardHeader className="pb-2 px-3 sm:px-6">
+              <CardTitle className="text-sm sm:text-base flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2">
                 <span className="flex items-center gap-2">
                   <Wallet className="h-4 w-4 text-primary" />
                   Dinero Disponible
                 </span>
-                <span className="text-2xl font-bold text-primary">
-                  {hideFinances ? '••••••' : `$${totalDisponible.toLocaleString()}`}
+                <span className="text-lg sm:text-xl font-bold text-primary">
+                  {hideFinances ? '••••••' : `$${Math.round(totalDisponible).toLocaleString()}`}
                 </span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
-                {disponible.map((cuenta, index) => (
+            <CardContent className="px-3 sm:px-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 sm:gap-3">
+                {disponible.filter(c => c.saldo > 0).map((cuenta, index) => (
                   <div
                     key={index}
-                    className="p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
+                    className="p-2 sm:p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
                   >
-                    <div className="flex items-center gap-2 mb-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                      <span className="text-xs font-medium text-muted-foreground truncate">
+                    <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                      <Building2 className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
+                      <span className="text-[10px] sm:text-xs font-medium text-muted-foreground truncate">
                         {cuenta.cuenta}
                       </span>
                     </div>
-                    <p className="text-lg font-bold text-foreground">
-                      {hideFinances ? '••••••' : `$${cuenta.saldo.toLocaleString()}`}
+                    <p className="text-sm sm:text-base font-bold text-foreground">
+                      {hideFinances ? '••••••' : `$${Math.round(cuenta.saldo).toLocaleString()}`}
                     </p>
                   </div>
                 ))}

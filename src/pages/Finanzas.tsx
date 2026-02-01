@@ -1173,39 +1173,39 @@ export default function Finanzas() {
 
       {/* Disponible - Saldo por Cuenta */}
       {disponible.length > 0 && (
-        <div className="rounded-xl border border-border bg-gradient-to-br from-primary/5 to-primary/10 p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
-                <Wallet className="h-5 w-5 text-primary" />
+        <div className="rounded-xl border border-border bg-gradient-to-br from-primary/5 to-primary/10 p-3 sm:p-4 lg:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 mb-3 sm:mb-4">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary/20">
+                <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
               </div>
               <div>
-                <h3 className="font-semibold text-foreground">Dinero Disponible</h3>
-                <p className="text-xs text-muted-foreground">Saldo actual por cuenta</p>
+                <h3 className="text-sm sm:text-base font-semibold text-foreground">Dinero Disponible</h3>
+                <p className="text-[10px] sm:text-xs text-muted-foreground">Saldo actual por cuenta</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-2xl sm:text-3xl font-bold text-primary">
-                ${totalDisponible.toLocaleString()}
+            <div className="text-left sm:text-right">
+              <p className="text-xl sm:text-2xl font-bold text-primary">
+                ${Math.round(totalDisponible).toLocaleString()}
               </p>
-              <p className="text-xs text-muted-foreground">Total disponible</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Total disponible</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {disponible.map((cuenta, index) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+            {disponible.filter(c => c.saldo > 0).map((cuenta, index) => (
               <div
                 key={index}
-                className="p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
+                className="p-2 sm:p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-xs font-medium text-muted-foreground truncate">
+                <div className="flex items-center gap-1.5 sm:gap-2 mb-1 sm:mb-2">
+                  <Building2 className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-[10px] sm:text-xs font-medium text-muted-foreground truncate">
                     {cuenta.cuenta}
                   </span>
                 </div>
-                <p className="text-lg font-bold text-foreground">
-                  ${cuenta.saldo.toLocaleString()}
+                <p className="text-sm sm:text-base font-bold text-foreground">
+                  ${Math.round(cuenta.saldo).toLocaleString()}
                 </p>
               </div>
             ))}
