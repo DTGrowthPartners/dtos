@@ -538,6 +538,14 @@ export class GoogleSheetsService {
         const marzoProyectado = typeof row[5] === 'number' ? row[5] : 0;
         const marzoReal = typeof row[6] === 'number' ? row[6] : 0;
 
+        // Debug logging for TOTAL rows
+        if (firstCol.includes('TOTAL')) {
+          console.log(`Budget row [${firstCol}]:`, {
+            raw: row.slice(0, 8),
+            parsed: { eneroProyectado, eneroReal, febreroProyectado, febreroReal, marzoProyectado, marzoReal }
+          });
+        }
+
         // Handle TOTAL INGRESOS
         if (firstCol === 'TOTAL INGRESOS') {
           result.ingresos.totales = {
