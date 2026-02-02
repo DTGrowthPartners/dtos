@@ -25,6 +25,8 @@ interface NoteColumnProps {
   onEditItem: (item: NoteItem) => void;
   onDeleteItem: (itemId: string) => void;
   onDropItem: (e: React.DragEvent, columnId: string) => void;
+  onDragStartItem?: (itemId: string) => void;
+  onDragEndItem?: () => void;
   onImageClick?: (imageUrl: string) => void;
   draggedItemId: string | null;
 }
@@ -38,6 +40,8 @@ export default function NoteColumn({
   onEditItem,
   onDeleteItem,
   onDropItem,
+  onDragStartItem,
+  onDragEndItem,
   onImageClick,
   draggedItemId,
 }: NoteColumnProps) {
@@ -49,11 +53,13 @@ export default function NoteColumn({
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('noteItemId', itemId);
+    onDragStartItem?.(itemId);
   };
 
   const handleDragEnd = (e: React.DragEvent) => {
     const element = e.target as HTMLElement;
     element.style.opacity = '1';
+    onDragEndItem?.();
   };
 
   return (

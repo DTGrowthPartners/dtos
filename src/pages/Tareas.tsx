@@ -2307,7 +2307,34 @@ export default function Tareas() {
   });
 
   const getTasksByColumn = (status: string) => {
-    return filteredTasks.filter((task) => task.status === status);
+    const columnTasks = filteredTasks.filter((task) => task.status === status);
+
+    // Sort tasks: overdue first, then by due date (soonest first), then tasks without due date
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const nowTimestamp = now.getTime();
+
+    return columnTasks.sort((a, b) => {
+      const aIsOverdue = a.dueDate && a.dueDate < nowTimestamp;
+      const bIsOverdue = b.dueDate && b.dueDate < nowTimestamp;
+
+      // Overdue tasks first
+      if (aIsOverdue && !bIsOverdue) return -1;
+      if (!aIsOverdue && bIsOverdue) return 1;
+
+      // Both overdue or both not overdue - sort by due date
+      if (a.dueDate && b.dueDate) {
+        return a.dueDate - b.dueDate; // Soonest first
+      }
+
+      // Tasks with due date before tasks without
+      if (a.dueDate && !b.dueDate) return -1;
+      if (!a.dueDate && b.dueDate) return 1;
+
+      // No due dates - sort by priority (high first)
+      const priorityOrder = { high: 0, medium: 1, low: 2 };
+      return (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2);
+    });
   };
 
   const cycleViewMode = () => {
@@ -3735,6 +3762,8 @@ export default function Tareas() {
                         onEditItem={handleEditNoteItem}
                         onDeleteItem={handleDeleteNoteItem}
                         onDropItem={handleNoteItemDrop}
+                        onDragStartItem={(itemId) => setDraggedNoteItem(itemId)}
+                        onDragEndItem={() => setDraggedNoteItem(null)}
                         onImageClick={(img) => {
                           setSelectedImage(img);
                           setImageModalOpen(true);
