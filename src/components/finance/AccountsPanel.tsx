@@ -1514,7 +1514,7 @@ function UnpaidInvoicesList({
                 className="ml-2"
               >
                 <Check className="h-4 w-4 mr-1" />
-                Pagada
+                Marcar pagado
               </Button>
             </div>
           </div>
