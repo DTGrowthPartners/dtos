@@ -190,6 +190,12 @@ export function AccountsPanel() {
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<Account | null>(null);
   const [selectedServiceForInvoice, setSelectedServiceForInvoice] = useState<PendingClientService | null>(null);
   const [generatingInvoiceId, setGeneratingInvoiceId] = useState<string | null>(null);
+  // Estados para pago de facturas (cuentas de cobro)
+  const [invoicePaymentDialogOpen, setInvoicePaymentDialogOpen] = useState(false);
+  const [pendingPaymentInvoice, setPendingPaymentInvoice] = useState<UnpaidInvoice | null>(null);
+  const [invoiceRegisterInSheets, setInvoiceRegisterInSheets] = useState(true);
+  const [invoicePaymentCuenta, setInvoicePaymentCuenta] = useState<'Principal' | 'Ahorros'>('Principal');
+  const [isProcessingInvoicePayment, setIsProcessingInvoicePayment] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -455,6 +461,47 @@ export function AccountsPanel() {
     });
   };
 
+  // Funciones para pago de facturas (cuentas de cobro)
+  const openInvoicePaymentDialog = (invoice: UnpaidInvoice) => {
+    setPendingPaymentInvoice(invoice);
+    setInvoiceRegisterInSheets(true);
+    setInvoicePaymentCuenta('Principal');
+    setInvoicePaymentDialogOpen(true);
+  };
+
+  const handleConfirmInvoicePayment = async () => {
+    if (!pendingPaymentInvoice) return;
+
+    setIsProcessingInvoicePayment(true);
+    try {
+      await apiClient.patch(`/api/invoices/${pendingPaymentInvoice.id}/status`, {
+        status: 'pagada',
+        registerInSheets: invoiceRegisterInSheets,
+        cuenta: invoicePaymentCuenta,
+      });
+
+      toast({
+        title: 'Factura marcada como pagada',
+        description: invoiceRegisterInSheets
+          ? `Se registró el pago en Google Sheets (${invoicePaymentCuenta})`
+          : 'Se actualizó el estado de la factura',
+      });
+
+      setInvoicePaymentDialogOpen(false);
+      setPendingPaymentInvoice(null);
+      fetchData();
+    } catch (error) {
+      console.error('Error marking invoice as paid:', error);
+      toast({
+        title: 'Error',
+        description: 'No se pudo marcar la factura como pagada',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsProcessingInvoicePayment(false);
+    }
+  };
+
   const formatCurrency = (amount: number, currency = 'COP') => {
     return new Intl.NumberFormat('es-CO', {
       style: 'currency',
@@ -581,6 +628,7 @@ export function AccountsPanel() {
                 invoices={unpaidInvoices}
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
+                onMarkAsPaid={openInvoicePaymentDialog}
               />
             </div>
           )}
@@ -1051,6 +1099,100 @@ export function AccountsPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Payment Confirmation Dialog */}
+      <Dialog open={invoicePaymentDialogOpen} onOpenChange={setInvoicePaymentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Pago de Cuenta de Cobro</DialogTitle>
+            <DialogDescription>
+              ¿Marcar esta cuenta de cobro como pagada?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {pendingPaymentInvoice && (
+              <div className="rounded-lg border p-4 bg-muted/50">
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Cliente</p>
+                    <p className="font-medium">{pendingPaymentInvoice.clientName}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Monto</p>
+                    <p className="font-bold text-success">{formatCurrency(pendingPaymentInvoice.totalAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Número</p>
+                    <p className="font-medium">#{pendingPaymentInvoice.invoiceNumber.substring(0, 12)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Fecha</p>
+                    <p className="font-medium">{formatDate(pendingPaymentInvoice.fecha)}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+              <div>
+                <p className="font-medium text-sm">Registrar en Google Sheets</p>
+                <p className="text-xs text-muted-foreground">
+                  Se agregará como ingreso en la hoja de Finanzas
+                </p>
+              </div>
+              <Switch
+                checked={invoiceRegisterInSheets}
+                onCheckedChange={setInvoiceRegisterInSheets}
+              />
+            </div>
+
+            {invoiceRegisterInSheets && (
+              <div className="space-y-2">
+                <Label>Cuenta de destino</Label>
+                <Select
+                  value={invoicePaymentCuenta}
+                  onValueChange={(v) => setInvoicePaymentCuenta(v as 'Principal' | 'Ahorros')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                    <SelectItem value="Ahorros">Ahorros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setInvoicePaymentDialogOpen(false)}
+              disabled={isProcessingInvoicePayment}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmInvoicePayment}
+              disabled={isProcessingInvoicePayment}
+            >
+              {isProcessingInvoicePayment ? (
+                <>
+                  <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Confirmar Pago
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1324,10 +1466,12 @@ function UnpaidInvoicesList({
   invoices,
   formatCurrency,
   formatDate,
+  onMarkAsPaid,
 }: {
   invoices: UnpaidInvoice[];
   formatCurrency: (amount: number, currency?: string) => string;
   formatDate: (date: string) => string;
+  onMarkAsPaid: (invoice: UnpaidInvoice) => void;
 }) {
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
@@ -1363,6 +1507,15 @@ function UnpaidInvoicesList({
                   #{invoice.invoiceNumber.substring(0, 12)}
                 </p>
               </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => onMarkAsPaid(invoice)}
+                className="ml-2"
+              >
+                <Check className="h-4 w-4 mr-1" />
+                Pagada
+              </Button>
             </div>
           </div>
 
