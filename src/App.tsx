@@ -19,6 +19,7 @@ import Finanzas from "@/pages/Finanzas";
 import CRM from "@/pages/CRM";
 import Terceros from "@/pages/Terceros";
 import Calendario from "@/pages/Calendario";
+import CuentasCobro from "@/pages/CuentasCobro";
 // import Brief from "@/pages/Brief"; // Moved to Tareas
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
@@ -74,6 +75,7 @@ const App = () => (
               <Route path="/equipo" element={<ProtectedRoute requiredPermission="equipo"><Equipo /></ProtectedRoute>} />
               <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
               <Route path="/finanzas" element={<ProtectedRoute requiredPermission="finanzas"><Finanzas /></ProtectedRoute>} />
+              <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="finanzas"><CuentasCobro /></ProtectedRoute>} />
               {/* <Route path="/proveedores" element={<Proveedores />} /> // Temporalmente oculto */}
               <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
