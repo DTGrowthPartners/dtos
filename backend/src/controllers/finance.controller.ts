@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { googleSheetsService } from '../services/googleSheets.service';
+import { getClientGoalsMetrics, getAvailableMonths } from '../services/clientGoals.service';
 
 export class FinanceController {
   async getFinanceData(req: Request, res: Response) {
@@ -262,6 +263,41 @@ export class FinanceController {
       console.error('Error in getDisponible:', error);
       res.status(500).json({
         message: 'Error al obtener saldo disponible',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // ==================== CLIENT GOALS (Meta de Clientes) ====================
+
+  async getClientGoals(req: Request, res: Response) {
+    try {
+      const { month, year } = req.query;
+
+      // Default to current month/year
+      const now = new Date();
+      const targetMonth = month ? parseInt(month as string, 10) : now.getMonth() + 1;
+      const targetYear = year ? parseInt(year as string, 10) : now.getFullYear();
+
+      const metrics = await getClientGoalsMetrics(targetMonth, targetYear);
+      res.json(metrics);
+    } catch (error) {
+      console.error('Error in getClientGoals:', error);
+      res.status(500).json({
+        message: 'Error al obtener métricas de meta de clientes',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  async getClientGoalsMonths(req: Request, res: Response) {
+    try {
+      const months = await getAvailableMonths();
+      res.json(months);
+    } catch (error) {
+      console.error('Error in getClientGoalsMonths:', error);
+      res.status(500).json({
+        message: 'Error al obtener meses disponibles',
         error: error instanceof Error ? error.message : 'Unknown error',
       });
     }

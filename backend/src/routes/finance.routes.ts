@@ -57,4 +57,13 @@ router.get('/disponible', authMiddleware, (req, res) =>
   financeController.getDisponible(req, res)
 );
 
+// Client Goals (Meta de Clientes)
+router.get('/client-goals', authMiddleware, (req, res) =>
+  financeController.getClientGoals(req, res)
+);
+
+router.get('/client-goals/months', authMiddleware, (req, res) =>
+  financeController.getClientGoalsMonths(req, res)
+);
+
 export default router;

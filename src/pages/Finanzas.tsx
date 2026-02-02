@@ -20,6 +20,7 @@ import AccountsPanel from '@/components/finance/AccountsPanel';
 import InvoicesPanel from '@/components/finance/InvoicesPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
 import IncomeReport from '@/components/finance/IncomeReport';
+import ClientGoalsPanel from '@/components/finance/ClientGoalsPanel';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -1212,6 +1213,9 @@ export default function Finanzas() {
           </div>
         </div>
       )}
+
+      {/* Meta de Clientes */}
+      <ClientGoalsPanel />
 
       {/* Charts Row */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
