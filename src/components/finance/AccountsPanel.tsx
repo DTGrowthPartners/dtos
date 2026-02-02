@@ -141,6 +141,19 @@ interface PendingClientService {
   canGenerateInvoice: boolean;
 }
 
+interface UnpaidInvoice {
+  id: string;
+  invoiceNumber: string;
+  clientName: string;
+  clientNit: string;
+  totalAmount: number;
+  fecha: string;
+  concepto: string | null;
+  servicio: string | null;
+  status: 'pendiente' | 'enviada';
+  createdAt: string;
+}
+
 const FREQUENCIES = [
   { value: 'daily', label: 'Diario' },
   { value: 'weekly', label: 'Semanal' },
@@ -166,6 +179,7 @@ export function AccountsPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [pendingServices, setPendingServices] = useState<PendingClientService[]>([]);
+  const [unpaidInvoices, setUnpaidInvoices] = useState<UnpaidInvoice[]>([]);
   const [summary, setSummary] = useState<AccountsSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'receivable' | 'payable'>('receivable');
@@ -211,16 +225,18 @@ export function AccountsPanel() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [accountsData, summaryData, clientsData, pendingServicesData] = await Promise.all([
+      const [accountsData, summaryData, clientsData, pendingServicesData, unpaidInvoicesData] = await Promise.all([
         apiClient.get<Account[]>('/api/accounts'),
         apiClient.get<AccountsSummary>('/api/accounts/summary'),
         apiClient.get<Client[]>('/api/clients'),
         apiClient.get<PendingClientService[]>('/api/accounts/pending-services'),
+        apiClient.get<UnpaidInvoice[]>('/api/invoices/unpaid'),
       ]);
       setAccounts(accountsData);
       setSummary(summaryData);
       setClients(clientsData);
       setPendingServices(pendingServicesData);
+      setUnpaidInvoices(unpaidInvoicesData);
     } catch (error) {
       console.error('Error fetching accounts:', error);
       toast({
@@ -554,6 +570,21 @@ export function AccountsPanel() {
         </div>
 
         <TabsContent value="receivable" className="mt-4 space-y-6">
+          {/* Cuentas de Cobro No Pagadas */}
+          {unpaidInvoices.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <FileText className="h-4 w-4" />
+                <span>Cuentas de Cobro Pendientes ({unpaidInvoices.length})</span>
+              </div>
+              <UnpaidInvoicesList
+                invoices={unpaidInvoices}
+                formatCurrency={formatCurrency}
+                formatDate={formatDate}
+              />
+            </div>
+          )}
+
           {/* Servicios de Clientes Pendientes */}
           {pendingServices.length > 0 && (
             <div className="space-y-3">
@@ -574,7 +605,7 @@ export function AccountsPanel() {
           {/* Cuentas por Cobrar Manuales */}
           {filteredAccounts.length > 0 && (
             <div className="space-y-3">
-              {pendingServices.length > 0 && (
+              {(pendingServices.length > 0 || unpaidInvoices.length > 0) && (
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Building2 className="h-4 w-4" />
                   <span>Otras Cuentas por Cobrar ({filteredAccounts.length})</span>
@@ -593,7 +624,7 @@ export function AccountsPanel() {
             </div>
           )}
 
-          {pendingServices.length === 0 && filteredAccounts.length === 0 && (
+          {pendingServices.length === 0 && filteredAccounts.length === 0 && unpaidInvoices.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No hay cuentas por cobrar</p>
@@ -1280,6 +1311,72 @@ function ClientServicesList({
               <Badge variant="outline" className="max-w-[200px] truncate">
                 {service.notas}
               </Badge>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Sub-component for unpaid invoices list
+function UnpaidInvoicesList({
+  invoices,
+  formatCurrency,
+  formatDate,
+}: {
+  invoices: UnpaidInvoice[];
+  formatCurrency: (amount: number, currency?: string) => string;
+  formatDate: (date: string) => string;
+}) {
+  const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+    pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
+    enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-800' },
+  };
+
+  return (
+    <div className="space-y-3">
+      {invoices.map((invoice) => (
+        <div
+          key={invoice.id}
+          className="rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-medium truncate">{invoice.clientName}</p>
+                <p className="text-sm text-muted-foreground truncate">
+                  {invoice.servicio || invoice.concepto || `Cuenta #${invoice.invoiceNumber.substring(0, 8)}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="text-right">
+                <p className="font-bold text-success">
+                  {formatCurrency(invoice.totalAmount)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  #{invoice.invoiceNumber.substring(0, 12)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Date and status badges */}
+          <div className="flex items-center gap-2 mt-3 flex-wrap">
+            <Badge variant="secondary" className="flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {formatDate(invoice.fecha)}
+            </Badge>
+            <Badge className={STATUS_LABELS[invoice.status]?.color || 'bg-gray-100 text-gray-800'}>
+              {STATUS_LABELS[invoice.status]?.label || invoice.status}
+            </Badge>
+            {invoice.clientNit && (
+              <Badge variant="outline">NIT: {invoice.clientNit}</Badge>
             )}
           </div>
         </div>

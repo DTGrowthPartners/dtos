@@ -172,7 +172,7 @@ class InvoiceController {
   public updateStatus = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;
-      const { status } = req.body;
+      const { status, registerInSheets = true, cuenta = 'Principal' } = req.body;
 
       if (!['pendiente', 'enviada', 'pagada'].includes(status)) {
         res.status(400).json({ message: 'Estado inválido. Debe ser: pendiente, enviada o pagada' });
@@ -188,22 +188,24 @@ class InvoiceController {
         return;
       }
 
-      // If marking as paid, register income in Finanzas
+      // If marking as paid, optionally register income in Finanzas
       const updateData: any = { status };
 
       if (status === 'pagada' && invoice.status !== 'pagada') {
         updateData.paidAt = new Date();
 
-        // Add income to Google Sheets
-        const today = new Date().toISOString().split('T')[0];
-        await googleSheetsService.addIncome({
-          fecha: today,
-          importe: invoice.totalAmount,
-          descripcion: `Pago cuenta de cobro #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
-          categoria: 'PAGO DE CLIENTE',
-          cuenta: 'Principal',
-          entidad: invoice.clientName,
-        });
+        // Only add income to Google Sheets if registerInSheets is true
+        if (registerInSheets) {
+          const today = new Date().toISOString().split('T')[0];
+          await googleSheetsService.addIncome({
+            fecha: today,
+            importe: invoice.totalAmount,
+            descripcion: `Pago cuenta de cobro #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
+            categoria: 'PAGO DE CLIENTE',
+            cuenta: cuenta,
+            entidad: invoice.clientName,
+          });
+        }
       }
 
       const updatedInvoice = await prisma.invoice.update({
@@ -212,6 +214,23 @@ class InvoiceController {
       });
 
       res.json(updatedInvoice);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getUnpaidInvoices = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const unpaidInvoices = await prisma.invoice.findMany({
+        where: {
+          status: {
+            not: 'pagada',
+          },
+        },
+        orderBy: { fecha: 'asc' },
+      });
+
+      res.json(unpaidInvoices);
     } catch (error) {
       next(error);
     }

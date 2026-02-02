@@ -6,6 +6,15 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PlusCircle, Trash2, FileText, CheckSquare, Square, Check, ChevronsUpDown, Send, CircleCheck, Clock } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import {
@@ -94,6 +103,12 @@ export default function InvoicesPanel() {
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
 
+  // Estado para el diálogo de confirmación de pago
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [pendingPaymentInvoiceId, setPendingPaymentInvoiceId] = useState<string | null>(null);
+  const [registerInSheets, setRegisterInSheets] = useState(true);
+  const [paymentCuenta, setPaymentCuenta] = useState('Principal');
+
   const [invoiceData, setInvoiceData] = useState({
     cliente_id: '',
     nombre_cliente: '',
@@ -162,14 +177,48 @@ export default function InvoicesPanel() {
   };
 
   const handleStatusChange = async (invoiceId: string, newStatus: 'pendiente' | 'enviada' | 'pagada') => {
+    // Si se marca como pagada, mostrar diálogo de confirmación
+    if (newStatus === 'pagada') {
+      setPendingPaymentInvoiceId(invoiceId);
+      setRegisterInSheets(true);
+      setPaymentCuenta('Principal');
+      setPaymentDialogOpen(true);
+      return;
+    }
+
     try {
       await apiClient.patch(`/api/invoices/${invoiceId}/status`, { status: newStatus });
       toast({
         title: 'Estado actualizado',
-        description: newStatus === 'pagada'
-          ? 'La cuenta se marco como pagada y se registro el ingreso en Finanzas.'
-          : `Estado cambiado a "${INVOICE_STATUS[newStatus].label}"`,
+        description: `Estado cambiado a "${INVOICE_STATUS[newStatus].label}"`,
       });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo actualizar el estado.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!pendingPaymentInvoiceId) return;
+
+    try {
+      await apiClient.patch(`/api/invoices/${pendingPaymentInvoiceId}/status`, {
+        status: 'pagada',
+        registerInSheets,
+        cuenta: paymentCuenta,
+      });
+      toast({
+        title: 'Cuenta marcada como pagada',
+        description: registerInSheets
+          ? 'Se registró el ingreso en Google Sheets (Finanzas).'
+          : 'No se registró el ingreso en Google Sheets.',
+      });
+      setPaymentDialogOpen(false);
+      setPendingPaymentInvoiceId(null);
       fetchData();
     } catch (error) {
       toast({
@@ -680,6 +729,54 @@ export default function InvoicesPanel() {
           )}
         </CardContent>
       </Card>
+
+      {/* Diálogo de Confirmación de Pago */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar Pago</DialogTitle>
+            <DialogDescription>
+              ¿Deseas registrar este pago en Google Sheets (Finanzas)?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="registerInSheets"
+                checked={registerInSheets}
+                onCheckedChange={(checked) => setRegisterInSheets(checked === true)}
+              />
+              <Label htmlFor="registerInSheets" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                Registrar ingreso en Google Sheets
+              </Label>
+            </div>
+            {registerInSheets && (
+              <div className="space-y-2">
+                <Label htmlFor="paymentCuenta">Cuenta destino</Label>
+                <Select value={paymentCuenta} onValueChange={setPaymentCuenta}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                    <SelectItem value="Ahorros">Ahorros</SelectItem>
+                    <SelectItem value="Bancolombia">Bancolombia</SelectItem>
+                    <SelectItem value="Nequi">Nequi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmPayment}>
+              Confirmar Pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
