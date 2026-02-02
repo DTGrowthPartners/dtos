@@ -119,16 +119,20 @@ export default function NoteColumn({
         ))}
 
         {items.length === 0 && (
-          <div className="h-24 border-2 border-dashed rounded-lg flex items-center justify-center text-muted-foreground text-sm">
-            Arrastra notas aquí
+          <div
+            className="h-24 border-2 border-dashed rounded-lg flex flex-col items-center justify-center text-muted-foreground text-sm cursor-pointer hover:border-primary hover:text-primary transition-colors"
+            onClick={() => onAddItem(column.id)}
+          >
+            <Plus className="h-5 w-5 mb-1" />
+            <span>Agregar nota</span>
           </div>
         )}
       </div>
 
       {/* Add Item Button */}
       <Button
-        variant="ghost"
-        className="w-full mt-3 justify-start text-muted-foreground hover:text-foreground"
+        variant="outline"
+        className="w-full mt-3 justify-center border-dashed border-2 hover:border-primary hover:text-primary"
         onClick={() => onAddItem(column.id)}
       >
         <Plus className="h-4 w-4 mr-2" />
