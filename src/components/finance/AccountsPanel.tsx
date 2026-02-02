@@ -48,6 +48,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { convertImageToBase64 } from '@/lib/imageService';
+import { authService } from '@/lib/auth';
 
 interface Client {
   id: string;
@@ -174,6 +175,7 @@ export function AccountsPanel() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [selectedAccountForPayment, setSelectedAccountForPayment] = useState<Account | null>(null);
   const [selectedServiceForInvoice, setSelectedServiceForInvoice] = useState<PendingClientService | null>(null);
+  const [generatingInvoiceId, setGeneratingInvoiceId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -228,6 +230,66 @@ export function AccountsPanel() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // Generate invoice directly for a service
+  const generateInvoiceDirectly = async (service: PendingClientService) => {
+    setGeneratingInvoiceId(service.id);
+
+    try {
+      const token = await authService.getToken();
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+
+      const invoiceData = {
+        cliente_id: service.client.id,
+        nombre_cliente: service.client.name,
+        identificacion: service.client.nit || '',
+        fecha: new Date().toISOString().split('T')[0],
+        concepto: 'Prestación de servicios profesionales de marketing digital y desarrollo de software',
+        servicio_proyecto: service.service.name,
+        observaciones: 'No responsable de IVA. Cuenta de cobro emitida bajo el régimen de tributación simplificada.',
+        servicios: [{
+          descripcion: service.service.description || service.service.name,
+          cantidad: 1,
+          precio_unitario: service.amount,
+        }],
+      };
+
+      const response = await fetch(`${API_URL}/api/invoices/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+        body: JSON.stringify(invoiceData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate invoice');
+      }
+
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+
+      toast({
+        title: 'Cuenta de cobro generada',
+        description: `Se generó la cuenta de cobro para ${service.client.name}`,
+      });
+
+      // Refresh data
+      fetchData();
+    } catch (error) {
+      console.error('Error generating invoice:', error);
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'No se pudo generar la cuenta de cobro',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingInvoiceId(null);
     }
   };
 
@@ -501,10 +563,8 @@ export function AccountsPanel() {
               </div>
               <ClientServicesList
                 services={pendingServices}
-                onGenerateInvoice={(service) => {
-                  setSelectedServiceForInvoice(service);
-                  setIsInvoiceDialogOpen(true);
-                }}
+                onGenerateInvoice={generateInvoiceDirectly}
+                generatingInvoiceId={generatingInvoiceId}
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
               />
@@ -1098,11 +1158,13 @@ function AccountsList({
 function ClientServicesList({
   services,
   onGenerateInvoice,
+  generatingInvoiceId,
   formatCurrency,
   formatDate,
 }: {
   services: PendingClientService[];
   onGenerateInvoice: (service: PendingClientService) => void;
+  generatingInvoiceId: string | null;
   formatCurrency: (amount: number, currency?: string) => string;
   formatDate: (date: string) => string;
 }) {
@@ -1164,9 +1226,19 @@ function ClientServicesList({
                   size="sm"
                   variant={service.isOverdue ? 'destructive' : service.isDueToday ? 'default' : 'outline'}
                   onClick={() => onGenerateInvoice(service)}
+                  disabled={generatingInvoiceId === service.id}
                 >
-                  <FileText className="h-4 w-4 mr-1" />
-                  Cobrar
+                  {generatingInvoiceId === service.id ? (
+                    <>
+                      <RefreshCcw className="h-4 w-4 mr-1 animate-spin" />
+                      Generando...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="h-4 w-4 mr-1" />
+                      Cobrar
+                    </>
+                  )}
                 </Button>
               )}
             </div>
