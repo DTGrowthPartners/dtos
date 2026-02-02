@@ -774,11 +774,38 @@ export default function Finanzas() {
             <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
             <p className="text-muted-foreground text-sm">Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
           </div>
+          {/* Botones de acción globales */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchFinanceData}
+              disabled={isLoading}
+            >
+              <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTercerosModal(true)}
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Terceros
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowNominaModal(true)}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Nómina
+            </Button>
+          </div>
         </div>
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <TabsList className="inline-flex w-max sm:w-auto gap-1">
                 <TabsTrigger value="resumen" className="flex items-center gap-2 whitespace-nowrap">
@@ -801,56 +828,29 @@ export default function Finanzas() {
             </div>
 
             {activeTab === 'resumen' && (
-              <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-2">
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={() => setShowFilters(!showFilters)}
-                  className="w-full sm:w-auto"
                 >
                   <Filter className="h-4 w-4 mr-2" />
                   Filtros
                   {hasActiveFilters && <span className="ml-2 h-2 w-2 rounded-full bg-primary"></span>}
                 </Button>
                 <Button
-                  variant="outline"
-                  onClick={fetchFinanceData}
-                  disabled={isLoading}
-                  className="w-full sm:w-auto"
-                >
-                  <RefreshCw className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-                  Actualizar
-                </Button>
-                <Button
-                  variant="default"
+                  size="sm"
                   onClick={() => setShowAddIncomeModal(true)}
-                  className="w-full sm:w-auto"
                 >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Agregar Ingreso
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Ingreso
                 </Button>
                 <Button
-                  variant="default"
+                  size="sm"
                   onClick={() => setShowAddExpenseModal(true)}
-                  className="w-full sm:w-auto"
                 >
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Agregar Gasto
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => setShowTercerosModal(true)}
-                  className="w-full sm:w-auto"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Terceros
-                </Button>
-                <Button
-                  variant="default"
-                  onClick={() => setShowNominaModal(true)}
-                  className="w-full sm:w-auto"
-                >
-                  <FileText className="h-4 w-4 mr-2" />
-                  Nómina
+                  <TrendingDown className="h-4 w-4 mr-2" />
+                  Gasto
                 </Button>
               </div>
             )}
@@ -1214,9 +1214,6 @@ export default function Finanzas() {
         </div>
       )}
 
-      {/* Meta de Clientes */}
-      <ClientGoalsPanel />
-
       {/* Charts Row */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Expense Distribution */}
@@ -1282,6 +1279,9 @@ export default function Finanzas() {
           )}
         </div>
       </div>
+
+      {/* Meta de Clientes */}
+      <ClientGoalsPanel />
 
       {/* Top Transactions */}
       <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
