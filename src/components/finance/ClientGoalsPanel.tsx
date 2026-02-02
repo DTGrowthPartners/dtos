@@ -2,14 +2,13 @@ import { useState, useEffect } from 'react';
 import {
   Target,
   TrendingUp,
-  Calendar,
   RefreshCw,
-  ChevronDown,
   Users,
   Briefcase,
   CheckCircle2,
-  AlertCircle,
   Archive,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -20,9 +19,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+
+interface WeeklyDetail {
+  weekNumber: number;
+  target: number;
+  executed: number;
+  percentage: number;
+}
 
 interface ClientGoalsMetrics {
   month: string;
@@ -54,6 +65,16 @@ interface ClientGoalsMetrics {
     recurringPercentage: number;
     projectsPercentage: number;
   };
+  weeklyRecurring: {
+    monthlyTarget: number;
+    weeklyTarget: number;
+    weeks: WeeklyDetail[];
+  };
+  weeklyProjects: {
+    monthlyTarget: number;
+    weeklyTarget: number;
+    weeks: WeeklyDetail[];
+  };
 }
 
 interface AvailableMonth {
@@ -83,6 +104,8 @@ export default function ClientGoalsPanel() {
   const [availableMonths, setAvailableMonths] = useState<AvailableMonth[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [recurringOpen, setRecurringOpen] = useState(true);
+  const [projectsOpen, setProjectsOpen] = useState(true);
   const { toast } = useToast();
 
   // Load available months on mount
@@ -127,7 +150,7 @@ export default function ClientGoalsPanel() {
       console.error('Error fetching client goals metrics:', error);
       toast({
         title: 'Error',
-        description: 'No se pudieron cargar las métricas de meta de clientes',
+        description: 'No se pudieron cargar las metricas de meta de clientes',
         variant: 'destructive',
       });
     } finally {
@@ -150,9 +173,9 @@ export default function ClientGoalsPanel() {
           <div className="h-8 w-32 bg-muted rounded" />
         </div>
         <div className="h-24 bg-muted rounded mb-4" />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="h-32 bg-muted rounded" />
-          <div className="h-32 bg-muted rounded" />
+        <div className="grid grid-cols-1 gap-4">
+          <div className="h-48 bg-muted rounded" />
+          <div className="h-48 bg-muted rounded" />
         </div>
       </div>
     );
@@ -219,13 +242,13 @@ export default function ClientGoalsPanel() {
         </div>
       </div>
 
-      {/* Main Monthly Metric */}
+      {/* 1. Indicador del Mes - Principal */}
       <div className="rounded-lg bg-card border border-border p-4 mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 text-primary" />
             <span className="text-sm font-medium text-foreground">
-              Nuevos Clientes - {monthDisplay}
+              Indicador del Mes - {monthDisplay}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -243,27 +266,41 @@ export default function ClientGoalsPanel() {
         </div>
 
         <div className="space-y-3">
+          {/* Valor Proyectado */}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground font-medium">Valor Proyectado:</span>
+            <span className="font-semibold text-foreground">
+              META {formatCurrency(metrics.budget.total)} (Clientes recurrentes y proyectos)
+            </span>
+          </div>
+
+          {/* Valor Clientes desglosado */}
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground font-medium">Valor Clientes:</span>
+            <span className="font-semibold text-foreground">
+              <span className="text-blue-600">Recurrentes {formatCurrency(metrics.executed.recurring)}</span>
+              {' + '}
+              <span className="text-amber-600">Proyectos {formatCurrency(metrics.executed.projects)}</span>
+              {' = '}
+              <span className="text-primary">{formatCurrency(metrics.executed.total)}</span>
+            </span>
+          </div>
+
           {/* Progress bar */}
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Ejecutado</span>
-              <span className="font-semibold text-foreground">
-                {formatFullCurrency(metrics.executed.total)} / {formatFullCurrency(metrics.budget.total)}
-              </span>
-            </div>
             <Progress
               value={metrics.completion.percentage}
               className={cn(
-                "h-3",
+                "h-4",
                 metrics.completion.isAchieved ? "[&>div]:bg-success" : "[&>div]:bg-primary"
               )}
             />
-            <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center justify-between text-sm">
               <span className={cn(
-                "font-medium",
+                "font-bold text-lg",
                 metrics.completion.isAchieved ? "text-success" : "text-primary"
               )}>
-                {metrics.completion.percentage}% cumplido
+                Meta Alcanzada: {metrics.completion.percentage}%
               </span>
               {!metrics.completion.isAchieved && (
                 <span className="text-muted-foreground">
@@ -275,79 +312,168 @@ export default function ClientGoalsPanel() {
         </div>
       </div>
 
-      {/* Weekly Metrics Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-        {/* Recurring Clients */}
-        <div className="rounded-lg bg-card border border-border p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
-              <Users className="h-4 w-4 text-blue-500" />
+      {/* 2. Indicador Semanal - Clientes Recurrentes */}
+      <Collapsible open={recurringOpen} onOpenChange={setRecurringOpen} className="mb-4">
+        <div className="rounded-lg bg-card border border-blue-200 overflow-hidden">
+          <CollapsibleTrigger className="w-full">
+            <div className="flex items-center justify-between p-4 hover:bg-blue-50/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                  <Users className="h-5 w-5 text-blue-500" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-sm font-semibold text-foreground">
+                    Indicador Semanal - Clientes Recurrentes
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Valor Proyectado MES: {formatCurrency(metrics.weeklyRecurring.monthlyTarget)}/mes
+                  </p>
+                </div>
+              </div>
+              {recurringOpen ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
             </div>
-            <div>
-              <h4 className="text-sm font-medium text-foreground">Recurrentes</h4>
-              <p className="text-xs text-muted-foreground">Meta semanal</p>
-            </div>
-          </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-4 pb-4 space-y-3">
+              {metrics.weeklyRecurring.weeks.map((week) => {
+                const isCurrentWeek = week.weekNumber === metrics.weekly.currentWeek && !metrics.isArchived;
+                const isFutureWeek = week.weekNumber > metrics.weekly.currentWeek && !metrics.isArchived;
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Meta</span>
-              <span className="font-medium">{formatCurrency(metrics.weekly.recurringTarget)}</span>
+                return (
+                  <div
+                    key={`recurring-${week.weekNumber}`}
+                    className={cn(
+                      "rounded-lg border p-3",
+                      isCurrentWeek ? "border-blue-400 bg-blue-50/50" : "border-border",
+                      isFutureWeek && "opacity-50"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={cn(
+                        "text-sm font-medium",
+                        isCurrentWeek && "text-blue-600"
+                      )}>
+                        Semana {week.weekNumber}
+                        {isCurrentWeek && " (Actual)"}
+                      </span>
+                      <span className={cn(
+                        "text-lg font-bold",
+                        week.percentage >= 100 ? "text-success" :
+                        week.percentage >= 80 ? "text-blue-600" :
+                        week.percentage >= 50 ? "text-amber-600" : "text-red-500"
+                      )}>
+                        {week.percentage}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                      <div>
+                        <span className="text-muted-foreground">Proyectado/semana:</span>
+                        <span className="font-medium ml-1">{formatCurrency(week.target)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Ejecutado:</span>
+                        <span className="font-semibold ml-1 text-blue-600">{formatCurrency(week.executed)}</span>
+                      </div>
+                    </div>
+                    <Progress
+                      value={Math.min(100, week.percentage)}
+                      className="h-2 [&>div]:bg-blue-500"
+                    />
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Esta semana</span>
-              <span className="font-semibold text-foreground">
-                {formatCurrency(metrics.weekly.recurringExecuted)}
-              </span>
-            </div>
-            <Progress
-              value={metrics.weekly.recurringPercentage}
-              className="h-2 [&>div]:bg-blue-500"
-            />
-            <p className="text-xs text-right text-muted-foreground">
-              {metrics.weekly.recurringPercentage}% de la meta semanal
-            </p>
-          </div>
+          </CollapsibleContent>
         </div>
+      </Collapsible>
 
-        {/* Project Clients */}
-        <div className="rounded-lg bg-card border border-border p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10">
-              <Briefcase className="h-4 w-4 text-amber-500" />
+      {/* 3. Indicador Semanal - Clientes Proyectos */}
+      <Collapsible open={projectsOpen} onOpenChange={setProjectsOpen}>
+        <div className="rounded-lg bg-card border border-amber-200 overflow-hidden">
+          <CollapsibleTrigger className="w-full">
+            <div className="flex items-center justify-between p-4 hover:bg-amber-50/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
+                  <Briefcase className="h-5 w-5 text-amber-500" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-sm font-semibold text-foreground">
+                    Indicador Semanal - Clientes Proyectos
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Valor Proyectado MES: {formatCurrency(metrics.weeklyProjects.monthlyTarget)}/mes
+                  </p>
+                </div>
+              </div>
+              {projectsOpen ? (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              )}
             </div>
-            <div>
-              <h4 className="text-sm font-medium text-foreground">Proyectos</h4>
-              <p className="text-xs text-muted-foreground">Meta semanal</p>
-            </div>
-          </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-4 pb-4 space-y-3">
+              {metrics.weeklyProjects.weeks.map((week) => {
+                const isCurrentWeek = week.weekNumber === metrics.weekly.currentWeek && !metrics.isArchived;
+                const isFutureWeek = week.weekNumber > metrics.weekly.currentWeek && !metrics.isArchived;
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Meta</span>
-              <span className="font-medium">{formatCurrency(metrics.weekly.projectsTarget)}</span>
+                return (
+                  <div
+                    key={`projects-${week.weekNumber}`}
+                    className={cn(
+                      "rounded-lg border p-3",
+                      isCurrentWeek ? "border-amber-400 bg-amber-50/50" : "border-border",
+                      isFutureWeek && "opacity-50"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={cn(
+                        "text-sm font-medium",
+                        isCurrentWeek && "text-amber-600"
+                      )}>
+                        Semana {week.weekNumber}
+                        {isCurrentWeek && " (Actual)"}
+                      </span>
+                      <span className={cn(
+                        "text-lg font-bold",
+                        week.percentage >= 100 ? "text-success" :
+                        week.percentage >= 80 ? "text-amber-600" :
+                        week.percentage >= 50 ? "text-yellow-600" : "text-red-500"
+                      )}>
+                        {week.percentage}%
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs mb-2">
+                      <div>
+                        <span className="text-muted-foreground">Proyectado/semana:</span>
+                        <span className="font-medium ml-1">{formatCurrency(week.target)}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Ejecutado:</span>
+                        <span className="font-semibold ml-1 text-amber-600">{formatCurrency(week.executed)}</span>
+                      </div>
+                    </div>
+                    <Progress
+                      value={Math.min(100, week.percentage)}
+                      className="h-2 [&>div]:bg-amber-500"
+                    />
+                  </div>
+                );
+              })}
             </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Esta semana</span>
-              <span className="font-semibold text-foreground">
-                {formatCurrency(metrics.weekly.projectsExecuted)}
-              </span>
-            </div>
-            <Progress
-              value={metrics.weekly.projectsPercentage}
-              className="h-2 [&>div]:bg-amber-500"
-            />
-            <p className="text-xs text-right text-muted-foreground">
-              {metrics.weekly.projectsPercentage}% de la meta semanal
-            </p>
-          </div>
+          </CollapsibleContent>
         </div>
-      </div>
+      </Collapsible>
 
       {/* Footer info */}
       <div className="mt-4 pt-3 border-t border-border/50">
         <p className="text-xs text-muted-foreground text-center">
-          Datos del presupuesto Q1 2026 desde Google Sheets
+          Datos del presupuesto Q1 2026 desde Google Sheets - Ejecutado desde CRM (Deals Ganados)
         </p>
       </div>
     </div>
