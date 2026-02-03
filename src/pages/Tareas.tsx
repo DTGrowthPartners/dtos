@@ -436,6 +436,10 @@ export default function Tareas() {
   const [savingBriefTemplate, setSavingBriefTemplate] = useState(false);
   const [briefToSaveAsTemplate, setBriefToSaveAsTemplate] = useState<string | null>(null);
 
+  // Batch delete states
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -1587,18 +1591,78 @@ export default function Tareas() {
   const handleDelete = async (task: Task) => {
     if (!confirm('¿Estás seguro de eliminar esta tarea?')) return;
 
+    // Optimistic update - remove from UI immediately
+    setTasks(prev => prev.filter(t => t.id !== task.id));
+
     try {
       await moveTaskToDeleted(task.id, task);
       toast({
         title: 'Tarea eliminada',
         description: 'La tarea se movió a la papelera',
       });
-      fetchData();
     } catch (error) {
       console.error('Error deleting task:', error);
+      // Revert on error - add task back
+      setTasks(prev => [...prev, task]);
       toast({
         title: 'Error',
         description: 'No se pudo eliminar la tarea',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Batch delete handlers
+  const handleToggleSelectTask = (taskId: string) => {
+    setSelectedTaskIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(taskId)) {
+        newSet.delete(taskId);
+      } else {
+        newSet.add(taskId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAll = () => {
+    const allVisibleTaskIds = filteredTasks.map(t => t.id);
+    setSelectedTaskIds(new Set(allVisibleTaskIds));
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedTaskIds(new Set());
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedTaskIds.size === 0) return;
+
+    if (!confirm(`¿Estás seguro de eliminar ${selectedTaskIds.size} tarea(s)?`)) return;
+
+    const tasksToDelete = tasks.filter(t => selectedTaskIds.has(t.id));
+
+    // Optimistic update - remove from UI immediately
+    setTasks(prev => prev.filter(t => !selectedTaskIds.has(t.id)));
+    setSelectedTaskIds(new Set());
+    setSelectionMode(false);
+
+    try {
+      // Delete all tasks in parallel
+      await Promise.all(
+        tasksToDelete.map(task => moveTaskToDeleted(task.id, task))
+      );
+
+      toast({
+        title: 'Tareas eliminadas',
+        description: `${tasksToDelete.length} tarea(s) movidas a la papelera`,
+      });
+    } catch (error) {
+      console.error('Error batch deleting tasks:', error);
+      // Revert on error - add tasks back
+      setTasks(prev => [...prev, ...tasksToDelete]);
+      toast({
+        title: 'Error',
+        description: 'No se pudieron eliminar algunas tareas',
         variant: 'destructive',
       });
     }
@@ -3119,6 +3183,19 @@ export default function Tareas() {
                   {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
                 </Button>
                 <Button
+                  variant={selectionMode ? 'default' : 'outline'}
+                  size="icon"
+                  onClick={() => {
+                    setSelectionMode(!selectionMode);
+                    if (!selectionMode) {
+                      setSelectedTaskIds(new Set());
+                    }
+                  }}
+                  className="flex-shrink-0"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                </Button>
+                <Button
                   onClick={() => {
                     resetForm();
                     setIsDialogOpen(true);
@@ -3132,6 +3209,46 @@ export default function Tareas() {
             )}
           </div>
         </div>
+
+        {/* Batch Selection Toolbar */}
+        {taskView === 'active' && selectionMode && (
+          <div className="flex items-center justify-between gap-2 p-3 rounded-lg bg-muted border">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">
+                {selectedTaskIds.size === 0
+                  ? 'Selecciona tareas'
+                  : `${selectedTaskIds.size} tarea${selectedTaskIds.size > 1 ? 's' : ''} seleccionada${selectedTaskIds.size > 1 ? 's' : ''}`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {filteredTasks.length > 0 && (
+                <>
+                  {selectedTaskIds.size === filteredTasks.length ? (
+                    <Button variant="outline" size="sm" onClick={handleDeselectAll}>
+                      Deseleccionar todas
+                    </Button>
+                  ) : (
+                    <Button variant="outline" size="sm" onClick={handleSelectAll}>
+                      Seleccionar todas ({filteredTasks.length})
+                    </Button>
+                  )}
+                </>
+              )}
+              {selectedTaskIds.size > 0 && (
+                <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Eliminar seleccionadas
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={() => {
+                setSelectionMode(false);
+                setSelectedTaskIds(new Set());
+              }}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Date Filters - Only show in active view */}
         {taskView === 'active' && (
@@ -3340,20 +3457,36 @@ export default function Tareas() {
                           <ContextMenu key={task.id}>
                             <ContextMenuTrigger asChild>
                               <Card
-                                draggable={true}
-                                onDragStart={(e) => handleDragStart(e, task.id)}
+                                draggable={!selectionMode}
+                                onDragStart={(e) => !selectionMode && handleDragStart(e, task.id)}
                                 onDragEnd={handleDragEnd}
-                                onClick={() => handleEdit(task)}
+                                onClick={() => selectionMode ? handleToggleSelectTask(task.id) : handleEdit(task)}
                                 className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${draggedTask === task.id ? 'opacity-50 scale-105' : ''
+                                  } ${selectedTaskIds.has(task.id) ? 'ring-2 ring-primary' : ''
                                   } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                               >
                                 {/* Task Header */}
                                 <div className="flex items-start justify-between mb-2">
                                   <div className="flex items-start gap-2 flex-1 min-w-0">
-                                    {/* Drag Handle */}
-                                    <div className="flex-shrink-0 mt-0.5 text-muted-foreground/50 cursor-grab">
-                                      <GripVertical className="h-4 w-4" />
-                                    </div>
+                                    {/* Selection Checkbox or Drag Handle */}
+                                    {selectionMode ? (
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleSelectTask(task.id);
+                                        }}
+                                        className={`flex-shrink-0 mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center cursor-pointer transition-all ${selectedTaskIds.has(task.id)
+                                          ? 'bg-primary border-primary text-primary-foreground'
+                                          : 'border-muted-foreground hover:border-primary'
+                                          }`}
+                                      >
+                                        {selectedTaskIds.has(task.id) && <CheckCircle2 className="h-3 w-3" />}
+                                      </div>
+                                    ) : (
+                                      <div className="flex-shrink-0 mt-0.5 text-muted-foreground/50 cursor-grab">
+                                        <GripVertical className="h-4 w-4" />
+                                      </div>
+                                    )}
                                     <button
                                       draggable={false}
                                       onClick={(e) => {
