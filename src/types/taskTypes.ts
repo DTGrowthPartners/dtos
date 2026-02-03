@@ -54,7 +54,7 @@ export interface TeamMember {
 
 export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Lía', role: 'CEO', initials: 'LI', color: 'bg-purple-500' },
-  { name: 'Dairo', role: 'Usuario', initials: 'DA', color: 'bg-indigo-500' },
+  { name: 'Dairo', role: 'CEO', initials: 'DA', color: 'bg-indigo-500' },
   { name: 'Stiven', role: 'Dev', initials: 'ST', color: 'bg-blue-500' },
   { name: 'Mariana', role: 'Designer', initials: 'MA', color: 'bg-pink-500' },
   { name: 'Jose', role: 'Freelancer', initials: 'JO', color: 'bg-orange-500' },
