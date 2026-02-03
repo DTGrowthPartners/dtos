@@ -132,7 +132,7 @@ const formatCompactCurrency = (value: number): string => {
 };
 
 export default function Finanzas() {
-  const [activeTab, setActiveTab] = useState<string>('resumen');
+  const [activeTab, setActiveTab] = useState<string>('reportes');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
