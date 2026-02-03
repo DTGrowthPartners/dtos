@@ -314,8 +314,8 @@ export const accountService = {
 
   // Get summary statistics
   async getSummary() {
-    const [receivables, payables, upcomingReceivables, upcomingPayables] = await Promise.all([
-      // Total receivables
+    const [receivables, payables, upcomingReceivables, upcomingPayables, unpaidInvoices] = await Promise.all([
+      // Total receivables (manual accounts)
       prisma.account.aggregate({
         where: { type: 'receivable', status: 'active' },
         _sum: { amount: true },
@@ -349,12 +349,25 @@ export const accountService = {
         },
         select: { id: true, amount: true, nextDueDate: true, entityName: true },
       }),
+      // Unpaid invoices (cuentas de cobro)
+      prisma.invoice.findMany({
+        where: { status: { in: ['pending', 'sent'] } },
+        select: { total: true },
+      }),
     ]);
+
+    // Calculate total from unpaid invoices
+    const unpaidInvoicesTotal = unpaidInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
+    const unpaidInvoicesCount = unpaidInvoices.length;
+
+    // Combine manual receivables with unpaid invoices
+    const totalReceivables = (receivables._sum.amount || 0) + unpaidInvoicesTotal;
+    const totalReceivablesCount = receivables._count + unpaidInvoicesCount;
 
     return {
       receivables: {
-        total: receivables._sum.amount || 0,
-        count: receivables._count,
+        total: totalReceivables,
+        count: totalReceivablesCount,
         upcoming: upcomingReceivables,
       },
       payables: {
@@ -362,7 +375,7 @@ export const accountService = {
         count: payables._count,
         upcoming: upcomingPayables,
       },
-      balance: (receivables._sum.amount || 0) - (payables._sum.amount || 0),
+      balance: totalReceivables - (payables._sum.amount || 0),
     };
   },
 
