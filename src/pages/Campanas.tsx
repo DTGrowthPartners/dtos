@@ -11,6 +11,11 @@ import {
   Eye,
   Building2,
   Calendar,
+  Grid3X3,
+  List,
+  Table,
+  X,
+  Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +31,8 @@ import {
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+
+type ViewMode = 'cards' | 'table' | 'list';
 
 interface Campaign {
   id: string;
@@ -124,6 +131,8 @@ export default function Campanas() {
   const [accountFilter, setAccountFilter] = useState<string>('all');
   const [datePreset, setDatePreset] = useState<string>('last_30d');
   const [togglingCampaign, setTogglingCampaign] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('cards');
+  const [objectiveFilter, setObjectiveFilter] = useState<string>('all');
 
   const fetchDashboard = async () => {
     try {
@@ -189,8 +198,31 @@ export default function Campanas() {
       campaign.client.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter;
     const matchesAccount = accountFilter === 'all' || campaign.client === accountFilter;
-    return matchesSearch && matchesStatus && matchesAccount;
+    const matchesObjective = objectiveFilter === 'all' || campaign.objective === objectiveFilter;
+    return matchesSearch && matchesStatus && matchesAccount && matchesObjective;
   });
+
+  const uniqueObjectives = Array.from(new Set(campaigns.map(c => c.objective)));
+  const uniqueClients = Array.from(new Set(campaigns.map(c => c.client)));
+
+  const activeFiltersCount = [
+    statusFilter !== 'all',
+    accountFilter !== 'all',
+    objectiveFilter !== 'all',
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setAccountFilter('all');
+    setObjectiveFilter('all');
+  };
+
+  const cycleViewMode = () => {
+    const modes: ViewMode[] = ['cards', 'table', 'list'];
+    const currentIndex = modes.indexOf(viewMode);
+    const nextIndex = (currentIndex + 1) % modes.length;
+    setViewMode(modes[nextIndex]);
+  };
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('es-CO', {
@@ -313,49 +345,116 @@ export default function Campanas() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Buscar campañas..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+      <div className="space-y-4">
+        {/* Search and View Mode */}
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Buscar campañas por nombre o cliente..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={cycleViewMode}
+              title={`Vista: ${viewMode === 'cards' ? 'Tarjetas' : viewMode === 'table' ? 'Tabla' : 'Lista'}`}
+            >
+              {viewMode === 'cards' && <Grid3X3 className="h-4 w-4" />}
+              {viewMode === 'table' && <Table className="h-4 w-4" />}
+              {viewMode === 'list' && <List className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+
+        {/* Filter Badges */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Filter className="h-4 w-4" />
+            <span>Filtros:</span>
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex gap-1">
+            {['all', 'active', 'paused'].map((status) => (
+              <Button
+                key={status}
+                variant={statusFilter === status ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setStatusFilter(status)}
+              >
+                {status === 'all'
+                  ? 'Todas'
+                  : status === 'active'
+                  ? 'Activas'
+                  : 'Pausadas'}
+              </Button>
+            ))}
+          </div>
+
+          <div className="h-6 w-px bg-border" />
+
+          {/* Account Filter */}
           <Select value={accountFilter} onValueChange={setAccountFilter}>
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-[180px] h-9">
               <Building2 className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Cuenta" />
+              <SelectValue placeholder="Todas las cuentas" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas las cuentas</SelectItem>
-              {accounts.map((account) => (
-                <SelectItem key={account.id} value={account.name}>
-                  {account.name}
+              {uniqueClients.map((client) => (
+                <SelectItem key={client} value={client}>
+                  {client}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
 
-          {['all', 'active', 'paused'].map((status) => (
-            <Button
-              key={status}
-              variant={statusFilter === status ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setStatusFilter(status)}
-              className={cn(statusFilter !== status && 'bg-card')}
-            >
-              {status === 'all'
-                ? 'Todas'
-                : statusConfig[status as keyof typeof statusConfig]?.label || status}
-            </Button>
-          ))}
+          {/* Objective Filter */}
+          <Select value={objectiveFilter} onValueChange={setObjectiveFilter}>
+            <SelectTrigger className="w-[180px] h-9">
+              <Target className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Todos los objetivos" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos los objetivos</SelectItem>
+              {uniqueObjectives.map((objective) => (
+                <SelectItem key={objective} value={objective}>
+                  {objectiveLabels[objective] || objective}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Clear Filters */}
+          {activeFiltersCount > 0 && (
+            <>
+              <div className="h-6 w-px bg-border" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-9 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Limpiar ({activeFiltersCount})
+              </Button>
+            </>
+          )}
+        </div>
+
+        {/* Results count */}
+        <div className="text-sm text-muted-foreground">
+          Mostrando <span className="font-semibold text-foreground">{filteredCampaigns.length}</span> de{' '}
+          <span className="font-semibold text-foreground">{campaigns.length}</span> campañas
         </div>
       </div>
 
-      {/* Campaign Cards */}
+      {/* Campaign Views */}
       {filteredCampaigns.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <Target className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -367,18 +466,212 @@ export default function Campanas() {
           </p>
         </div>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {filteredCampaigns.map((campaign) => (
-            <CampaignCard
-              key={campaign.id}
-              campaign={campaign}
-              onToggleStatus={toggleCampaignStatus}
-              isToggling={togglingCampaign === campaign.id}
-              formatCurrency={formatCurrency}
-              formatNumber={formatNumber}
-            />
-          ))}
-        </div>
+        <>
+          {/* Cards View */}
+          {viewMode === 'cards' && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredCampaigns.map((campaign) => (
+                <CampaignCard
+                  key={campaign.id}
+                  campaign={campaign}
+                  onToggleStatus={toggleCampaignStatus}
+                  isToggling={togglingCampaign === campaign.id}
+                  formatCurrency={formatCurrency}
+                  formatNumber={formatNumber}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Table View */}
+          {viewMode === 'table' && (
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-muted/50 border-b border-border">
+                    <tr>
+                      <th className="text-left p-4 text-sm font-semibold text-foreground">Campaña</th>
+                      <th className="text-left p-4 text-sm font-semibold text-foreground">Cliente</th>
+                      <th className="text-left p-4 text-sm font-semibold text-foreground">Estado</th>
+                      <th className="text-left p-4 text-sm font-semibold text-foreground">Objetivo</th>
+                      <th className="text-right p-4 text-sm font-semibold text-foreground">Inversión</th>
+                      <th className="text-right p-4 text-sm font-semibold text-foreground">Resultados</th>
+                      <th className="text-right p-4 text-sm font-semibold text-foreground">CPA</th>
+                      <th className="text-right p-4 text-sm font-semibold text-foreground">CTR</th>
+                      <th className="text-right p-4 text-sm font-semibold text-foreground">ROAS</th>
+                      <th className="text-center p-4 text-sm font-semibold text-foreground">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredCampaigns.map((campaign) => {
+                      const status = statusConfig[campaign.status];
+                      const objectiveLabel = objectiveLabels[campaign.objective] || campaign.objective;
+                      return (
+                        <tr key={campaign.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="p-4">
+                            <div className="font-medium text-foreground max-w-[200px] truncate" title={campaign.name}>
+                              {campaign.name}
+                            </div>
+                          </td>
+                          <td className="p-4">
+                            <div className="text-sm text-muted-foreground">{campaign.client}</div>
+                          </td>
+                          <td className="p-4">
+                            <Badge variant="outline" className={cn('text-xs', status.className)}>
+                              {status.label}
+                            </Badge>
+                          </td>
+                          <td className="p-4">
+                            <div className="text-sm text-muted-foreground">{objectiveLabel}</div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="font-medium text-foreground">{formatCurrency(campaign.spent)}</div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="font-medium text-foreground">{formatNumber(campaign.results)}</div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="text-sm text-muted-foreground">{formatCurrency(campaign.cpa)}</div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className="text-sm text-muted-foreground">{campaign.ctr.toFixed(2)}%</div>
+                          </td>
+                          <td className="p-4 text-right">
+                            <div className={cn('font-medium', campaign.roas >= 2 ? 'text-success' : 'text-foreground')}>
+                              {campaign.roas.toFixed(1)}x
+                            </div>
+                          </td>
+                          <td className="p-4 text-center">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => toggleCampaignStatus(campaign.id, campaign.status)}
+                              disabled={togglingCampaign === campaign.id}
+                              className={cn(
+                                'h-8 w-8',
+                                campaign.status === 'active' ? 'text-warning hover:text-warning' : 'text-success hover:text-success'
+                              )}
+                            >
+                              {togglingCampaign === campaign.id ? (
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                              ) : campaign.status === 'active' ? (
+                                <Pause className="h-4 w-4" />
+                              ) : (
+                                <Play className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* List View */}
+          {viewMode === 'list' && (
+            <div className="space-y-2">
+              {filteredCampaigns.map((campaign) => {
+                const status = statusConfig[campaign.status];
+                const objectiveLabel = objectiveLabels[campaign.objective] || campaign.objective;
+                const progress = campaign.budget > 0 ? (campaign.spent / campaign.budget) * 100 : 0;
+
+                return (
+                  <div
+                    key={campaign.id}
+                    className="rounded-lg border border-border bg-card p-4 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Status and Toggle Button */}
+                      <div className="flex items-center gap-2 min-w-[100px]">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => toggleCampaignStatus(campaign.id, campaign.status)}
+                          disabled={togglingCampaign === campaign.id}
+                          className={cn(
+                            'h-8 w-8 flex-shrink-0',
+                            campaign.status === 'active' ? 'text-warning hover:text-warning' : 'text-success hover:text-success'
+                          )}
+                        >
+                          {togglingCampaign === campaign.id ? (
+                            <RefreshCw className="h-4 w-4 animate-spin" />
+                          ) : campaign.status === 'active' ? (
+                            <Pause className="h-4 w-4" />
+                          ) : (
+                            <Play className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Badge variant="outline" className={cn('text-xs', status.className)}>
+                          {status.label}
+                        </Badge>
+                      </div>
+
+                      {/* Campaign Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-2">
+                          <h3 className="font-semibold text-foreground truncate">{campaign.name}</h3>
+                          <Badge variant="outline" className="text-xs flex-shrink-0">
+                            {objectiveLabel}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{campaign.client}</p>
+                      </div>
+
+                      {/* Metrics */}
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Inversión</p>
+                          <p className="font-semibold text-foreground">{formatCurrency(campaign.spent)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Resultados</p>
+                          <p className="font-semibold text-foreground">{formatNumber(campaign.results)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">CPA</p>
+                          <p className="font-medium text-foreground">{formatCurrency(campaign.cpa)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">CTR</p>
+                          <p className="font-medium text-foreground">{campaign.ctr.toFixed(2)}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">ROAS</p>
+                          <p className={cn('font-semibold', campaign.roas >= 2 ? 'text-success' : 'text-foreground')}>
+                            {campaign.roas.toFixed(1)}x
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Budget Progress */}
+                      {campaign.budget > 0 && (
+                        <div className="w-24 flex-shrink-0">
+                          <div className="text-xs text-muted-foreground mb-1 text-right">
+                            {Math.min(progress, 100).toFixed(0)}%
+                          </div>
+                          <Progress
+                            value={Math.min(progress, 100)}
+                            className={cn(
+                              'h-2',
+                              progress > 90
+                                ? '[&>div]:bg-destructive'
+                                : progress > 70
+                                ? '[&>div]:bg-warning'
+                                : '[&>div]:bg-primary'
+                            )}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
