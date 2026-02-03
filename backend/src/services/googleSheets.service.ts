@@ -104,8 +104,9 @@ export class GoogleSheetsService {
       const expensesRows = expensesResponse.data.values || [];
 
       // Debug: Log raw data from sheets
-      console.log('Raw Income Rows (first 5):', incomeRows.slice(0, 5));
-      console.log('Raw Expenses Rows (first 5):', expensesRows.slice(0, 5));
+      console.log('========== GOOGLE SHEETS DATA ==========');
+      console.log('Raw Income Rows (first 10):', JSON.stringify(incomeRows.slice(0, 10), null, 2));
+      console.log('Raw Expenses Rows (first 10):', JSON.stringify(expensesRows.slice(0, 10), null, 2));
       console.log('Total income rows:', incomeRows.length);
       console.log('Total expenses rows:', expensesRows.length);
 
@@ -145,11 +146,21 @@ export class GoogleSheetsService {
         .filter(item => item.categoria !== 'AJUSTE SALDO')
         .reduce((sum, item) => sum + item.importe, 0);
 
-      console.log('Google Sheets data extracted:');
-      console.log('Ingresos:', ingresos);
-      console.log('Gastos:', gastos);
+      console.log('========== PARSED DATA ==========');
+      console.log('Ingresos (first 10):', JSON.stringify(ingresos.slice(0, 10), null, 2));
+      console.log('Gastos (first 10):', JSON.stringify(gastos.slice(0, 10), null, 2));
       console.log('Total Income:', totalIncome);
       console.log('Total Expenses:', totalExpenses);
+
+      // Check for today's entries
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      console.log('Today is:', todayStr);
+      const todayIngresos = ingresos.filter(i => i.fecha === todayStr);
+      const todayGastos = gastos.filter(g => g.fecha === todayStr);
+      console.log('Today Ingresos:', todayIngresos.length, JSON.stringify(todayIngresos, null, 2));
+      console.log('Today Gastos:', todayGastos.length, JSON.stringify(todayGastos, null, 2));
+      console.log('========================================');
 
       // Generar datos por mes (últimos 6 meses)
       const financeByMonth = this.generateMonthlyData(totalIncome, totalExpenses);
