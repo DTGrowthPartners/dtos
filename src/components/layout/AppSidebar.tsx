@@ -15,6 +15,7 @@ import {
   UsersRound,
   CalendarDays,
   LayoutGrid,
+  Megaphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ const navItems: NavItem[] = [
   { title: 'Terceros', path: '/terceros', icon: UsersRound, permission: 'terceros' },
   { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
   { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
+  { title: 'Campañas', path: '/campanas', icon: Megaphone },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
   // Briefs moved inside Tareas as a view
   { title: 'Calendario', path: '/calendario', icon: CalendarDays, permission: 'calendario' },
