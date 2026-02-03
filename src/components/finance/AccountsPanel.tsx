@@ -104,6 +104,29 @@ interface AccountsSummary {
   balance: number;
 }
 
+interface BudgetQ1Data {
+  ingresos: {
+    categorias: Record<string, { proyectado: number; real: number }>;
+    totales: {
+      enero: { proyectado: number; real: number };
+      febrero: { proyectado: number; real: number };
+      marzo: { proyectado: number; real: number };
+    };
+  };
+  gastos: {
+    categorias: Record<string, {
+      enero: { proyectado: number; real: number };
+      febrero: { proyectado: number; real: number };
+      marzo: { proyectado: number; real: number };
+    }>;
+    totales: {
+      enero: { proyectado: number; real: number };
+      febrero: { proyectado: number; real: number };
+      marzo: { proyectado: number; real: number };
+    };
+  };
+}
+
 interface PendingClientService {
   id: string;
   clientServiceId: string;
@@ -181,6 +204,7 @@ export function AccountsPanel() {
   const [pendingServices, setPendingServices] = useState<PendingClientService[]>([]);
   const [unpaidInvoices, setUnpaidInvoices] = useState<UnpaidInvoice[]>([]);
   const [summary, setSummary] = useState<AccountsSummary | null>(null);
+  const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'receivable' | 'payable'>('receivable');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -231,18 +255,20 @@ export function AccountsPanel() {
   const fetchData = async () => {
     try {
       setIsLoading(true);
-      const [accountsData, summaryData, clientsData, pendingServicesData, unpaidInvoicesData] = await Promise.all([
+      const [accountsData, summaryData, clientsData, pendingServicesData, unpaidInvoicesData, budgetDataRes] = await Promise.all([
         apiClient.get<Account[]>('/api/accounts'),
         apiClient.get<AccountsSummary>('/api/accounts/summary'),
         apiClient.get<Client[]>('/api/clients'),
         apiClient.get<PendingClientService[]>('/api/accounts/pending-services'),
         apiClient.get<UnpaidInvoice[]>('/api/invoices/unpaid'),
+        apiClient.get<BudgetQ1Data>('/api/finance/budget'),
       ]);
       setAccounts(accountsData);
       setSummary(summaryData);
       setClients(clientsData);
       setPendingServices(pendingServicesData);
       setUnpaidInvoices(unpaidInvoicesData);
+      setBudgetData(budgetDataRes);
     } catch (error) {
       console.error('Error fetching accounts:', error);
       toast({
@@ -560,22 +586,22 @@ export function AccountsPanel() {
             <div>
               <p className="text-sm text-muted-foreground">Por Pagar</p>
               <p className="text-xl font-bold text-destructive">
-                {formatCurrency(summary?.payables.total || 0)}
+                {formatCurrency(budgetData?.gastos?.totales?.febrero?.proyectado || 0)}
               </p>
-              <p className="text-xs text-muted-foreground">{summary?.payables.count || 0} cuentas activas</p>
+              <p className="text-xs text-muted-foreground">Presupuesto Febrero 2025</p>
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-3">
-            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${(summary?.balance || 0) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
-              <Building2 className={`h-5 w-5 ${(summary?.balance || 0) >= 0 ? 'text-success' : 'text-destructive'}`} />
+            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+              <Building2 className={`h-5 w-5 ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'text-success' : 'text-destructive'}`} />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Balance</p>
-              <p className={`text-xl font-bold ${(summary?.balance || 0) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {formatCurrency(summary?.balance || 0)}
+              <p className={`text-xl font-bold ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {formatCurrency((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0))}
               </p>
               <p className="text-xs text-muted-foreground">Cobrar - Pagar</p>
             </div>

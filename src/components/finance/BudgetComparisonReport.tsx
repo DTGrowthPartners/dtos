@@ -52,7 +52,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<MonthKey | 'q1'>('q1');
+  const [selectedMonth, setSelectedMonth] = useState<MonthKey | 'q1'>('febrero');
 
   // Get current month for highlighting
   const currentDate = new Date();

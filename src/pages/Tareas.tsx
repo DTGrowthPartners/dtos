@@ -563,120 +563,13 @@ export default function Tareas() {
              d1.getDate() === d2.getDate();
     };
 
-    for (const task of tasksData) {
-      if (task.recurrence?.enabled && task.recurrence.nextOccurrence) {
-        // Check if it's time to create a new instance (compare dates only, not exact timestamps)
-        if (isSameDayOrPast(task.recurrence.nextOccurrence)) {
-          // IMPORTANT: Check if we already generated for this occurrence
-          // If lastGenerated exists and is on the same day or after nextOccurrence, skip
-          if (task.recurrence.lastGenerated) {
-            const lastGenDate = new Date(task.recurrence.lastGenerated);
-            lastGenDate.setHours(0, 0, 0, 0);
-            const nextOccDate = new Date(task.recurrence.nextOccurrence);
-            nextOccDate.setHours(0, 0, 0, 0);
-
-            if (lastGenDate.getTime() >= nextOccDate.getTime()) {
-              console.log(`[Recurrence] Skipping ${task.title} - already generated for this occurrence`);
-              continue; // Skip - already generated for this occurrence
-            }
-          }
-
-          // Check if there's already an instance for this date to prevent duplicates
-          const existingInstance = tasksData.find(t =>
-            t.recurringTemplateId === task.id &&
-            t.dueDate &&
-            isSameDay(t.dueDate, task.recurrence!.nextOccurrence)
-          );
-
-          if (existingInstance) {
-            console.log(`[Recurrence] Skipping ${task.title} - instance already exists for this date`);
-            // Update lastGenerated to prevent future duplicate attempts
-            await updateTask(task.id, {
-              recurrence: {
-                ...task.recurrence,
-                lastGenerated: now,
-              },
-            });
-            continue;
-          }
-
-          try {
-            // Create new task instance
-            const newTaskData: Omit<Task, 'id' | 'createdAt'> = {
-              title: task.title,
-              description: task.description,
-              status: TaskStatus.TODO,
-              priority: task.priority,
-              assignee: task.assignee,
-              creator: task.creator,
-              projectId: task.projectId,
-              type: task.type,
-              dueDate: task.recurrence.nextOccurrence,
-              isRecurringInstance: true,
-              recurringTemplateId: task.id,
-            };
-
-            const newInstanceId = await createTask(newTaskData);
-
-            // Send WhatsApp notification for high priority recurring tasks
-            if (task.priority === Priority.HIGH) {
-              const project = projects.find(p => p.id === task.projectId);
-              sendHighPriorityTaskToWhatsApp({
-                id: newInstanceId,
-                titulo: task.title,
-                descripcion: formatChecklistForWhatsApp(task.description || '', task.checklist),
-                prioridad: 'Alta',
-                asignado: task.assignee,
-                creador: task.creator,
-                proyecto: project?.name || 'Sin proyecto',
-                fechaLimite: task.recurrence.nextOccurrence
-                  ? new Date(task.recurrence.nextOccurrence).toISOString().split('T')[0]
-                  : null,
-              });
-              console.log(`[Recurrence] Sent WhatsApp notification for high priority recurring task: ${task.title}`);
-            }
-
-            // Calculate next occurrence
-            let nextOccurrence: number;
-            const currentOccurrence = new Date(task.recurrence.nextOccurrence);
-
-            switch (task.recurrence.frequency) {
-              case 'daily':
-                currentOccurrence.setDate(currentOccurrence.getDate() + 1);
-                nextOccurrence = currentOccurrence.getTime();
-                break;
-              case 'weekly':
-                currentOccurrence.setDate(currentOccurrence.getDate() + 7);
-                nextOccurrence = currentOccurrence.getTime();
-                break;
-              case 'biweekly':
-                currentOccurrence.setDate(currentOccurrence.getDate() + 14);
-                nextOccurrence = currentOccurrence.getTime();
-                break;
-              case 'monthly':
-                currentOccurrence.setMonth(currentOccurrence.getMonth() + 1);
-                nextOccurrence = currentOccurrence.getTime();
-                break;
-              default:
-                nextOccurrence = currentOccurrence.getTime();
-            }
-
-            // Update the template task with new next occurrence
-            await updateTask(task.id, {
-              recurrence: {
-                ...task.recurrence,
-                nextOccurrence,
-                lastGenerated: now,
-              },
-            });
-
-            console.log(`[Recurrence] Created recurring task instance for: ${task.title}`);
-          } catch (error) {
-            console.error(`[Recurrence] Error processing recurring task ${task.id}:`, error);
-          }
-        }
-      }
-    }
+    // DISABLED: Automatic task generation for recurring tasks
+    // Recurring tasks now update their due date when completed instead of creating duplicate instances
+    // for (const task of tasksData) {
+    //   if (task.recurrence?.enabled && task.recurrence.nextOccurrence) {
+    //     ...
+    //   }
+    // }
   };
 
   const fetchData = async () => {
@@ -863,76 +756,30 @@ export default function Tareas() {
       } else {
         const newTaskId = await createTask(taskData as Omit<Task, 'id' | 'createdAt'>);
 
-        // If this is a recurring task, create the first instance immediately
-        if (formData.isRecurring) {
-          const firstInstanceData: Omit<Task, 'id' | 'createdAt'> = {
-            title: formData.title.trim(),
-            description: formData.description.trim(),
-            status: TaskStatus.TODO,
-            priority: formData.priority,
-            assignee: formData.assignee,
-            creator: formData.creator,
-            projectId: formData.projectId,
-            type: formData.type || undefined,
-            dueDate: formData.dueDate ? parseLocalDateTime(formData.dueDate, formData.dueTime) : Date.now(),
-            isRecurringInstance: true,
-            recurringTemplateId: newTaskId,
-          };
+        // Send notifications for all tasks (recurring or not)
+        if (taskData.assignee && user?.firstName && taskData.assignee !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_assigned',
+            taskTitle: taskData.title,
+            taskId: newTaskId,
+            assigneeName: taskData.assignee,
+            senderName: user.firstName,
+          });
+        }
 
-          const firstInstanceId = await createTask(firstInstanceData);
-          console.log('[Recurrence] Created first instance for recurring task:', firstInstanceId);
-
-          // Send notification to assignee for the instance (not the template)
-          if (taskData.assignee && user?.firstName && taskData.assignee !== user.firstName) {
-            sendTaskNotification({
-              type: 'task_assigned',
-              taskTitle: taskData.title,
-              taskId: firstInstanceId,
-              assigneeName: taskData.assignee,
-              senderName: user.firstName,
-            });
-          }
-
-          // Send to WhatsApp webhook if high priority
-          if (taskData.priority === Priority.HIGH) {
-            const project = projects.find(p => p.id === taskData.projectId);
-            sendHighPriorityTaskToWhatsApp({
-              id: firstInstanceId,
-              titulo: taskData.title,
-              descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
-              prioridad: 'Alta',
-              asignado: taskData.assignee,
-              creador: taskData.creator,
-              proyecto: project?.name || 'Sin proyecto',
-              fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
-            });
-          }
-        } else {
-          // Non-recurring task - send notifications normally
-          if (taskData.assignee && user?.firstName && taskData.assignee !== user.firstName) {
-            sendTaskNotification({
-              type: 'task_assigned',
-              taskTitle: taskData.title,
-              taskId: newTaskId,
-              assigneeName: taskData.assignee,
-              senderName: user.firstName,
-            });
-          }
-
-          // Send to WhatsApp webhook if high priority
-          if (taskData.priority === Priority.HIGH) {
-            const project = projects.find(p => p.id === taskData.projectId);
-            sendHighPriorityTaskToWhatsApp({
-              id: newTaskId,
-              titulo: taskData.title,
-              descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
-              prioridad: 'Alta',
-              asignado: taskData.assignee,
-              creador: taskData.creator,
-              proyecto: project?.name || 'Sin proyecto',
-              fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
-            });
-          }
+        // Send to WhatsApp webhook if high priority
+        if (taskData.priority === Priority.HIGH) {
+          const project = projects.find(p => p.id === taskData.projectId);
+          sendHighPriorityTaskToWhatsApp({
+            id: newTaskId,
+            titulo: taskData.title,
+            descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
+            prioridad: 'Alta',
+            asignado: taskData.assignee,
+            creador: taskData.creator,
+            proyecto: project?.name || 'Sin proyecto',
+            fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
+          });
         }
 
         toast({
@@ -940,7 +787,7 @@ export default function Tareas() {
           description: duplicatingTask
             ? 'La tarea se duplicó correctamente'
             : formData.isRecurring
-              ? 'Se creó la tarea recurrente y su primera instancia'
+              ? 'La tarea recurrente se creó correctamente. Se actualizará automáticamente al completarla.'
               : 'La tarea se creó correctamente',
         });
       }
@@ -1761,6 +1608,9 @@ export default function Tareas() {
     const previousStatus = task.status;
     const newStatus = task.status === TaskStatus.DONE ? TaskStatus.TODO : TaskStatus.DONE;
 
+    // Check if this is a recurring task
+    const isRecurringTask = task.recurrence?.enabled === true;
+
     // Optimistic update - update UI immediately
     setTasks(prevTasks =>
       prevTasks.map(t =>
@@ -1775,9 +1625,80 @@ export default function Tareas() {
         // If already done, move back to TODO
         await updateTask(task.id, { status: TaskStatus.TODO });
       } else {
-        // Mark as done and copy to completed tasks
-        await updateTask(task.id, { status: TaskStatus.DONE, completedAt: Date.now() });
-        await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
+        // Check if this is a recurring task being marked as DONE
+        if (isRecurringTask && task.recurrence) {
+          // Calculate next occurrence
+          const now = new Date();
+          let nextOccurrence: Date;
+
+          if (task.dueDate) {
+            nextOccurrence = new Date(task.dueDate);
+          } else {
+            nextOccurrence = new Date();
+          }
+
+          switch (task.recurrence.frequency) {
+            case 'daily':
+              nextOccurrence.setDate(nextOccurrence.getDate() + 1);
+              break;
+            case 'weekly':
+              nextOccurrence.setDate(nextOccurrence.getDate() + 7);
+              break;
+            case 'biweekly':
+              nextOccurrence.setDate(nextOccurrence.getDate() + 14);
+              break;
+            case 'monthly':
+              nextOccurrence.setMonth(nextOccurrence.getMonth() + 1);
+              break;
+          }
+
+          // Check if the task is overdue (if overdue, don't create next occurrence)
+          const isOverdue = task.dueDate && task.dueDate < Date.now();
+
+          if (isOverdue) {
+            // If overdue, just mark as DONE without creating next occurrence
+            await updateTask(task.id, { status: TaskStatus.DONE, completedAt: Date.now() });
+            await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
+
+            toast({
+              title: 'Tarea vencida completada',
+              description: 'La tarea estaba vencida y no se creó una nueva ocurrencia',
+            });
+          } else {
+            // Update the task with next occurrence and reset status to TODO
+            await updateTask(task.id, {
+              status: TaskStatus.TODO,
+              dueDate: nextOccurrence.getTime(),
+              completedAt: undefined,
+              recurrence: {
+                ...task.recurrence,
+                nextOccurrence: nextOccurrence.getTime(),
+                lastGenerated: Date.now(),
+              },
+            });
+
+            // Copy to completed tasks for history
+            await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE, completedAt: Date.now() });
+
+            // Update UI to show the new due date
+            setTasks(prevTasks =>
+              prevTasks.map(t =>
+                t.id === task.id
+                  ? { ...t, status: TaskStatus.TODO, dueDate: nextOccurrence.getTime(), completedAt: undefined }
+                  : t
+              )
+            );
+
+            toast({
+              title: 'Tarea recurrente completada',
+              description: `Próxima fecha: ${nextOccurrence.toLocaleDateString('es-ES')}`,
+            });
+          }
+        } else {
+          // Non-recurring task: mark as done and copy to completed tasks
+          await updateTask(task.id, { status: TaskStatus.DONE, completedAt: Date.now() });
+          await copyTaskToCompleted(task.id, { ...task, status: TaskStatus.DONE });
+        }
 
         // Notify creator that task was completed
         if (task.creator && user?.firstName && task.creator !== user.firstName) {
@@ -2298,10 +2219,9 @@ export default function Tareas() {
       matchesDate = isOverdue(task.dueDate) && task.status !== TaskStatus.DONE;
     }
 
-    // Hide recurring TEMPLATES from the task list - only show instances
-    // Templates have recurrence.enabled = true, instances have isRecurringInstance = true
-    const isRecurringTemplate = task.recurrence?.enabled === true;
-    if (isRecurringTemplate) return false;
+    // Show all tasks including recurring ones (we no longer create separate instances)
+    // const isRecurringTemplate = task.recurrence?.enabled === true;
+    // if (isRecurringTemplate) return false;
 
     return matchesSearch && matchesProject && matchesAssignee && matchesPriority && matchesDate;
   });
