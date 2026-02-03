@@ -487,6 +487,7 @@ export class GoogleSheetsService {
 
       const rows = response.data.values || [];
       console.log('Budget Q1 rows count:', rows.length);
+      console.log('First 10 rows from Presupuesto Q1:', JSON.stringify(rows.slice(0, 10), null, 2));
 
       // Initialize result structure
       const result = {
@@ -582,8 +583,9 @@ export class GoogleSheetsService {
       }
 
       console.log('Budget Q1 data parsed - Gastos categories:', Object.keys(result.gastos.categorias).length);
-      console.log('Budget Q1 totales ingresos:', result.ingresos.totales);
-      console.log('Budget Q1 totales gastos:', result.gastos.totales);
+      console.log('Budget Q1 totales ingresos:', JSON.stringify(result.ingresos.totales, null, 2));
+      console.log('Budget Q1 totales gastos:', JSON.stringify(result.gastos.totales, null, 2));
+      console.log('Full budget result:', JSON.stringify(result, null, 2));
 
       return result;
     } catch (error) {
