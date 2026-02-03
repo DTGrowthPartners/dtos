@@ -17,6 +17,7 @@ import accountRoutes from './routes/account.routes';
 import webhookRoutes from './routes/webhook.routes';
 import calendarRoutes from './routes/calendar.routes';
 import clientPortalRoutes from './routes/clientPortal.routes';
+import campaignsRoutes from './routes/campaigns.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -55,6 +56,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/webhook', webhookRoutes);
 app.use('/api/calendar', calendarRoutes);
 app.use('/api/client-portal', clientPortalRoutes);
+app.use('/api/campaigns', campaignsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -86,6 +86,9 @@ model Client {
   portalServices   PortalServiceStatus[]
   portalInvitations PortalInvitation[]
   portalExcelFiles PortalExcelFile[]
+  // Meta Ads Integration
+  metaAdAccountId  String?   // ID de cuenta publicitaria de Meta (ej: act_123456789)
+  metaBusinessId   String?   // ID del Business Manager de Meta
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
