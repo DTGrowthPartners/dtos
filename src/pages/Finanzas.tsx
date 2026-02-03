@@ -148,7 +148,7 @@ export default function Finanzas() {
   const [filterType, setFilterType] = useState<'todas' | 'ingresos' | 'gastos'>('todas');
   const [filterDateFrom, setFilterDateFrom] = useState<string>('');
   const [filterDateTo, setFilterDateTo] = useState<string>('');
-  const [filterDatePreset, setFilterDatePreset] = useState<string>('todas');
+  const [filterDatePreset, setFilterDatePreset] = useState<string>('thisMonth');
   const [showFilters, setShowFilters] = useState(true);
 
   // Modals
