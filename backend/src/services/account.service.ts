@@ -351,13 +351,13 @@ export const accountService = {
       }),
       // Unpaid invoices (cuentas de cobro)
       prisma.invoice.findMany({
-        where: { status: { in: ['pending', 'sent'] } },
-        select: { total: true },
+        where: { status: { in: ['pendiente', 'enviada'] } },
+        select: { totalAmount: true },
       }),
     ]);
 
     // Calculate total from unpaid invoices
-    const unpaidInvoicesTotal = unpaidInvoices.reduce((sum, invoice) => sum + invoice.total, 0);
+    const unpaidInvoicesTotal = unpaidInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
     const unpaidInvoicesCount = unpaidInvoices.length;
 
     // Combine manual receivables with unpaid invoices
