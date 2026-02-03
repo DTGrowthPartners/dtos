@@ -462,6 +462,15 @@ export default function Finanzas() {
   const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
   const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
 
+  // Debug filtered income
+  console.log('========== FILTERED INCOME DEBUG ==========');
+  console.log('Filter settings:', { filterDateFrom, filterDateTo, filterDatePreset, filterCategory, filterType });
+  console.log('All ingresos count:', ingresos.length);
+  console.log('Filtered ingresos count:', filteredIngresos.length);
+  console.log('Filtered ingresos:', filteredIngresos.map(t => ({ fecha: t.fecha, importe: t.importe, descripcion: t.descripcion })));
+  console.log('Filtered total income:', filteredTotalIncome);
+  console.log('==========================================');
+
   // Calculate base totals (all transactions excluding AJUSTE SALDO, no other filters)
   const baseTotalIncome = useMemo(() => {
     const filtered = ingresos.filter(t => !isAjusteSaldo(t.categoria));
