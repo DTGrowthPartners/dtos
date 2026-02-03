@@ -132,7 +132,7 @@ const formatCompactCurrency = (value: number): string => {
 };
 
 export default function Finanzas() {
-  const [activeTab, setActiveTab] = useState<string>('reportes');
+  const [activeTab, setActiveTab] = useState<string>('resumen');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
@@ -351,6 +351,11 @@ export default function Finanzas() {
 
   useEffect(() => {
     fetchFinanceData();
+  }, []);
+
+  // Apply initial date preset filter
+  useEffect(() => {
+    applyDatePreset('thisMonth');
   }, []);
 
   const fetchFinanceData = async () => {
