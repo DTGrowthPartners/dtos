@@ -14,7 +14,7 @@ const getFirestore = () => admin.firestore();
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dt-bot-secret-key-2024';
 
 // Team members válidos para el sistema de tareas
-const VALID_TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Mariana', 'Jose', 'Anderson', 'Edgardo', 'Jhonathan'];
+const VALID_TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Mariana', 'Jose', 'Anderson', 'Edgardo', 'Jhonathan', 'Kimi AI'];
 
 // Middleware para verificar API key del bot
 const verifyBotApiKey = (req: Request, res: Response, next: Function) => {

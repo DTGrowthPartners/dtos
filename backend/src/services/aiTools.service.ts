@@ -151,6 +151,8 @@ export class AIToolsService {
    * Create a new task in Firestore via bot endpoint
    */
   private async createTask(args: any, userId: string) {
+    console.log('[AITools] Creating task:', { title: args.title, assignee: args.assignee, userId });
+
     const response = await fetch('http://localhost:3001/api/webhook/bot/tasks', {
       method: 'POST',
       headers: {
@@ -161,17 +163,20 @@ export class AIToolsService {
         title: args.title,
         description: args.description || '',
         assignee: args.assignee,
-        creator: userId,
+        creator: 'Kimi AI', // Use fixed creator name instead of userId
         priority: args.priority || 'MEDIUM',
         projectId: args.projectId || null,
       })
     });
 
     if (!response.ok) {
-      throw new Error(`Error creando tarea: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      console.error('[AITools] Create task failed:', errorData);
+      throw new Error(errorData.error || `Error creando tarea: ${response.statusText}`);
     }
 
     const data: any = await response.json();
+    console.log('[AITools] Task created successfully:', data.task?.id);
     return data;
   }
 
