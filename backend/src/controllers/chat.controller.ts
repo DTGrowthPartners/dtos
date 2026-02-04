@@ -218,6 +218,9 @@ Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, 
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
           try {
+            // Debug: log the complete tool call structure
+            console.log('[Chat] Raw tool call:', JSON.stringify(toolCall, null, 2));
+
             const toolName = (toolCall as any).function.name;
             const toolArgs = JSON.parse((toolCall as any).function.arguments);
 
