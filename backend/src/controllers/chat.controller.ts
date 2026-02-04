@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import OpenAI from 'openai';
+import { AI_TOOLS } from '../config/aiTools';
+import { AIToolsService } from '../services/aiTools.service';
 
 // Configure Kimi AI client via Hugging Face
 const kimiClient = new OpenAI({
@@ -112,6 +114,136 @@ export class ChatController {
       res.status(500).json({
         success: false,
         error: error.message || 'Error al analizar la imagen'
+      });
+    }
+  }
+
+  // Send a message to Kimi AI with Function Calling (tools) support
+  async sendMessageWithTools(req: Request, res: Response) {
+    try {
+      const { message, conversationHistory } = req.body;
+      const userId = (req as any).user.userId;
+
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({
+          success: false,
+          error: 'Message is required and must be a string'
+        });
+      }
+
+      console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
+
+      // Build messages array with system prompt
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        {
+          role: "system",
+          content: "Eres Kimi AI, asistente inteligente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas. Responde en español de forma amigable y profesional. Cuando uses herramientas, explica los resultados de forma clara y útil."
+        }
+      ];
+
+      // Add conversation history if provided
+      if (conversationHistory && Array.isArray(conversationHistory)) {
+        messages.push(...conversationHistory);
+      }
+
+      // Add current user message
+      messages.push({ role: "user", content: message });
+
+      let iterations = 0;
+      const MAX_ITERATIONS = 5;
+      const aiToolsService = new AIToolsService();
+
+      while (iterations < MAX_ITERATIONS) {
+        iterations++;
+        console.log(`[Chat] Iteration ${iterations}/${MAX_ITERATIONS}`);
+
+        // Call Kimi AI with tools
+        const completion = await kimiClient.chat.completions.create({
+          model: "moonshotai/Kimi-K2.5:novita",
+          messages: messages,
+          tools: AI_TOOLS as any,
+          tool_choice: "auto",
+          temperature: 0.7,
+          max_tokens: 2000,
+        });
+
+        const assistantMessage = completion.choices[0].message;
+
+        // Check if there are tool calls
+        if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+          // No tool calls - return final response
+          let response = assistantMessage.content || '';
+
+          // Filter out thinking tags
+          if (response.includes('</think>')) {
+            response = response.split('</think>').pop()?.trim() || response;
+          }
+
+          console.log('[Chat] Final response generated (no tools used)');
+
+          return res.json({
+            success: true,
+            response: response,
+            usage: completion.usage,
+          });
+        }
+
+        console.log(`[Chat] Tool calls requested: ${assistantMessage.tool_calls.length}`);
+
+        // Add assistant message to history
+        messages.push({
+          role: "assistant",
+          content: assistantMessage.content || null,
+          tool_calls: assistantMessage.tool_calls as any
+        });
+
+        // Execute each tool call
+        for (const toolCall of assistantMessage.tool_calls) {
+          try {
+            const toolName = toolCall.function.name;
+            const toolArgs = JSON.parse(toolCall.function.arguments);
+
+            console.log(`[Chat] Executing tool: ${toolName}`, toolArgs);
+
+            const result = await aiToolsService.executeTool(toolName, toolArgs, userId);
+
+            console.log(`[Chat] Tool ${toolName} executed successfully`);
+
+            // Add tool result to messages
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify(result)
+            } as any);
+          } catch (error: any) {
+            console.error('[Chat] Tool execution error:', error);
+
+            // Add error result
+            messages.push({
+              role: "tool",
+              tool_call_id: toolCall.id,
+              content: JSON.stringify({
+                success: false,
+                error: `Error al ejecutar la herramienta: ${error.message}`
+              })
+            } as any);
+          }
+        }
+      }
+
+      // Max iterations reached
+      console.log('[Chat] Max iterations reached');
+
+      return res.json({
+        success: true,
+        response: "Necesito más tiempo para procesar esta solicitud. ¿Puedes reformular tu pregunta?",
+      });
+
+    } catch (error: any) {
+      console.error('[Chat] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error al procesar el mensaje'
       });
     }
   }

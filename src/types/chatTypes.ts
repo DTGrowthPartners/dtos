@@ -11,7 +11,7 @@ export interface ChatMessage {
 export interface ChatRoom {
   id: string;
   name: string;
-  type: 'general' | 'direct';
+  type: 'general' | 'direct' | 'ai';
   participants: string[];
   participantNames?: Record<string, string>;
   lastMessage?: {

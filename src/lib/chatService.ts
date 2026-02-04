@@ -47,6 +47,30 @@ export const initializeGeneralRoom = async () => {
   }
 };
 
+// Get or create AI chat room for a user
+export const getOrCreateAIRoom = async (userId: string, userName: string): Promise<string> => {
+  const roomId = `ai_room_${userId}`;
+  const roomRef = doc(db, ROOMS_COLLECTION, roomId);
+  const roomSnap = await getDoc(roomRef);
+
+  if (!roomSnap.exists()) {
+    await setDoc(roomRef, {
+      id: roomId,
+      name: 'Chat con IA',
+      type: 'ai',
+      participants: [userId, 'ai_assistant'],
+      participantNames: {
+        [userId]: userName,
+        'ai_assistant': 'Kimi AI',
+      },
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  }
+
+  return roomId;
+};
+
 // Send a message to a room
 export const sendMessage = async (
   roomId: string,

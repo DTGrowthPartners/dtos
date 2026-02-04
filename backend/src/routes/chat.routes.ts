@@ -14,4 +14,7 @@ router.post('/', chatController.sendMessage.bind(chatController));
 // POST /api/chat/vision - Analyze an image with Kimi AI
 router.post('/vision', chatController.analyzeImage.bind(chatController));
 
+// POST /api/chat/ai - Send a message to Kimi AI with Function Calling (tools)
+router.post('/ai', chatController.sendMessageWithTools.bind(chatController));
+
 export default router;

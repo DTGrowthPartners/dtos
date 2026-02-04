@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import {
   sendMessage,
   subscribeToMessages,
@@ -22,6 +23,7 @@ import {
   markMessagesAsRead,
   getOrCreateDirectRoom,
   subscribeToUserRooms,
+  getOrCreateAIRoom,
 } from '@/lib/chatService';
 import type { ChatMessage, UserPresence, ChatRoom } from '@/types/chatTypes';
 
@@ -69,7 +71,9 @@ export default function LiveChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
+  const { toast } = useToast();
+  const [aiRoomId, setAiRoomId] = useState<string | null>(null);
 
   // Scroll to bottom on new messages
   const scrollToBottom = () => {
@@ -104,6 +108,20 @@ export default function LiveChat() {
       }
     };
     fetchTeamUsers();
+
+    // Initialize AI room
+    const initAIRoom = async () => {
+      const currentUser = teamUsers.find((u) => u.id === user.id);
+      const userName = currentUser?.firstName || 'Usuario';
+      const roomId = await getOrCreateAIRoom(user.id, userName);
+      setAiRoomId(roomId);
+
+      // Subscribe to AI room unread count
+      subscribeToUnreadCount(roomId, user.id, (count) => {
+        setUnreadCounts((prev) => ({ ...prev, [roomId]: count }));
+      });
+    };
+    initAIRoom();
 
     // Setup presence
     const cleanupPresence = setupPresenceListeners(user.id);
@@ -189,20 +207,81 @@ export default function LiveChat() {
     setIsLoading(true);
     try {
       const currentUser = teamUsers.find((u) => u.id === user.id);
-      await sendMessage(
-        activeRoomId,
-        newMessage.trim(),
-        user.id,
-        currentUser?.firstName || user.email?.split('@')[0] || 'Usuario',
-        currentUser?.photoUrl
-      );
-      setNewMessage('');
+      const userName = currentUser?.firstName || user.email?.split('@')[0] || 'Usuario';
+
+      // Detect if it's AI room
+      const isAIRoom = activeRoomId === aiRoomId;
+
+      if (isAIRoom) {
+        // Save user message first
+        await sendMessage(
+          activeRoomId,
+          newMessage.trim(),
+          user.id,
+          userName,
+          currentUser?.photoUrl
+        );
+
+        const messageText = newMessage.trim();
+        setNewMessage('');
+
+        // Build conversation history (last 20 messages for context)
+        const conversationHistory = messages.slice(-20).map((m) => ({
+          role: m.senderId === user.id ? 'user' : 'assistant',
+          content: m.text,
+        }));
+
+        // Call AI endpoint with tools
+        const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const response = await fetch(`${API_URL}/api/chat/ai`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            message: messageText,
+            conversationHistory,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!data.success) {
+          throw new Error(data.error || 'Error al procesar el mensaje');
+        }
+
+        // Save AI response
+        await sendMessage(
+          activeRoomId,
+          data.response,
+          'ai_assistant',
+          'Kimi AI',
+          undefined
+        );
+      } else {
+        // Regular team chat
+        await sendMessage(
+          activeRoomId,
+          newMessage.trim(),
+          user.id,
+          userName,
+          currentUser?.photoUrl
+        );
+        setNewMessage('');
+      }
+
       // Refocus input after sending for continuous typing
       setTimeout(() => {
         inputRef.current?.focus();
       }, 0);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error sending message:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Error al enviar el mensaje',
+        variant: 'destructive',
+      });
     } finally {
       setIsLoading(false);
     }
@@ -212,6 +291,14 @@ export default function LiveChat() {
     setActiveRoomId(GENERAL_ROOM_ID);
     setActiveRoomName('Chat General');
     setView('chat');
+  };
+
+  const openAIChat = () => {
+    if (!aiRoomId) return;
+    setActiveRoomId(aiRoomId);
+    setActiveRoomName('Chat con IA');
+    setView('chat');
+    markMessagesAsRead(aiRoomId, user!.id);
   };
 
   const startDirectChat = async (targetUser: TeamUser) => {
@@ -463,6 +550,37 @@ export default function LiveChat() {
                     </p>
                   </div>
                 </button>
+
+                {/* AI Chat */}
+                {aiRoomId && (
+                  <button
+                    onClick={openAIChat}
+                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
+                      activeRoomId === aiRoomId && view === 'chat'
+                        ? 'bg-primary/10 border border-primary/20'
+                        : 'hover:bg-muted'
+                    }`}
+                  >
+                    <div className="relative">
+                      <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
+                        <Sparkles className="h-5 w-5" />
+                      </div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">Chat con IA</span>
+                        {unreadCounts[aiRoomId] > 0 && (
+                          <Badge variant="destructive" className="text-xs h-5 min-w-[20px]">
+                            {unreadCounts[aiRoomId]}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        Asistente con acceso a tus datos
+                      </p>
+                    </div>
+                  </button>
+                )}
 
                 {/* Direct Rooms */}
                 {directRooms.length > 0 && (
