@@ -41,7 +41,12 @@ export class ChatController {
         max_tokens: 2000,
       });
 
-      const response = completion.choices[0].message.content;
+      let response = completion.choices[0].message.content || '';
+
+      // Filter out thinking tags and content if present
+      if (response.includes('</think>')) {
+        response = response.split('</think>').pop()?.trim() || response;
+      }
 
       console.log('[Chat] Response generated successfully');
 
@@ -87,7 +92,12 @@ export class ChatController {
         ],
       });
 
-      const response = completion.choices[0].message.content;
+      let response = completion.choices[0].message.content || '';
+
+      // Filter out thinking tags and content if present
+      if (response.includes('</think>')) {
+        response = response.split('</think>').pop()?.trim() || response;
+      }
 
       console.log('[Chat] Image analysis completed');
 
