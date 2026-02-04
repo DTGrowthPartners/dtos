@@ -488,8 +488,49 @@ export class GoogleSheetsService {
     };
   }> {
     try {
+      // Get real transaction data from Salidas sheet
+      const financeData = await this.getFinanceData();
+      const gastosTransactions = financeData.gastos.filter(t => t.categoria !== 'AJUSTE SALDO');
+
+      // Helper: Group expenses by category and month
+      const groupExpensesByMonth = (transactions: TransactionRow[]) => {
+        const byCategory: Record<string, { enero: number; febrero: number; marzo: number }> = {};
+        const totals = { enero: 0, febrero: 0, marzo: 0 };
+
+        transactions.forEach(t => {
+          // Extract year-month from fecha (format: YYYY-MM-DD)
+          const [year, month] = t.fecha.split('-');
+          if (year !== '2025') return; // Only process Q1 2025
+
+          let monthKey: 'enero' | 'febrero' | 'marzo' | null = null;
+          if (month === '01') monthKey = 'enero';
+          else if (month === '02') monthKey = 'febrero';
+          else if (month === '03') monthKey = 'marzo';
+
+          if (!monthKey) return;
+
+          // Initialize category if not exists
+          if (!byCategory[t.categoria]) {
+            byCategory[t.categoria] = { enero: 0, febrero: 0, marzo: 0 };
+          }
+
+          // Add to category and totals
+          byCategory[t.categoria][monthKey] += t.importe;
+          totals[monthKey] += t.importe;
+        });
+
+        return { byCategory, totals };
+      };
+
+      const realExpenses = groupExpensesByMonth(gastosTransactions);
+      console.log('[Budget] Real expenses calculated:', {
+        categoriesCount: Object.keys(realExpenses.byCategory).length,
+        totals: realExpenses.totals,
+        sampleCategories: Object.keys(realExpenses.byCategory).slice(0, 5)
+      });
+
       // Read from "Presupuesto Q1" sheet - Full data
-      // Structure: A=Categoria, B=Enero Proy, C=Enero Real, D=Feb Proy, E=Feb Real, F=Mar Proy, G=Mar Real, H=Total
+      // Structure: A=Categoria, B=Enero Proy, C=Enero Real (IGNORED), D=Feb Proy, E=Feb Real (IGNORED), F=Mar Proy, G=Mar Real (IGNORED), H=Total
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
         range: "'Presupuesto Q1'!A1:H70",
@@ -544,11 +585,14 @@ export class GoogleSheetsService {
 
         const categoria = String(row[0]).trim();
         const eneroProyectado = typeof row[1] === 'number' ? row[1] : 0;
-        const eneroReal = typeof row[2] === 'number' ? row[2] : 0;
         const febreroProyectado = typeof row[3] === 'number' ? row[3] : 0;
-        const febreroReal = typeof row[4] === 'number' ? row[4] : 0;
         const marzoProyectado = typeof row[5] === 'number' ? row[5] : 0;
-        const marzoReal = typeof row[6] === 'number' ? row[6] : 0;
+
+        // Calculate real values from transactions (not from sheet!)
+        const realData = realExpenses.byCategory[categoria] || { enero: 0, febrero: 0, marzo: 0 };
+        const eneroReal = realData.enero;
+        const febreroReal = realData.febrero;
+        const marzoReal = realData.marzo;
 
         // Debug logging for TOTAL rows
         if (firstCol.includes('TOTAL')) {
@@ -571,10 +615,11 @@ export class GoogleSheetsService {
         // Handle TOTAL GASTOS
         if (firstCol === 'TOTAL GASTOS') {
           result.gastos.totales = {
-            enero: { proyectado: eneroProyectado, real: eneroReal },
-            febrero: { proyectado: febreroProyectado, real: febreroReal },
-            marzo: { proyectado: marzoProyectado, real: marzoReal },
+            enero: { proyectado: eneroProyectado, real: realExpenses.totals.enero },
+            febrero: { proyectado: febreroProyectado, real: realExpenses.totals.febrero },
+            marzo: { proyectado: marzoProyectado, real: realExpenses.totals.marzo },
           };
+          console.log('[Budget] TOTAL GASTOS updated with real values:', result.gastos.totales);
           continue;
         }
 
