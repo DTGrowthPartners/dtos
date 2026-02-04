@@ -298,7 +298,7 @@ export default function LiveChat() {
     setActiveRoomId(aiRoomId);
     setActiveRoomName('Chat con IA');
     setView('chat');
-    markMessagesAsRead(aiRoomId, user!.id);
+    // Mark messages as read will be handled by the useEffect when messages load
   };
 
   const startDirectChat = async (targetUser: TeamUser) => {

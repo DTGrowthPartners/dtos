@@ -12,7 +12,7 @@ export const AI_TOOLS = [
     type: "function",
     function: {
       name: "getTasks",
-      description: "Obtener lista de tareas del usuario con filtros opcionales. Usa esto cuando el usuario pregunte por sus tareas, pendientes, o trabajo.",
+      description: "Obtener lista de tareas con filtros opcionales. Usa esto cuando el usuario pregunte por tareas, pendientes, o trabajo de cualquier persona del equipo.",
       parameters: {
         type: "object",
         properties: {
@@ -25,6 +25,10 @@ export const AI_TOOLS = [
             type: "string",
             enum: ["LOW", "MEDIUM", "HIGH"],
             description: "Filtrar por prioridad: LOW (baja), MEDIUM (media), HIGH (alta)"
+          },
+          assignee: {
+            type: "string",
+            description: "Filtrar por persona asignada. Usa el nombre exacto: Lía, Dairo, Stiven, Mariana, Jose, Anderson, Edgardo, Jhonathan"
           },
           search: {
             type: "string",

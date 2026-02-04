@@ -63,6 +63,14 @@ export class AIToolsService {
       tasks = tasks.filter((t: any) => t.priority === args.priority);
     }
 
+    if (args.assignee) {
+      const assigneeLower = args.assignee.toLowerCase();
+      tasks = tasks.filter((t: any) => {
+        const taskAssignee = (t.assignee || t.asignado || '').toLowerCase();
+        return taskAssignee.includes(assigneeLower);
+      });
+    }
+
     if (args.search) {
       const searchLower = args.search.toLowerCase();
       tasks = tasks.filter((t: any) =>
