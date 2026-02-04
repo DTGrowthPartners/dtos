@@ -170,7 +170,7 @@ export class AIToolsService {
     });
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ error: response.statusText }));
+      const errorData: any = await response.json().catch(() => ({ error: response.statusText }));
       console.error('[AITools] Create task failed:', errorData);
       throw new Error(errorData.error || `Error creando tarea: ${response.statusText}`);
     }
