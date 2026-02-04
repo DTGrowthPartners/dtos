@@ -5,8 +5,9 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/lib/auth';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -26,6 +27,7 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { token } = useAuthStore();
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -54,7 +56,6 @@ export default function Chat() {
         content: msg.content,
       }));
 
-      const token = localStorage.getItem('access_token');
       const response = await fetch(`${API_URL}/api/chat`, {
         method: 'POST',
         headers: {
