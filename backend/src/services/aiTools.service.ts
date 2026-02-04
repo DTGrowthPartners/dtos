@@ -53,7 +53,7 @@ export class AIToolsService {
     }
 
     const snapshot = await query.get();
-    let tasks = snapshot.docs.map(doc => ({
+    let tasks = snapshot.docs.map((doc: any) => ({
       id: doc.id,
       ...doc.data()
     }));

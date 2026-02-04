@@ -200,8 +200,8 @@ export class ChatController {
         // Execute each tool call
         for (const toolCall of assistantMessage.tool_calls) {
           try {
-            const toolName = toolCall.function.name;
-            const toolArgs = JSON.parse(toolCall.function.arguments);
+            const toolName = (toolCall as any).function.name;
+            const toolArgs = JSON.parse((toolCall as any).function.arguments);
 
             console.log(`[Chat] Executing tool: ${toolName}`, toolArgs);
 
