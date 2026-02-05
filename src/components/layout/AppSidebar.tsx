@@ -16,7 +16,6 @@ import {
   CalendarDays,
   LayoutGrid,
   Megaphone,
-  MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -41,7 +40,6 @@ const navItems: NavItem[] = [
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
   // Briefs moved inside Tareas as a view
   { title: 'Calendario', path: '/calendario', icon: CalendarDays, permission: 'calendario' },
-  { title: 'Chat IA', path: '/chat', icon: MessageSquare },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
   { title: 'Portal Clientes', path: '/admin/portal-clientes', icon: LayoutGrid, permission: 'admin' },
