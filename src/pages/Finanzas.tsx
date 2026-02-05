@@ -50,20 +50,37 @@ const EXPENSE_CATEGORIES = [
 
 const INCOME_CATEGORIES = [
   'PAGO DE CLIENTE',
-  'INVERSIÓN PUBLICIDAD DE CLIENTE',
-  'REEMBOLSO',
   'TRASLADO DE NEQUI',
   'TRASLADO DE DAVIPLATA',
   'TRASLADO DE BANCOLOMBIA',
   'TRASLADO DE RAPPICUENTA',
+  'POR DEFINIR',
+  'OTROS',
+  'FINANCIEROS',
+  'REEMBOLSO',
+  'REVERSIONES',
   'AJUSTE SALDO',
 ];
 
-// Bancos preestablecidos para entradas
-const PRESET_BANKS = [
+// Categorías que son traslados entre cuentas (requieren registro dual)
+const TRANSFER_CATEGORIES = [
+  'TRASLADO DE NEQUI',
+  'TRASLADO DE DAVIPLATA',
+  'TRASLADO DE BANCOLOMBIA',
+  'TRASLADO DE RAPPICUENTA',
+];
+
+// Cuentas disponibles
+const AVAILABLE_ACCOUNTS = [
   'Bancolombia *5993',
   'Bancolombia *7710',
+  'Nequi',
+  'Daviplata',
+  'Rappicuenta',
 ];
+
+// Bancos preestablecidos para entradas (alias para compatibilidad)
+const PRESET_BANKS = AVAILABLE_ACCOUNTS;
 
 interface FinanceData {
   month: string;
@@ -175,7 +192,11 @@ export default function Finanzas() {
     categoria: '',
     cuenta: '',
     entidad: '',
+    cuentaOrigen: '', // For transfers: source account
   });
+
+  // Check if selected category is a transfer
+  const isTransferCategory = TRANSFER_CATEGORIES.includes(incomeForm.categoria);
 
   // Date preset options (Shopify style)
   const datePresets = [
@@ -762,12 +783,59 @@ export default function Finanzas() {
 
   const handleAddIncome = async () => {
     try {
-      await apiClient.post('/api/finance/income', incomeForm);
-      toast({
-        title: 'Éxito',
-        description: 'Ingreso agregado correctamente',
-      });
+      // Check if it's a transfer between accounts
+      if (isTransferCategory && incomeForm.cuentaOrigen) {
+        // Create dual records for transfers
+        const cuentaOrigen = incomeForm.cuentaOrigen;
+        const cuentaDestino = incomeForm.cuenta;
+
+        // 1. Create SALIDA (expense) record - money leaving source account
+        await apiClient.post('/api/finance/expense', {
+          fecha: incomeForm.fecha,
+          importe: incomeForm.importe,
+          descripcion: incomeForm.descripcion || `Traslado a ${cuentaDestino}`,
+          categoria: `TRASLADO A ${cuentaDestino.toUpperCase()}`,
+          cuenta: cuentaOrigen,
+          entidad: incomeForm.entidad || 'DT Growth Partners',
+        });
+
+        // 2. Create ENTRADA (income) record - money arriving to destination account
+        await apiClient.post('/api/finance/income', {
+          fecha: incomeForm.fecha,
+          importe: incomeForm.importe,
+          descripcion: incomeForm.descripcion || `Traslado de ${cuentaOrigen}`,
+          categoria: `TRASLADO DE ${cuentaOrigen.toUpperCase()}`,
+          cuenta: cuentaDestino,
+          entidad: incomeForm.entidad || 'DT Growth Partners',
+        });
+
+        toast({
+          title: 'Traslado registrado',
+          description: `Traslado de ${cuentaOrigen} a ${cuentaDestino} registrado correctamente (Entrada + Salida)`,
+        });
+      } else {
+        // Normal income registration
+        await apiClient.post('/api/finance/income', {
+          ...incomeForm,
+          entidad: incomeForm.entidad || 'tercero', // Default to "tercero" if not specified
+        });
+        toast({
+          title: 'Éxito',
+          description: 'Ingreso agregado correctamente',
+        });
+      }
+
       setShowAddIncomeModal(false);
+      // Reset form
+      setIncomeForm({
+        fecha: new Date().toISOString().split('T')[0],
+        importe: '',
+        descripcion: '',
+        categoria: '',
+        cuenta: '',
+        entidad: '',
+        cuentaOrigen: '',
+      });
       fetchFinanceData();
     } catch (error) {
       console.error('Error adding income:', error);
@@ -1574,7 +1642,7 @@ export default function Finanzas() {
                 <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
                 <Select
                   value={incomeForm.categoria}
-                  onValueChange={(value) => setIncomeForm({ ...incomeForm, categoria: value })}
+                  onValueChange={(value) => setIncomeForm({ ...incomeForm, categoria: value, cuentaOrigen: '' })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona una categoría" />
@@ -1587,8 +1655,33 @@ export default function Finanzas() {
                 </Select>
               </div>
 
+              {/* Show source account field for transfers */}
+              {isTransferCategory && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mb-2">
+                    ⚡ Traslado entre cuentas - Se creará registro dual (Entrada + Salida)
+                  </p>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Cuenta Origen (de donde sale)</label>
+                  <Select
+                    value={incomeForm.cuentaOrigen}
+                    onValueChange={(value) => setIncomeForm({ ...incomeForm, cuentaOrigen: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona cuenta origen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {AVAILABLE_ACCOUNTS.filter(acc => acc !== incomeForm.cuenta).map((acc) => (
+                        <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Cuenta (Banco)</label>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  {isTransferCategory ? 'Cuenta Destino (donde entra)' : 'Cuenta (Banco)'}
+                </label>
                 <Select
                   value={incomeForm.cuenta}
                   onValueChange={(value) => setIncomeForm({ ...incomeForm, cuenta: value })}
@@ -1597,7 +1690,7 @@ export default function Finanzas() {
                     <SelectValue placeholder="Selecciona una cuenta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {PRESET_BANKS.map((bank) => (
+                    {AVAILABLE_ACCOUNTS.filter(acc => acc !== incomeForm.cuentaOrigen).map((bank) => (
                       <SelectItem key={bank} value={bank}>{bank}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1605,11 +1698,13 @@ export default function Finanzas() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Entidad</label>
+                <label className="text-sm font-medium text-foreground mb-2 block">
+                  {isTransferCategory ? 'Responsable del traslado' : 'Tercero / Cliente'}
+                </label>
                 <Input
                   value={incomeForm.entidad}
                   onChange={(e) => setIncomeForm({ ...incomeForm, entidad: e.target.value })}
-                  placeholder="Ej: Cliente X"
+                  placeholder={isTransferCategory ? 'Ej: Dairo Traslaviña' : 'Ej: Cliente X (dejar vacío = tercero)'}
                 />
               </div>
             </div>

@@ -51,6 +51,8 @@ interface Client {
 interface FinanceData {
   totalIncome: number;
   totalExpenses: number;
+  ingresos: FinanceTransaction[];
+  gastos: FinanceTransaction[];
 }
 
 interface ServiceRevenueMetrics {
@@ -61,12 +63,14 @@ interface ServiceRevenueMetrics {
 }
 
 interface FinanceTransaction {
-  id: string;
-  tipo: string;
+  id?: string;
+  tipo?: string;
   importe: number;
   fecha: string;
   terceroId?: string;
   terceroNombre?: string;
+  categoria?: string;
+  descripcion?: string;
 }
 
 interface CRMDeal {
@@ -405,8 +409,20 @@ export default function Dashboard() {
           const stages = results[6] as CRMStage[];
           const disponibleData = results[7] as DisponibleResponse;
 
-          setMonthlyIncome(financeData.totalIncome || 0);
-          setMonthlyExpenses(financeData.totalExpenses || 0);
+          // Filter transactions for February 2025 only
+          const februaryIngresos = (financeData.ingresos || []).filter(t => {
+            return t.fecha?.startsWith('2025-02') && t.categoria !== 'AJUSTE SALDO';
+          });
+          const februaryGastos = (financeData.gastos || []).filter(t => {
+            return t.fecha?.startsWith('2025-02') && t.categoria !== 'AJUSTE SALDO';
+          });
+
+          // Calculate February totals
+          const februaryIncome = februaryIngresos.reduce((sum, t) => sum + (t.importe || 0), 0);
+          const februaryExpenses = februaryGastos.reduce((sum, t) => sum + (t.importe || 0), 0);
+
+          setMonthlyIncome(februaryIncome);
+          setMonthlyExpenses(februaryExpenses);
           setFinanceTransactions(expenses);
           setCrmDeals(deals);
           setCrmStages(stages);
@@ -507,19 +523,19 @@ export default function Dashboard() {
         {/* Admin Stats Grid - 10 cards */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
           <StatCard
-            title="Ingresos del Mes"
+            title="Ingresos Febrero"
             value={isLoading ? '...' : formatCurrency(monthlyIncome, hideFinances)}
             icon={DollarSign}
             variant="success"
           />
           <StatCard
-            title="Gastos del Mes"
+            title="Gastos Febrero"
             value={isLoading ? '...' : formatCurrency(monthlyExpenses, hideFinances)}
             icon={TrendingUp}
             variant="warning"
           />
           <StatCard
-            title="Beneficio Neto"
+            title="Beneficio Febrero"
             value={isLoading ? '...' : formatCurrency(monthlyIncome - monthlyExpenses, hideFinances)}
             icon={BarChart3}
             variant={monthlyIncome - monthlyExpenses >= 0 ? 'success' : 'warning'}

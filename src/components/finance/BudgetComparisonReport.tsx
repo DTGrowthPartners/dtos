@@ -168,8 +168,12 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         percentUsed,
         status,
       };
-    }).filter(item => item.proyectado > 0 || item.real > 0)
-      .sort((a, b) => b.proyectado - a.proyectado);
+    }).filter(item => {
+      // Exclude UTILIDAD BRUTA and UTILIDAD NETA - they are calculated results, not expense categories
+      const upperCategoria = item.categoria.toUpperCase();
+      if (upperCategoria.includes('UTILIDAD')) return false;
+      return item.proyectado > 0 || item.real > 0;
+    }).sort((a, b) => b.proyectado - a.proyectado);
   }, [budgetData, selectedMonth]);
 
   // Selected period totals
