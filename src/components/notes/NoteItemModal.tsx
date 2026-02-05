@@ -233,7 +233,7 @@ export default function NoteItemModal({
                       <img
                         src={content}
                         alt="Preview"
-                        className="w-full h-48 object-contain rounded border bg-muted"
+                        className="w-full max-h-64 object-contain rounded border"
                       />
                       <Button
                         type="button"

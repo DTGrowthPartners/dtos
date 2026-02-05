@@ -57,7 +57,7 @@ export default function NoteItemCard({
               <img
                 src={item.content}
                 alt={item.title || 'Nota imagen'}
-                className="w-full h-32 object-cover rounded cursor-pointer hover:opacity-90 transition-opacity"
+                className="w-full max-h-64 object-contain rounded cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   onImageClick?.(item.content);
