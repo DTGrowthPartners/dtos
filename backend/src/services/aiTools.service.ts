@@ -31,6 +31,8 @@ export class AIToolsService {
           return await this.createTask(args, userId);
         case 'getDeals':
           return await this.getDeals(args, userId);
+        case 'updateTask':
+          return await this.updateTask(args, userId);
         default:
           throw new Error(`Herramienta desconocida: ${toolName}`);
       }
@@ -201,5 +203,65 @@ export class AIToolsService {
 
     const data: any = await response.json();
     return data;
+  }
+
+  /**
+   * Update one or more tasks in Firestore via bot endpoint
+   */
+  private async updateTask(args: any, userId: string) {
+    const { taskIds, status, priority } = args;
+
+    if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
+      throw new Error('Se requiere al menos un ID de tarea');
+    }
+
+    console.log('[AITools] Updating tasks:', { taskIds, status, priority });
+
+    const results: any[] = [];
+    const errors: string[] = [];
+
+    for (const taskId of taskIds) {
+      try {
+        const body: any = {};
+        if (status) body.status = status;
+        if (priority) body.priority = priority;
+
+        const response = await fetch(`http://localhost:3001/api/webhook/bot/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': this.BOT_API_KEY
+          },
+          body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+          const errorData: any = await response.json().catch(() => ({ error: response.statusText }));
+          errors.push(`Tarea ${taskId}: ${errorData.error || response.statusText}`);
+          continue;
+        }
+
+        const data: any = await response.json();
+        results.push({
+          id: taskId,
+          success: true,
+          title: data.task?.title || 'Tarea actualizada'
+        });
+      } catch (error: any) {
+        errors.push(`Tarea ${taskId}: ${error.message}`);
+      }
+    }
+
+    const statusText = status === 'DONE' ? 'completadas' :
+                       status === 'IN_PROGRESS' ? 'en progreso' : 'pendientes';
+
+    return {
+      success: errors.length === 0,
+      message: results.length > 0
+        ? `${results.length} tarea(s) marcada(s) como ${statusText}`
+        : 'No se pudo actualizar ninguna tarea',
+      updated: results,
+      errors: errors.length > 0 ? errors : undefined
+    };
   }
 }

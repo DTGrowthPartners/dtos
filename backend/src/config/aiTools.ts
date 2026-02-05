@@ -134,5 +134,34 @@ export const AI_TOOLS = [
         additionalProperties: false
       }
     }
+  },
+  {
+    type: "function",
+    function: {
+      name: "updateTask",
+      description: "Actualizar el estado de una o más tareas. Usa esto cuando el usuario pida marcar tareas como completadas, cambiar estado, o actualizar tareas existentes. IMPORTANTE: Primero usa getTasks para obtener los IDs de las tareas, luego usa updateTask con esos IDs.",
+      parameters: {
+        type: "object",
+        properties: {
+          taskIds: {
+            type: "array",
+            items: { type: "string" },
+            description: "Lista de IDs de tareas a actualizar. Obtén estos IDs usando getTasks primero."
+          },
+          status: {
+            type: "string",
+            enum: ["TODO", "IN_PROGRESS", "DONE"],
+            description: "Nuevo estado: TODO (pendiente), IN_PROGRESS (en progreso), DONE (completada)"
+          },
+          priority: {
+            type: "string",
+            enum: ["LOW", "MEDIUM", "HIGH"],
+            description: "Nueva prioridad (opcional)"
+          }
+        },
+        required: ["taskIds", "status"],
+        additionalProperties: false
+      }
+    }
   }
 ];
