@@ -118,6 +118,7 @@ export default function Dashboard() {
   const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
   const [totalDisponible, setTotalDisponible] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentMonthName, setCurrentMonthName] = useState('');
 
   // Hide/show finances toggle (persisted in localStorage)
   const [hideFinances, setHideFinances] = useState(() => {
@@ -409,20 +410,26 @@ export default function Dashboard() {
           const stages = results[6] as CRMStage[];
           const disponibleData = results[7] as DisponibleResponse;
 
-          // Filter transactions for February 2025 only
-          const februaryIngresos = (financeData.ingresos || []).filter(t => {
-            return t.fecha?.startsWith('2025-02') && t.categoria !== 'AJUSTE SALDO';
+          // Get current month in YYYY-MM format
+          const now = new Date();
+          const currentMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+          const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+          setCurrentMonthName(monthNames[now.getMonth()]);
+
+          // Filter transactions for current month only
+          const monthlyIngresos = (financeData.ingresos || []).filter(t => {
+            return t.fecha?.startsWith(currentMonthPrefix) && t.categoria !== 'AJUSTE SALDO';
           });
-          const februaryGastos = (financeData.gastos || []).filter(t => {
-            return t.fecha?.startsWith('2025-02') && t.categoria !== 'AJUSTE SALDO';
+          const monthlyGastos = (financeData.gastos || []).filter(t => {
+            return t.fecha?.startsWith(currentMonthPrefix) && t.categoria !== 'AJUSTE SALDO';
           });
 
-          // Calculate February totals
-          const februaryIncome = februaryIngresos.reduce((sum, t) => sum + (t.importe || 0), 0);
-          const februaryExpenses = februaryGastos.reduce((sum, t) => sum + (t.importe || 0), 0);
+          // Calculate current month totals
+          const currentMonthIncome = monthlyIngresos.reduce((sum, t) => sum + (t.importe || 0), 0);
+          const currentMonthExpenses = monthlyGastos.reduce((sum, t) => sum + (t.importe || 0), 0);
 
-          setMonthlyIncome(februaryIncome);
-          setMonthlyExpenses(februaryExpenses);
+          setMonthlyIncome(currentMonthIncome);
+          setMonthlyExpenses(currentMonthExpenses);
           setFinanceTransactions(expenses);
           setCrmDeals(deals);
           setCrmStages(stages);
@@ -523,19 +530,19 @@ export default function Dashboard() {
         {/* Admin Stats Grid - 10 cards */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
           <StatCard
-            title="Ingresos Febrero"
+            title={`Ingresos ${currentMonthName || 'Mes'}`}
             value={isLoading ? '...' : formatCurrency(monthlyIncome, hideFinances)}
             icon={DollarSign}
             variant="success"
           />
           <StatCard
-            title="Gastos Febrero"
+            title={`Gastos ${currentMonthName || 'Mes'}`}
             value={isLoading ? '...' : formatCurrency(monthlyExpenses, hideFinances)}
             icon={TrendingUp}
             variant="warning"
           />
           <StatCard
-            title="Beneficio Febrero"
+            title={`Beneficio ${currentMonthName || 'Mes'}`}
             value={isLoading ? '...' : formatCurrency(monthlyIncome - monthlyExpenses, hideFinances)}
             icon={BarChart3}
             variant={monthlyIncome - monthlyExpenses >= 0 ? 'success' : 'warning'}
