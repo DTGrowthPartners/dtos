@@ -1699,12 +1699,12 @@ export default function Finanzas() {
 
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">
-                  {isTransferCategory ? 'Responsable del traslado' : 'Tercero / Cliente'}
+                  {isTransferCategory ? 'Quién hace el traslado' : 'Quién paga (Tercero)'}
                 </label>
                 <Input
                   value={incomeForm.entidad}
                   onChange={(e) => setIncomeForm({ ...incomeForm, entidad: e.target.value })}
-                  placeholder={isTransferCategory ? 'Ej: Dairo Traslaviña' : 'Ej: Cliente X (dejar vacío = tercero)'}
+                  placeholder={isTransferCategory ? 'Ej: Dairo Traslaviña' : 'Ej: Nombre del cliente que paga'}
                 />
               </div>
             </div>
