@@ -26,7 +26,7 @@ import type { NoteItem, NoteItemType } from '@/types/taskTypes';
 interface NoteItemModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => void;
+  onSave: (data: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt' | 'order'>, keepOpen?: boolean) => void;
   editingItem?: NoteItem | null;
   columnId: string;
   projectId: string;
@@ -64,7 +64,7 @@ export default function NoteItemModal({
     }
   }, [editingItem, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent, keepOpen = false) => {
     e.preventDefault();
     if (!content.trim()) {
       toast({
@@ -82,7 +82,20 @@ export default function NoteItemModal({
       description: description.trim() || undefined,
       columnId,
       projectId,
-    });
+    }, keepOpen);
+
+    // If keeping open, reset the form for next item
+    if (keepOpen) {
+      setTitle('');
+      setContent('');
+      setDescription('');
+      // Keep the same type for convenience
+    }
+  };
+
+  const handleSaveAndAddAnother = (e: React.MouseEvent) => {
+    e.preventDefault();
+    handleSubmit(e as any, true);
   };
 
   const handleImageUpload = async (file: File) => {
@@ -288,10 +301,20 @@ export default function NoteItemModal({
             </div>
           </Tabs>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
+            {!editingItem && (
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!content.trim() || isSaving || uploading}
+                onClick={handleSaveAndAddAnother}
+              >
+                {isSaving ? 'Guardando...' : 'Guardar y agregar otro'}
+              </Button>
+            )}
             <Button type="submit" disabled={!content.trim() || isSaving || uploading}>
               {isSaving ? 'Guardando...' : editingItem ? 'Guardar' : 'Crear'}
             </Button>

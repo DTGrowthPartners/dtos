@@ -1268,7 +1268,7 @@ export default function Tareas() {
     setIsNoteItemModalOpen(true);
   };
 
-  const handleSaveNoteItem = async (data: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt' | 'order'>) => {
+  const handleSaveNoteItem = async (data: Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt' | 'order'>, keepOpen = false) => {
     setIsSavingNote(true);
     try {
       if (editingNoteItem) {
@@ -1293,9 +1293,12 @@ export default function Tareas() {
         setNoteItems(prev => [...prev, newItem]);
         toast({ title: 'Nota creada' });
       }
-      setIsNoteItemModalOpen(false);
-      setEditingNoteItem(null);
-      setSelectedNoteColumnId(null);
+      // Only close the modal if not keeping open for another item
+      if (!keepOpen) {
+        setIsNoteItemModalOpen(false);
+        setEditingNoteItem(null);
+        setSelectedNoteColumnId(null);
+      }
     } catch (error) {
       console.error('Error saving note item:', error);
       toast({ title: 'Error', description: 'No se pudo guardar la nota', variant: 'destructive' });
