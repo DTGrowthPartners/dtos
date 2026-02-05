@@ -229,11 +229,19 @@ export default function NoteItemModal({
                 <div className="grid gap-2">
                   <Label>Imagen</Label>
                   {content ? (
-                    <div className="relative">
+                    <div
+                      className="relative rounded border overflow-hidden"
+                      style={{
+                        backgroundImage: 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',
+                        backgroundSize: '16px 16px',
+                        backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                        backgroundColor: '#f9fafb'
+                      }}
+                    >
                       <img
                         src={content}
                         alt="Preview"
-                        className="w-full max-h-64 object-contain rounded border"
+                        className="w-full max-h-64 object-contain"
                       />
                       <Button
                         type="button"

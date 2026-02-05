@@ -54,16 +54,26 @@ export default function NoteItemCard({
               <h4 className="font-medium text-sm mb-1">{item.title}</h4>
             )}
             {!imageError ? (
-              <img
-                src={item.content}
-                alt={item.title || 'Nota imagen'}
-                className="w-full max-h-64 object-contain rounded cursor-pointer hover:opacity-90 transition-opacity"
+              <div
+                className="rounded overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                style={{
+                  backgroundImage: 'linear-gradient(45deg, #e5e7eb 25%, transparent 25%), linear-gradient(-45deg, #e5e7eb 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e5e7eb 75%), linear-gradient(-45deg, transparent 75%, #e5e7eb 75%)',
+                  backgroundSize: '16px 16px',
+                  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+                  backgroundColor: '#f9fafb'
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onImageClick?.(item.content);
                 }}
-                onError={() => setImageError(true)}
-              />
+              >
+                <img
+                  src={item.content}
+                  alt={item.title || 'Nota imagen'}
+                  className="w-full max-h-64 object-contain"
+                  onError={() => setImageError(true)}
+                />
+              </div>
             ) : (
               <div className="w-full h-32 bg-muted rounded flex items-center justify-center">
                 <ImageIcon className="h-8 w-8 text-muted-foreground" />
