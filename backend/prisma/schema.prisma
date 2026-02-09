@@ -187,16 +187,30 @@ model Invoice {
   clientName      String
   clientNit       String
   totalAmount     Float
+  paidAmount      Float    @default(0)
   fecha           DateTime
   concepto        String?
   servicio        String?
   observaciones   String?
   filePath        String   // Ruta del PDF generado
-  status          String   @default("pendiente") // pendiente, enviada, pagada
+  status          String   @default("pendiente") // pendiente, enviada, parcial, pagada
   paidAt          DateTime?
+  payments        InvoicePayment[]
   createdBy       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model InvoicePayment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount          Float
+  paidAt          DateTime @default(now())
+  paymentMethod   String?
+  reference       String?
+  notes           String?
+  createdAt       DateTime @default(now())
 }
 
 // ==================== CRM / Pipeline de Ventas ====================

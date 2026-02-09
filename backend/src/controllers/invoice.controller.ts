@@ -100,6 +100,7 @@ class InvoiceController {
     try {
       const invoices = await prisma.invoice.findMany({
         orderBy: { createdAt: 'desc' },
+        include: { payments: { orderBy: { paidAt: 'desc' } } },
       });
 
       res.json(invoices);
@@ -174,8 +175,8 @@ class InvoiceController {
       const { id } = req.params;
       const { status, registerInSheets = true, cuenta = 'Principal' } = req.body;
 
-      if (!['pendiente', 'enviada', 'pagada'].includes(status)) {
-        res.status(400).json({ message: 'Estado inválido. Debe ser: pendiente, enviada o pagada' });
+      if (!['pendiente', 'enviada', 'parcial', 'pagada'].includes(status)) {
+        res.status(400).json({ message: 'Estado inválido. Debe ser: pendiente, enviada, parcial o pagada' });
         return;
       }
 
@@ -223,14 +224,141 @@ class InvoiceController {
     try {
       const unpaidInvoices = await prisma.invoice.findMany({
         where: {
-          status: {
-            not: 'pagada',
-          },
+          status: { in: ['pendiente', 'enviada', 'parcial'] },
         },
+        include: { payments: { orderBy: { paidAt: 'desc' } } },
         orderBy: { fecha: 'asc' },
       });
 
       res.json(unpaidInvoices);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ==================== PAYMENTS (ABONOS) ====================
+
+  public addPayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { amount, paymentMethod, reference, notes, registerInSheets = false, cuenta = 'Principal' } = req.body;
+
+      if (!amount || amount <= 0) {
+        res.status(400).json({ message: 'El monto debe ser mayor a 0' });
+        return;
+      }
+
+      const invoice = await prisma.invoice.findUnique({ where: { id } });
+      if (!invoice) {
+        res.status(404).json({ message: 'Cuenta de cobro no encontrada' });
+        return;
+      }
+
+      const remaining = invoice.totalAmount - invoice.paidAmount;
+      if (amount > remaining + 0.01) {
+        res.status(400).json({ message: `El abono excede el saldo pendiente ($${remaining.toLocaleString()})` });
+        return;
+      }
+
+      // Create payment record
+      await prisma.invoicePayment.create({
+        data: { invoiceId: id, amount, paymentMethod, reference, notes },
+      });
+
+      // Recalculate paidAmount
+      const totalPaid = await prisma.invoicePayment.aggregate({
+        where: { invoiceId: id },
+        _sum: { amount: true },
+      });
+      const newPaidAmount = totalPaid._sum.amount || 0;
+
+      // Update invoice status
+      let newStatus = invoice.status;
+      const updateData: any = { paidAmount: newPaidAmount };
+
+      if (newPaidAmount >= invoice.totalAmount - 0.01) {
+        newStatus = 'pagada';
+        updateData.status = 'pagada';
+        updateData.paidAt = new Date();
+      } else if (newPaidAmount > 0) {
+        newStatus = 'parcial';
+        updateData.status = 'parcial';
+      }
+
+      const updated = await prisma.invoice.update({
+        where: { id },
+        data: updateData,
+        include: { payments: { orderBy: { paidAt: 'desc' } } },
+      });
+
+      // Register in Google Sheets if requested
+      if (registerInSheets) {
+        const today = new Date().toISOString().split('T')[0];
+        await googleSheetsService.addIncome({
+          fecha: today,
+          importe: amount,
+          descripcion: `Abono cuenta #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
+          categoria: 'PAGO DE CLIENTE',
+          cuenta,
+          entidad: invoice.clientName,
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public getPayments = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const payments = await prisma.invoicePayment.findMany({
+        where: { invoiceId: id },
+        orderBy: { paidAt: 'desc' },
+      });
+      res.json(payments);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  public deletePayment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id, paymentId } = req.params;
+
+      await prisma.invoicePayment.delete({ where: { id: paymentId } });
+
+      // Recalculate paidAmount
+      const totalPaid = await prisma.invoicePayment.aggregate({
+        where: { invoiceId: id },
+        _sum: { amount: true },
+      });
+      const newPaidAmount = totalPaid._sum.amount || 0;
+
+      // Update invoice status
+      const invoice = await prisma.invoice.findUnique({ where: { id } });
+      if (!invoice) {
+        res.status(404).json({ message: 'Invoice not found' });
+        return;
+      }
+
+      const updateData: any = { paidAmount: newPaidAmount };
+      if (newPaidAmount <= 0) {
+        updateData.status = invoice.paidAt ? 'enviada' : 'pendiente';
+        updateData.paidAt = null;
+      } else if (newPaidAmount < invoice.totalAmount - 0.01) {
+        updateData.status = 'parcial';
+        updateData.paidAt = null;
+      }
+
+      const updated = await prisma.invoice.update({
+        where: { id },
+        data: updateData,
+        include: { payments: { orderBy: { paidAt: 'desc' } } },
+      });
+
+      res.json(updated);
     } catch (error) {
       next(error);
     }

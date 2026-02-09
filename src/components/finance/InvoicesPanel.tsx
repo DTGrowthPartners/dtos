@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, FileText, CheckSquare, Square, Check, ChevronsUpDown, Send, CircleCheck, Clock } from 'lucide-react';
+import { PlusCircle, Trash2, FileText, CheckSquare, Square, Check, ChevronsUpDown, Send, CircleCheck, Clock, Banknote, Eye, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -73,23 +73,35 @@ interface ServiceItem {
   precio_unitario: number;
 }
 
+interface InvoicePayment {
+  id: string;
+  amount: number;
+  paidAt: string;
+  paymentMethod?: string;
+  reference?: string;
+  notes?: string;
+}
+
 interface Invoice {
   id: string;
   invoiceNumber: string;
   clientName: string;
   clientNit: string;
   totalAmount: number;
+  paidAmount: number;
   fecha: string;
   concepto: string | null;
   servicio: string | null;
-  status: 'pendiente' | 'enviada' | 'pagada';
+  status: 'pendiente' | 'enviada' | 'parcial' | 'pagada';
   paidAt: string | null;
+  payments?: InvoicePayment[];
   createdAt: string;
 }
 
 const INVOICE_STATUS = {
   pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
   enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-800', icon: Send },
+  parcial: { label: 'Parcial', color: 'bg-orange-100 text-orange-800', icon: Clock },
   pagada: { label: 'Pagada', color: 'bg-green-100 text-green-800', icon: CircleCheck },
 } as const;
 
@@ -108,6 +120,25 @@ export default function InvoicesPanel() {
   const [pendingPaymentInvoiceId, setPendingPaymentInvoiceId] = useState<string | null>(null);
   const [registerInSheets, setRegisterInSheets] = useState(true);
   const [paymentCuenta, setPaymentCuenta] = useState('Principal');
+
+  // Estado para diálogo de abono parcial
+  const [abonoDialogOpen, setAbonoDialogOpen] = useState(false);
+  const [selectedInvoiceForAbono, setSelectedInvoiceForAbono] = useState<Invoice | null>(null);
+  const [abonoForm, setAbonoForm] = useState({
+    amount: '',
+    paymentMethod: 'transferencia',
+    reference: '',
+    notes: '',
+    registerInSheets: true,
+    cuenta: 'Principal',
+  });
+  const [isSubmittingAbono, setIsSubmittingAbono] = useState(false);
+
+  // Estado para historial de pagos
+  const [paymentsDialogOpen, setPaymentsDialogOpen] = useState(false);
+  const [selectedInvoicePayments, setSelectedInvoicePayments] = useState<Invoice | null>(null);
+  const [invoicePayments, setInvoicePayments] = useState<InvoicePayment[]>([]);
+  const [isLoadingPayments, setIsLoadingPayments] = useState(false);
 
   const [invoiceData, setInvoiceData] = useState({
     cliente_id: '',
@@ -226,6 +257,87 @@ export default function InvoicesPanel() {
         description: 'No se pudo actualizar el estado.',
         variant: 'destructive',
       });
+    }
+  };
+
+  // --- Abono Handlers ---
+  const openAbonoDialog = (invoice: Invoice) => {
+    setSelectedInvoiceForAbono(invoice);
+    const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
+    setAbonoForm({
+      amount: String(saldo),
+      paymentMethod: 'transferencia',
+      reference: '',
+      notes: '',
+      registerInSheets: true,
+      cuenta: 'Principal',
+    });
+    setAbonoDialogOpen(true);
+  };
+
+  const handleSubmitAbono = async () => {
+    if (!selectedInvoiceForAbono) return;
+    const amount = parseFloat(abonoForm.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: 'Error', description: 'El monto debe ser mayor a 0.', variant: 'destructive' });
+      return;
+    }
+    const saldo = selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0);
+    if (amount > saldo) {
+      toast({ title: 'Error', description: `El monto no puede superar el saldo pendiente (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(saldo)}).`, variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmittingAbono(true);
+    try {
+      await apiClient.post(`/api/invoices/${selectedInvoiceForAbono.id}/payments`, {
+        amount,
+        paymentMethod: abonoForm.paymentMethod,
+        reference: abonoForm.reference || undefined,
+        notes: abonoForm.notes || undefined,
+        registerInSheets: abonoForm.registerInSheets,
+        cuenta: abonoForm.cuenta,
+      });
+      toast({
+        title: 'Abono registrado',
+        description: `Se registró un abono de ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(amount)}.`,
+      });
+      setAbonoDialogOpen(false);
+      setSelectedInvoiceForAbono(null);
+      fetchData();
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo registrar el abono.', variant: 'destructive' });
+    } finally {
+      setIsSubmittingAbono(false);
+    }
+  };
+
+  const openPaymentsHistory = async (invoice: Invoice) => {
+    setSelectedInvoicePayments(invoice);
+    setPaymentsDialogOpen(true);
+    setIsLoadingPayments(true);
+    try {
+      const payments = await apiClient.get<InvoicePayment[]>(`/api/invoices/${invoice.id}/payments`);
+      setInvoicePayments(payments);
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudieron cargar los pagos.', variant: 'destructive' });
+    } finally {
+      setIsLoadingPayments(false);
+    }
+  };
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!selectedInvoicePayments) return;
+    if (!confirm('¿Eliminar este abono?')) return;
+    try {
+      await apiClient.delete(`/api/invoices/${selectedInvoicePayments.id}/payments/${paymentId}`);
+      toast({ title: 'Abono eliminado', description: 'El abono fue eliminado correctamente.' });
+      // Refresh payments list
+      const payments = await apiClient.get<InvoicePayment[]>(`/api/invoices/${selectedInvoicePayments.id}/payments`);
+      setInvoicePayments(payments);
+      fetchData();
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo eliminar el abono.', variant: 'destructive' });
     }
   };
 
@@ -634,8 +746,9 @@ export default function InvoicesPanel() {
                     <TableHead className="min-w-[100px]">Fecha</TableHead>
                     <TableHead className="min-w-[150px]">Cliente</TableHead>
                     <TableHead className="text-right min-w-[120px]">Valor</TableHead>
+                    <TableHead className="text-right min-w-[120px]">Saldo</TableHead>
                     <TableHead className="min-w-[130px]">Estado</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Acciones</TableHead>
+                    <TableHead className="text-right min-w-[150px]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -658,6 +771,17 @@ export default function InvoicesPanel() {
                       <TableCell className="break-words">{invoice.clientName}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
                         {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {(() => {
+                          const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
+                          const isPaid = saldo <= 0;
+                          return (
+                            <span className={isPaid ? 'text-green-600 font-medium' : (invoice.paidAmount > 0 ? 'text-orange-600 font-medium' : '')}>
+                              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(saldo)}
+                            </span>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         <Select
@@ -691,6 +815,12 @@ export default function InvoicesPanel() {
                                 Enviada
                               </div>
                             </SelectItem>
+                            <SelectItem value="parcial" disabled>
+                              <div className="flex items-center gap-2">
+                                <Banknote className="h-3 w-3 text-orange-600" />
+                                Parcial
+                              </div>
+                            </SelectItem>
                             <SelectItem value="pagada">
                               <div className="flex items-center gap-2">
                                 <CircleCheck className="h-3 w-3 text-green-600" />
@@ -701,7 +831,29 @@ export default function InvoicesPanel() {
                         </Select>
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1">
+                          {invoice.status !== 'pagada' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openAbonoDialog(invoice)}
+                              title="Agregar Abono"
+                              className="text-orange-600 hover:text-orange-700"
+                            >
+                              <Banknote className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {(invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0)) && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openPaymentsHistory(invoice)}
+                              title="Ver Abonos"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
@@ -773,6 +925,194 @@ export default function InvoicesPanel() {
             </Button>
             <Button onClick={handleConfirmPayment}>
               Confirmar Pago
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Abono Parcial */}
+      <Dialog open={abonoDialogOpen} onOpenChange={setAbonoDialogOpen}>
+        <DialogContent className="sm:max-w-[450px]">
+          <DialogHeader>
+            <DialogTitle>Registrar Abono</DialogTitle>
+            <DialogDescription>
+              {selectedInvoiceForAbono && (
+                <>
+                  {selectedInvoiceForAbono.clientName} — Cuenta #{selectedInvoiceForAbono.invoiceNumber.substring(0, 12)}
+                  <br />
+                  <span className="font-medium">
+                    Saldo pendiente: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0))}
+                  </span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Monto del Abono *</Label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={abonoForm.amount}
+                onChange={(e) => setAbonoForm({ ...abonoForm, amount: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Método de Pago</Label>
+              <Select value={abonoForm.paymentMethod} onValueChange={(v) => setAbonoForm({ ...abonoForm, paymentMethod: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transferencia">Transferencia</SelectItem>
+                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                  <SelectItem value="nequi">Nequi</SelectItem>
+                  <SelectItem value="daviplata">Daviplata</SelectItem>
+                  <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Referencia</Label>
+              <Input
+                placeholder="Número de transacción"
+                value={abonoForm.reference}
+                onChange={(e) => setAbonoForm({ ...abonoForm, reference: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Notas</Label>
+              <Input
+                placeholder="Notas adicionales"
+                value={abonoForm.notes}
+                onChange={(e) => setAbonoForm({ ...abonoForm, notes: e.target.value })}
+              />
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="abonoRegisterInSheets"
+                checked={abonoForm.registerInSheets}
+                onCheckedChange={(checked) => setAbonoForm({ ...abonoForm, registerInSheets: checked === true })}
+              />
+              <Label htmlFor="abonoRegisterInSheets" className="text-sm">
+                Registrar ingreso en Google Sheets
+              </Label>
+            </div>
+
+            {abonoForm.registerInSheets && (
+              <div className="space-y-2">
+                <Label>Cuenta destino</Label>
+                <Select value={abonoForm.cuenta} onValueChange={(v) => setAbonoForm({ ...abonoForm, cuenta: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                    <SelectItem value="Ahorros">Ahorros</SelectItem>
+                    <SelectItem value="Bancolombia">Bancolombia</SelectItem>
+                    <SelectItem value="Nequi">Nequi</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAbonoDialogOpen(false)} disabled={isSubmittingAbono}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitAbono} disabled={isSubmittingAbono}>
+              {isSubmittingAbono ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Registrando...
+                </>
+              ) : (
+                <>
+                  <Banknote className="h-4 w-4 mr-2" />
+                  Registrar Abono
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de Historial de Pagos */}
+      <Dialog open={paymentsDialogOpen} onOpenChange={setPaymentsDialogOpen}>
+        <DialogContent className="sm:max-w-[550px]">
+          <DialogHeader>
+            <DialogTitle>Historial de Abonos</DialogTitle>
+            <DialogDescription>
+              {selectedInvoicePayments && (
+                <>
+                  {selectedInvoicePayments.clientName} — Cuenta #{selectedInvoicePayments.invoiceNumber.substring(0, 12)}
+                  <br />
+                  Total: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(selectedInvoicePayments.totalAmount)}
+                  {' | '}Abonado: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(selectedInvoicePayments.paidAmount || 0)}
+                  {' | '}Saldo: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(selectedInvoicePayments.totalAmount - (selectedInvoicePayments.paidAmount || 0))}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            {isLoadingPayments ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : invoicePayments.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                No hay abonos registrados
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fecha</TableHead>
+                    <TableHead className="text-right">Monto</TableHead>
+                    <TableHead>Método</TableHead>
+                    <TableHead>Referencia</TableHead>
+                    <TableHead className="text-right">Acción</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoicePayments.map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell className="whitespace-nowrap">
+                        {new Date(payment.paidAt).toLocaleDateString('es-CO')}
+                      </TableCell>
+                      <TableCell className="text-right font-medium text-green-600">
+                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(payment.amount)}
+                      </TableCell>
+                      <TableCell className="capitalize">{payment.paymentMethod || '—'}</TableCell>
+                      <TableCell>{payment.reference || '—'}</TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeletePayment(payment.id)}
+                          className="text-destructive hover:text-destructive"
+                          title="Eliminar abono"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentsDialogOpen(false)}>
+              Cerrar
             </Button>
           </DialogFooter>
         </DialogContent>

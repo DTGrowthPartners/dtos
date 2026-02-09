@@ -12,6 +12,9 @@ router.get('/', invoiceController.list);
 router.get('/unpaid', invoiceController.getUnpaidInvoices);
 router.get('/:id/download', invoiceController.download);
 router.patch('/:id/status', invoiceController.updateStatus);
+router.get('/:id/payments', invoiceController.getPayments);
+router.post('/:id/payments', invoiceController.addPayment);
+router.delete('/:id/payments/:paymentId', invoiceController.deletePayment);
 router.delete('/:id', invoiceController.delete);
 
 export default router;

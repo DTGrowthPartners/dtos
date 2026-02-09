@@ -169,9 +169,13 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         status,
       };
     }).filter(item => {
-      // Exclude UTILIDAD BRUTA and UTILIDAD NETA - they are calculated results, not expense categories
+      // Exclude calculated result rows - not actual expense categories
       const upperCategoria = item.categoria.toUpperCase();
       if (upperCategoria.includes('UTILIDAD')) return false;
+      if (upperCategoria.includes('MARGEN')) return false;
+      if (upperCategoria.includes('DIVIDENDO')) return false;
+      if (upperCategoria.includes('RESERVA')) return false;
+      if (upperCategoria.includes('TOTAL DAIRO')) return false;
       return item.proyectado > 0 || item.real > 0;
     }).sort((a, b) => b.proyectado - a.proyectado);
   }, [budgetData, selectedMonth]);
@@ -579,6 +583,69 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
           </div>
         </div>
       )}
+
+      {/* Empresa y Dividendo Section */}
+      {budgetData?.gastos?.categorias && (() => {
+        const dividendoCategories = Object.entries(budgetData.gastos.categorias)
+          .filter(([cat]) => {
+            const upper = cat.toUpperCase();
+            return upper.includes('DIVIDENDO') || upper.includes('RESERVA') || upper.includes('TOTAL DAIRO');
+          })
+          .map(([categoria, data]) => {
+            const enero = data?.enero || DEFAULT_MONTH_TOTALS;
+            const febrero = data?.febrero || DEFAULT_MONTH_TOTALS;
+            const marzo = data?.marzo || DEFAULT_MONTH_TOTALS;
+
+            let proyectado: number;
+            let real: number;
+
+            if (selectedMonth === 'q1') {
+              proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado;
+              real = enero.real + febrero.real + marzo.real;
+            } else {
+              const monthData = data?.[selectedMonth] || DEFAULT_MONTH_TOTALS;
+              proyectado = monthData.proyectado;
+              real = monthData.real;
+            }
+
+            return { categoria, proyectado, real };
+          })
+          .filter(item => item.proyectado > 0 || item.real > 0);
+
+        if (dividendoCategories.length === 0) return null;
+
+        return (
+          <div className="rounded-xl border border-border bg-card p-6">
+            <h3 className="font-semibold text-foreground mb-4">
+              Empresa y Dividendo (75% Reserva) - {periodLabels[selectedMonth]}
+            </h3>
+            <div className="space-y-3">
+              {dividendoCategories.map((item) => {
+                const percentUsed = item.proyectado > 0 ? (item.real / item.proyectado) * 100 : 0;
+                return (
+                  <div key={item.categoria} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                    <span className="text-sm text-foreground">{item.categoria}</span>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-foreground">${item.real.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground">de ${item.proyectado.toLocaleString()}</p>
+                      </div>
+                      <span className={cn(
+                        "text-xs font-medium px-2 py-1 rounded-full",
+                        percentUsed > 100 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
+                        percentUsed > 80 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
+                        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                      )}>
+                        {percentUsed.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Info Card */}
       {categoryBreakdown.length === 0 && !isLoading && (

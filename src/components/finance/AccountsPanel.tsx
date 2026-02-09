@@ -170,10 +170,11 @@ interface UnpaidInvoice {
   clientName: string;
   clientNit: string;
   totalAmount: number;
+  paidAmount: number;
   fecha: string;
   concepto: string | null;
   servicio: string | null;
-  status: 'pendiente' | 'enviada';
+  status: 'pendiente' | 'enviada' | 'parcial';
   createdAt: string;
 }
 
@@ -207,6 +208,15 @@ export function AccountsPanel() {
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'receivable' | 'payable'>('receivable');
+
+  // Dynamic month for budget
+  const currentMonthIndex = new Date().getMonth(); // 0=Jan
+  type MonthKey = 'enero' | 'febrero' | 'marzo';
+  const monthKeys: MonthKey[] = ['enero', 'febrero', 'marzo'];
+  const currentMonthKey: MonthKey | null = currentMonthIndex < 3 ? monthKeys[currentMonthIndex] : null;
+  const monthLabels: Record<MonthKey, string> = { enero: 'Enero', febrero: 'Febrero', marzo: 'Marzo' };
+  const currentMonthBudget = currentMonthKey ? budgetData?.gastos?.totales?.[currentMonthKey] : null;
+  const pendientePresupuesto = currentMonthBudget ? Math.max(0, currentMonthBudget.proyectado - currentMonthBudget.real) : 0;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
@@ -586,22 +596,24 @@ export function AccountsPanel() {
             <div>
               <p className="text-sm text-muted-foreground">Por Pagar</p>
               <p className="text-xl font-bold text-destructive">
-                {formatCurrency(budgetData?.gastos?.totales?.febrero?.proyectado || 0)}
+                {formatCurrency(pendientePresupuesto)}
               </p>
-              <p className="text-xs text-muted-foreground">Presupuesto Febrero 2025</p>
+              <p className="text-xs text-muted-foreground">
+                Pendiente {currentMonthKey ? monthLabels[currentMonthKey] : 'N/A'}
+              </p>
             </div>
           </div>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-3">
-            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
-              <Building2 className={`h-5 w-5 ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'text-success' : 'text-destructive'}`} />
+            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+              <Building2 className={`h-5 w-5 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`} />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Balance</p>
-              <p className={`text-xl font-bold ${((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0)) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {formatCurrency((summary?.receivables.total || 0) - (budgetData?.gastos?.totales?.febrero?.proyectado || 0))}
+              <p className={`text-xl font-bold ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {formatCurrency((summary?.receivables.total || 0) - pendientePresupuesto)}
               </p>
               <p className="text-xs text-muted-foreground">Cobrar - Pagar</p>
             </div>
@@ -1502,64 +1514,84 @@ function UnpaidInvoicesList({
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
     enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-800' },
+    parcial: { label: 'Parcial', color: 'bg-orange-100 text-orange-800' },
   };
 
   return (
     <div className="space-y-3">
-      {invoices.map((invoice) => (
-        <div
-          key={invoice.id}
-          className="rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md"
-        >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                <FileText className="h-5 w-5 text-muted-foreground" />
+      {invoices.map((invoice) => {
+        const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
+        return (
+          <div
+            key={invoice.id}
+            className="rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{invoice.clientName}</p>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {invoice.servicio || invoice.concepto || `Cuenta #${invoice.invoiceNumber.substring(0, 8)}`}
+                  </p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="font-medium truncate">{invoice.clientName}</p>
-                <p className="text-sm text-muted-foreground truncate">
-                  {invoice.servicio || invoice.concepto || `Cuenta #${invoice.invoiceNumber.substring(0, 8)}`}
-                </p>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="text-right">
+                  {invoice.paidAmount > 0 ? (
+                    <>
+                      <p className="font-bold text-orange-600">
+                        {formatCurrency(saldo)}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-through">
+                        {formatCurrency(invoice.totalAmount)}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="font-bold text-success">
+                      {formatCurrency(invoice.totalAmount)}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    #{invoice.invoiceNumber.substring(0, 12)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onMarkAsPaid(invoice)}
+                  className="ml-2"
+                >
+                  <Check className="h-4 w-4 mr-1" />
+                  Marcar pagado
+                </Button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="text-right">
-                <p className="font-bold text-success">
-                  {formatCurrency(invoice.totalAmount)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  #{invoice.invoiceNumber.substring(0, 12)}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onMarkAsPaid(invoice)}
-                className="ml-2"
-              >
-                <Check className="h-4 w-4 mr-1" />
-                Marcar pagado
-              </Button>
+            {/* Date and status badges */}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <Badge variant="secondary" className="flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
+                {formatDate(invoice.fecha)}
+              </Badge>
+              <Badge className={STATUS_LABELS[invoice.status]?.color || 'bg-gray-100 text-gray-800'}>
+                {STATUS_LABELS[invoice.status]?.label || invoice.status}
+              </Badge>
+              {invoice.paidAmount > 0 && (
+                <Badge variant="outline" className="text-orange-700">
+                  Abonado: {formatCurrency(invoice.paidAmount)}
+                </Badge>
+              )}
+              {invoice.clientNit && (
+                <Badge variant="outline">NIT: {invoice.clientNit}</Badge>
+              )}
             </div>
           </div>
-
-          {/* Date and status badges */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {formatDate(invoice.fecha)}
-            </Badge>
-            <Badge className={STATUS_LABELS[invoice.status]?.color || 'bg-gray-100 text-gray-800'}>
-              {STATUS_LABELS[invoice.status]?.label || invoice.status}
-            </Badge>
-            {invoice.clientNit && (
-              <Badge variant="outline">NIT: {invoice.clientNit}</Badge>
-            )}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
