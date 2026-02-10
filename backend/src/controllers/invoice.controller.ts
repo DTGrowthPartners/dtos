@@ -205,6 +205,10 @@ class InvoiceController {
             categoria: 'PAGO DE CLIENTE',
             cuenta: cuenta,
             entidad: invoice.clientName,
+            tercero: invoice.clientName,
+            clasificacionIngreso: 'Ingreso Operacional',
+            noCuentaCobro: invoice.invoiceNumber,
+            tipoTransaccion: 'Pago Total',
           });
         }
       }
@@ -294,6 +298,7 @@ class InvoiceController {
       // Register in Google Sheets if requested
       if (registerInSheets) {
         const today = new Date().toISOString().split('T')[0];
+        const isPagoTotal = newPaidAmount >= invoice.totalAmount - 0.01;
         await googleSheetsService.addIncome({
           fecha: today,
           importe: amount,
@@ -301,6 +306,10 @@ class InvoiceController {
           categoria: 'PAGO DE CLIENTE',
           cuenta,
           entidad: invoice.clientName,
+          tercero: invoice.clientName,
+          clasificacionIngreso: 'Ingreso Operacional',
+          noCuentaCobro: invoice.invoiceNumber,
+          tipoTransaccion: isPagoTotal ? 'Pago Total' : 'Abono',
         });
       }
 

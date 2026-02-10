@@ -2468,7 +2468,7 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
       categoria: incomeCategory,
       cuenta: incomeAccount,
       entidad: incomeEntity,
-      terceroId: incomeTerceroId,
+      tercero: incomeTerceroId,
     });
 
     console.log(`[Bot API] Ingreso registrado: $${incomeAmount} - ${incomeDescription}`);

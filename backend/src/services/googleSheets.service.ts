@@ -404,7 +404,10 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     entidad: string;
-    terceroId?: string;
+    tercero?: string;
+    clasificacionIngreso?: string;
+    noCuentaCobro?: string;
+    tipoTransaccion?: string;
   }): Promise<void> {
     try {
       // Parse YYYY-MM-DD and create date with current time
@@ -451,6 +454,7 @@ export class GoogleSheetsService {
       });
 
       // Now update the newly inserted row (row 2) with data
+      // Columns: Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, Tercero, Clasificación Ingreso, No. Cuenta de Cobro, Tipo Transacción
       const values = [[
         serialDate,
         income.importe,
@@ -458,12 +462,15 @@ export class GoogleSheetsService {
         income.categoria,
         income.cuenta,
         income.entidad,
-        income.terceroId || '',
+        income.tercero || '',
+        income.clasificacionIngreso || '',
+        income.noCuentaCobro || '',
+        income.tipoTransaccion || '',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:G2',
+        range: 'Entradas!A2:J2',
         valueInputOption: 'RAW',
         requestBody: {
           values,
