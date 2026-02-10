@@ -273,7 +273,7 @@ export default function InvoicesPanel() {
     setAbonoForm({
       amount: String(saldo),
       paymentMethod: 'transferencia',
-      reference: '',
+      reference: invoice.invoiceNumber,
       notes: '',
       registerInSheets: true,
       cuenta: 'Principal',
