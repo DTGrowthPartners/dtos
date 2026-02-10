@@ -214,7 +214,7 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border">
-                      <th className="text-left py-3 px-2 font-medium text-muted-foreground">Nombre</th>
+                      <th className="text-left py-3 px-2 font-medium text-muted-foreground">Nombre / Razón Social</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Tipo</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">NIT</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Email</th>
@@ -321,7 +321,7 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                 </div>
 
                 <div>
-                  <label className="text-sm font-medium text-foreground mb-2 block">Nombre</label>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Nombre / Razón Social</label>
                   <Input
                     value={formData.nombre}
                     onChange={(e) => setFormData({...formData, nombre: e.target.value})}

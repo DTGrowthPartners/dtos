@@ -634,34 +634,33 @@ export class GoogleSheetsService {
 
   async getTerceros(): Promise<Tercero[]> {
     try {
-      // Columnas: A=ID, B=Tipo, C=Nombre, D=NIT, E=Email, F=Teléfono, G=Dirección, H=Categoría, I=CuentaBancaria, J=SalarioBase, K=Cargo, L=Estado, M=CreatedAt
+      // Real sheet columns: A=Nombre/Razón Social, B=Tipo Tercero, C=NIT, D=Email, E=Teléfono, F=Tipo Cliente, G=Tipo Proveedor, H=Estado
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A2:M',
+        range: 'Terceros!A2:H',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const rows = response.data.values || [];
 
       return rows
-        .filter((row: any[]) => row[0]) // Has ID
-        .map((row: any[]) => ({
-          id: String(row[0]),
+        .filter((row: any[]) => row[0]) // Has name
+        .map((row: any[], index: number) => ({
+          id: String(index + 2), // Row number as ID (row 2 = index 0)
+          nombre: String(row[0] || ''),
           tipo: String(row[1] || 'proveedor') as Tercero['tipo'],
-          nombre: String(row[2] || ''),
-          nit: row[3] ? String(row[3]) : undefined,
-          email: row[4] ? String(row[4]) : undefined,
-          telefono: row[5] ? String(row[5]) : undefined,
-          direccion: row[6] ? String(row[6]) : undefined,
-          categoria: row[7] ? String(row[7]) : undefined,
-          cuentaBancaria: row[8] ? String(row[8]) : undefined,
-          salarioBase: row[9] ? Number(row[9]) : undefined,
-          cargo: row[10] ? String(row[10]) : undefined,
-          estado: (row[11] || 'activo') as Tercero['estado'],
-          createdAt: this.parseDate(row[12]) || new Date().toISOString().split('T')[0],
+          nit: row[2] ? String(row[2]) : undefined,
+          email: row[3] ? String(row[3]) : undefined,
+          telefono: row[4] ? String(row[4]) : undefined,
+          categoria: row[5] ? String(row[5]) : undefined, // Tipo Cliente
+          direccion: undefined,
+          cuentaBancaria: undefined,
+          salarioBase: undefined,
+          cargo: undefined,
+          estado: (row[7] || 'activo') as Tercero['estado'],
+          createdAt: new Date().toISOString().split('T')[0],
         }));
     } catch (error: any) {
-      // If sheet doesn't exist, return empty array
       if (error.message?.includes('Unable to parse range')) {
         console.log('Terceros sheet does not exist yet, returning empty array');
         return [];
@@ -673,42 +672,30 @@ export class GoogleSheetsService {
 
   async addTercero(tercero: Omit<Tercero, 'id' | 'createdAt'>): Promise<string> {
     try {
-      // Generate unique ID
-      const id = `T${Date.now()}`;
-      const createdAt = this.dateToSerialNumber(new Date());
+      // Columns: A=Nombre/Razón Social, B=Tipo Tercero, C=NIT, D=Email, E=Teléfono, F=Tipo Cliente, G=Tipo Proveedor, H=Estado
+      const tipoCliente = tercero.tipo === 'cliente' ? (tercero.categoria || 'Otros') : 'Otros';
+      const tipoProveedor = tercero.tipo === 'proveedor' ? (tercero.categoria || 'Gastos') : 'Gastos';
 
-      // Ensure sheet exists
-      await this.ensureSheetExists('Terceros', [
-        'ID', 'Tipo', 'Nombre', 'NIT', 'Email', 'Teléfono', 'Dirección',
-        'Categoría', 'CuentaBancaria', 'SalarioBase', 'Cargo', 'Estado', 'CreatedAt'
-      ]);
-
-      // Append new row
       const values = [[
-        id,
-        tercero.tipo,
         tercero.nombre,
+        tercero.tipo,
         tercero.nit || '',
         tercero.email || '',
         tercero.telefono || '',
-        tercero.direccion || '',
-        tercero.categoria || '',
-        tercero.cuentaBancaria || '',
-        tercero.salarioBase || '',
-        tercero.cargo || '',
-        tercero.estado,
-        createdAt,
+        tipoCliente,
+        tipoProveedor,
+        tercero.estado || 'activo',
       ]];
 
       await this.sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A:M',
+        range: 'Terceros!A:H',
         valueInputOption: 'RAW',
         requestBody: { values },
       });
 
-      console.log('Tercero added:', id, tercero.nombre);
-      return id;
+      console.log('Tercero added:', tercero.nombre);
+      return tercero.nombre;
     } catch (error) {
       console.error('Error adding Tercero:', error);
       throw new Error('No se pudo agregar el tercero');
@@ -717,48 +704,40 @@ export class GoogleSheetsService {
 
   async updateTercero(id: string, tercero: Partial<Tercero>): Promise<void> {
     try {
-      // Find row by ID
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A:A',
-      });
-
-      const rows = response.data.values || [];
-      const rowIndex = rows.findIndex((row: any[]) => String(row[0]) === id);
-
-      if (rowIndex === -1) {
-        throw new Error('Tercero no encontrado');
-      }
+      // id is the row number
+      const rowIndex = parseInt(id);
+      if (isNaN(rowIndex)) throw new Error('ID de tercero inválido');
 
       // Get current row data
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        range: `Terceros!A${rowIndex}:H${rowIndex}`,
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const current = currentRow.data.values?.[0] || [];
 
-      // Update with new values
+      const tipoCliente = (tercero.tipo ?? current[1]) === 'cliente'
+        ? (tercero.categoria ?? current[5] ?? 'Otros')
+        : (current[5] ?? 'Otros');
+      const tipoProveedor = (tercero.tipo ?? current[1]) === 'proveedor'
+        ? (tercero.categoria ?? current[6] ?? 'Gastos')
+        : (current[6] ?? 'Gastos');
+
       const values = [[
-        id,
+        tercero.nombre ?? current[0],
         tercero.tipo ?? current[1],
-        tercero.nombre ?? current[2],
-        tercero.nit ?? current[3] ?? '',
-        tercero.email ?? current[4] ?? '',
-        tercero.telefono ?? current[5] ?? '',
-        tercero.direccion ?? current[6] ?? '',
-        tercero.categoria ?? current[7] ?? '',
-        tercero.cuentaBancaria ?? current[8] ?? '',
-        tercero.salarioBase ?? current[9] ?? '',
-        tercero.cargo ?? current[10] ?? '',
-        tercero.estado ?? current[11],
-        current[12], // Keep original createdAt
+        tercero.nit ?? current[2] ?? '',
+        tercero.email ?? current[3] ?? '',
+        tercero.telefono ?? current[4] ?? '',
+        tipoCliente,
+        tipoProveedor,
+        tercero.estado ?? current[7] ?? 'activo',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        range: `Terceros!A${rowIndex}:H${rowIndex}`,
         valueInputOption: 'RAW',
         requestBody: { values },
       });
@@ -772,7 +751,6 @@ export class GoogleSheetsService {
 
   async deleteTercero(id: string): Promise<void> {
     try {
-      // Soft delete - just change status to inactive
       await this.updateTercero(id, { estado: 'inactivo' });
       console.log('Tercero deactivated:', id);
     } catch (error) {
