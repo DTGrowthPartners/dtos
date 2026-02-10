@@ -207,7 +207,13 @@ export default function InvoicesPanel() {
     }
   };
 
-  const handleStatusChange = async (invoiceId: string, newStatus: 'pendiente' | 'enviada' | 'pagada') => {
+  const handleStatusChange = async (invoiceId: string, newStatus: 'pendiente' | 'enviada' | 'parcial' | 'pagada') => {
+    // Si se selecciona parcial, abrir diálogo de abono
+    if (newStatus === 'parcial') {
+      const invoice = invoices.find(i => i.id === invoiceId);
+      if (invoice) openAbonoDialog(invoice);
+      return;
+    }
     // Si se marca como pagada, mostrar diálogo de confirmación
     if (newStatus === 'pagada') {
       setPendingPaymentInvoiceId(invoiceId);
@@ -786,7 +792,7 @@ export default function InvoicesPanel() {
                       <TableCell>
                         <Select
                           value={invoice.status || 'pendiente'}
-                          onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'pagada')}
+                          onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'parcial' | 'pagada')}
                         >
                           <SelectTrigger className="w-[120px] h-8">
                             <SelectValue>
@@ -815,10 +821,10 @@ export default function InvoicesPanel() {
                                 Enviada
                               </div>
                             </SelectItem>
-                            <SelectItem value="parcial" disabled>
+                            <SelectItem value="parcial">
                               <div className="flex items-center gap-2">
                                 <Banknote className="h-3 w-3 text-orange-600" />
-                                Parcial
+                                Abono Parcial
                               </div>
                             </SelectItem>
                             <SelectItem value="pagada">
@@ -834,13 +840,14 @@ export default function InvoicesPanel() {
                         <div className="flex justify-end gap-1">
                           {invoice.status !== 'pagada' && (
                             <Button
-                              variant="ghost"
+                              variant="outline"
                               size="sm"
                               onClick={() => openAbonoDialog(invoice)}
                               title="Agregar Abono"
-                              className="text-orange-600 hover:text-orange-700"
+                              className="text-orange-600 hover:text-orange-700 border-orange-300 hover:bg-orange-50"
                             >
-                              <Banknote className="h-4 w-4" />
+                              <Banknote className="h-4 w-4 mr-1" />
+                              Abono
                             </Button>
                           )}
                           {(invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0)) && (
