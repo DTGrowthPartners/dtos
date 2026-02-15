@@ -125,7 +125,8 @@ interface DisponibleResponse {
 // Helper to check if a category is AJUSTE SALDO (case-insensitive, trim whitespace)
 const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
   if (!categoria) return false;
-  return categoria.trim().toUpperCase() === 'AJUSTE SALDO';
+  const upper = categoria.trim().toUpperCase();
+  return upper === 'AJUSTE SALDO' || upper === 'REEMBOLSO INVERSIÓN PUBLICIDAD';
 };
 
 // Helper function to format currency in a compact way
