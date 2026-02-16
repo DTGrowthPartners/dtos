@@ -645,21 +645,29 @@ export class GoogleSheetsService {
 
       return rows
         .filter((row: any[]) => row[0]) // Has name
-        .map((row: any[], index: number) => ({
-          id: String(index + 2), // Row number as ID (row 2 = index 0)
-          nombre: String(row[0] || ''),
-          tipo: String(row[1] || 'proveedor') as Tercero['tipo'],
-          nit: row[2] ? String(row[2]) : undefined,
-          email: row[3] ? String(row[3]) : undefined,
-          telefono: row[4] ? String(row[4]) : undefined,
-          categoria: row[5] ? String(row[5]) : undefined, // Tipo Cliente
-          direccion: undefined,
-          cuentaBancaria: undefined,
-          salarioBase: undefined,
-          cargo: undefined,
-          estado: (row[7] || 'activo') as Tercero['estado'],
-          createdAt: new Date().toISOString().split('T')[0],
-        }));
+        .map((row: any[], index: number) => {
+          const tipo = String(row[1] || 'proveedor');
+          // Read category from appropriate column: F (index 5) for clients, G (index 6) for providers
+          const categoria = tipo === 'cliente'
+            ? (row[5] ? String(row[5]) : undefined)
+            : (row[6] ? String(row[6]) : undefined);
+
+          return {
+            id: String(index + 2), // Row number as ID (row 2 = index 0)
+            nombre: String(row[0] || ''),
+            tipo: tipo as Tercero['tipo'],
+            nit: row[2] ? String(row[2]) : undefined,
+            email: row[3] ? String(row[3]) : undefined,
+            telefono: row[4] ? String(row[4]) : undefined,
+            categoria,
+            direccion: undefined,
+            cuentaBancaria: undefined,
+            salarioBase: undefined,
+            cargo: undefined,
+            estado: (row[7] || 'activo') as Tercero['estado'],
+            createdAt: new Date().toISOString().split('T')[0],
+          };
+        });
     } catch (error: any) {
       if (error.message?.includes('Unable to parse range')) {
         console.log('Terceros sheet does not exist yet, returning empty array');
@@ -917,6 +925,152 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error getting expenses by tercero:', error);
       return [];
+    }
+  }
+
+  // ==================== METAS CLIENTES (Client Goals per Client) ====================
+
+  /**
+   * Get per-client income goals and actuals for a specific month.
+   * Reads goals from "Metas Clientes" sheet and cross-references with "Entradas" sheet.
+   * Sheet structure: A=Cliente/Proyecto, B=Meta Enero, C=Meta Febrero, D=Meta Marzo
+   */
+  async getClientGoalsByClient(month: number, year: number): Promise<{
+    month: number;
+    year: number;
+    monthName: string;
+    clients: Array<{
+      cliente: string;
+      meta: number;
+      ingresoReal: number;
+      porcentaje: number;
+      semaforo: 'verde' | 'amarillo' | 'rojo';
+    }>;
+    totals: {
+      meta: number;
+      ingresoReal: number;
+      porcentaje: number;
+      semaforo: 'verde' | 'amarillo' | 'rojo';
+    };
+  }> {
+    const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const monthName = monthNames[month - 1] || 'desconocido';
+
+    try {
+      // Ensure sheet exists with headers
+      await this.ensureSheetExists('Metas Clientes', [
+        'Cliente / Proyecto', 'Meta Enero', 'Meta Febrero', 'Meta Marzo'
+      ]);
+
+      // Read goals from "Metas Clientes" sheet
+      const goalsResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "'Metas Clientes'!A2:D",
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const goalRows = goalsResponse.data.values || [];
+
+      // Map month number to column index (B=1=Enero, C=2=Febrero, D=3=Marzo)
+      const monthColIndex = month; // 1-based (1=col B, 2=col C, 3=col D)
+      if (monthColIndex < 1 || monthColIndex > 3) {
+        return {
+          month, year, monthName,
+          clients: [],
+          totals: { meta: 0, ingresoReal: 0, porcentaje: 0, semaforo: 'rojo' },
+        };
+      }
+
+      // Parse client goals
+      const clientGoals: Array<{ cliente: string; meta: number }> = goalRows
+        .filter((row: any[]) => row[0] && row[monthColIndex])
+        .map((row: any[]) => ({
+          cliente: String(row[0]).trim(),
+          meta: typeof row[monthColIndex] === 'number' ? row[monthColIndex] : parseFloat(String(row[monthColIndex])) || 0,
+        }))
+        .filter((g: { meta: number }) => g.meta > 0);
+
+      // Read Entradas (income) for the target month
+      const incomeResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Entradas!A1:J',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const incomeRows = incomeResponse.data.values || [];
+
+      // Filter income rows for the target month and group by Tercero/Entidad
+      const incomeByClient = new Map<string, number>();
+
+      for (const row of incomeRows) {
+        if (!row[1]) continue; // No amount
+
+        const fecha = this.parseDate(row[0]);
+        if (!fecha) continue;
+
+        // Check if the date is in the target month/year
+        const [rowYear, rowMonth] = fecha.split('-').map(Number);
+        if (rowYear !== year || rowMonth !== month) continue;
+
+        // Skip AJUSTE SALDO and transfers
+        const categoria = String(row[3] || '').trim().toUpperCase();
+        if (categoria === 'AJUSTE SALDO' || categoria.startsWith('TRASLADO')) continue;
+
+        const amount = this.parseAmount(row[1]);
+        // Use Tercero (col G, index 6) first, fall back to Entidad (col F, index 5)
+        const clientName = String(row[6] || row[5] || '').trim();
+        if (!clientName) continue;
+
+        const current = incomeByClient.get(clientName.toLowerCase()) || 0;
+        incomeByClient.set(clientName.toLowerCase(), current + amount);
+      }
+
+      // Match goals with actual income
+      const clients = clientGoals.map(goal => {
+        const ingresoReal = incomeByClient.get(goal.cliente.toLowerCase()) || 0;
+        const porcentaje = goal.meta > 0 ? Math.round((ingresoReal / goal.meta) * 100) : 0;
+        const semaforo: 'verde' | 'amarillo' | 'rojo' =
+          porcentaje >= 80 ? 'verde' :
+          porcentaje >= 50 ? 'amarillo' : 'rojo';
+
+        return {
+          cliente: goal.cliente,
+          meta: goal.meta,
+          ingresoReal,
+          porcentaje,
+          semaforo,
+        };
+      });
+
+      // Sort by percentage descending
+      clients.sort((a, b) => b.porcentaje - a.porcentaje);
+
+      // Calculate totals
+      const totalMeta = clients.reduce((sum, c) => sum + c.meta, 0);
+      const totalIngreso = clients.reduce((sum, c) => sum + c.ingresoReal, 0);
+      const totalPorcentaje = totalMeta > 0 ? Math.round((totalIngreso / totalMeta) * 100) : 0;
+      const totalSemaforo: 'verde' | 'amarillo' | 'rojo' =
+        totalPorcentaje >= 80 ? 'verde' :
+        totalPorcentaje >= 50 ? 'amarillo' : 'rojo';
+
+      return {
+        month, year, monthName,
+        clients,
+        totals: {
+          meta: totalMeta,
+          ingresoReal: totalIngreso,
+          porcentaje: totalPorcentaje,
+          semaforo: totalSemaforo,
+        },
+      };
+    } catch (error) {
+      console.error('Error getting client goals by client:', error);
+      return {
+        month, year, monthName,
+        clients: [],
+        totals: { meta: 0, ingresoReal: 0, porcentaje: 0, semaforo: 'rojo' },
+      };
     }
   }
 

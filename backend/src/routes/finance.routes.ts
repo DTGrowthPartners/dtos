@@ -62,6 +62,10 @@ router.get('/client-goals', authMiddleware, (req, res) =>
   financeController.getClientGoals(req, res)
 );
 
+router.get('/client-goals/by-client', authMiddleware, (req, res) =>
+  financeController.getClientGoalsByClient(req, res)
+);
+
 router.get('/client-goals/months', authMiddleware, (req, res) =>
   financeController.getClientGoalsMonths(req, res)
 );

@@ -730,82 +730,237 @@ export default function InvoicesPanel() {
               No hay cuentas de cobro generadas
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
-                        className="h-6 w-6 p-0"
-                      >
-                        {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
-                          <CheckSquare className="h-4 w-4" />
-                        ) : (
-                          <Square className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </TableHead>
-                    <TableHead className="min-w-[150px]">N Cuenta</TableHead>
-                    <TableHead className="min-w-[100px]">Fecha</TableHead>
-                    <TableHead className="min-w-[150px]">Cliente</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Valor</TableHead>
-                    <TableHead className="text-right min-w-[120px]">Saldo</TableHead>
-                    <TableHead className="min-w-[130px]">Estado</TableHead>
-                    <TableHead className="text-right min-w-[150px]">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {invoices.map((invoice) => (
-                    <TableRow key={invoice.id}>
-                      <TableCell>
+            <>
+              {/* Desktop Table */}
+              <div className="hidden md:block overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
+                          className="h-6 w-6 p-0"
+                        >
+                          {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
+                            <CheckSquare className="h-4 w-4" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </TableHead>
+                      <TableHead className="min-w-[150px]">N Cuenta</TableHead>
+                      <TableHead className="min-w-[100px]">Fecha</TableHead>
+                      <TableHead className="min-w-[150px]">Cliente</TableHead>
+                      <TableHead className="text-right min-w-[120px]">Valor</TableHead>
+                      <TableHead className="text-right min-w-[120px]">Saldo</TableHead>
+                      <TableHead className="min-w-[130px]">Estado</TableHead>
+                      <TableHead className="text-right min-w-[150px]">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invoices.map((invoice) => {
+                      const hasPayments = invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0);
+                      return (
+                      <TableRow key={invoice.id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            checked={selectedInvoices.has(invoice.id)}
+                            onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <span className="break-words">#{invoice.invoiceNumber.substring(0, 12)}...</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="whitespace-nowrap">{new Date(invoice.fecha).toLocaleDateString('es-CO')}</span>
+                        </TableCell>
+                        <TableCell className="break-words">{invoice.clientName}</TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap">
+                          {(() => {
+                            const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
+                            const isPaid = saldo <= 0;
+                            return (
+                              <span className={isPaid ? 'text-green-600 font-medium' : (invoice.paidAmount > 0 ? 'text-orange-600 font-medium' : '')}>
+                                {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(saldo)}
+                              </span>
+                            );
+                          })()}
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={invoice.status || 'pendiente'}
+                            onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'parcial' | 'pagada')}
+                          >
+                            <SelectTrigger className="w-[120px] h-8">
+                              <SelectValue>
+                                {(() => {
+                                  const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                                  const StatusIcon = status.icon;
+                                  return (
+                                    <Badge className={cn("gap-1", status.color)}>
+                                      <StatusIcon className="h-3 w-3" />
+                                      {status.label}
+                                    </Badge>
+                                  );
+                                })()}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pendiente">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-3 w-3 text-yellow-600" />
+                                  Pendiente
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="enviada">
+                                <div className="flex items-center gap-2">
+                                  <Send className="h-3 w-3 text-blue-600" />
+                                  Enviada
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="parcial">
+                                <div className="flex items-center gap-2">
+                                  <Banknote className="h-3 w-3 text-orange-600" />
+                                  Abono Parcial
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="pagada">
+                                <div className="flex items-center gap-2">
+                                  <CircleCheck className="h-3 w-3 text-green-600" />
+                                  Pagada
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            {invoice.status !== 'pagada' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openAbonoDialog(invoice)}
+                                title="Agregar Abono"
+                                className="text-orange-600 hover:text-orange-700 border-orange-300 hover:bg-orange-50"
+                              >
+                                <Banknote className="h-4 w-4 mr-1" />
+                                Abono
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => hasPayments ? openPaymentsHistory(invoice) : undefined}
+                              title={hasPayments ? "Ver Abonos" : "Sin abonos aún"}
+                              className={hasPayments ? "text-blue-600 hover:text-blue-700" : "text-muted-foreground/30 cursor-default"}
+                              disabled={!hasPayments}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleView(invoice.id)}
+                              title="Ver PDF"
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDelete(invoice.id)}
+                              className="text-destructive hover:text-destructive"
+                              title="Eliminar"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Mobile Cards */}
+              <div className="md:hidden space-y-3">
+                {/* Select all */}
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
+                    className="h-7 w-7 p-0"
+                  >
+                    {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
+                      <CheckSquare className="h-4 w-4" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <span className="text-xs text-muted-foreground">Seleccionar todo</span>
+                </div>
+
+                {invoices.map((invoice) => {
+                  const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
+                  const isPaid = saldo <= 0;
+                  const hasPayments = invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0);
+                  const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                  const StatusIcon = status.icon;
+
+                  return (
+                    <div
+                      key={invoice.id}
+                      className={`rounded-xl border p-3 space-y-2.5 ${
+                        selectedInvoices.has(invoice.id) ? 'border-primary bg-primary/5' : 'border-border bg-card'
+                      }`}
+                    >
+                      {/* Row 1: Checkbox + Client + Amount */}
+                      <div className="flex items-start gap-2">
                         <input
                           type="checkbox"
                           checked={selectedInvoices.has(invoice.id)}
                           onChange={(e) => handleSelectInvoice(invoice.id, e.target.checked)}
-                          className="h-4 w-4"
+                          className="h-4 w-4 mt-0.5 flex-shrink-0"
                         />
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        <span className="break-words">#{invoice.invoiceNumber.substring(0, 12)}...</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="whitespace-nowrap">{new Date(invoice.fecha).toLocaleDateString('es-CO')}</span>
-                      </TableCell>
-                      <TableCell className="break-words">{invoice.clientName}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
-                      </TableCell>
-                      <TableCell className="text-right whitespace-nowrap">
-                        {(() => {
-                          const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
-                          const isPaid = saldo <= 0;
-                          return (
-                            <span className={isPaid ? 'text-green-600 font-medium' : (invoice.paidAmount > 0 ? 'text-orange-600 font-medium' : '')}>
-                              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(saldo)}
-                            </span>
-                          );
-                        })()}
-                      </TableCell>
-                      <TableCell>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm truncate">{invoice.clientName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(invoice.fecha).toLocaleDateString('es-CO')} · {invoice.servicio || invoice.concepto || `#${invoice.invoiceNumber.substring(0, 8)}`}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-sm">
+                            {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(invoice.totalAmount)}
+                          </p>
+                          {invoice.paidAmount > 0 && (
+                            <p className={`text-xs font-medium ${isPaid ? 'text-green-600' : 'text-orange-600'}`}>
+                              Saldo: {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(saldo)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Row 2: Status + Actions */}
+                      <div className="flex items-center justify-between gap-2">
                         <Select
                           value={invoice.status || 'pendiente'}
                           onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'parcial' | 'pagada')}
                         >
-                          <SelectTrigger className="w-[120px] h-8">
+                          <SelectTrigger className="w-auto h-7 px-2 text-xs">
                             <SelectValue>
-                              {(() => {
-                                const status = INVOICE_STATUS[invoice.status || 'pendiente'];
-                                const StatusIcon = status.icon;
-                                return (
-                                  <Badge className={cn("gap-1", status.color)}>
-                                    <StatusIcon className="h-3 w-3" />
-                                    {status.label}
-                                  </Badge>
-                                );
-                              })()}
+                              <Badge className={cn("gap-1 text-xs", status.color)}>
+                                <StatusIcon className="h-3 w-3" />
+                                {status.label}
+                              </Badge>
                             </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
@@ -835,56 +990,51 @@ export default function InvoicesPanel() {
                             </SelectItem>
                           </SelectContent>
                         </Select>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
+
+                        <div className="flex items-center gap-0.5">
                           {invoice.status !== 'pagada' && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => openAbonoDialog(invoice)}
-                              title="Agregar Abono"
-                              className="text-orange-600 hover:text-orange-700 border-orange-300 hover:bg-orange-50"
+                              className="text-orange-600 border-orange-300 h-7 px-2 text-xs"
                             >
-                              <Banknote className="h-4 w-4 mr-1" />
+                              <Banknote className="h-3.5 w-3.5 mr-1" />
                               Abono
-                            </Button>
-                          )}
-                          {(invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0)) && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openPaymentsHistory(invoice)}
-                              title="Ver Abonos"
-                              className="text-blue-600 hover:text-blue-700"
-                            >
-                              <Eye className="h-4 w-4" />
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleView(invoice.id)}
-                            title="Ver PDF"
+                            onClick={() => hasPayments ? openPaymentsHistory(invoice) : undefined}
+                            className={`h-7 w-7 p-0 ${hasPayments ? 'text-blue-600' : 'text-muted-foreground/30 cursor-default'}`}
+                            disabled={!hasPayments}
                           >
-                            <FileText className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleView(invoice.id)}
+                            className="h-7 w-7 p-0"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDelete(invoice.id)}
-                            className="text-destructive hover:text-destructive"
-                            title="Eliminar"
+                            className="h-7 w-7 p-0 text-destructive"
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

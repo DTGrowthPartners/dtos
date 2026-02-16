@@ -29,6 +29,13 @@ const isTransfer = (categoria: string | undefined | null): boolean => {
   return upper.startsWith('TRASLADO');
 };
 
+// Helper to check if a category is REEMBOLSO (should not appear in reports)
+const isReembolso = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  const upper = categoria.trim().toUpperCase();
+  return upper.includes('REEMBOLSO');
+};
+
 export default function IncomeReport({ ingresos }: IncomeReportProps) {
   // Normalize date helper
   const normalizeDate = (dateStr: string): string => {
@@ -56,9 +63,13 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
     return dateStr;
   };
 
-  // Filter out AJUSTE SALDO and transfers for real income analysis
+  // Filter out AJUSTE SALDO, transfers, and REEMBOLSO for real income analysis
   const realIncome = useMemo(() => {
-    return ingresos.filter(t => !isAjusteSaldo(t.categoria) && !isTransfer(t.categoria));
+    return ingresos.filter(t =>
+      !isAjusteSaldo(t.categoria) &&
+      !isTransfer(t.categoria) &&
+      !isReembolso(t.categoria)
+    );
   }, [ingresos]);
 
   // Income by category

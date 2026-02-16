@@ -9,6 +9,9 @@ router.use(authMiddleware);
 // Estadísticas
 router.get('/estadisticas', (req, res) => tercerosController.getEstadisticas(req, res));
 
+// Sync from Google Sheets
+router.post('/sync-from-sheets', (req, res) => tercerosController.syncFromSheets(req, res));
+
 // Terceros
 router.get('/', (req, res) => tercerosController.findAll(req, res));
 router.get('/:id', (req, res) => tercerosController.findOne(req, res));

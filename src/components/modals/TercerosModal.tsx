@@ -176,8 +176,8 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                   <SelectValue placeholder="Filtrar por estado" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="activos">Activos</SelectItem>
-                  <SelectItem value="inactivos">Inactivos</SelectItem>
+                  <SelectItem value="activo">Activos</SelectItem>
+                  <SelectItem value="inactivo">Inactivos</SelectItem>
                   <SelectItem value="todos">Todos</SelectItem>
                 </SelectContent>
               </Select>
@@ -216,8 +216,8 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                     <tr className="border-b border-border">
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Nombre / Razón Social</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Tipo</th>
+                      <th className="text-left py-3 px-2 font-medium text-muted-foreground">Categoría</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">NIT</th>
-                      <th className="text-left py-3 px-2 font-medium text-muted-foreground">Email</th>
                       <th className="text-left py-3 px-2 font-medium text-muted-foreground">Estado</th>
                       <th className="text-right py-3 px-2 font-medium text-muted-foreground">Acciones</th>
                     </tr>
@@ -227,9 +227,9 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                       filteredTerceros.map((tercero) => (
                         <tr key={tercero.id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
                           <td className="py-3 px-2 text-foreground">{tercero.nombre}</td>
-                          <td className="py-3 px-2 text-foreground">{tercero.tipo}</td>
+                          <td className="py-3 px-2 text-foreground capitalize">{tercero.tipo}</td>
+                          <td className="py-3 px-2 text-muted-foreground">{tercero.categoria || '-'}</td>
                           <td className="py-3 px-2 text-muted-foreground">{tercero.nit || '-'}</td>
-                          <td className="py-3 px-2 text-muted-foreground">{tercero.email || '-'}</td>
                           <td className="py-3 px-2">
                             <span className={`px-2 py-1 rounded-full text-xs ${
                               tercero.estado === 'activo' 
@@ -277,7 +277,7 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={6} className="py-8 text-center text-muted-foreground">
+                        <td colSpan={7} className="py-8 text-center text-muted-foreground">
                           No se encontraron terceros
                         </td>
                       </tr>
@@ -367,16 +367,14 @@ export function TercerosModal({ onClose }: { onClose: () => void }) {
                   />
                 </div>
 
-                {formData.tipo === 'proveedor' && (
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
-                    <Input
-                      value={formData.categoria}
-                      onChange={(e) => setFormData({...formData, categoria: e.target.value})}
-                      placeholder="Ej: Servicios, Productos"
-                    />
-                  </div>
-                )}
+                <div>
+                  <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
+                  <Input
+                    value={formData.categoria}
+                    onChange={(e) => setFormData({...formData, categoria: e.target.value})}
+                    placeholder={formData.tipo === 'cliente' ? 'Ej: Pago de clientes, Financieros' : 'Ej: Servicios, Gastos'}
+                  />
+                </div>
 
                 <div>
                   <label className="text-sm font-medium text-foreground mb-2 block">Cuenta Bancaria</label>

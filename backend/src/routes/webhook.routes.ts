@@ -3,6 +3,10 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import admin from 'firebase-admin';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
+import { invoiceService } from '../services/invoice.service';
+import { CreateInvoiceDto } from '../dtos/invoice.dto';
+import path from 'path';
+import fs from 'fs';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -1033,6 +1037,74 @@ router.get('/bot/finances', verifyBotApiKey, async (req: Request, res: Response)
     res.status(500).json({
       success: false,
       error: 'Error al obtener información financiera',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/client-goals
+ *
+ * Metas de ingresos por cliente/proyecto del mes.
+ * Muestra: meta, ingreso real, % de cumplimiento, semáforo (🟢🟡🔴).
+ * Objetivo: María puede responder "¿cómo van las metas de clientes este mes?"
+ *
+ * Query params:
+ *   - mes: enero, febrero, marzo (default: mes actual)
+ *   - month: 1, 2, 3 (alternativa numérica)
+ */
+router.get('/bot/client-goals', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { mes, month } = req.query;
+
+    // Determine target month
+    const now = new Date();
+    let targetMonth = now.getMonth() + 1; // 1-based
+    const targetYear = now.getFullYear();
+
+    if (month) {
+      targetMonth = parseInt(month as string, 10);
+    } else if (mes) {
+      const mesLower = (mes as string).toLowerCase();
+      if (['enero', 'january', '1'].includes(mesLower)) targetMonth = 1;
+      else if (['febrero', 'february', '2'].includes(mesLower)) targetMonth = 2;
+      else if (['marzo', 'march', '3'].includes(mesLower)) targetMonth = 3;
+    }
+
+    const data = await googleSheetsService.getClientGoalsByClient(targetMonth, targetYear);
+
+    // Format for bot-friendly response
+    const semaforoEmoji = (s: string) => s === 'verde' ? '🟢' : s === 'amarillo' ? '🟡' : '🔴';
+    const formatMoney = (v: number) => `$${Math.round(v).toLocaleString('es-CO')}`;
+
+    const clientLines = data.clients.map(c =>
+      `${semaforoEmoji(c.semaforo)} ${c.cliente}: Meta ${formatMoney(c.meta)} | Real ${formatMoney(c.ingresoReal)} | ${c.porcentaje}%`
+    );
+
+    const resumen = [
+      `📊 Metas de Clientes - ${data.monthName.charAt(0).toUpperCase() + data.monthName.slice(1)} ${data.year}`,
+      ``,
+      `${semaforoEmoji(data.totals.semaforo)} TOTAL: Meta ${formatMoney(data.totals.meta)} | Real ${formatMoney(data.totals.ingresoReal)} | ${data.totals.porcentaje}%`,
+      `Faltante: ${formatMoney(Math.max(0, data.totals.meta - data.totals.ingresoReal))}`,
+      ``,
+      `--- Detalle por cliente ---`,
+      ...clientLines,
+    ].join('\n');
+
+    res.json({
+      success: true,
+      month: data.month,
+      year: data.year,
+      monthName: data.monthName,
+      totals: data.totals,
+      clients: data.clients,
+      resumen,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error obteniendo metas de clientes:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener metas de clientes',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
@@ -2491,6 +2563,537 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
     res.status(500).json({
       success: false,
       error: 'Error al registrar el ingreso en Google Sheets',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// ==================== Bot API (Generación de Cuentas de Cobro) ====================
+
+/**
+ * POST /api/webhook/bot/invoices/generate
+ *
+ * Genera una cuenta de cobro (invoice PDF) desde el bot.
+ * Usa la misma lógica que /api/invoices/generate pero con API key auth.
+ *
+ * Body:
+ * {
+ *   "nombre_cliente": "Empresa XYZ",
+ *   "identificacion": "900123456-7",
+ *   "fecha": "2025-02-11",
+ *   "concepto": "Servicios de Marketing Digital",
+ *   "servicio_proyecto": "Marketing Digital",
+ *   "observaciones": "Pago correspondiente a febrero 2025",
+ *   "servicios": [
+ *     { "descripcion": "Gestión de redes sociales", "cantidad": 1, "precio_unitario": 2000000 },
+ *     { "descripcion": "Pauta publicitaria", "cantidad": 1, "precio_unitario": 500000 }
+ *   ],
+ *   "cliente_id": "abc123"  // opcional, ID del cliente en el sistema
+ * }
+ *
+ * Response:
+ * {
+ *   "success": true,
+ *   "message": "Cuenta de cobro DC-XXX generada",
+ *   "invoice": { id, invoiceNumber, clientName, totalAmount, ... },
+ *   "downloadUrl": "/api/invoices/XXX/download"
+ * }
+ */
+router.post('/bot/invoices/generate', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const invoiceData: CreateInvoiceDto = req.body;
+
+    // Validaciones
+    if (!invoiceData.nombre_cliente || !invoiceData.identificacion || !invoiceData.servicios || !invoiceData.fecha) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campos requeridos: nombre_cliente, identificacion, servicios, fecha',
+      });
+    }
+
+    if (!Array.isArray(invoiceData.servicios) || invoiceData.servicios.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Debe incluir al menos un servicio',
+      });
+    }
+
+    for (const servicio of invoiceData.servicios) {
+      if (!servicio.descripcion || servicio.descripcion.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          error: 'Todos los servicios deben tener una descripción',
+        });
+      }
+      if (typeof servicio.cantidad !== 'number' || servicio.cantidad <= 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'La cantidad debe ser un número mayor a 0',
+        });
+      }
+      if (typeof servicio.precio_unitario !== 'number' || servicio.precio_unitario < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'El precio unitario debe ser un número mayor o igual a 0',
+        });
+      }
+    }
+
+    // Generar el PDF
+    const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf(invoiceData);
+
+    // Calcular total
+    const totalAmount = invoiceData.servicios.reduce(
+      (sum, item) => sum + (item.cantidad * item.precio_unitario),
+      0
+    );
+
+    // Buscar un usuario por defecto para createdBy (Dairo o el primero disponible)
+    let botUserId = 'bot';
+    const defaultUser = await prisma.user.findFirst({
+      where: { firstName: { contains: 'Dairo', mode: 'insensitive' } },
+    });
+    if (defaultUser) {
+      botUserId = defaultUser.id;
+    } else {
+      const anyUser = await prisma.user.findFirst();
+      if (anyUser) botUserId = anyUser.id;
+    }
+
+    // Guardar en base de datos
+    const invoice = await prisma.invoice.create({
+      data: {
+        invoiceNumber,
+        clientId: invoiceData.cliente_id || '',
+        clientName: invoiceData.nombre_cliente,
+        clientNit: invoiceData.identificacion,
+        totalAmount,
+        fecha: new Date(invoiceData.fecha),
+        concepto: invoiceData.concepto,
+        servicio: invoiceData.servicio_proyecto,
+        observaciones: invoiceData.observaciones,
+        filePath: generatedPath,
+        createdBy: botUserId,
+      },
+    });
+
+    console.log(`[Bot API] Cuenta de cobro generada: ${invoiceNumber} para ${invoiceData.nombre_cliente} - $${totalAmount.toLocaleString('es-CO')}`);
+
+    res.status(201).json({
+      success: true,
+      message: `Cuenta de cobro ${invoiceNumber} generada para ${invoiceData.nombre_cliente}`,
+      invoice: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        clientName: invoice.clientName,
+        clientNit: invoice.clientNit,
+        totalAmount: invoice.totalAmount,
+        fecha: invoice.fecha.toISOString().split('T')[0],
+        concepto: invoice.concepto,
+        servicio: invoice.servicio,
+        status: invoice.status,
+        createdAt: invoice.createdAt.toISOString(),
+      },
+      downloadUrl: `/api/webhook/bot/invoices/${invoice.id}/download`,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error generando cuenta de cobro:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al generar la cuenta de cobro',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/invoices/:id/download
+ *
+ * Descarga el PDF de una cuenta de cobro (para el bot de WhatsApp).
+ * Retorna el archivo PDF directamente.
+ */
+router.get('/bot/invoices/:id/download', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { id },
+    });
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        error: 'Cuenta de cobro no encontrada',
+      });
+    }
+
+    const absolutePath = path.resolve(invoice.filePath);
+
+    if (!fs.existsSync(absolutePath)) {
+      return res.status(404).json({
+        success: false,
+        error: 'Archivo PDF no encontrado en el servidor',
+      });
+    }
+
+    const sanitizedFilename = path.basename(absolutePath).replace(/[^a-zA-Z0-9._-]/g, '_');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${sanitizedFilename}`);
+    res.sendFile(absolutePath);
+  } catch (error) {
+    console.error('[Bot API] Error descargando cuenta de cobro:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al descargar la cuenta de cobro',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/invoices
+ *
+ * Lista las cuentas de cobro (para el bot de WhatsApp).
+ * Query params:
+ *   - status: pendiente, enviada, parcial, pagada (default: all)
+ *   - cliente: buscar por nombre de cliente
+ *   - limit: número máximo de resultados (default: 20)
+ */
+router.get('/bot/invoices', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { status, estado, cliente, client, limit } = req.query;
+    const invoiceStatus = (status || estado) as string | undefined;
+    const clientSearch = (cliente || client) as string | undefined;
+    const limitNum = parseInt((limit as string) || '20', 10);
+
+    const whereClause: any = {};
+
+    if (invoiceStatus && invoiceStatus !== 'all') {
+      whereClause.status = invoiceStatus;
+    }
+
+    if (clientSearch) {
+      whereClause.clientName = { contains: clientSearch, mode: 'insensitive' };
+    }
+
+    const invoices = await prisma.invoice.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      take: limitNum,
+      include: { payments: { orderBy: { paidAt: 'desc' } } },
+    });
+
+    const formatted = invoices.map(inv => ({
+      id: inv.id,
+      numero: inv.invoiceNumber,
+      cliente: inv.clientName,
+      nit: inv.clientNit,
+      total: inv.totalAmount,
+      abonado: inv.paidAmount,
+      saldo: inv.totalAmount - (inv.paidAmount || 0),
+      estado: inv.status,
+      fecha: inv.fecha.toISOString().split('T')[0],
+      concepto: inv.concepto,
+      servicio: inv.servicio,
+      pagos: inv.payments.length,
+      downloadUrl: `/api/webhook/bot/invoices/${inv.id}/download`,
+    }));
+
+    const totalPendiente = formatted
+      .filter(i => i.estado !== 'pagada')
+      .reduce((sum, i) => sum + i.saldo, 0);
+
+    res.json({
+      success: true,
+      count: formatted.length,
+      totalPendiente,
+      invoices: formatted,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando cuentas de cobro:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener cuentas de cobro',
+    });
+  }
+});
+
+// ==================== Bot API (Briefs como Markdown) ====================
+
+/**
+ * Convierte los bloques de un brief a formato Markdown.
+ */
+function briefBlocksToMarkdown(blocks: any[]): string {
+  if (!blocks || !Array.isArray(blocks)) return '';
+
+  // Ordenar por order
+  const sorted = [...blocks].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  const lines: string[] = [];
+
+  for (const block of sorted) {
+    switch (block.type) {
+      case 'heading1':
+        lines.push(`# ${block.content || ''}`);
+        lines.push('');
+        break;
+      case 'heading2':
+        lines.push(`## ${block.content || ''}`);
+        lines.push('');
+        break;
+      case 'heading3':
+        lines.push(`### ${block.content || ''}`);
+        lines.push('');
+        break;
+      case 'paragraph':
+        if (block.content) {
+          lines.push(block.content);
+          lines.push('');
+        }
+        break;
+      case 'checklist':
+        if (block.items && Array.isArray(block.items)) {
+          for (const item of block.items) {
+            const checkbox = item.checked ? '[x]' : '[ ]';
+            lines.push(`- ${checkbox} ${item.text || ''}`);
+          }
+          lines.push('');
+        }
+        break;
+      case 'link':
+        if (block.content) {
+          const title = block.metadata?.title || block.content;
+          lines.push(`[${title}](${block.content})`);
+          lines.push('');
+        }
+        break;
+      case 'image':
+        if (block.content) {
+          lines.push(`![image](${block.content})`);
+          lines.push('');
+        }
+        break;
+      case 'divider':
+        lines.push('---');
+        lines.push('');
+        break;
+      case 'callout': {
+        const variantPrefix: Record<string, string> = {
+          info: 'ℹ️',
+          warning: '⚠️',
+          success: '✅',
+          error: '❌',
+        };
+        const prefix = variantPrefix[block.variant || 'info'] || 'ℹ️';
+        lines.push(`> ${prefix} ${block.content || ''}`);
+        lines.push('');
+        break;
+      }
+      default:
+        if (block.content) {
+          lines.push(block.content);
+          lines.push('');
+        }
+    }
+  }
+
+  return lines.join('\n').trim();
+}
+
+/**
+ * GET /api/webhook/bot/briefs
+ *
+ * Lista todos los briefs disponibles.
+ * Query params:
+ *   - proyecto / project: filtrar por projectId
+ *   - search / buscar: buscar por título
+ *
+ * Cada brief incluye un `markdownUrl` que el bot puede usar para obtener el contenido .md
+ */
+router.get('/bot/briefs', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { proyecto, project, search, buscar } = req.query;
+    const projectFilter = (proyecto || project) as string | undefined;
+    const searchTerm = (search || buscar) as string | undefined;
+
+    // Leer todos los briefs (no templates)
+    let briefsQuery = getFirestore().collection('briefs').where('isTemplate', '==', false);
+
+    if (projectFilter) {
+      briefsQuery = briefsQuery.where('projectId', '==', projectFilter);
+    }
+
+    const briefsSnapshot = await briefsQuery.get();
+    let briefs = briefsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
+
+    // Filtrar por búsqueda en título
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      briefs = briefs.filter(b => (b.title || '').toLowerCase().includes(term));
+    }
+
+    // Ordenar por updatedAt desc
+    briefs.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+    // Obtener nombres de proyectos
+    const projectIds = [...new Set(briefs.map(b => b.projectId).filter(Boolean))];
+    const projectNames: Record<string, string> = {};
+    for (const pid of projectIds) {
+      try {
+        const projDoc = await getFirestore().collection('projects').doc(pid).get();
+        if (projDoc.exists) {
+          const projData = projDoc.data();
+          projectNames[pid] = projData?.name || projData?.title || pid;
+        }
+      } catch {
+        projectNames[pid] = pid;
+      }
+    }
+
+    res.json({
+      success: true,
+      count: briefs.length,
+      briefs: briefs.map(b => ({
+        id: b.id,
+        titulo: b.title,
+        descripcion: b.description || null,
+        proyecto: projectNames[b.projectId] || b.projectId,
+        projectId: b.projectId,
+        bloques: (b.blocks || []).length,
+        updatedAt: b.updatedAt ? new Date(b.updatedAt).toISOString() : null,
+        createdAt: b.createdAt ? new Date(b.createdAt).toISOString() : null,
+        markdownUrl: `/api/webhook/bot/briefs/${b.id}/markdown`,
+      })),
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando briefs:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener briefs',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/briefs/:id/markdown
+ *
+ * Retorna el contenido de un brief en formato Markdown (.md).
+ * El bot puede usar esta URL para linkear el brief como archivo de memoria.
+ *
+ * Headers de respuesta:
+ *   - Content-Type: text/markdown; charset=utf-8
+ *   - Content-Disposition: inline; filename="brief-titulo.md"
+ */
+router.get('/bot/briefs/:id/markdown', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const briefDoc = await getFirestore().collection('briefs').doc(id).get();
+
+    if (!briefDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: `Brief con ID "${id}" no encontrado`,
+      });
+    }
+
+    const brief = { id: briefDoc.id, ...briefDoc.data() } as any;
+
+    // Obtener nombre del proyecto
+    let projectName = brief.projectId;
+    try {
+      const projDoc = await getFirestore().collection('projects').doc(brief.projectId).get();
+      if (projDoc.exists) {
+        const projData = projDoc.data();
+        projectName = projData?.name || projData?.title || brief.projectId;
+      }
+    } catch { /* ignore */ }
+
+    // Construir markdown con metadata header
+    const mdLines: string[] = [
+      `# ${brief.title || 'Sin título'}`,
+      '',
+      `**Proyecto:** ${projectName}`,
+      brief.description ? `**Descripción:** ${brief.description}` : '',
+      `**Última actualización:** ${brief.updatedAt ? new Date(brief.updatedAt).toISOString().split('T')[0] : 'N/A'}`,
+      '',
+      '---',
+      '',
+    ].filter(Boolean);
+
+    // Convertir bloques a markdown
+    const blocksMarkdown = briefBlocksToMarkdown(brief.blocks || []);
+    const fullMarkdown = mdLines.join('\n') + blocksMarkdown;
+
+    // Sanitizar nombre para el filename
+    const safeTitle = (brief.title || 'brief').replace(/[^a-zA-Z0-9áéíóúñÁÉÍÓÚÑ _-]/g, '').replace(/\s+/g, '-').toLowerCase();
+
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `inline; filename="${safeTitle}.md"`);
+    res.send(fullMarkdown);
+  } catch (error) {
+    console.error('[Bot API] Error obteniendo brief como markdown:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener brief',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/webhook/bot/briefs/:id
+ *
+ * Retorna los datos JSON de un brief (con el markdown incluido).
+ */
+router.get('/bot/briefs/:id', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    const briefDoc = await getFirestore().collection('briefs').doc(id).get();
+
+    if (!briefDoc.exists) {
+      return res.status(404).json({
+        success: false,
+        error: `Brief con ID "${id}" no encontrado`,
+      });
+    }
+
+    const brief = { id: briefDoc.id, ...briefDoc.data() } as any;
+
+    // Obtener nombre del proyecto
+    let projectName = brief.projectId;
+    try {
+      const projDoc = await getFirestore().collection('projects').doc(brief.projectId).get();
+      if (projDoc.exists) {
+        const projData = projDoc.data();
+        projectName = projData?.name || projData?.title || brief.projectId;
+      }
+    } catch { /* ignore */ }
+
+    // Convertir bloques a markdown
+    const markdown = briefBlocksToMarkdown(brief.blocks || []);
+
+    res.json({
+      success: true,
+      brief: {
+        id: brief.id,
+        titulo: brief.title,
+        descripcion: brief.description || null,
+        proyecto: projectName,
+        projectId: brief.projectId,
+        markdown,
+        markdownUrl: `/api/webhook/bot/briefs/${brief.id}/markdown`,
+        bloques: (brief.blocks || []).length,
+        updatedAt: brief.updatedAt ? new Date(brief.updatedAt).toISOString() : null,
+        createdAt: brief.createdAt ? new Date(brief.createdAt).toISOString() : null,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error obteniendo brief:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener brief',
       details: error instanceof Error ? error.message : 'Unknown error',
     });
   }

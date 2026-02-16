@@ -43,6 +43,11 @@ export const createAccount = async (req: Request, res: Response) => {
     const userId = (req as any).user.userId;
     const data = req.body;
 
+    // Sanitize clientId: "custom" or invalid values should be null
+    if (data.clientId === 'custom' || data.clientId === '') {
+      data.clientId = undefined;
+    }
+
     const account = await accountService.create({
       ...data,
       startDate: new Date(data.startDate),

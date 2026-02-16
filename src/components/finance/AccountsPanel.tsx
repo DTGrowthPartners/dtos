@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Building2,
   Package,
+  Download,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -230,6 +231,9 @@ export function AccountsPanel() {
   const [invoiceRegisterInSheets, setInvoiceRegisterInSheets] = useState(true);
   const [invoicePaymentCuenta, setInvoicePaymentCuenta] = useState<'Principal' | 'Ahorros'>('Principal');
   const [isProcessingInvoicePayment, setIsProcessingInvoicePayment] = useState(false);
+  // Estado de cuenta
+  const [estadoCuentaOpen, setEstadoCuentaOpen] = useState(false);
+  const [estadoCuentaClient, setEstadoCuentaClient] = useState<string>('');
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -351,6 +355,103 @@ export function AccountsPanel() {
     }
   };
 
+  const openEstadoCuenta = (clientName: string) => {
+    setEstadoCuentaClient(clientName);
+    setEstadoCuentaOpen(true);
+  };
+
+  // Calculate estado de cuenta data for selected client
+  const estadoCuentaData = estadoCuentaClient ? (() => {
+    const clientNameLower = estadoCuentaClient.toLowerCase();
+    const clientInvoices = unpaidInvoices.filter(i => i.clientName.toLowerCase() === clientNameLower);
+    const clientServices = pendingServices.filter(s => s.client.name.toLowerCase() === clientNameLower);
+    const clientAccounts = accounts.filter(a =>
+      a.type === 'receivable' && a.status === 'active' &&
+      (a.client?.name || a.entityName).toLowerCase() === clientNameLower
+    );
+
+    const totalFacturado = clientInvoices.reduce((sum, i) => sum + i.totalAmount, 0);
+    const totalAbonado = clientInvoices.reduce((sum, i) => sum + (i.paidAmount || 0), 0);
+    const saldoFacturas = totalFacturado - totalAbonado;
+    const totalServicios = clientServices.reduce((sum, s) => sum + s.amount, 0);
+    const totalCuentas = clientAccounts.reduce((sum, a) => sum + a.amount, 0);
+    const saldoTotal = saldoFacturas + totalCuentas;
+
+    return { clientInvoices, clientServices, clientAccounts, totalFacturado, totalAbonado, saldoFacturas, totalServicios, totalCuentas, saldoTotal };
+  })() : null;
+
+  // Get unique client names for estado de cuenta selector
+  const uniqueClients = [...new Set([
+    ...unpaidInvoices.map(i => i.clientName),
+    ...pendingServices.map(s => s.client.name),
+    ...accounts.filter(a => a.type === 'receivable' && a.status === 'active').map(a => a.client?.name || a.entityName),
+  ])].filter(Boolean).sort();
+
+  const exportToExcel = () => {
+    // Build rows from all receivable sources
+    const rows: string[][] = [
+      ['Tipo', 'Cliente/Tercero', 'Concepto', 'Monto', 'Moneda', 'Estado', 'Frecuencia', 'Próximo Vencimiento'],
+    ];
+
+    // Unpaid invoices
+    unpaidInvoices.forEach((inv) => {
+      const saldo = inv.totalAmount - (inv.paidAmount || 0);
+      rows.push([
+        'Cuenta de Cobro',
+        inv.clientName,
+        inv.servicio || inv.concepto || `#${inv.invoiceNumber.substring(0, 12)}`,
+        String(saldo),
+        'COP',
+        inv.status,
+        '-',
+        inv.fecha,
+      ]);
+    });
+
+    // Client services
+    pendingServices.forEach((svc) => {
+      rows.push([
+        'Servicio de Cliente',
+        svc.client.name,
+        svc.service.name,
+        String(svc.amount),
+        svc.currency,
+        svc.estado,
+        svc.frecuencia,
+        svc.fechaProximoCobro || '-',
+      ]);
+    });
+
+    // Manual accounts (receivable)
+    accounts.filter(a => a.type === 'receivable' && a.status === 'active').forEach((acc) => {
+      rows.push([
+        'Cuenta Manual',
+        acc.client?.name || acc.entityName,
+        acc.concept,
+        String(acc.amount),
+        acc.currency,
+        acc.status,
+        acc.isRecurring ? (acc.frequency || 'recurrente') : 'único',
+        acc.nextDueDate || '-',
+      ]);
+    });
+
+    // Convert to CSV with BOM for Excel UTF-8 support
+    const csvContent = '\uFEFF' + rows.map(row =>
+      row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')
+    ).join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `cuentas-por-cobrar-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast({ title: 'Exportado', description: 'Se descargó el archivo CSV (compatible con Excel)' });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -358,7 +459,7 @@ export function AccountsPanel() {
         ...formData,
         amount: parseFloat(formData.amount),
         frequencyDays: formData.frequencyDays ? parseInt(formData.frequencyDays) : undefined,
-        clientId: formData.clientId || undefined,
+        clientId: formData.clientId && formData.clientId !== 'custom' ? formData.clientId : undefined,
         endDate: formData.endDate || undefined,
       };
 
@@ -410,6 +511,38 @@ export function AccountsPanel() {
       toast({
         title: 'Error',
         description: 'No se pudo registrar el pago',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    if (!confirm('¿Estás seguro de eliminar esta cuenta de cobro?')) return;
+
+    try {
+      await apiClient.delete(`/api/invoices/${invoiceId}`);
+      toast({ title: 'Cuenta eliminada', description: 'La cuenta de cobro se eliminó correctamente' });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar la cuenta de cobro',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteService = async (service: PendingClientService) => {
+    if (!confirm(`¿Eliminar el servicio "${service.service.name}" de ${service.client.name}?`)) return;
+
+    try {
+      await apiClient.delete(`/api/clients/${service.client.id}/services/${service.service.id}`);
+      toast({ title: 'Servicio eliminado', description: 'El servicio del cliente se eliminó correctamente' });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo eliminar el servicio',
         variant: 'destructive',
       });
     }
@@ -572,50 +705,50 @@ export function AccountsPanel() {
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <ArrowDownCircle className="h-5 w-5 text-success" />
+      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+        <div className="rounded-xl border border-border bg-card p-2.5 sm:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-success/10 flex items-center justify-center flex-shrink-0">
+              <ArrowDownCircle className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Por Cobrar</p>
-              <p className="text-xl font-bold text-success">
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">Por Cobrar</p>
+              <p className="text-sm sm:text-xl font-bold text-success">
                 {formatCurrency(summary?.receivables.total || 0)}
               </p>
-              <p className="text-xs text-muted-foreground">{summary?.receivables.count || 0} cuentas activas</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">{summary?.receivables.count || 0} cuentas activas</p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-destructive/10 flex items-center justify-center">
-              <ArrowUpCircle className="h-5 w-5 text-destructive" />
+        <div className="rounded-xl border border-border bg-card p-2.5 sm:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3">
+            <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-destructive/10 flex items-center justify-center flex-shrink-0">
+              <ArrowUpCircle className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Por Pagar</p>
-              <p className="text-xl font-bold text-destructive">
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">Por Pagar</p>
+              <p className="text-sm sm:text-xl font-bold text-destructive">
                 {formatCurrency(pendientePresupuesto)}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
                 Pendiente {currentMonthKey ? monthLabels[currentMonthKey] : 'N/A'}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center gap-3">
-            <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
-              <Building2 className={`h-5 w-5 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`} />
+        <div className="rounded-xl border border-border bg-card p-2.5 sm:p-4">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3">
+            <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+              <Building2 className={`h-4 w-4 sm:h-5 sm:w-5 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`} />
             </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Balance</p>
-              <p className={`text-xl font-bold ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`}>
+            <div className="text-center sm:text-left">
+              <p className="text-[10px] sm:text-sm text-muted-foreground">Balance</p>
+              <p className={`text-sm sm:text-xl font-bold ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`}>
                 {formatCurrency((summary?.receivables.total || 0) - pendientePresupuesto)}
               </p>
-              <p className="text-xs text-muted-foreground">Cobrar - Pagar</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Cobrar - Pagar</p>
             </div>
           </div>
         </div>
@@ -623,35 +756,57 @@ export function AccountsPanel() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'receivable' | 'payable')}>
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <TabsList>
-            <TabsTrigger value="receivable" className="flex items-center gap-2">
-              <ArrowDownCircle className="h-4 w-4" />
-              Por Cobrar ({accounts.filter((a) => a.type === 'receivable' && a.status === 'active').length})
-            </TabsTrigger>
-            <TabsTrigger value="payable" className="flex items-center gap-2">
-              <ArrowUpCircle className="h-4 w-4" />
-              Por Pagar ({accounts.filter((a) => a.type === 'payable' && a.status === 'active').length})
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <TabsList className="h-9">
+              <TabsTrigger value="receivable" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+                <ArrowDownCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Por </span>Cobrar ({accounts.filter((a) => a.type === 'receivable' && a.status === 'active').length})
+              </TabsTrigger>
+              <TabsTrigger value="payable" className="flex items-center gap-1.5 text-xs sm:text-sm px-2 sm:px-3">
+                <ArrowUpCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span className="hidden sm:inline">Por </span>Pagar ({accounts.filter((a) => a.type === 'payable' && a.status === 'active').length})
+              </TabsTrigger>
+            </TabsList>
 
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchData}>
-              <RefreshCcw className="h-4 w-4 mr-2" />
-              Actualizar
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => {
-                resetForm();
-                setFormData((prev) => ({ ...prev, type: activeTab }));
-                setIsDialogOpen(true);
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nueva Cuenta
-            </Button>
+            <div className="flex gap-1.5 sm:gap-2">
+              <Button variant="outline" size="sm" onClick={fetchData} className="h-8 px-2 sm:px-3">
+                <RefreshCcw className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">Actualizar</span>
+              </Button>
+              <Button
+                size="sm"
+                className="h-8 px-2 sm:px-3"
+                onClick={() => {
+                  resetForm();
+                  setFormData((prev) => ({ ...prev, type: activeTab }));
+                  setIsDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">Nueva Cuenta</span>
+              </Button>
+            </div>
           </div>
+
+          {activeTab === 'receivable' && (
+            <div className="flex gap-2">
+              <Select onValueChange={(clientName) => openEstadoCuenta(clientName)}>
+                <SelectTrigger className="flex-1 sm:w-[200px] sm:flex-none h-8 text-xs">
+                  <SelectValue placeholder="Estado de Cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {uniqueClients.map((name) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="sm" onClick={exportToExcel} className="h-8 px-2 sm:px-3">
+                <Download className="h-4 w-4" />
+                <span className="hidden sm:inline ml-2">Excel</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         <TabsContent value="receivable" className="mt-4 space-y-6">
@@ -667,6 +822,7 @@ export function AccountsPanel() {
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
                 onMarkAsPaid={openInvoicePaymentDialog}
+                onDelete={handleDeleteInvoice}
               />
             </div>
           )}
@@ -681,6 +837,7 @@ export function AccountsPanel() {
               <ClientServicesList
                 services={pendingServices}
                 onGenerateInvoice={generateInvoiceDirectly}
+                onDelete={handleDeleteService}
                 generatingInvoiceId={generatingInvoiceId}
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
@@ -688,15 +845,13 @@ export function AccountsPanel() {
             </div>
           )}
 
-          {/* Cuentas por Cobrar Manuales */}
+          {/* Cuentas Recurrentes Manuales (Por Cobrar) */}
           {filteredAccounts.length > 0 && (
             <div className="space-y-3">
-              {(pendingServices.length > 0 || unpaidInvoices.length > 0) && (
-                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                  <Building2 className="h-4 w-4" />
-                  <span>Otras Cuentas por Cobrar ({filteredAccounts.length})</span>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                <RefreshCcw className="h-4 w-4" />
+                <span>Cuentas Recurrentes ({filteredAccounts.length})</span>
+              </div>
               <AccountsList
                 accounts={filteredAccounts}
                 onEdit={handleEdit}
@@ -710,7 +865,7 @@ export function AccountsPanel() {
             </div>
           )}
 
-          {pendingServices.length === 0 && filteredAccounts.length === 0 && unpaidInvoices.length === 0 && (
+          {pendingServices.length === 0 && unpaidInvoices.length === 0 && filteredAccounts.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
               <p>No hay cuentas por cobrar</p>
@@ -781,9 +936,7 @@ export function AccountsPanel() {
                   )}
                 </div>
                 <div className="flex-1 space-y-2">
-                  <Label>
-                    {formData.type === 'receivable' ? 'Cliente / Entidad' : 'Proveedor / Entidad'} *
-                  </Label>
+                  <Label>Tercero *</Label>
                   {formData.type === 'receivable' ? (
                     <Select
                       value={formData.clientId}
@@ -798,7 +951,7 @@ export function AccountsPanel() {
                       }}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cliente" />
+                        <SelectValue placeholder="Seleccionar tercero" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="custom">Otro (escribir nombre)</SelectItem>
@@ -811,7 +964,7 @@ export function AccountsPanel() {
                     </Select>
                   ) : (
                     <Input
-                      placeholder="Nombre del proveedor"
+                      placeholder="Nombre del tercero"
                       value={formData.entityName}
                       onChange={(e) => setFormData({ ...formData, entityName: e.target.value })}
                       required
@@ -819,7 +972,7 @@ export function AccountsPanel() {
                   )}
                   {formData.clientId === 'custom' && formData.type === 'receivable' && (
                     <Input
-                      placeholder="Nombre del cliente"
+                      placeholder="Nombre del tercero"
                       value={formData.entityName}
                       onChange={(e) => setFormData({ ...formData, entityName: e.target.value })}
                       required
@@ -1231,6 +1384,110 @@ export function AccountsPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Estado de Cuenta Dialog */}
+      <Dialog open={estadoCuentaOpen} onOpenChange={setEstadoCuentaOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
+          <DialogHeader>
+            <DialogTitle className="text-base sm:text-lg">Estado de Cuenta</DialogTitle>
+            <DialogDescription>{estadoCuentaClient}</DialogDescription>
+          </DialogHeader>
+
+          {estadoCuentaData && (
+            <div className="space-y-4 py-2">
+              {/* Summary */}
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="rounded-lg border p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Facturado</p>
+                  <p className="text-sm sm:text-lg font-bold">{formatCurrency(estadoCuentaData.totalFacturado)}</p>
+                </div>
+                <div className="rounded-lg border p-2 sm:p-3 text-center">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Abonado</p>
+                  <p className="text-sm sm:text-lg font-bold text-success">{formatCurrency(estadoCuentaData.totalAbonado)}</p>
+                </div>
+                <div className="rounded-lg border p-2 sm:p-3 text-center bg-destructive/5">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Saldo</p>
+                  <p className="text-sm sm:text-lg font-bold text-destructive">{formatCurrency(estadoCuentaData.saldoTotal)}</p>
+                </div>
+              </div>
+
+              {/* Invoices */}
+              {estadoCuentaData.clientInvoices.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="h-4 w-4" /> Cuentas de Cobro
+                  </h4>
+                  <div className="space-y-2">
+                    {estadoCuentaData.clientInvoices.map((inv) => (
+                      <div key={inv.id} className="flex items-center justify-between p-2 rounded border text-xs sm:text-sm gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium truncate">{inv.servicio || inv.concepto || `#${inv.invoiceNumber.substring(0, 12)}`}</p>
+                          <p className="text-xs text-muted-foreground">{formatDate(inv.fecha)} - {inv.status}</p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-medium">{formatCurrency(inv.totalAmount)}</p>
+                          {inv.paidAmount > 0 && (
+                            <p className="text-xs text-success">Abonado: {formatCurrency(inv.paidAmount)}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Manual accounts */}
+              {estadoCuentaData.clientAccounts.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Building2 className="h-4 w-4" /> Cuentas por Cobrar
+                  </h4>
+                  <div className="space-y-2">
+                    {estadoCuentaData.clientAccounts.map((acc) => (
+                      <div key={acc.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                        <div>
+                          <p className="font-medium">{acc.concept}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {acc.isRecurring ? `Recurrente - ${acc.frequency}` : 'Único'}
+                            {acc.nextDueDate && ` - Próximo: ${formatDate(acc.nextDueDate)}`}
+                          </p>
+                        </div>
+                        <p className="font-medium">{formatCurrency(acc.amount, acc.currency)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Services */}
+              {estadoCuentaData.clientServices.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <Package className="h-4 w-4" /> Servicios Activos
+                  </h4>
+                  <div className="space-y-2">
+                    {estadoCuentaData.clientServices.map((svc) => (
+                      <div key={svc.id} className="flex items-center justify-between p-2 rounded border text-sm">
+                        <div>
+                          <p className="font-medium">{svc.service.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">{svc.frecuencia}</p>
+                        </div>
+                        <p className="font-medium">{formatCurrency(svc.amount, svc.currency)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEstadoCuentaOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1269,36 +1526,36 @@ function AccountsList({
       {accounts.map((account) => (
         <div
           key={account.id}
-          className={`rounded-xl border p-4 transition-all hover:shadow-md ${
+          className={`rounded-xl border p-3 sm:p-4 transition-all hover:shadow-md ${
             isOverdue(account.nextDueDate) ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-card'
           }`}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-start justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {account.entityLogo || account.client?.logo ? (
                 <img
                   src={account.entityLogo || account.client?.logo}
                   alt=""
-                  className="h-10 w-10 rounded-lg object-contain bg-muted p-1"
+                  className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-contain bg-muted p-1 flex-shrink-0"
                 />
               ) : (
-                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 </div>
               )}
               <div className="min-w-0">
-                <p className="font-medium truncate">{account.client?.name || account.entityName}</p>
-                <p className="text-sm text-muted-foreground truncate">{account.concept}</p>
+                <p className="font-medium truncate text-sm sm:text-base">{account.client?.name || account.entityName}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{account.concept}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <div className="text-right">
-                <p className={`font-bold ${type === 'receivable' ? 'text-success' : 'text-destructive'}`}>
+                <p className={`font-bold text-sm sm:text-base ${type === 'receivable' ? 'text-success' : 'text-destructive'}`}>
                   {formatCurrency(account.amount, account.currency)}
                 </p>
                 {account.isRecurring && (
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground justify-end">
                     <RefreshCcw className="h-3 w-3" />
                     <span>
                       {account.frequency === 'custom' && account.frequencyDays
@@ -1311,7 +1568,7 @@ function AccountsList({
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1334,11 +1591,11 @@ function AccountsList({
           </div>
 
           {/* Due date and badges */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
             {account.nextDueDate && (
               <Badge
                 variant={isOverdue(account.nextDueDate) ? 'destructive' : 'secondary'}
-                className="flex items-center gap-1"
+                className="flex items-center gap-1 text-xs"
               >
                 {isOverdue(account.nextDueDate) ? (
                   <AlertTriangle className="h-3 w-3" />
@@ -1350,10 +1607,10 @@ function AccountsList({
               </Badge>
             )}
             {account.category && (
-              <Badge variant="outline">{account.category}</Badge>
+              <Badge variant="outline" className="text-xs">{account.category}</Badge>
             )}
             {account._count && account._count.payments > 0 && (
-              <Badge variant="outline" className="flex items-center gap-1">
+              <Badge variant="outline" className="flex items-center gap-1 text-xs">
                 <Clock className="h-3 w-3" />
                 {account._count.payments} pago(s)
               </Badge>
@@ -1369,12 +1626,14 @@ function AccountsList({
 function ClientServicesList({
   services,
   onGenerateInvoice,
+  onDelete,
   generatingInvoiceId,
   formatCurrency,
   formatDate,
 }: {
   services: PendingClientService[];
   onGenerateInvoice: (service: PendingClientService) => void;
+  onDelete: (service: PendingClientService) => void;
   generatingInvoiceId: string | null;
   formatCurrency: (amount: number, currency?: string) => string;
   formatDate: (date: string) => string;
@@ -1392,7 +1651,7 @@ function ClientServicesList({
       {services.map((service) => (
         <div
           key={service.id}
-          className={`rounded-xl border p-4 transition-all hover:shadow-md ${
+          className={`rounded-xl border p-3 sm:p-4 transition-all hover:shadow-md ${
             service.isOverdue
               ? 'border-destructive/50 bg-destructive/5'
               : service.isDueToday
@@ -1402,95 +1661,103 @@ function ClientServicesList({
               : 'border-border bg-card'
           }`}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-start justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-2 sm:gap-3 min-w-0">
               {service.client.logo ? (
                 <img
                   src={service.client.logo}
                   alt=""
-                  className="h-10 w-10 rounded-lg object-contain bg-muted p-1"
+                  className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg object-contain bg-muted p-1 flex-shrink-0"
                 />
               ) : (
-                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                  <Building2 className="h-5 w-5 text-muted-foreground" />
+                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <Building2 className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 </div>
               )}
               <div className="min-w-0">
-                <p className="font-medium truncate">{service.client.name}</p>
-                <p className="text-sm text-muted-foreground truncate">{service.service.name}</p>
+                <p className="font-medium truncate text-sm sm:text-base">{service.client.name}</p>
+                <p className="text-xs sm:text-sm text-muted-foreground truncate">{service.service.name}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               <div className="text-right">
-                <p className="font-bold text-success">
+                <p className="font-bold text-success text-sm sm:text-base">
                   {formatCurrency(service.amount, service.currency)}
                 </p>
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground justify-end">
                   <RefreshCcw className="h-3 w-3" />
                   <span>{FRECUENCIA_LABELS[service.frecuencia] || service.frecuencia}</span>
                 </div>
               </div>
 
-              {service.canGenerateInvoice && (
-                <Button
-                  size="sm"
-                  variant={service.isOverdue ? 'destructive' : service.isDueToday ? 'default' : 'outline'}
-                  onClick={() => onGenerateInvoice(service)}
-                  disabled={generatingInvoiceId === service.id}
-                >
-                  {generatingInvoiceId === service.id ? (
-                    <>
-                      <RefreshCcw className="h-4 w-4 mr-1 animate-spin" />
-                      Generando...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="h-4 w-4 mr-1" />
-                      Cobrar
-                    </>
-                  )}
-                </Button>
-              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onDelete(service)} className="text-destructive">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Eliminar
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
 
-          {/* Due date and badges */}
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
-            {service.fechaProximoCobro && (
-              <Badge
-                variant={
-                  service.isOverdue
-                    ? 'destructive'
+          {/* Due date, badges and action */}
+          <div className="flex items-center justify-between mt-3 gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+              {service.fechaProximoCobro && (
+                <Badge
+                  variant={
+                    service.isOverdue
+                      ? 'destructive'
+                      : service.isDueToday
+                      ? 'default'
+                      : 'secondary'
+                  }
+                  className="flex items-center gap-1 text-xs"
+                >
+                  {service.isOverdue ? (
+                    <AlertTriangle className="h-3 w-3" />
+                  ) : service.isDueToday ? (
+                    <Clock className="h-3 w-3" />
+                  ) : (
+                    <Calendar className="h-3 w-3" />
+                  )}
+                  {service.isOverdue
+                    ? 'Vencido: '
                     : service.isDueToday
-                    ? 'default'
-                    : 'secondary'
-                }
-                className="flex items-center gap-1"
+                    ? 'Hoy: '
+                    : 'Próximo: '}
+                  {formatDate(service.fechaProximoCobro)}
+                </Badge>
+              )}
+              <Badge variant="outline" className="flex items-center gap-1 text-xs">
+                <Package className="h-3 w-3" />
+                <span className="hidden sm:inline">Servicio </span>Asignado
+              </Badge>
+            </div>
+            {service.canGenerateInvoice && (
+              <Button
+                size="sm"
+                variant={service.isOverdue ? 'destructive' : service.isDueToday ? 'default' : 'outline'}
+                onClick={() => onGenerateInvoice(service)}
+                disabled={generatingInvoiceId === service.id}
+                className="flex-shrink-0 h-7 px-2 sm:px-3 text-xs"
               >
-                {service.isOverdue ? (
-                  <AlertTriangle className="h-3 w-3" />
-                ) : service.isDueToday ? (
-                  <Clock className="h-3 w-3" />
+                {generatingInvoiceId === service.id ? (
+                  <RefreshCcw className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <Calendar className="h-3 w-3" />
+                  <>
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    Cobrar
+                  </>
                 )}
-                {service.isOverdue
-                  ? 'Vencido: '
-                  : service.isDueToday
-                  ? 'Hoy: '
-                  : 'Próximo: '}
-                {formatDate(service.fechaProximoCobro)}
-              </Badge>
-            )}
-            <Badge variant="outline" className="flex items-center gap-1">
-              <Package className="h-3 w-3" />
-              Servicio Asignado
-            </Badge>
-            {service.notas && (
-              <Badge variant="outline" className="max-w-[200px] truncate">
-                {service.notas}
-              </Badge>
+              </Button>
             )}
           </div>
         </div>
@@ -1505,11 +1772,13 @@ function UnpaidInvoicesList({
   formatCurrency,
   formatDate,
   onMarkAsPaid,
+  onDelete,
 }: {
   invoices: UnpaidInvoice[];
   formatCurrency: (amount: number, currency?: string) => string;
   formatDate: (date: string) => string;
   onMarkAsPaid: (invoice: UnpaidInvoice) => void;
+  onDelete: (invoiceId: string) => void;
 }) {
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
     pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800' },
@@ -1524,70 +1793,82 @@ function UnpaidInvoicesList({
         return (
           <div
             key={invoice.id}
-            className="rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md"
+            className="rounded-xl border border-border bg-card p-3 sm:p-4 transition-all hover:shadow-md"
           >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
+            <div className="flex items-start justify-between gap-2 sm:gap-4">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                <div className="h-8 w-8 sm:h-10 sm:w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                  <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
                 </div>
                 <div className="min-w-0">
-                  <p className="font-medium truncate">{invoice.clientName}</p>
-                  <p className="text-sm text-muted-foreground truncate">
+                  <p className="font-medium truncate text-sm sm:text-base">{invoice.clientName}</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground truncate">
                     {invoice.servicio || invoice.concepto || `Cuenta #${invoice.invoiceNumber.substring(0, 8)}`}
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <div className="text-right">
-                  {invoice.paidAmount > 0 ? (
-                    <>
-                      <p className="font-bold text-orange-600">
-                        {formatCurrency(saldo)}
-                      </p>
-                      <p className="text-xs text-muted-foreground line-through">
-                        {formatCurrency(invoice.totalAmount)}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="font-bold text-success">
+              <div className="text-right flex-shrink-0">
+                {invoice.paidAmount > 0 ? (
+                  <>
+                    <p className="font-bold text-orange-600 text-sm sm:text-base">
+                      {formatCurrency(saldo)}
+                    </p>
+                    <p className="text-xs text-muted-foreground line-through">
                       {formatCurrency(invoice.totalAmount)}
                     </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    #{invoice.invoiceNumber.substring(0, 12)}
+                  </>
+                ) : (
+                  <p className="font-bold text-success text-sm sm:text-base">
+                    {formatCurrency(invoice.totalAmount)}
                   </p>
-                </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  #{invoice.invoiceNumber.substring(0, 8)}
+                </p>
+              </div>
+            </div>
+
+            {/* Date, status badges and action */}
+            <div className="flex items-center justify-between mt-3 gap-2">
+              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                <Badge variant="secondary" className="flex items-center gap-1 text-xs">
+                  <Calendar className="h-3 w-3" />
+                  {formatDate(invoice.fecha)}
+                </Badge>
+                <Badge className={`text-xs ${STATUS_LABELS[invoice.status]?.color || 'bg-gray-100 text-gray-800'}`}>
+                  {STATUS_LABELS[invoice.status]?.label || invoice.status}
+                </Badge>
+                {invoice.paidAmount > 0 && (
+                  <Badge variant="outline" className="text-orange-700 text-xs">
+                    Abonado: {formatCurrency(invoice.paidAmount)}
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => onMarkAsPaid(invoice)}
-                  className="ml-2"
+                  className="flex-shrink-0 h-7 px-2 sm:px-3 text-xs"
                 >
-                  <Check className="h-4 w-4 mr-1" />
-                  Marcar pagado
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                  <span className="hidden sm:inline">Marcar </span>Pagado
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onDelete(invoice.id)} className="text-destructive">
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Eliminar
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
-            </div>
-
-            {/* Date and status badges */}
-            <div className="flex items-center gap-2 mt-3 flex-wrap">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                {formatDate(invoice.fecha)}
-              </Badge>
-              <Badge className={STATUS_LABELS[invoice.status]?.color || 'bg-gray-100 text-gray-800'}>
-                {STATUS_LABELS[invoice.status]?.label || invoice.status}
-              </Badge>
-              {invoice.paidAmount > 0 && (
-                <Badge variant="outline" className="text-orange-700">
-                  Abonado: {formatCurrency(invoice.paidAmount)}
-                </Badge>
-              )}
-              {invoice.clientNit && (
-                <Badge variant="outline">NIT: {invoice.clientNit}</Badge>
-              )}
             </div>
           </div>
         );

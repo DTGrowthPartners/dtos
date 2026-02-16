@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   Plus, Search, Mail, Phone, Building2, Users, User,
   ChevronDown, ChevronRight, Edit, Trash2, UserPlus,
-  Briefcase, UserCheck, Truck, BadgeCheck
+  Briefcase, UserCheck, Truck, BadgeCheck, RefreshCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -102,7 +102,8 @@ export default function Terceros() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState<string>('todos');
   const [isLoading, setIsLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('clientes'); // Cambiar tab default a clientes
+  const [activeTab, setActiveTab] = useState('clientes');
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Dialogs
   const [isOrgDialogOpen, setIsOrgDialogOpen] = useState(false);
@@ -183,6 +184,26 @@ export default function Terceros() {
 
   const handleSearch = () => {
     fetchData();
+  };
+
+  const handleSyncFromSheets = async () => {
+    setIsSyncing(true);
+    try {
+      const result = await apiClient.post<{ success: boolean; message: string; created: number; updated: number; total: number }>('/api/terceros/sync-from-sheets', {});
+      toast({
+        title: 'Sincronización completada',
+        description: `${result.created} creados, ${result.updated} actualizados de ${result.total} en Google Sheets`,
+      });
+      fetchData();
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'No se pudo sincronizar con Google Sheets',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Organizacion handlers
@@ -414,6 +435,14 @@ export default function Terceros() {
           <p className="text-muted-foreground">Gestiona organizaciones y contactos</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={handleSyncFromSheets}
+            disabled={isSyncing}
+          >
+            <RefreshCcw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            {isSyncing ? 'Sincronizando...' : 'Sync Sheets'}
+          </Button>
           <Button
             variant="outline"
             onClick={() => {

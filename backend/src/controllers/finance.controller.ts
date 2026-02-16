@@ -290,6 +290,25 @@ export class FinanceController {
     }
   }
 
+  async getClientGoalsByClient(req: Request, res: Response) {
+    try {
+      const { month, year } = req.query;
+
+      const now = new Date();
+      const targetMonth = month ? parseInt(month as string, 10) : now.getMonth() + 1;
+      const targetYear = year ? parseInt(year as string, 10) : now.getFullYear();
+
+      const data = await googleSheetsService.getClientGoalsByClient(targetMonth, targetYear);
+      res.json(data);
+    } catch (error) {
+      console.error('Error in getClientGoalsByClient:', error);
+      res.status(500).json({
+        message: 'Error al obtener metas por cliente',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
   async getClientGoalsMonths(req: Request, res: Response) {
     try {
       const months = await getAvailableMonths();
