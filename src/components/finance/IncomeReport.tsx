@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight, Calendar, Target } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 interface Transaction {
@@ -36,7 +37,26 @@ const isReembolso = (categoria: string | undefined | null): boolean => {
   return upper.includes('REEMBOLSO');
 };
 
+type MonthKey = 'enero' | 'febrero' | 'marzo';
+
 export default function IncomeReport({ ingresos }: IncomeReportProps) {
+  const currentDate = new Date();
+  const currentMonthIndex = currentDate.getMonth();
+  const currentYear = currentDate.getFullYear();
+
+  const getMonthKey = (index: number): MonthKey | null => {
+    if (index === 0) return 'enero';
+    if (index === 1) return 'febrero';
+    if (index === 2) return 'marzo';
+    return null;
+  };
+
+  const currentMonthKey = getMonthKey(currentMonthIndex);
+
+  const [selectedMonth, setSelectedMonth] = useState<MonthKey | 'todos'>(() => {
+    return currentMonthKey || 'todos';
+  });
+
   // Normalize date helper
   const normalizeDate = (dateStr: string): string => {
     if (!dateStr) return '';
@@ -64,13 +84,26 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
   };
 
   // Filter out AJUSTE SALDO, transfers, and REEMBOLSO for real income analysis
-  const realIncome = useMemo(() => {
+  const realIncomeAll = useMemo(() => {
     return ingresos.filter(t =>
       !isAjusteSaldo(t.categoria) &&
       !isTransfer(t.categoria) &&
       !isReembolso(t.categoria)
     );
   }, [ingresos]);
+
+  // Apply month filter
+  const monthToNumber: Record<MonthKey, string> = { enero: '01', febrero: '02', marzo: '03' };
+
+  const realIncome = useMemo(() => {
+    if (selectedMonth === 'todos') return realIncomeAll;
+    const monthNum = monthToNumber[selectedMonth];
+    const prefix = `${currentYear}-${monthNum}`;
+    return realIncomeAll.filter(t => {
+      const normalized = normalizeDate(t.fecha);
+      return normalized.startsWith(prefix);
+    });
+  }, [realIncomeAll, selectedMonth, currentYear]);
 
   // Income by category
   const incomeByCategory = useMemo(() => {
@@ -208,7 +241,12 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
     return `$${value.toLocaleString()}`;
   };
 
-  const currentMonth = new Date().toLocaleString('es-ES', { month: 'long' });
+  const periodLabels: Record<MonthKey | 'todos', string> = {
+    todos: 'Todos los meses',
+    enero: `Enero ${currentYear}`,
+    febrero: `Febrero ${currentYear}`,
+    marzo: `Marzo ${currentYear}`,
+  };
 
   return (
     <div className="space-y-6">
@@ -216,8 +254,32 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
       <div>
         <h2 className="text-xl font-bold text-foreground">Reporte de Ingresos</h2>
         <p className="text-sm text-muted-foreground">
-          Análisis de entradas de dinero - {currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1)}
+          Análisis de entradas de dinero - {periodLabels[selectedMonth]}
         </p>
+      </div>
+
+      {/* Month Filter */}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant={selectedMonth === 'todos' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setSelectedMonth('todos')}
+        >
+          <Target className="h-4 w-4 mr-1" />
+          Todos
+        </Button>
+        {(['enero', 'febrero', 'marzo'] as MonthKey[]).map((month) => (
+          <Button
+            key={month}
+            variant={selectedMonth === month ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSelectedMonth(month)}
+            className={cn(month === currentMonthKey && selectedMonth !== month && 'border-primary')}
+          >
+            {month === currentMonthKey && <Calendar className="h-4 w-4 mr-1" />}
+            {month.charAt(0).toUpperCase() + month.slice(1)}
+          </Button>
+        ))}
       </div>
 
       {/* Summary Cards */}
