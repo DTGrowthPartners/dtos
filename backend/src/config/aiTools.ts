@@ -104,9 +104,13 @@ export const AI_TOOLS = [
             enum: ["LOW", "MEDIUM", "HIGH"],
             description: "Prioridad de la tarea: LOW (baja), MEDIUM (media - por defecto), HIGH (alta)"
           },
+          project: {
+            type: "string",
+            description: "Nombre del proyecto al que pertenece la tarea (ej: 'Tennis Cartagena', 'San Autos'). Busca por nombre. Si no se especifica, la tarea se crea sin proyecto."
+          },
           projectId: {
             type: "string",
-            description: "ID del proyecto al que pertenece la tarea (opcional)"
+            description: "ID exacto del proyecto (opcional, usar 'project' con el nombre es más fácil)"
           }
         },
         required: ["title", "assignee"],

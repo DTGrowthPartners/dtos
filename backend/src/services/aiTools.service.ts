@@ -165,8 +165,9 @@ export class AIToolsService {
         title: args.title,
         description: args.description || '',
         assignee: args.assignee,
-        creator: 'Kimi AI', // Use fixed creator name instead of userId
+        creator: 'Kimi AI',
         priority: args.priority || 'MEDIUM',
+        project: args.project || null,
         projectId: args.projectId || null,
       })
     });

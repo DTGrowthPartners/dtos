@@ -286,31 +286,8 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
       }
     }
 
-    // Si no se encontró proyecto, usar el primero disponible
-    if (!resolvedProjectId) {
-      const firstProject = await getFirestore().collection('projects')
-        .where('archived', '!=', true)
-        .limit(1)
-        .get();
-      if (!firstProject.empty) {
-        resolvedProjectId = firstProject.docs[0].id;
-        projectNameResolved = firstProject.docs[0].data().name;
-      } else {
-        // Intentar sin filtro de archived
-        const anyProject = await getFirestore().collection('projects').limit(1).get();
-        if (!anyProject.empty) {
-          resolvedProjectId = anyProject.docs[0].id;
-          projectNameResolved = anyProject.docs[0].data().name;
-        }
-      }
-    }
-
-    if (!resolvedProjectId) {
-      return res.status(400).json({
-        success: false,
-        error: 'No se encontró ningún proyecto. Crea uno primero.',
-      });
-    }
+    // Si no se encontró proyecto y no se especificó ninguno, permitir crear sin proyecto
+    // (antes se asignaba al primer proyecto, causando que todas las tareas fueran al mismo)
 
     // Mapear prioridad a formato Firestore (uppercase)
     const priorityMap: Record<string, string> = {
@@ -352,10 +329,14 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
       priority: mappedPriority,
       assignee: normalizedAssignee,
       creator: normalizedCreator,
-      projectId: resolvedProjectId,
       createdAt: Date.now(),
       images: [],
     };
+
+    // Solo agregar projectId si se resolvió un proyecto
+    if (resolvedProjectId) {
+      taskData.projectId = resolvedProjectId;
+    }
 
     // Campos opcionales
     if (dueDateTimestamp) taskData.dueDate = dueDateTimestamp;
@@ -365,7 +346,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
     // Crear tarea en Firestore
     const docRef = await getFirestore().collection('tasks').add(taskData);
 
-    console.log(`[Bot API] Tarea creada en Firestore: "${taskTitle}" asignada a ${normalizedAssignee} en proyecto ${projectNameResolved}`);
+    console.log(`[Bot API] Tarea creada en Firestore: "${taskTitle}" asignada a ${normalizedAssignee}${resolvedProjectId ? ` en proyecto ${projectNameResolved}` : ' (sin proyecto)'}`);
 
     // Si es alta prioridad, también agregar a la cola de WhatsApp
     if (mappedPriority === 'HIGH') {
@@ -393,10 +374,10 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
         priority: mappedPriority,
         assignee: normalizedAssignee,
         creator: normalizedCreator,
-        project: {
+        project: resolvedProjectId ? {
           id: resolvedProjectId,
           name: projectNameResolved,
-        },
+        } : null,
         dueDate: taskDueDate || null,
         createdAt: taskData.createdAt,
       },
