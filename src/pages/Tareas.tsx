@@ -3398,24 +3398,20 @@ export default function Tareas() {
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
-                              onClick={() => handleEdit(task)}
-                              className={`p-3 bg-card rounded-lg border cursor-pointer hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                              className={`p-3 bg-card rounded-lg border hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
                                 }`}
                             >
                               <div className="flex items-center gap-3">
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleToggleComplete(task);
-                                  }}
-                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${task.status === TaskStatus.DONE
-                                    ? 'bg-emerald-500 border-emerald-500 text-white'
-                                    : 'border-muted-foreground'
+                                  onClick={() => handleToggleComplete(task)}
+                                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 ${task.status === TaskStatus.DONE
+                                    ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
+                                    : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
                                     }`}
                                 >
-                                  {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
+                                  {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
                                 </button>
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleEdit(task)}>
                                   <p className={`text-sm font-medium truncate ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
                                     {task.title}
                                   </p>
@@ -3439,7 +3435,7 @@ export default function Tareas() {
                                     {assignee?.initials}
                                   </div>
                                 )}
-                                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex gap-1">
                                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
                                     <Edit className="h-3 w-3" />
                                   </Button>
@@ -3503,7 +3499,7 @@ export default function Tareas() {
                                     >
                                       {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
                                     </button>
-                                    <h3 className={`font-semibold text-xs md:text-sm leading-tight break-words transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
+                                    <h3 className={`font-semibold text-sm leading-tight break-words transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
                                       {task.title}
                                     </h3>
                                   </div>
