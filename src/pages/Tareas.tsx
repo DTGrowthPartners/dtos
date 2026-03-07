@@ -3330,7 +3330,7 @@ export default function Tareas() {
         {/* Active Tasks - Kanban Board */}
         {taskView === 'active' && (
           <div className="flex-1 overflow-x-auto pb-4">
-            <div className="flex gap-3 md:gap-4 h-full min-w-max md:min-w-0">
+            <div className={`flex gap-3 md:gap-4 h-full ${viewMode === 'compact' ? 'min-w-0' : 'min-w-max md:min-w-0'}`}>
               {DEFAULT_COLUMNS.map((column) => {
                 const columnTasks = getTasksByColumn(column.status);
                 const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
@@ -3338,7 +3338,7 @@ export default function Tareas() {
                 return (
                   <div
                     key={column.id}
-                    className="w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0 flex flex-col bg-muted/50 rounded-lg p-3 md:p-4"
+                    className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0'}`}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, column.status)}
                   >
@@ -3367,13 +3367,28 @@ export default function Tareas() {
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
-                              onClick={() => handleEdit(task)}
-                              className={`p-2 bg-card rounded border-l-4 cursor-pointer hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                              className={`p-2 bg-card rounded border-l-4 hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
                                 } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                             >
                               <div className="flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${PRIORITY_COLORS[task.priority].split(' ')[0]}`}></span>
-                                <span className="text-sm flex-1 truncate">{task.title}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleToggleComplete(task);
+                                  }}
+                                  className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 ${task.status === TaskStatus.DONE
+                                    ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
+                                    : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
+                                    }`}
+                                >
+                                  {task.status === TaskStatus.DONE && <CheckCircle2 className="h-2.5 w-2.5 animate-in zoom-in duration-200" />}
+                                </button>
+                                <span
+                                  className={`text-sm flex-1 truncate cursor-pointer hover:underline ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}
+                                  onClick={() => handleEdit(task)}
+                                >
+                                  {task.title}
+                                </span>
                                 {getUserPhoto(task.assignee) ? (
                                   <img
                                     src={getUserPhoto(task.assignee)}
@@ -3391,17 +3406,18 @@ export default function Tareas() {
                         }
 
                         if (viewMode === 'list') {
-                          // List View
+                          // List View - title on top, badges below
                           return (
                             <div
                               key={task.id}
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
-                              className={`p-3 bg-card rounded-lg border hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                              className={`p-2 bg-card rounded-lg border hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
                                 }`}
                             >
-                              <div className="flex items-center gap-3">
+                              {/* Row 1: checkbox + full title */}
+                              <div className="flex items-center gap-2">
                                 <button
                                   onClick={() => handleToggleComplete(task)}
                                   className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-300 ${task.status === TaskStatus.DONE
@@ -3411,41 +3427,35 @@ export default function Tareas() {
                                 >
                                   {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
                                 </button>
-                                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => handleEdit(task)}>
-                                  <p className={`text-sm font-medium truncate ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                                    {task.title}
-                                  </p>
-                                  {project && (
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
-                                      {project.name}
-                                    </span>
-                                  )}
-                                </div>
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
+                                <span
+                                  className={`text-sm flex-1 min-w-0 cursor-pointer hover:underline ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}
+                                  onClick={() => handleEdit(task)}
+                                >
+                                  {task.title}
+                                </span>
+                              </div>
+                              {/* Row 2: project, priority, avatar */}
+                              <div className="flex items-center gap-1.5 mt-1 ml-7">
+                                {project && (
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${project.color} text-white`}>
+                                    {project.name}
+                                  </span>
+                                )}
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority]}`}>
                                   {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
                                 </span>
+                                <div className="flex-1" />
                                 {getUserPhoto(task.assignee) ? (
                                   <img
                                     src={getUserPhoto(task.assignee)}
                                     alt={task.assignee}
-                                    className="w-7 h-7 rounded-full object-cover"
+                                    className="w-5 h-5 rounded-full object-cover"
                                   />
                                 ) : (
-                                  <div className={`w-7 h-7 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
+                                  <div className={`w-5 h-5 rounded-full ${assignee?.color} flex items-center justify-center text-white text-[10px]`}>
                                     {assignee?.initials}
                                   </div>
                                 )}
-                                <div className="flex gap-1">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleEdit(task)}>
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDuplicate(task)}>
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(task)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
                               </div>
                             </div>
                           );
