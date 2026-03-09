@@ -17,6 +17,7 @@ import {
   Building2,
   Package,
   Download,
+  DollarSign,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -217,7 +218,7 @@ export function AccountsPanel() {
   const currentMonthKey: MonthKey | null = currentMonthIndex < 3 ? monthKeys[currentMonthIndex] : null;
   const monthLabels: Record<MonthKey, string> = { enero: 'Enero', febrero: 'Febrero', marzo: 'Marzo' };
   const currentMonthBudget = currentMonthKey ? budgetData?.gastos?.totales?.[currentMonthKey] : null;
-  const pendientePresupuesto = currentMonthBudget ? Math.max(0, currentMonthBudget.proyectado - currentMonthBudget.real) : 0;
+  const totalPresupuesto = currentMonthBudget?.proyectado || 0;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false);
   const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
@@ -234,6 +235,19 @@ export function AccountsPanel() {
   // Estado de cuenta
   const [estadoCuentaOpen, setEstadoCuentaOpen] = useState(false);
   const [estadoCuentaClient, setEstadoCuentaClient] = useState<string>('');
+  const [estadoCuentaPayments, setEstadoCuentaPayments] = useState<Record<string, any[]>>({});
+  // Abono dialog for invoices (from Cuentas view)
+  const [abonoDialogOpen, setAbonoDialogOpen] = useState(false);
+  const [selectedInvoiceForAbono, setSelectedInvoiceForAbono] = useState<UnpaidInvoice | null>(null);
+  const [abonoForm, setAbonoForm] = useState({
+    amount: '',
+    paymentMethod: 'transferencia',
+    reference: '',
+    notes: '',
+    registerInSheets: true,
+    cuenta: 'Principal',
+  });
+  const [isSubmittingAbono, setIsSubmittingAbono] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -355,9 +369,30 @@ export function AccountsPanel() {
     }
   };
 
-  const openEstadoCuenta = (clientName: string) => {
+  const openEstadoCuenta = async (clientName: string) => {
     setEstadoCuentaClient(clientName);
     setEstadoCuentaOpen(true);
+    setEstadoCuentaPayments({});
+
+    // Fetch payment history for client invoices
+    const clientNameLower = clientName.toLowerCase();
+    const clientInvs = unpaidInvoices.filter(i => i.clientName.toLowerCase() === clientNameLower);
+    const paymentsMap: Record<string, any[]> = {};
+
+    await Promise.all(
+      clientInvs.map(async (inv) => {
+        try {
+          const payments = await apiClient.get<any[]>(`/api/invoices/${inv.id}/payments`);
+          if (payments.length > 0) {
+            paymentsMap[inv.id] = payments;
+          }
+        } catch (error) {
+          console.error('Error fetching payments for invoice:', inv.id, error);
+        }
+      })
+    );
+
+    setEstadoCuentaPayments(paymentsMap);
   };
 
   // Calculate estado de cuenta data for selected client
@@ -631,6 +666,55 @@ export function AccountsPanel() {
   };
 
   // Funciones para pago de facturas (cuentas de cobro)
+  // --- Abono Handlers (partial payment for invoices from Cuentas) ---
+  const openAbonoDialog = (invoice: UnpaidInvoice) => {
+    setSelectedInvoiceForAbono(invoice);
+    setAbonoForm({
+      amount: '',
+      paymentMethod: 'transferencia',
+      reference: '',
+      notes: '',
+      registerInSheets: true,
+      cuenta: 'Principal',
+    });
+    setAbonoDialogOpen(true);
+  };
+
+  const handleSubmitAbono = async () => {
+    if (!selectedInvoiceForAbono) return;
+    const amount = parseFloat(abonoForm.amount);
+    if (!amount || amount <= 0) return;
+
+    const saldo = selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0);
+    if (amount > saldo) {
+      toast({ title: 'Error', description: 'El monto del abono supera el saldo pendiente.', variant: 'destructive' });
+      return;
+    }
+
+    setIsSubmittingAbono(true);
+    try {
+      await apiClient.post(`/api/invoices/${selectedInvoiceForAbono.id}/payments`, {
+        amount,
+        paymentMethod: abonoForm.paymentMethod,
+        reference: abonoForm.reference || undefined,
+        notes: abonoForm.notes || undefined,
+        registerInSheets: abonoForm.registerInSheets,
+        cuenta: abonoForm.cuenta,
+      });
+      toast({
+        title: 'Abono registrado',
+        description: `Se registró un abono de ${formatCurrency(amount)}.`,
+      });
+      setAbonoDialogOpen(false);
+      setSelectedInvoiceForAbono(null);
+      fetchData();
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo registrar el abono.', variant: 'destructive' });
+    } finally {
+      setIsSubmittingAbono(false);
+    }
+  };
+
   const openInvoicePaymentDialog = (invoice: UnpaidInvoice) => {
     setPendingPaymentInvoice(invoice);
     setInvoiceRegisterInSheets(true);
@@ -729,10 +813,10 @@ export function AccountsPanel() {
             <div className="text-center sm:text-left">
               <p className="text-[10px] sm:text-sm text-muted-foreground">Por Pagar</p>
               <p className="text-sm sm:text-xl font-bold text-destructive">
-                {formatCurrency(pendientePresupuesto)}
+                {formatCurrency(totalPresupuesto)}
               </p>
               <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">
-                Pendiente {currentMonthKey ? monthLabels[currentMonthKey] : 'N/A'}
+                Presupuesto {currentMonthKey ? monthLabels[currentMonthKey] : 'N/A'}
               </p>
             </div>
           </div>
@@ -740,13 +824,13 @@ export function AccountsPanel() {
 
         <div className="rounded-xl border border-border bg-card p-2.5 sm:p-4">
           <div className="flex flex-col sm:flex-row items-center sm:items-center gap-1.5 sm:gap-3">
-            <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
-              <Building2 className={`h-4 w-4 sm:h-5 sm:w-5 ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`} />
+            <div className={`h-8 w-8 sm:h-10 sm:w-10 rounded-lg flex items-center justify-center flex-shrink-0 ${((summary?.receivables.total || 0) - totalPresupuesto) >= 0 ? 'bg-success/10' : 'bg-destructive/10'}`}>
+              <Building2 className={`h-4 w-4 sm:h-5 sm:w-5 ${((summary?.receivables.total || 0) - totalPresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`} />
             </div>
             <div className="text-center sm:text-left">
               <p className="text-[10px] sm:text-sm text-muted-foreground">Balance</p>
-              <p className={`text-sm sm:text-xl font-bold ${((summary?.receivables.total || 0) - pendientePresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`}>
-                {formatCurrency((summary?.receivables.total || 0) - pendientePresupuesto)}
+              <p className={`text-sm sm:text-xl font-bold ${((summary?.receivables.total || 0) - totalPresupuesto) >= 0 ? 'text-success' : 'text-destructive'}`}>
+                {formatCurrency((summary?.receivables.total || 0) - totalPresupuesto)}
               </p>
               <p className="text-[10px] sm:text-xs text-muted-foreground hidden sm:block">Cobrar - Pagar</p>
             </div>
@@ -822,6 +906,7 @@ export function AccountsPanel() {
                 formatCurrency={formatCurrency}
                 formatDate={formatDate}
                 onMarkAsPaid={openInvoicePaymentDialog}
+                onAbono={openAbonoDialog}
                 onDelete={handleDeleteInvoice}
               />
             </div>
@@ -1385,6 +1470,113 @@ export function AccountsPanel() {
         </DialogContent>
       </Dialog>
 
+      {/* Abono Dialog for Invoices */}
+      <Dialog open={abonoDialogOpen} onOpenChange={setAbonoDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar Abono</DialogTitle>
+            <DialogDescription>
+              {selectedInvoiceForAbono && (
+                <>
+                  {selectedInvoiceForAbono.clientName} — Cuenta #{selectedInvoiceForAbono.invoiceNumber.substring(0, 12)}
+                  <br />
+                  <span className="text-xs">
+                    Saldo pendiente: {formatCurrency(selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0))}
+                  </span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Monto del Abono *</Label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={abonoForm.amount}
+                onChange={(e) => setAbonoForm({ ...abonoForm, amount: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Método de Pago</Label>
+              <Select value={abonoForm.paymentMethod} onValueChange={(v) => setAbonoForm({ ...abonoForm, paymentMethod: v })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="transferencia">Transferencia</SelectItem>
+                  <SelectItem value="efectivo">Efectivo</SelectItem>
+                  <SelectItem value="tarjeta">Tarjeta</SelectItem>
+                  <SelectItem value="nequi">Nequi</SelectItem>
+                  <SelectItem value="daviplata">Daviplata</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Referencia</Label>
+              <Input
+                placeholder="Número de transacción"
+                value={abonoForm.reference}
+                onChange={(e) => setAbonoForm({ ...abonoForm, reference: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Notas</Label>
+              <Textarea
+                placeholder="Notas adicionales..."
+                value={abonoForm.notes}
+                onChange={(e) => setAbonoForm({ ...abonoForm, notes: e.target.value })}
+                rows={2}
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+              <div>
+                <p className="font-medium text-sm">Registrar en Google Sheets</p>
+                <p className="text-xs text-muted-foreground">Se agregará como ingreso en la hoja de Finanzas</p>
+              </div>
+              <Switch
+                checked={abonoForm.registerInSheets}
+                onCheckedChange={(checked) => setAbonoForm({ ...abonoForm, registerInSheets: checked === true })}
+              />
+            </div>
+            {abonoForm.registerInSheets && (
+              <div className="space-y-2">
+                <Label>Cuenta de destino</Label>
+                <Select value={abonoForm.cuenta} onValueChange={(v) => setAbonoForm({ ...abonoForm, cuenta: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                    <SelectItem value="Ahorros">Ahorros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAbonoDialogOpen(false)} disabled={isSubmittingAbono}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSubmitAbono} disabled={isSubmittingAbono}>
+              {isSubmittingAbono ? (
+                <>
+                  <RefreshCcw className="h-4 w-4 mr-2 animate-spin" />
+                  Registrando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Registrar Abono
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Estado de Cuenta Dialog */}
       <Dialog open={estadoCuentaOpen} onOpenChange={setEstadoCuentaOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto mx-2 sm:mx-auto">
@@ -1432,6 +1624,37 @@ export function AccountsPanel() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Historial de Abonos */}
+              {Object.keys(estadoCuentaPayments).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" /> Historial de Abonos
+                  </h4>
+                  <div className="space-y-2">
+                    {Object.entries(estadoCuentaPayments).flatMap(([invoiceId, payments]) => {
+                      const invoice = estadoCuentaData.clientInvoices.find((i: any) => i.id === invoiceId);
+                      return payments.map((payment: any) => (
+                        <div key={payment.id} className="flex items-center justify-between p-2 rounded border text-xs sm:text-sm gap-2">
+                          <div className="min-w-0">
+                            <p className="font-medium truncate">
+                              {invoice ? (invoice.servicio || invoice.concepto || `#${invoice.invoiceNumber.substring(0, 8)}`) : 'Factura'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(payment.paidAt)}
+                              {payment.paymentMethod && ` — ${payment.paymentMethod}`}
+                              {payment.reference && ` — Ref: ${payment.reference}`}
+                            </p>
+                          </div>
+                          <p className="font-medium text-success flex-shrink-0">
+                            {formatCurrency(payment.amount)}
+                          </p>
+                        </div>
+                      ));
+                    })}
                   </div>
                 </div>
               )}
@@ -1772,12 +1995,14 @@ function UnpaidInvoicesList({
   formatCurrency,
   formatDate,
   onMarkAsPaid,
+  onAbono,
   onDelete,
 }: {
   invoices: UnpaidInvoice[];
   formatCurrency: (amount: number, currency?: string) => string;
   formatDate: (date: string) => string;
   onMarkAsPaid: (invoice: UnpaidInvoice) => void;
+  onAbono: (invoice: UnpaidInvoice) => void;
   onDelete: (invoiceId: string) => void;
 }) {
   const STATUS_LABELS: Record<string, { label: string; color: string }> = {
@@ -1846,6 +2071,16 @@ function UnpaidInvoicesList({
                 )}
               </div>
               <div className="flex items-center gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onAbono(invoice)}
+                  className="flex-shrink-0 h-7 px-2 sm:px-3 text-xs"
+                  title="Registrar abono parcial"
+                >
+                  <DollarSign className="h-3.5 w-3.5 mr-1" />
+                  Abono
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"

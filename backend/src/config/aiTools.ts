@@ -142,6 +142,51 @@ export const AI_TOOLS = [
   {
     type: "function",
     function: {
+      name: "getCampaigns",
+      description: "Obtener campañas publicitarias de un cliente con métricas de rendimiento (presupuesto, gasto, impresiones, clics, conversiones, CTR, CPC, CPA). Usa esto cuando pregunten por campañas, publicidad, ads, Meta Ads, o el rendimiento publicitario de un cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          client: {
+            type: "string",
+            description: "Nombre del cliente para buscar sus campañas (búsqueda parcial, ej: 'acbfit', 'autoexpress')"
+          },
+          status: {
+            type: "string",
+            enum: ["active", "paused", "completed"],
+            description: "Filtrar por estado: active (activa), paused (pausada), completed (completada)"
+          },
+          platform: {
+            type: "string",
+            enum: ["facebook", "google", "instagram", "tiktok", "linkedin"],
+            description: "Filtrar por plataforma publicitaria"
+          }
+        },
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getClientGoals",
+      description: "Obtener metas de ingresos por cliente/proyecto del mes con semáforo de cumplimiento. Usa esto cuando pregunten por metas de clientes, cumplimiento de ingresos, cómo van las metas, semáforo de clientes, o rendimiento mensual de clientes.",
+      parameters: {
+        type: "object",
+        properties: {
+          month: {
+            type: "string",
+            description: "Mes a consultar: enero, febrero, marzo, etc. Si no se especifica, usa el mes actual.",
+            enum: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+          }
+        },
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "updateTask",
       description: "Actualizar el estado de una o más tareas. Usa esto cuando el usuario pida marcar tareas como completadas, cambiar estado, o actualizar tareas existentes. IMPORTANTE: Primero usa getTasks para obtener los IDs de las tareas, luego usa updateTask con esos IDs.",
       parameters: {

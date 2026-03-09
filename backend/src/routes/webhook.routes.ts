@@ -1092,6 +1092,142 @@ router.get('/bot/client-goals', verifyBotApiKey, async (req: Request, res: Respo
 });
 
 /**
+ * GET /api/webhook/bot/campaigns
+ *
+ * Obtiene campañas de un cliente con métricas.
+ * Query params:
+ *   - client: nombre del cliente (búsqueda parcial)
+ *   - clientId: ID exacto del cliente
+ *   - status: active, paused, completed (default: all)
+ *   - platform: facebook, google, instagram, tiktok, linkedin
+ */
+router.get('/bot/campaigns', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { client, clientId, status, platform } = req.query;
+    const clientSearch = (client as string) || undefined;
+    const clientIdExact = (clientId as string) || undefined;
+
+    // Find the client first
+    let targetClient: any = null;
+
+    if (clientIdExact) {
+      targetClient = await prisma.client.findUnique({
+        where: { id: clientIdExact },
+        select: { id: true, name: true, metaAdAccountId: true },
+      });
+    } else if (clientSearch) {
+      targetClient = await prisma.client.findFirst({
+        where: { name: { contains: clientSearch, mode: 'insensitive' } },
+        select: { id: true, name: true, metaAdAccountId: true },
+      });
+    }
+
+    if (!targetClient) {
+      // If no specific client, return all campaigns grouped by client
+      const allCampaigns = await prisma.portalCampaign.findMany({
+        where: {
+          ...(status ? { status: status as string } : {}),
+          ...(platform ? { platform: platform as string } : {}),
+        },
+        include: {
+          client: { select: { id: true, name: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 30,
+      });
+
+      return res.json({
+        success: true,
+        count: allCampaigns.length,
+        campaigns: allCampaigns.map(c => ({
+          id: c.id,
+          cliente: c.client.name,
+          nombre: c.name,
+          plataforma: c.platform,
+          estado: c.status,
+          presupuesto: Number(c.budget),
+          gastado: Number(c.spent),
+          impresiones: c.impressions,
+          clics: c.clicks,
+          conversiones: c.conversions,
+          ctr: c.ctr ? Number(c.ctr) : null,
+          cpc: c.cpc ? Number(c.cpc) : null,
+          cpa: c.cpa ? Number(c.cpa) : null,
+          fechaInicio: c.startDate?.toISOString().split('T')[0],
+          fechaFin: c.endDate?.toISOString().split('T')[0] || null,
+          notas: c.notes,
+          actualizado: c.updatedAt?.toISOString().split('T')[0],
+        })),
+      });
+    }
+
+    // Get campaigns for specific client
+    const whereClause: any = { clientId: targetClient.id };
+    if (status) whereClause.status = status;
+    if (platform) whereClause.platform = platform;
+
+    const campaigns = await prisma.portalCampaign.findMany({
+      where: whereClause,
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    // Calculate summary metrics
+    const activeCampaigns = campaigns.filter(c => c.status === 'active');
+    const totalBudget = activeCampaigns.reduce((sum, c) => sum + Number(c.budget), 0);
+    const totalSpent = activeCampaigns.reduce((sum, c) => sum + Number(c.spent), 0);
+    const totalImpressions = activeCampaigns.reduce((sum, c) => sum + c.impressions, 0);
+    const totalClicks = activeCampaigns.reduce((sum, c) => sum + c.clicks, 0);
+    const totalConversions = activeCampaigns.reduce((sum, c) => sum + c.conversions, 0);
+    const avgCTR = totalImpressions > 0 ? ((totalClicks / totalImpressions) * 100) : 0;
+    const avgCPC = totalClicks > 0 ? (totalSpent / totalClicks) : 0;
+    const avgCPA = totalConversions > 0 ? (totalSpent / totalConversions) : 0;
+
+    res.json({
+      success: true,
+      cliente: targetClient.name,
+      clienteId: targetClient.id,
+      resumen: {
+        campanasActivas: activeCampaigns.length,
+        campanasTotal: campaigns.length,
+        presupuestoTotal: totalBudget,
+        gastadoTotal: totalSpent,
+        porcentajeGastado: totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0,
+        impresionesTotal: totalImpressions,
+        clicsTotal: totalClicks,
+        conversionesTotal: totalConversions,
+        ctrPromedio: Math.round(avgCTR * 100) / 100,
+        cpcPromedio: Math.round(avgCPC),
+        cpaPromedio: Math.round(avgCPA),
+      },
+      campaigns: campaigns.map(c => ({
+        id: c.id,
+        nombre: c.name,
+        plataforma: c.platform,
+        estado: c.status,
+        presupuesto: Number(c.budget),
+        gastado: Number(c.spent),
+        impresiones: c.impressions,
+        clics: c.clicks,
+        conversiones: c.conversions,
+        ctr: c.ctr ? Number(c.ctr) : null,
+        cpc: c.cpc ? Number(c.cpc) : null,
+        cpa: c.cpa ? Number(c.cpa) : null,
+        fechaInicio: c.startDate?.toISOString().split('T')[0],
+        fechaFin: c.endDate?.toISOString().split('T')[0] || null,
+        notas: c.notes,
+        actualizado: c.updatedAt?.toISOString().split('T')[0],
+      })),
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando campañas:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener campañas',
+    });
+  }
+});
+
+/**
  * GET /api/webhook/bot/terceros
  *
  * Lista terceros (contactos, proveedores, empleados).

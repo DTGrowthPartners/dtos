@@ -33,6 +33,10 @@ export class AIToolsService {
           return await this.getDeals(args, userId);
         case 'updateTask':
           return await this.updateTask(args, userId);
+        case 'getCampaigns':
+          return await this.getCampaigns(args, userId);
+        case 'getClientGoals':
+          return await this.getClientGoals(args, userId);
         default:
           throw new Error(`Herramienta desconocida: ${toolName}`);
       }
@@ -264,5 +268,53 @@ export class AIToolsService {
       updated: results,
       errors: errors.length > 0 ? errors : undefined
     };
+  }
+
+  /**
+   * Get client goals (metas) with traffic light indicators via bot endpoint
+   */
+  private async getClientGoals(args: any, userId: string) {
+    const url = new URL('http://localhost:3001/api/webhook/bot/client-goals');
+
+    if (args.month) {
+      url.searchParams.append('mes', args.month);
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'x-api-key': this.BOT_API_KEY
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error consultando metas de clientes: ${response.statusText}`);
+    }
+
+    const data: any = await response.json();
+    return data;
+  }
+
+  /**
+   * Get campaigns from PostgreSQL via bot endpoint
+   */
+  private async getCampaigns(args: any, userId: string) {
+    const url = new URL('http://localhost:3001/api/webhook/bot/campaigns');
+
+    if (args.client) url.searchParams.append('client', args.client);
+    if (args.status) url.searchParams.append('status', args.status);
+    if (args.platform) url.searchParams.append('platform', args.platform);
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        'x-api-key': this.BOT_API_KEY
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error consultando campañas: ${response.statusText}`);
+    }
+
+    const data: any = await response.json();
+    return data;
   }
 }
