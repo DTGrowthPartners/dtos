@@ -2997,7 +2997,7 @@ export default function Tareas() {
                           <img
                             src={selectedProject.logo}
                             alt={selectedProject.name}
-                            className="h-14 w-14 md:h-16 md:w-16 rounded-full object-cover border-2 border-border/30 shadow-lg"
+                            className="h-14 w-14 md:h-16 md:w-16 rounded-full object-contain bg-white/10 border-2 border-border/30 shadow-lg"
                           />
                         ) : (
                           <div className={`h-14 w-14 md:h-16 md:w-16 rounded-full ${selectedProject?.color || 'bg-gray-500'} flex items-center justify-center shadow-lg border-2 border-white/10`}>
