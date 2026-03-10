@@ -2997,7 +2997,7 @@ export default function Tareas() {
                           <img
                             src={selectedProject.logo}
                             alt={selectedProject.name}
-                            className="h-28 w-28 md:h-36 md:w-36 object-contain"
+                            className="h-28 w-28 md:h-44 md:w-44 lg:h-48 lg:w-48 object-contain"
                           />
                         ) : (
                           <div className={`h-14 w-14 md:h-16 md:w-16 rounded-full ${selectedProject?.color || 'bg-gray-500'} flex items-center justify-center shadow-lg border-2 border-white/10`}>
@@ -3041,7 +3041,7 @@ export default function Tareas() {
 
                     {/* Name + Category */}
                     <div className="flex-1 min-w-0">
-                      <h1 className="text-lg md:text-xl font-bold text-foreground tracking-tight leading-tight">
+                      <h1 className="text-xl md:text-2xl lg:text-3xl font-bold text-foreground tracking-tight leading-tight">
                         {selectedProject?.name}
                       </h1>
                       <button
