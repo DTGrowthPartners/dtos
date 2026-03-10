@@ -2986,22 +2986,22 @@ export default function Tareas() {
         {/* Header */}
         {taskView === 'active' && selectedProject ? (
           /* ==================== PROJECT LANDING HEADER ==================== */
-              <div className="rounded-xl border border-border/50 bg-gradient-to-br from-muted/60 via-background to-muted/30 overflow-hidden">
-                {/* Top section: Logo + Info + Tools */}
-                <div className="p-4 md:p-6">
-                  <div className="flex flex-col md:flex-row gap-4 md:gap-6">
-                    {/* Project Logo */}
-                    <div className="flex-shrink-0 self-start">
+              <div className="rounded-xl border border-border/50 bg-gradient-to-b from-slate-900/80 via-slate-900/60 to-slate-900/40 dark:from-slate-900 dark:via-slate-900/80 dark:to-slate-900/60 overflow-hidden">
+                {/* Top Row: Logo + Name + Nueva Tarea */}
+                <div className="px-5 pt-5 pb-3">
+                  <div className="flex items-center gap-4">
+                    {/* Project Logo - Circular */}
+                    <div className="flex-shrink-0">
                       <div className="relative group">
                         {selectedProject?.logo ? (
                           <img
                             src={selectedProject.logo}
                             alt={selectedProject.name}
-                            className="h-16 w-16 md:h-20 md:w-20 rounded-2xl object-cover border-2 border-border/50 shadow-lg"
+                            className="h-14 w-14 md:h-16 md:w-16 rounded-full object-cover border-2 border-border/30 shadow-lg"
                           />
                         ) : (
-                          <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl ${selectedProject?.color || 'bg-gray-500'} flex items-center justify-center shadow-lg border-2 border-white/10`}>
-                            <span className="text-2xl md:text-3xl font-bold text-white">
+                          <div className={`h-14 w-14 md:h-16 md:w-16 rounded-full ${selectedProject?.color || 'bg-gray-500'} flex items-center justify-center shadow-lg border-2 border-white/10`}>
+                            <span className="text-xl md:text-2xl font-bold text-white">
                               {selectedProject?.name?.charAt(0)?.toUpperCase() || '?'}
                             </span>
                           </div>
@@ -3032,19 +3032,18 @@ export default function Tareas() {
                             };
                             input.click();
                           }}
-                          className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                          className="absolute inset-0 rounded-full bg-black/0 group-hover:bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
                         >
-                          <Camera className="h-5 w-5 text-white" />
+                          <Camera className="h-4 w-4 text-white" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Project Info */}
+                    {/* Name + Category */}
                     <div className="flex-1 min-w-0">
-                      <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+                      <h1 className="text-lg md:text-xl font-bold text-foreground tracking-tight leading-tight">
                         {selectedProject?.name}
                       </h1>
-                      {/* Category */}
                       <button
                         onClick={() => {
                           const cat = prompt('Categoría del proyecto (ej: Retail de moda, Clínica estética, etc.):', selectedProject?.category || '');
@@ -3055,63 +3054,24 @@ export default function Tareas() {
                             ));
                           }
                         }}
-                        className="text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
                       >
                         {selectedProject?.category || 'Click para agregar categoría...'}
                       </button>
-
-                      {/* Objective / Description */}
-                      <div className="mt-2">
-                        {editingProjectDescription ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              value={projectDescriptionDraft}
-                              onChange={(e) => setProjectDescriptionDraft(e.target.value)}
-                              placeholder="Objetivos del proyecto..."
-                              className="text-sm h-9 flex-1 max-w-xl"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSaveProjectDescription();
-                                if (e.key === 'Escape') setEditingProjectDescription(false);
-                              }}
-                              autoFocus
-                            />
-                            <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveProjectDescription}>
-                              <CheckSquare className="h-4 w-4" />
-                            </Button>
-                            <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingProjectDescription(false)}>
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setProjectDescriptionDraft(selectedProject?.description || '');
-                              setEditingProjectDescription(true);
-                            }}
-                            className="text-sm text-foreground/70 hover:text-foreground flex items-center gap-2 group transition-colors"
-                          >
-                            <Target className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-                            {selectedProject?.description || (
-                              <span className="italic text-muted-foreground">Agregar objetivo del proyecto...</span>
-                            )}
-                            <Edit className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-                          </button>
-                        )}
-                      </div>
                     </div>
 
-                    {/* Action Buttons (top right) */}
-                    <div className="flex items-start gap-2 flex-shrink-0">
-                      <div className="relative flex-1 md:flex-none">
+                    {/* Right: Search + Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <div className="relative hidden md:block">
                         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                         <Input
                           placeholder="Buscar..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="pl-9 w-full md:w-[180px] h-9"
+                          className="pl-9 w-[160px] h-9 bg-background/50"
                         />
                       </div>
-                      <Button variant="outline" size="icon" onClick={cycleViewMode} className="flex-shrink-0 h-9 w-9">
+                      <Button variant="outline" size="icon" onClick={cycleViewMode} className="h-9 w-9 bg-background/50">
                         {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
                       </Button>
                       <Button
@@ -3121,22 +3081,71 @@ export default function Tareas() {
                           setSelectionMode(!selectionMode);
                           if (!selectionMode) setSelectedTaskIds(new Set());
                         }}
-                        className="flex-shrink-0 h-9 w-9"
+                        className="h-9 w-9 bg-background/50"
                       >
                         <CheckSquare className="h-4 w-4" />
                       </Button>
                       <Button
                         onClick={() => { resetForm(); setIsDialogOpen(true); }}
-                        className="flex-shrink-0 h-9"
+                        className="h-9"
                       >
-                        <Plus className="h-4 w-4 md:mr-2" />
-                        <span className="hidden md:inline">Nueva Tarea</span>
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        Nueva Tarea
                       </Button>
                     </div>
                   </div>
+                </div>
 
-                  {/* Tool Buttons Row */}
-                  <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border/30">
+                {/* Middle: Objective + Tool Buttons */}
+                <div className="px-5 pb-3">
+                  <div className="flex flex-col md:flex-row md:items-start gap-3 md:gap-6">
+                    {/* Objective */}
+                    <div className="flex-1 min-w-0">
+                      {editingProjectDescription ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={projectDescriptionDraft}
+                            onChange={(e) => setProjectDescriptionDraft(e.target.value)}
+                            placeholder="Objetivos del proyecto..."
+                            className="text-sm h-9 flex-1 max-w-xl bg-background/50"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleSaveProjectDescription();
+                              if (e.key === 'Escape') setEditingProjectDescription(false);
+                            }}
+                            autoFocus
+                          />
+                          <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveProjectDescription}>
+                            <CheckSquare className="h-4 w-4" />
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingProjectDescription(false)}>
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setProjectDescriptionDraft(selectedProject?.description || '');
+                            setEditingProjectDescription(true);
+                          }}
+                          className="text-sm text-foreground/70 hover:text-foreground group transition-colors text-left"
+                        >
+                          {selectedProject?.description ? (
+                            <>
+                              <span className="font-semibold text-foreground/90 block mb-0.5">Objetivo del proyecto:</span>
+                              <span className="text-muted-foreground leading-relaxed">{selectedProject.description}</span>
+                            </>
+                          ) : (
+                            <span className="italic text-muted-foreground flex items-center gap-2">
+                              <Target className="h-3.5 w-3.5" />
+                              Agregar objetivo del proyecto...
+                            </span>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Tool Buttons - Right aligned */}
+                    <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
                     {/* Ads Manager */}
                     {editingAdsManagerLink ? (
                       <div className="flex items-center gap-2">
@@ -3323,6 +3332,7 @@ export default function Tareas() {
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
+                    </div>
                   </div>
                 </div>
 
