@@ -5,6 +5,7 @@ const CREDENTIALS_PATH = path.join(__dirname, '../../..', 'credencials.json');
 const SPREADSHEET_ID = '1SKHZBmxEsZgKjoEx_p5QtyOy21Z0o9twIsWWlICmuzE';
 
 interface TransactionRow {
+  rowIndex: number; // 1-based row number in the sheet (for update/delete)
   fecha: string;
   importe: number;
   descripcion: string;
@@ -110,11 +111,14 @@ export class GoogleSheetsService {
       console.log('Total income rows:', incomeRows.length);
       console.log('Total expenses rows:', expensesRows.length);
 
-      // Parsear ingresos
+      // Parsear ingresos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
+      // Row 1 = header, data starts at row 1 in array (index 0) = sheet row 1
       const ingresos: TransactionRow[] = incomeRows
-        .filter((row: any[]) => row[1]) // check importe exists
-        .map((row: any[]) => ({
+        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 })) // +1 because sheets are 1-based
+        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
+        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
+          rowIndex: sheetRow,
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -124,11 +128,13 @@ export class GoogleSheetsService {
           terceroId: row[6] ? String(row[6]) : undefined,
         }));
 
-      // Parsear gastos
+      // Parsear gastos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
       const gastos: TransactionRow[] = expensesRows
-        .filter((row: any[]) => row[1]) // check importe exists
-        .map((row: any[]) => ({
+        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 }))
+        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
+        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
+          rowIndex: sheetRow,
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -481,6 +487,190 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error adding income to Google Sheets:', error);
       throw new Error('No se pudo agregar el ingreso a Google Sheets');
+    }
+  }
+
+  // ==================== UPDATE / DELETE MOVIMIENTOS ====================
+
+  async updateExpense(rowIndex: number, updates: Partial<{
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+    terceroId: string;
+  }>): Promise<void> {
+    try {
+      // Get current row data
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Salidas!A${rowIndex}:G${rowIndex}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const current = currentRow.data.values?.[0] || [];
+
+      // Build updated row, keeping current values for fields not being updated
+      let fecha = current[0]; // Keep existing serial date by default
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        fecha = this.dateToSerialNumber(new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()));
+      }
+
+      const values = [[
+        fecha,
+        updates.importe ?? current[1],
+        updates.descripcion ?? current[2] ?? '',
+        updates.categoria ?? current[3] ?? '',
+        updates.cuenta ?? current[4] ?? '',
+        updates.entidad ?? current[5] ?? '',
+        updates.terceroId ?? current[6] ?? '',
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Salidas!A${rowIndex}:G${rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Expense updated at row:', rowIndex);
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      throw new Error('No se pudo actualizar el gasto');
+    }
+  }
+
+  async updateIncome(rowIndex: number, updates: Partial<{
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+    tercero: string;
+    clasificacionIngreso: string;
+    noCuentaCobro: string;
+    tipoTransaccion: string;
+  }>): Promise<void> {
+    try {
+      // Get current row data
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Entradas!A${rowIndex}:J${rowIndex}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const current = currentRow.data.values?.[0] || [];
+
+      let fecha = current[0];
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        fecha = this.dateToSerialNumber(new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()));
+      }
+
+      const values = [[
+        fecha,
+        updates.importe ?? current[1],
+        updates.descripcion ?? current[2] ?? '',
+        updates.categoria ?? current[3] ?? '',
+        updates.cuenta ?? current[4] ?? '',
+        updates.entidad ?? current[5] ?? '',
+        updates.tercero ?? current[6] ?? '',
+        updates.clasificacionIngreso ?? current[7] ?? '',
+        updates.noCuentaCobro ?? current[8] ?? '',
+        updates.tipoTransaccion ?? current[9] ?? '',
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Entradas!A${rowIndex}:J${rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Income updated at row:', rowIndex);
+    } catch (error) {
+      console.error('Error updating income:', error);
+      throw new Error('No se pudo actualizar el ingreso');
+    }
+  }
+
+  async deleteExpense(rowIndex: number): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const salidasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Salidas'
+      );
+
+      if (!salidasSheet) throw new Error('No se encontró la hoja "Salidas"');
+
+      const sheetId = salidasSheet.properties?.sheetId;
+
+      // Delete the row (rowIndex is 1-based, startIndex is 0-based)
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex - 1,
+                endIndex: rowIndex,
+              },
+            },
+          }],
+        },
+      });
+
+      console.log('Expense deleted at row:', rowIndex);
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      throw new Error('No se pudo eliminar el gasto');
+    }
+  }
+
+  async deleteIncome(rowIndex: number): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const entradasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Entradas'
+      );
+
+      if (!entradasSheet) throw new Error('No se encontró la hoja "Entradas"');
+
+      const sheetId = entradasSheet.properties?.sheetId;
+
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex - 1,
+                endIndex: rowIndex,
+              },
+            },
+          }],
+        },
+      });
+
+      console.log('Income deleted at row:', rowIndex);
+    } catch (error) {
+      console.error('Error deleting income:', error);
+      throw new Error('No se pudo eliminar el ingreso');
     }
   }
 

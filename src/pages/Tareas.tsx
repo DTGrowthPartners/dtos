@@ -44,6 +44,8 @@ import {
   ChevronDown,
   BarChart3,
   FileText,
+  Target,
+  Camera,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -2384,6 +2386,12 @@ export default function Tareas() {
     );
   }
 
+  // Project landing header variables
+  const selectedProject = filterProject !== 'all' ? projects.find(p => p.id === filterProject) : null;
+  const todoCount = filteredTasks.filter(t => t.status === 'TODO').length;
+  const inProgressCount = filteredTasks.filter(t => t.status === 'IN_PROGRESS').length;
+  const doneCount = filteredTasks.filter(t => t.status === 'DONE').length;
+
   return (
     <div className="animate-fade-in h-full flex gap-2 md:gap-4">
       {/* Left Sidebar - Projects (Collapsable) - Hidden on mobile */}
@@ -2976,242 +2984,517 @@ export default function Tareas() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 gap-3 md:gap-4">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div className="flex-1 min-w-0">
-            <h1 className="text-base md:text-lg font-semibold text-muted-foreground">
-              {taskView === 'active' && 'Mis Tareas'}
-              {taskView === 'archived' && 'Tareas Archivadas'}
-              {taskView === 'deleted' && 'Tareas Eliminadas'}
-            </h1>
-            <p className="text-sm md:text-base font-medium text-foreground">
-              {taskView === 'active' && (
-                <>
-                  {filterProject !== 'all' ? (
-                    <span className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${projects.find(p => p.id === filterProject)?.color || 'bg-gray-500'}`} />
-                      {projects.find(p => p.id === filterProject)?.name}
-                    </span>
-                  ) : 'Todos los proyectos'}
-                  <span className="text-muted-foreground font-normal"> · {filteredTasks.length} tareas</span>
-                </>
-              )}
-              {taskView === 'archived' && `${archivedTasks.length} tareas completadas`}
-              {taskView === 'deleted' && `${deletedTasks.length} tareas en papelera`}
-            </p>
-            {/* Project Description */}
-            {taskView === 'active' && filterProject !== 'all' && (
-              <div className="mt-3">
-                {editingProjectDescription ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={projectDescriptionDraft}
-                      onChange={(e) => setProjectDescriptionDraft(e.target.value)}
-                      placeholder="Objetivos del proyecto..."
-                      className="text-sm h-9 max-w-lg"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveProjectDescription();
-                        if (e.key === 'Escape') setEditingProjectDescription(false);
-                      }}
-                      autoFocus
-                    />
-                    <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveProjectDescription}>
-                      <CheckSquare className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingProjectDescription(false)}>
-                      <X className="h-4 w-4" />
-                    </Button>
+        {taskView === 'active' && selectedProject ? (
+          /* ==================== PROJECT LANDING HEADER ==================== */
+              <div className="rounded-xl border border-border/50 bg-gradient-to-br from-muted/60 via-background to-muted/30 overflow-hidden">
+                {/* Top section: Logo + Info + Tools */}
+                <div className="p-4 md:p-6">
+                  <div className="flex flex-col md:flex-row gap-4 md:gap-6">
+                    {/* Project Logo */}
+                    <div className="flex-shrink-0 self-start">
+                      <div className="relative group">
+                        {selectedProject?.logo ? (
+                          <img
+                            src={selectedProject.logo}
+                            alt={selectedProject.name}
+                            className="h-16 w-16 md:h-20 md:w-20 rounded-2xl object-cover border-2 border-border/50 shadow-lg"
+                          />
+                        ) : (
+                          <div className={`h-16 w-16 md:h-20 md:w-20 rounded-2xl ${selectedProject?.color || 'bg-gray-500'} flex items-center justify-center shadow-lg border-2 border-white/10`}>
+                            <span className="text-2xl md:text-3xl font-bold text-white">
+                              {selectedProject?.name?.charAt(0)?.toUpperCase() || '?'}
+                            </span>
+                          </div>
+                        )}
+                        <button
+                          onClick={async () => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = async (e) => {
+                              const file = (e.target as HTMLInputElement).files?.[0];
+                              if (!file) return;
+                              try {
+                                const validation = validateImage(file);
+                                if (!validation.valid) {
+                                  toast({ title: 'Error', description: validation.error, variant: 'destructive' });
+                                  return;
+                                }
+                                const base64 = await convertImageToBase64(file);
+                                await updateProject(filterProject, { logo: base64 });
+                                setProjects(prev => prev.map(p =>
+                                  p.id === filterProject ? { ...p, logo: base64 } : p
+                                ));
+                                toast({ title: 'Logo actualizado' });
+                              } catch {
+                                toast({ title: 'Error al subir logo', variant: 'destructive' });
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="absolute inset-0 rounded-2xl bg-black/0 group-hover:bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                        >
+                          <Camera className="h-5 w-5 text-white" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Project Info */}
+                    <div className="flex-1 min-w-0">
+                      <h1 className="text-xl md:text-2xl font-bold text-foreground tracking-tight">
+                        {selectedProject?.name}
+                      </h1>
+                      {/* Category */}
+                      <button
+                        onClick={() => {
+                          const cat = prompt('Categoría del proyecto (ej: Retail de moda, Clínica estética, etc.):', selectedProject?.category || '');
+                          if (cat !== null) {
+                            updateProject(filterProject, { category: cat });
+                            setProjects(prev => prev.map(p =>
+                              p.id === filterProject ? { ...p, category: cat } : p
+                            ));
+                          }
+                        }}
+                        className="text-sm text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                      >
+                        {selectedProject?.category || 'Click para agregar categoría...'}
+                      </button>
+
+                      {/* Objective / Description */}
+                      <div className="mt-2">
+                        {editingProjectDescription ? (
+                          <div className="flex items-center gap-2">
+                            <Input
+                              value={projectDescriptionDraft}
+                              onChange={(e) => setProjectDescriptionDraft(e.target.value)}
+                              placeholder="Objetivos del proyecto..."
+                              className="text-sm h-9 flex-1 max-w-xl"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') handleSaveProjectDescription();
+                                if (e.key === 'Escape') setEditingProjectDescription(false);
+                              }}
+                              autoFocus
+                            />
+                            <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveProjectDescription}>
+                              <CheckSquare className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingProjectDescription(false)}>
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setProjectDescriptionDraft(selectedProject?.description || '');
+                              setEditingProjectDescription(true);
+                            }}
+                            className="text-sm text-foreground/70 hover:text-foreground flex items-center gap-2 group transition-colors"
+                          >
+                            <Target className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                            {selectedProject?.description || (
+                              <span className="italic text-muted-foreground">Agregar objetivo del proyecto...</span>
+                            )}
+                            <Edit className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Buttons (top right) */}
+                    <div className="flex items-start gap-2 flex-shrink-0">
+                      <div className="relative flex-1 md:flex-none">
+                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Buscar..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="pl-9 w-full md:w-[180px] h-9"
+                        />
+                      </div>
+                      <Button variant="outline" size="icon" onClick={cycleViewMode} className="flex-shrink-0 h-9 w-9">
+                        {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant={selectionMode ? 'default' : 'outline'}
+                        size="icon"
+                        onClick={() => {
+                          setSelectionMode(!selectionMode);
+                          if (!selectionMode) setSelectedTaskIds(new Set());
+                        }}
+                        className="flex-shrink-0 h-9 w-9"
+                      >
+                        <CheckSquare className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        onClick={() => { resetForm(); setIsDialogOpen(true); }}
+                        className="flex-shrink-0 h-9"
+                      >
+                        <Plus className="h-4 w-4 md:mr-2" />
+                        <span className="hidden md:inline">Nueva Tarea</span>
+                      </Button>
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      const currentProject = projects.find(p => p.id === filterProject);
-                      setProjectDescriptionDraft(currentProject?.description || '');
-                      setEditingProjectDescription(true);
-                    }}
-                    className="text-sm text-foreground/80 hover:text-foreground flex items-center gap-2 group bg-muted/50 hover:bg-muted px-3 py-1.5 rounded-md transition-colors"
-                  >
-                    {projects.find(p => p.id === filterProject)?.description || (
-                      <span className="italic text-muted-foreground">Click para agregar objetivos del proyecto...</span>
+
+                  {/* Tool Buttons Row */}
+                  <div className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-border/30">
+                    {/* Ads Manager */}
+                    {editingAdsManagerLink ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={adsManagerLinkDraft}
+                          onChange={(e) => setAdsManagerLinkDraft(e.target.value)}
+                          placeholder="https://adsmanager.facebook.com/..."
+                          className="text-sm h-9 w-80"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveAdsManagerLink();
+                            if (e.key === 'Escape') setEditingAdsManagerLink(false);
+                          }}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveAdsManagerLink}><CheckSquare className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingAdsManagerLink(false)}><X className="h-4 w-4" /></Button>
+                      </div>
+                    ) : (
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          {selectedProject?.adsManagerLink ? (
+                            <a
+                              href={selectedProject.adsManagerLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/80 hover:bg-muted border border-border/50 rounded-lg transition-colors"
+                            >
+                              <BarChart3 className="h-4 w-4 text-blue-400" />
+                              Ads Manager
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setAdsManagerLinkDraft(selectedProject?.adsManagerLink || '');
+                                setEditingAdsManagerLink(true);
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/50 hover:bg-muted border border-dashed border-border/50 rounded-lg transition-colors text-muted-foreground"
+                            >
+                              <BarChart3 className="h-4 w-4" />
+                              Ads Manager
+                            </button>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {selectedProject?.adsManagerLink ? 'Abrir Ads Manager' : 'Configurar link de Ads Manager'}
+                        </TooltipContent>
+                      </Tooltip>
                     )}
-                    <Edit className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </button>
-                )}
-              </div>
-            )}
-            {/* Chat Link - Abrir Grupo WhatsApp */}
-            {taskView === 'active' && filterProject !== 'all' && (
-              <div className="mt-2 flex items-center gap-2">
-                {editingChatLink ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={chatLinkDraft}
-                      onChange={(e) => setChatLinkDraft(e.target.value)}
-                      placeholder="https://chat.whatsapp.com/..."
-                      className="text-sm h-8 w-80"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveChatLink();
-                        if (e.key === 'Escape') setEditingChatLink(false);
-                      }}
-                      autoFocus
-                    />
-                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveChatLink}>
-                      <CheckSquare className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingChatLink(false)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {projects.find(p => p.id === filterProject)?.chatLink ? (
-                      <a
-                        href={projects.find(p => p.id === filterProject)?.chatLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
-                      >
-                        <MessageCircle className="h-3.5 w-3.5" />
-                        Abrir grupo
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : null}
-                    <Tooltip delayDuration={0}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => {
-                            const currentProject = projects.find(p => p.id === filterProject);
-                            setChatLinkDraft(currentProject?.chatLink || '');
-                            setEditingChatLink(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-                        >
-                          <Link className="h-3 w-3" />
-                          {projects.find(p => p.id === filterProject)?.chatLink ? 'Editar link' : 'Agregar link de grupo'}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>Configurar link de WhatsApp del proyecto</TooltipContent>
-                    </Tooltip>
-                  </div>
-                )}
-              </div>
-            )}
-            {/* Ads Manager Link */}
-            {taskView === 'active' && filterProject !== 'all' && (
-              <div className="mt-2 flex items-center gap-2">
-                {editingAdsManagerLink ? (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={adsManagerLinkDraft}
-                      onChange={(e) => setAdsManagerLinkDraft(e.target.value)}
-                      placeholder="https://adsmanager.facebook.com/..."
-                      className="text-sm h-8 w-80"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleSaveAdsManagerLink();
-                        if (e.key === 'Escape') setEditingAdsManagerLink(false);
-                      }}
-                      autoFocus
-                    />
-                    <Button size="sm" variant="ghost" className="h-8" onClick={handleSaveAdsManagerLink}>
-                      <CheckSquare className="h-4 w-4" />
-                    </Button>
-                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingAdsManagerLink(false)}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    {projects.find(p => p.id === filterProject)?.adsManagerLink ? (
-                      <a
-                        href={projects.find(p => p.id === filterProject)?.adsManagerLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
-                      >
-                        <BarChart3 className="h-3.5 w-3.5" />
-                        Ads Manager
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
-                    ) : null}
-                    <Tooltip delayDuration={0}>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => {
-                            const currentProject = projects.find(p => p.id === filterProject);
-                            setAdsManagerLinkDraft(currentProject?.adsManagerLink || '');
-                            setEditingAdsManagerLink(true);
-                          }}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
-                        >
-                          <Link className="h-3 w-3" />
-                          {projects.find(p => p.id === filterProject)?.adsManagerLink ? 'Editar link' : 'Agregar Ads Manager'}
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>Configurar link de Ads Manager del cliente</TooltipContent>
-                    </Tooltip>
-                    {/* Brief Button */}
+
+                    {/* Briefs */}
                     <button
                       onClick={() => setTaskView(taskView === 'brief' ? 'active' : 'brief')}
-                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
                         taskView === 'brief'
-                          ? 'bg-violet-600 text-white'
-                          : 'bg-violet-500 hover:bg-violet-600 text-white'
+                          ? 'bg-violet-600 text-white border-violet-600'
+                          : 'bg-muted/80 hover:bg-muted border-border/50'
                       }`}
                     >
-                      <FileText className="h-3.5 w-3.5" />
-                      {taskView === 'brief' ? 'Ver Tareas' : 'Briefs'}
+                      <FileText className={`h-4 w-4 ${taskView === 'brief' ? 'text-white' : 'text-violet-400'}`} />
+                      Briefs
                       {taskView !== 'brief' && projectBriefs.length > 0 && (
-                        <span className="ml-1 px-1.5 py-0.5 text-[10px] bg-white/20 rounded-full">
+                        <span className="px-1.5 py-0.5 text-[10px] bg-violet-500/20 text-violet-400 rounded-full font-semibold">
                           {projectBriefs.length}
                         </span>
                       )}
                     </button>
+
+                    {/* WhatsApp */}
+                    {editingChatLink ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={chatLinkDraft}
+                          onChange={(e) => setChatLinkDraft(e.target.value)}
+                          placeholder="https://chat.whatsapp.com/..."
+                          className="text-sm h-9 w-80"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSaveChatLink();
+                            if (e.key === 'Escape') setEditingChatLink(false);
+                          }}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" className="h-9" onClick={handleSaveChatLink}><CheckSquare className="h-4 w-4" /></Button>
+                        <Button size="sm" variant="ghost" className="h-9" onClick={() => setEditingChatLink(false)}><X className="h-4 w-4" /></Button>
+                      </div>
+                    ) : (
+                      <Tooltip delayDuration={0}>
+                        <TooltipTrigger asChild>
+                          {selectedProject?.chatLink ? (
+                            <a
+                              href={selectedProject.chatLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/80 hover:bg-muted border border-border/50 rounded-lg transition-colors"
+                            >
+                              <MessageCircle className="h-4 w-4 text-green-400" />
+                              WhatsApp
+                            </a>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setChatLinkDraft(selectedProject?.chatLink || '');
+                                setEditingChatLink(true);
+                              }}
+                              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/50 hover:bg-muted border border-dashed border-border/50 rounded-lg transition-colors text-muted-foreground"
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              WhatsApp
+                            </button>
+                          )}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          {selectedProject?.chatLink ? 'Abrir grupo de WhatsApp' : 'Configurar link de WhatsApp'}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+
+                    {/* Drive */}
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        {selectedProject?.driveLink ? (
+                          <a
+                            href={selectedProject.driveLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/80 hover:bg-muted border border-border/50 rounded-lg transition-colors"
+                          >
+                            <FolderOpen className="h-4 w-4 text-amber-400" />
+                            Drive
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const link = prompt('Link de Google Drive del proyecto:', selectedProject?.driveLink || '');
+                              if (link !== null) {
+                                updateProject(filterProject, { driveLink: link });
+                                setProjects(prev => prev.map(p =>
+                                  p.id === filterProject ? { ...p, driveLink: link } : p
+                                ));
+                                if (link) toast({ title: 'Link de Drive actualizado' });
+                              }
+                            }}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-muted/50 hover:bg-muted border border-dashed border-border/50 rounded-lg transition-colors text-muted-foreground"
+                          >
+                            <FolderOpen className="h-4 w-4" />
+                            Drive
+                          </button>
+                        )}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {selectedProject?.driveLink ? 'Abrir carpeta de Drive' : 'Configurar link de Drive'}
+                      </TooltipContent>
+                    </Tooltip>
+
+                    {/* Edit links dropdown */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="inline-flex items-center gap-1 px-2 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors">
+                          <Edit className="h-3.5 w-3.5" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => {
+                          setAdsManagerLinkDraft(selectedProject?.adsManagerLink || '');
+                          setEditingAdsManagerLink(true);
+                        }}>
+                          <BarChart3 className="h-4 w-4 mr-2" /> Editar Ads Manager
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          setChatLinkDraft(selectedProject?.chatLink || '');
+                          setEditingChatLink(true);
+                        }}>
+                          <MessageCircle className="h-4 w-4 mr-2" /> Editar WhatsApp
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          const link = prompt('Link de Google Drive:', selectedProject?.driveLink || '');
+                          if (link !== null) {
+                            updateProject(filterProject, { driveLink: link });
+                            setProjects(prev => prev.map(p =>
+                              p.id === filterProject ? { ...p, driveLink: link } : p
+                            ));
+                          }
+                        }}>
+                          <FolderOpen className="h-4 w-4 mr-2" /> Editar Drive
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            {taskView === 'active' && (
-              <>
-                <div className="relative flex-1 md:flex-none">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 w-full md:w-[200px]"
-                  />
                 </div>
-                <Button variant="outline" size="icon" onClick={cycleViewMode} className="flex-shrink-0">
-                  {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
-                </Button>
-                <Button
-                  variant={selectionMode ? 'default' : 'outline'}
-                  size="icon"
-                  onClick={() => {
-                    setSelectionMode(!selectionMode);
-                    if (!selectionMode) {
-                      setSelectedTaskIds(new Set());
-                    }
-                  }}
-                  className="flex-shrink-0"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                </Button>
-                <Button
-                  onClick={() => {
-                    resetForm();
-                    setIsDialogOpen(true);
-                  }}
-                  className="flex-shrink-0"
-                >
-                  <Plus className="h-4 w-4 md:mr-2" />
-                  <span className="hidden md:inline">Nueva Tarea</span>
-                </Button>
-              </>
-            )}
+
+                {/* Stats Bar */}
+                <div className={`grid border-t border-border/30`} style={{ gridTemplateColumns: `repeat(${1 + (selectedProject?.kpis?.length || 0) + ((!selectedProject?.kpis || selectedProject.kpis.length < 5) ? 1 : 0)}, minmax(0, 1fr))` }}>
+                  {/* Task count - always visible */}
+                  <div className="px-4 py-3 md:py-4 border-r border-border/20">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-lg md:text-xl font-bold text-foreground">{filteredTasks.length}</span>
+                      <Target className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="text-xs text-muted-foreground">Tareas activas</div>
+                  </div>
+
+                  {/* Custom KPIs */}
+                  {(selectedProject?.kpis || []).map((kpi, idx) => (
+                    <ContextMenu key={kpi.id}>
+                      <ContextMenuTrigger asChild>
+                        <button
+                          onClick={() => {
+                            const newValue = prompt(`Valor para "${kpi.label}":`, kpi.value);
+                            if (newValue !== null) {
+                              const updatedKpis = [...(selectedProject?.kpis || [])];
+                              updatedKpis[idx] = { ...kpi, value: newValue };
+                              updateProject(filterProject, { kpis: updatedKpis });
+                              setProjects(prev => prev.map(p =>
+                                p.id === filterProject ? { ...p, kpis: updatedKpis } : p
+                              ));
+                            }
+                          }}
+                          className={`px-4 py-3 md:py-4 text-left hover:bg-muted/50 transition-colors ${idx < (selectedProject?.kpis?.length || 0) - 1 ? 'border-r border-border/20' : ''}`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            {kpi.icon && <span className="text-sm">{kpi.icon}</span>}
+                            <span className="text-lg md:text-xl font-bold text-foreground">{kpi.value}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">{kpi.label}</div>
+                        </button>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onClick={() => {
+                          const newLabel = prompt('Nombre del KPI:', kpi.label);
+                          if (newLabel) {
+                            const updatedKpis = [...(selectedProject?.kpis || [])];
+                            updatedKpis[idx] = { ...kpi, label: newLabel };
+                            updateProject(filterProject, { kpis: updatedKpis });
+                            setProjects(prev => prev.map(p =>
+                              p.id === filterProject ? { ...p, kpis: updatedKpis } : p
+                            ));
+                          }
+                        }}>
+                          <Pencil className="h-4 w-4 mr-2" /> Renombrar
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => {
+                          const newIcon = prompt('Emoji/icono:', kpi.icon || '');
+                          if (newIcon !== null) {
+                            const updatedKpis = [...(selectedProject?.kpis || [])];
+                            updatedKpis[idx] = { ...kpi, icon: newIcon };
+                            updateProject(filterProject, { kpis: updatedKpis });
+                            setProjects(prev => prev.map(p =>
+                              p.id === filterProject ? { ...p, kpis: updatedKpis } : p
+                            ));
+                          }
+                        }}>
+                          <Hash className="h-4 w-4 mr-2" /> Cambiar icono
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem className="text-red-400" onClick={() => {
+                          const updatedKpis = (selectedProject?.kpis || []).filter((_, i) => i !== idx);
+                          updateProject(filterProject, { kpis: updatedKpis });
+                          setProjects(prev => prev.map(p =>
+                            p.id === filterProject ? { ...p, kpis: updatedKpis } : p
+                          ));
+                          toast({ title: `KPI "${kpi.label}" eliminado` });
+                        }}>
+                          <Trash2 className="h-4 w-4 mr-2" /> Eliminar KPI
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  ))}
+
+                  {/* Add KPI button - only if less than 5 KPIs */}
+                  {(!selectedProject?.kpis || selectedProject.kpis.length < 5) && (
+                    <button
+                      onClick={() => {
+                        const label = prompt('Nombre del KPI (ej: Meta, ROAS objetivo, Ventas test):');
+                        if (!label) return;
+                        const value = prompt(`Valor para "${label}":`);
+                        if (value === null) return;
+                        const icon = prompt('Emoji/icono (opcional, ej: \uD83C\uDFAF, \uD83D\uDCB0):') || '';
+                        const newKpi = { id: Date.now().toString(), label, value, icon };
+                        const updatedKpis = [...(selectedProject?.kpis || []), newKpi];
+                        updateProject(filterProject, { kpis: updatedKpis });
+                        setProjects(prev => prev.map(p =>
+                          p.id === filterProject ? { ...p, kpis: updatedKpis } : p
+                        ));
+                        toast({ title: `KPI "${label}" agregado` });
+                      }}
+                      className="px-4 py-3 md:py-4 text-left border-l border-dashed border-border/30 hover:bg-muted/50 transition-colors group"
+                    >
+                      <div className="flex items-center gap-1.5 text-muted-foreground group-hover:text-foreground">
+                        <Plus className="h-4 w-4" />
+                        <span className="text-sm font-medium">KPI</span>
+                      </div>
+                      <div className="text-xs text-muted-foreground">Agregar métrica</div>
+                    </button>
+                  )}
+                </div>
+              </div>
+        ) : (
+          /* ==================== DEFAULT HEADER (All projects / Archived / Deleted) ==================== */
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base md:text-lg font-semibold text-muted-foreground">
+                {taskView === 'active' && 'Mis Tareas'}
+                {taskView === 'archived' && 'Tareas Archivadas'}
+                {taskView === 'deleted' && 'Tareas Eliminadas'}
+              </h1>
+              <p className="text-sm md:text-base font-medium text-foreground">
+                {taskView === 'active' && (
+                  <>
+                    Todos los proyectos
+                    <span className="text-muted-foreground font-normal"> · {filteredTasks.length} tareas</span>
+                  </>
+                )}
+                {taskView === 'archived' && `${archivedTasks.length} tareas completadas`}
+                {taskView === 'deleted' && `${deletedTasks.length} tareas en papelera`}
+              </p>
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {taskView === 'active' && (
+                <>
+                  <div className="relative flex-1 md:flex-none">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 w-full md:w-[200px]"
+                    />
+                  </div>
+                  <Button variant="outline" size="icon" onClick={cycleViewMode} className="flex-shrink-0">
+                    {viewMode === 'card' ? <Grid3X3 className="h-4 w-4" /> : <List className="h-4 w-4" />}
+                  </Button>
+                  <Button
+                    variant={selectionMode ? 'default' : 'outline'}
+                    size="icon"
+                    onClick={() => {
+                      setSelectionMode(!selectionMode);
+                      if (!selectionMode) {
+                        setSelectedTaskIds(new Set());
+                      }
+                    }}
+                    className="flex-shrink-0"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      resetForm();
+                      setIsDialogOpen(true);
+                    }}
+                    className="flex-shrink-0"
+                  >
+                    <Plus className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">Nueva Tarea</span>
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Batch Selection Toolbar */}
         {taskView === 'active' && selectionMode && (
@@ -3330,7 +3613,7 @@ export default function Tareas() {
         {/* Active Tasks - Kanban Board */}
         {taskView === 'active' && (
           <div className="flex-1 overflow-x-auto pb-4">
-            <div className={`flex gap-3 md:gap-4 h-full ${viewMode === 'compact' ? 'min-w-0' : 'min-w-max md:min-w-0'}`}>
+            <div className={`flex gap-3 md:gap-4 h-full ${viewMode === 'compact' ? 'min-w-0' : 'min-w-0'}`}>
               {DEFAULT_COLUMNS.map((column) => {
                 const columnTasks = getTasksByColumn(column.status);
                 const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
@@ -3338,7 +3621,7 @@ export default function Tareas() {
                 return (
                   <div
                     key={column.id}
-                    className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'w-[280px] md:w-[320px] lg:w-[350px] flex-shrink-0'}`}
+                    className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'flex-1 min-w-[280px]'}`}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, column.status)}
                   >

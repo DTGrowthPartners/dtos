@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2 } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2, Pencil, Trash2, Check, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -95,6 +95,7 @@ interface ExpenseCategory {
 }
 
 interface Transaction {
+  rowIndex: number;
   fecha: string;
   importe: number;
   descripcion: string;
@@ -194,6 +195,11 @@ export default function Finanzas() {
   const [showAddIncomeModal, setShowAddIncomeModal] = useState(false);
   const [showTercerosModal, setShowTercerosModal] = useState(false);
   const [showNominaModal, setShowNominaModal] = useState(false);
+
+  // Inline edit state
+  const [editingRow, setEditingRow] = useState<{ rowIndex: number; type: 'ingreso' | 'gasto' } | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [savingRow, setSavingRow] = useState(false);
 
   // Form states
   const [expenseForm, setExpenseForm] = useState({
@@ -897,6 +903,55 @@ export default function Finanzas() {
         description: 'No se pudo agregar el ingreso',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Handle inline edit
+  const startEditing = (transaction: Transaction, type: 'ingreso' | 'gasto') => {
+    setEditingRow({ rowIndex: transaction.rowIndex, type });
+    setEditForm({ ...transaction });
+  };
+
+  const cancelEditing = () => {
+    setEditingRow(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingRow || !editForm) return;
+    setSavingRow(true);
+    try {
+      const endpoint = editingRow.type === 'ingreso' ? 'income' : 'expense';
+      await apiClient.put(`/api/finance/${endpoint}/${editingRow.rowIndex}`, {
+        fecha: editForm.fecha,
+        importe: editForm.importe,
+        descripcion: editForm.descripcion,
+        categoria: editForm.categoria,
+        cuenta: editForm.cuenta,
+        entidad: editForm.entidad,
+      });
+      toast({ title: 'Actualizado', description: 'Movimiento actualizado correctamente' });
+      setEditingRow(null);
+      setEditForm({});
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error updating:', error);
+      toast({ title: 'Error', description: 'No se pudo actualizar el movimiento', variant: 'destructive' });
+    } finally {
+      setSavingRow(false);
+    }
+  };
+
+  const handleDelete = async (rowIndex: number, type: 'ingreso' | 'gasto') => {
+    if (!confirm('¿Estás seguro de eliminar este movimiento? Esta acción no se puede deshacer.')) return;
+    try {
+      const endpoint = type === 'ingreso' ? 'income' : 'expense';
+      await apiClient.delete(`/api/finance/${endpoint}/${rowIndex}`);
+      toast({ title: 'Eliminado', description: 'Movimiento eliminado correctamente' });
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error deleting:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar el movimiento', variant: 'destructive' });
     }
   };
 
@@ -1626,27 +1681,67 @@ export default function Finanzas() {
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
                         <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
+                        <th className="text-center py-3 px-2 font-medium text-muted-foreground w-[80px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredIngresos.length > 0 ? (
-                        filteredIngresos.map((ingreso, index) => (
-                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
-                            <td className="py-3 px-2 text-foreground">
-                              <div className="max-w-[200px] sm:max-w-none">
-                                <p className="truncate">{ingreso.descripcion}</p>
-                                <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
-                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
-                            <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
-                          </tr>
-                        ))
+                        filteredIngresos.map((ingreso) => {
+                          const isEditing = editingRow?.rowIndex === ingreso.rowIndex && editingRow?.type === 'ingreso';
+                          return (
+                            <tr key={ingreso.rowIndex} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                              {isEditing ? (
+                                <>
+                                  <td className="py-2 px-2">
+                                    <Input type="date" value={editForm.fecha || ''} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} className="h-8 text-xs w-[130px]" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2 hidden sm:table-cell">
+                                    <select value={editForm.categoria || ''} onChange={(e) => setEditForm({ ...editForm, categoria: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                                      {INCOME_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 hidden md:table-cell">
+                                    <Input value={editForm.entidad || ''} onChange={(e) => setEditForm({ ...editForm, entidad: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input type="number" value={editForm.importe || ''} onChange={(e) => setEditForm({ ...editForm, importe: Number(e.target.value) })} className="h-8 text-xs text-right w-[100px]" />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={saveEdit} disabled={savingRow} className="p-1 rounded hover:bg-success/20 text-success"><Check className="h-4 w-4" /></button>
+                                      <button onClick={cancelEditing} className="p-1 rounded hover:bg-destructive/20 text-destructive"><X className="h-4 w-4" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
+                                  <td className="py-3 px-2 text-foreground">
+                                    <div className="max-w-[200px] sm:max-w-none">
+                                      <p className="truncate">{ingreso.descripcion}</p>
+                                      <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
+                                  <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
+                                  <td className="py-3 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => startEditing(ingreso, 'ingreso')} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => handleDelete(ingreso.rowIndex, 'ingreso')} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             {hasActiveFilters ? 'No hay ingresos con los filtros aplicados' : 'No hay ingresos registrados'}
                           </td>
                         </tr>
@@ -1704,27 +1799,67 @@ export default function Finanzas() {
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
                         <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
+                        <th className="text-center py-3 px-2 font-medium text-muted-foreground w-[80px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredGastos.length > 0 ? (
-                        filteredGastos.map((gasto, index) => (
-                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
-                            <td className="py-3 px-2 text-foreground">
-                              <div className="max-w-[200px] sm:max-w-none">
-                                <p className="truncate">{gasto.descripcion}</p>
-                                <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
-                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
-                            <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
-                          </tr>
-                        ))
+                        filteredGastos.map((gasto) => {
+                          const isEditing = editingRow?.rowIndex === gasto.rowIndex && editingRow?.type === 'gasto';
+                          return (
+                            <tr key={gasto.rowIndex} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                              {isEditing ? (
+                                <>
+                                  <td className="py-2 px-2">
+                                    <Input type="date" value={editForm.fecha || ''} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} className="h-8 text-xs w-[130px]" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2 hidden sm:table-cell">
+                                    <select value={editForm.categoria || ''} onChange={(e) => setEditForm({ ...editForm, categoria: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                                      {EXPENSE_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 hidden md:table-cell">
+                                    <Input value={editForm.entidad || ''} onChange={(e) => setEditForm({ ...editForm, entidad: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input type="number" value={editForm.importe || ''} onChange={(e) => setEditForm({ ...editForm, importe: Number(e.target.value) })} className="h-8 text-xs text-right w-[100px]" />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={saveEdit} disabled={savingRow} className="p-1 rounded hover:bg-success/20 text-success"><Check className="h-4 w-4" /></button>
+                                      <button onClick={cancelEditing} className="p-1 rounded hover:bg-destructive/20 text-destructive"><X className="h-4 w-4" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
+                                  <td className="py-3 px-2 text-foreground">
+                                    <div className="max-w-[200px] sm:max-w-none">
+                                      <p className="truncate">{gasto.descripcion}</p>
+                                      <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
+                                  <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
+                                  <td className="py-3 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => startEditing(gasto, 'gasto')} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => handleDelete(gasto.rowIndex, 'gasto')} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             {hasActiveFilters ? 'No hay gastos con los filtros aplicados' : 'No hay gastos registrados'}
                           </td>
                         </tr>
