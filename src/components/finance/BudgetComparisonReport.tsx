@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, RefreshCw, Target, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, RefreshCw, Target, Calendar, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { DateRange } from 'react-day-picker';
 
 interface Transaction {
   fecha: string;
@@ -15,7 +18,6 @@ interface Transaction {
   entidad: string;
 }
 
-// New budget data structure from Presupuesto Q1
 interface BudgetQ1Data {
   ingresos: {
     categorias: Record<string, { proyectado: number; real: number }>;
@@ -44,21 +46,53 @@ interface BudgetComparisonReportProps {
 }
 
 type MonthKey = 'enero' | 'febrero' | 'marzo';
+type SelectedPeriod = MonthKey | 'q1' | 'custom';
 
-// Default values for safe access
 const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
+const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+const isExcludedCategory = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  const upper = categoria.trim().toUpperCase();
+  return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
+};
+
+const normalizeDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const slashMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slashMatch) {
+    const [, part1, part2, year] = slashMatch;
+    const num1 = parseInt(part1);
+    const num2 = parseInt(part2);
+    if (num1 > 12) return `${year}-${part2.padStart(2, '0')}-${part1.padStart(2, '0')}`;
+    else if (num2 > 12) return `${year}-${part1.padStart(2, '0')}-${part2.padStart(2, '0')}`;
+    else return `${year}-${part2.padStart(2, '0')}-${part1.padStart(2, '0')}`;
+  }
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+  } catch { /* ignore */ }
+  return dateStr;
+};
+
+const formatDateShort = (date: Date): string => {
+  return `${date.getDate()} ${MONTH_NAMES_SHORT[date.getMonth()]} ${date.getFullYear()}`;
+};
 
 export default function BudgetComparisonReport({ gastos }: BudgetComparisonReportProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<MonthKey | 'q1'>('febrero');
+  const [selectedMonth, setSelectedMonth] = useState<SelectedPeriod>('febrero');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  // Get current month for highlighting
   const currentDate = new Date();
-  const currentMonthIndex = currentDate.getMonth(); // 0 = January
+  const currentMonthIndex = currentDate.getMonth();
 
-  // Map month index to month key
   const getMonthKey = (index: number): MonthKey | null => {
     if (index === 0) return 'enero';
     if (index === 1) return 'febrero';
@@ -68,7 +102,6 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
   const currentMonthKey = getMonthKey(currentMonthIndex);
 
-  // Fetch budget data from Google Sheets
   useEffect(() => {
     const fetchBudget = async () => {
       try {
@@ -87,11 +120,55 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         setIsLoading(false);
       }
     };
-
     fetchBudget();
   }, [toast]);
 
-  // Calculate Q1 totals
+  const filteredGastos = useMemo(() => {
+    if (selectedMonth !== 'custom' || !dateRange?.from) return gastos;
+
+    const fromStr = `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, '0')}-${String(dateRange.from.getDate()).padStart(2, '0')}`;
+    const toDate = dateRange.to || dateRange.from;
+    const toStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+
+    return gastos.filter(t => {
+      if (isExcludedCategory(t.categoria)) return false;
+      const normalized = normalizeDate(t.fecha);
+      return normalized >= fromStr && normalized <= toStr;
+    });
+  }, [gastos, selectedMonth, dateRange]);
+
+  const customCategoryBreakdown = useMemo(() => {
+    if (selectedMonth !== 'custom') return [];
+
+    const categoryMap = new Map<string, number>();
+    filteredGastos.forEach(t => {
+      if (t.categoria && !isExcludedCategory(t.categoria)) {
+        const current = categoryMap.get(t.categoria) || 0;
+        categoryMap.set(t.categoria, current + t.importe);
+      }
+    });
+
+    return Array.from(categoryMap.entries())
+      .map(([categoria, real]) => ({
+        categoria,
+        proyectado: 0,
+        real,
+        diferencia: -real,
+        percentUsed: 0,
+        status: 'ok' as const,
+      }))
+      .sort((a, b) => b.real - a.real);
+  }, [filteredGastos, selectedMonth]);
+
+  const customTotals = useMemo(() => {
+    if (selectedMonth !== 'custom') return { proyectado: 0, real: 0, percentUsed: 0 };
+    const real = filteredGastos.reduce((sum, t) => {
+      if (isExcludedCategory(t.categoria)) return sum;
+      return sum + t.importe;
+    }, 0);
+    return { proyectado: 0, real, percentUsed: 0 };
+  }, [filteredGastos, selectedMonth]);
+
   const q1Totals = useMemo(() => {
     if (!budgetData?.gastos?.totales) return { proyectado: 0, real: 0, percentUsed: 0 };
 
@@ -107,7 +184,6 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     return { proyectado, real, percentUsed };
   }, [budgetData]);
 
-  // Monthly comparison data for chart
   const monthlyComparisonData = useMemo(() => {
     if (!budgetData?.gastos?.totales) return [];
 
@@ -133,8 +209,8 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     });
   }, [budgetData, currentMonthKey]);
 
-  // Category breakdown for selected month or Q1
   const categoryBreakdown = useMemo(() => {
+    if (selectedMonth === 'custom') return customCategoryBreakdown;
     if (!budgetData?.gastos?.categorias) return [];
 
     const categories = budgetData.gastos.categorias;
@@ -160,16 +236,8 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       const percentUsed = proyectado > 0 ? (real / proyectado) * 100 : (real > 0 ? 100 : 0);
       const status = percentUsed > 100 ? 'over' : percentUsed > 80 ? 'warning' : 'ok';
 
-      return {
-        categoria,
-        proyectado,
-        real,
-        diferencia,
-        percentUsed,
-        status,
-      };
+      return { categoria, proyectado, real, diferencia, percentUsed, status };
     }).filter(item => {
-      // Exclude calculated result rows - not actual expense categories
       const upperCategoria = item.categoria.toUpperCase();
       if (upperCategoria.includes('UTILIDAD')) return false;
       if (upperCategoria.includes('MARGEN')) return false;
@@ -178,38 +246,27 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       if (upperCategoria.includes('TOTAL DAIRO')) return false;
       return item.proyectado > 0 || item.real > 0;
     }).sort((a, b) => b.proyectado - a.proyectado);
-  }, [budgetData, selectedMonth]);
+  }, [budgetData, selectedMonth, customCategoryBreakdown]);
 
-  // Selected period totals
   const selectedPeriodTotals = useMemo(() => {
+    if (selectedMonth === 'custom') return customTotals;
     if (!budgetData?.gastos?.totales) return { proyectado: 0, real: 0, percentUsed: 0 };
 
-    if (selectedMonth === 'q1') {
-      return q1Totals;
-    }
+    if (selectedMonth === 'q1') return q1Totals;
 
     const totales = budgetData.gastos.totales[selectedMonth] || DEFAULT_MONTH_TOTALS;
     const percentUsed = totales.proyectado > 0 ? (totales.real / totales.proyectado) * 100 : 0;
 
-    return {
-      proyectado: totales.proyectado,
-      real: totales.real,
-      percentUsed,
-    };
-  }, [budgetData, selectedMonth, q1Totals]);
+    return { proyectado: totales.proyectado, real: totales.real, percentUsed };
+  }, [budgetData, selectedMonth, q1Totals, customTotals]);
 
   const formatCurrency = (value: number) => {
-    if (value >= 1000000) {
-      return `$${(value / 1000000).toFixed(1)}M`;
-    }
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
     return `$${(value / 1000).toFixed(0)}k`;
   };
 
-  const formatCurrencyFull = (value: number) => {
-    return `$${value.toLocaleString()}`;
-  };
+  const formatCurrencyFull = (value: number) => `$${value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
-  // Loading state
   if (isLoading && !budgetData) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -218,11 +275,14 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     );
   }
 
-  const periodLabels = {
+  const periodLabels: Record<string, string> = {
     q1: 'Q1 2025',
     enero: 'Enero 2025',
     febrero: 'Febrero 2025',
     marzo: 'Marzo 2025',
+    custom: dateRange?.from
+      ? `${formatDateShort(dateRange.from)}${dateRange.to ? ` - ${formatDateShort(dateRange.to)}` : ''}`
+      : 'Rango personalizado',
   };
 
   return (
@@ -246,7 +306,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         <Button
           variant={selectedMonth === 'q1' ? 'default' : 'outline'}
           size="sm"
-          onClick={() => setSelectedMonth('q1')}
+          onClick={() => { setSelectedMonth('q1'); setDateRange(undefined); }}
         >
           <Target className="h-4 w-4 mr-1" />
           Q1 Completo
@@ -256,21 +316,51 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
             key={month}
             variant={selectedMonth === month ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSelectedMonth(month)}
+            onClick={() => { setSelectedMonth(month); setDateRange(undefined); }}
             className={cn(month === currentMonthKey && selectedMonth !== month && 'border-primary')}
           >
             {month === currentMonthKey && <Calendar className="h-4 w-4 mr-1" />}
             {month.charAt(0).toUpperCase() + month.slice(1)}
           </Button>
         ))}
+
+        <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+          <PopoverTrigger asChild>
+            <Button variant={selectedMonth === 'custom' ? 'default' : 'outline'} size="sm">
+              <CalendarRange className="h-4 w-4 mr-1" />
+              {selectedMonth === 'custom' && dateRange?.from
+                ? periodLabels.custom
+                : 'Rango personalizado'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarPicker
+              mode="range"
+              selected={dateRange}
+              onSelect={(range) => {
+                setDateRange(range);
+                if (range?.from) setSelectedMonth('custom');
+                if (range?.from && range?.to) setTimeout(() => setIsCalendarOpen(false), 300);
+              }}
+              numberOfMonths={2}
+              defaultMonth={new Date(2026, 0)}
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Summary Cards */}
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Presupuesto {periodLabels[selectedMonth]}</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{formatCurrency(selectedPeriodTotals.proyectado)}</p>
-          <p className="text-xs text-muted-foreground mt-1">{formatCurrencyFull(selectedPeriodTotals.proyectado)}</p>
+          <p className="text-sm text-muted-foreground">
+            {selectedMonth === 'custom' ? 'Período' : `Presupuesto ${periodLabels[selectedMonth]}`}
+          </p>
+          <p className="text-2xl font-bold text-foreground mt-1">
+            {selectedMonth === 'custom' ? periodLabels.custom : formatCurrency(selectedPeriodTotals.proyectado)}
+          </p>
+          {selectedMonth !== 'custom' && (
+            <p className="text-xs text-muted-foreground mt-1">{formatCurrencyFull(selectedPeriodTotals.proyectado)}</p>
+          )}
         </div>
 
         <div className="rounded-xl border border-border bg-card p-4">
@@ -279,107 +369,101 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
           <p className="text-xs text-muted-foreground mt-1">{formatCurrencyFull(selectedPeriodTotals.real)}</p>
         </div>
 
-        <div className={cn(
-          "rounded-xl border p-4",
-          (selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0
-            ? "border-success/50 bg-success/10"
-            : "border-destructive/50 bg-destructive/10"
-        )}>
-          <p className="text-sm text-muted-foreground">Diferencia</p>
-          <div className="flex items-center gap-2 mt-1">
-            {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? (
-              <TrendingDown className="h-5 w-5 text-success" />
-            ) : (
-              <TrendingUp className="h-5 w-5 text-destructive" />
-            )}
-            <p className={cn(
-              "text-2xl font-bold",
-              (selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? "text-success" : "text-destructive"
+        {selectedMonth !== 'custom' ? (
+          <>
+            <div className={cn(
+              "rounded-xl border p-4",
+              (selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0
+                ? "border-success/50 bg-success/10"
+                : "border-destructive/50 bg-destructive/10"
             )}>
-              {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? '-' : '+'}
-              {formatCurrency(Math.abs(selectedPeriodTotals.proyectado - selectedPeriodTotals.real))}
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? 'Ahorro' : 'Exceso'}
-          </p>
-        </div>
+              <p className="text-sm text-muted-foreground">Diferencia</p>
+              <div className="flex items-center gap-2 mt-1">
+                {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? (
+                  <TrendingDown className="h-5 w-5 text-success" />
+                ) : (
+                  <TrendingUp className="h-5 w-5 text-destructive" />
+                )}
+                <p className={cn(
+                  "text-2xl font-bold",
+                  (selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? "text-success" : "text-destructive"
+                )}>
+                  {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? '-' : '+'}
+                  {formatCurrency(Math.abs(selectedPeriodTotals.proyectado - selectedPeriodTotals.real))}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {(selectedPeriodTotals.proyectado - selectedPeriodTotals.real) >= 0 ? 'Ahorro' : 'Exceso'}
+              </p>
+            </div>
 
-        <div className={cn(
-          "rounded-xl border p-4",
-          selectedPeriodTotals.percentUsed <= 80 ? "border-success/50 bg-success/10" :
-          selectedPeriodTotals.percentUsed <= 100 ? "border-warning/50 bg-warning/10" :
-          "border-destructive/50 bg-destructive/10"
-        )}>
-          <p className="text-sm text-muted-foreground">% Ejecutado</p>
-          <div className="flex items-center gap-2 mt-1">
-            {selectedPeriodTotals.percentUsed <= 80 ? (
-              <CheckCircle className="h-5 w-5 text-success" />
-            ) : selectedPeriodTotals.percentUsed <= 100 ? (
-              <AlertTriangle className="h-5 w-5 text-warning" />
-            ) : (
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-            )}
-            <p className={cn(
-              "text-2xl font-bold",
-              selectedPeriodTotals.percentUsed <= 80 ? "text-success" :
-              selectedPeriodTotals.percentUsed <= 100 ? "text-warning" :
-              "text-destructive"
+            <div className={cn(
+              "rounded-xl border p-4",
+              selectedPeriodTotals.percentUsed <= 80 ? "border-success/50 bg-success/10" :
+              selectedPeriodTotals.percentUsed <= 100 ? "border-warning/50 bg-warning/10" :
+              "border-destructive/50 bg-destructive/10"
             )}>
-              {selectedPeriodTotals.percentUsed.toFixed(1)}%
-            </p>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            {selectedPeriodTotals.percentUsed <= 100
-              ? `Disponible: ${(100 - selectedPeriodTotals.percentUsed).toFixed(1)}%`
-              : `Excedido: ${(selectedPeriodTotals.percentUsed - 100).toFixed(1)}%`
-            }
-          </p>
-        </div>
+              <p className="text-sm text-muted-foreground">% Ejecutado</p>
+              <div className="flex items-center gap-2 mt-1">
+                {selectedPeriodTotals.percentUsed <= 80 ? (
+                  <CheckCircle className="h-5 w-5 text-success" />
+                ) : selectedPeriodTotals.percentUsed <= 100 ? (
+                  <AlertTriangle className="h-5 w-5 text-warning" />
+                ) : (
+                  <AlertTriangle className="h-5 w-5 text-destructive" />
+                )}
+                <p className={cn(
+                  "text-2xl font-bold",
+                  selectedPeriodTotals.percentUsed <= 80 ? "text-success" :
+                  selectedPeriodTotals.percentUsed <= 100 ? "text-warning" :
+                  "text-destructive"
+                )}>
+                  {selectedPeriodTotals.percentUsed.toFixed(1)}%
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {selectedPeriodTotals.percentUsed <= 100
+                  ? `Disponible: ${(100 - selectedPeriodTotals.percentUsed).toFixed(1)}%`
+                  : `Excedido: ${(selectedPeriodTotals.percentUsed - 100).toFixed(1)}%`
+                }
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">Transacciones</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{filteredGastos.filter(t => !isExcludedCategory(t.categoria)).length}</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <p className="text-sm text-muted-foreground">Categorías</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{customCategoryBreakdown.length}</p>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Monthly Comparison Chart */}
-      {monthlyComparisonData.length > 0 && (
+      {selectedMonth !== 'custom' && monthlyComparisonData.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold text-foreground mb-4">Comparación Mensual Q1</h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyComparisonData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis
-                  dataKey="month"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                />
-                <YAxis
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={10}
-                  tickLine={false}
-                  tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`}
-                />
+                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  formatter={(value: number, name: string) => [
-                    `$${value.toLocaleString()}`,
-                    name === 'proyectado' ? 'Presupuesto' : 'Real'
-                  ]}
+                  contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                  formatter={(value: number, name: string) => [`$${value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`, name === 'proyectado' ? 'Presupuesto' : 'Real']}
                 />
-                <Legend
-                  formatter={(value) => value === 'proyectado' ? 'Presupuesto' : 'Real'}
-                />
+                <Legend formatter={(value) => value === 'proyectado' ? 'Presupuesto' : 'Real'} />
                 <Bar dataKey="proyectado" name="proyectado" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="real" name="real" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          {/* Monthly Summary Cards */}
           <div className="grid grid-cols-3 gap-4 mt-4">
             {monthlyComparisonData.map((month) => (
               <div
@@ -417,75 +501,64 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
             Desglose por Categoría - {periodLabels[selectedMonth]}
           </h3>
           <div className="space-y-3">
-            {/* Header */}
             <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b border-border">
               <div className="col-span-4">Categoría</div>
-              <div className="col-span-5 text-center">Ejecutado</div>
-              <div className="col-span-3 text-right">Presupuesto</div>
+              <div className="col-span-5 text-center">{selectedMonth === 'custom' ? 'Gasto Real' : 'Ejecutado'}</div>
+              <div className="col-span-3 text-right">{selectedMonth === 'custom' ? 'Total' : 'Presupuesto'}</div>
             </div>
 
-            {/* Rows */}
             {categoryBreakdown.map((row, index) => {
               const percentCapped = Math.min(row.percentUsed, 100);
+              const maxReal = Math.max(...categoryBreakdown.map(r => r.real));
+              const barWidth = selectedMonth === 'custom'
+                ? (maxReal > 0 ? (row.real / maxReal) * 100 : 0)
+                : percentCapped;
+
               return (
                 <div key={index} className="grid grid-cols-12 gap-2 items-center py-1">
-                  {/* Category Name */}
-                  <div className="col-span-4 text-sm text-foreground truncate" title={row.categoria}>
-                    {row.categoria}
-                  </div>
-
-                  {/* Bar + Value + Percentage */}
+                  <div className="col-span-4 text-sm text-foreground truncate" title={row.categoria}>{row.categoria}</div>
                   <div className="col-span-5 flex items-center gap-2">
-                    {/* Progress Bar Container */}
                     <div className="flex-1 relative">
                       <div className="h-6 bg-muted/50 rounded overflow-hidden">
                         <div
                           className={cn(
                             "h-full rounded transition-all duration-300",
+                            selectedMonth === 'custom' ? "bg-blue-400" :
                             row.status === 'over' ? "bg-red-400" :
                             row.status === 'warning' ? "bg-yellow-400" :
                             "bg-green-400"
                           )}
-                          style={{ width: `${percentCapped}%` }}
+                          style={{ width: `${barWidth}%` }}
                         />
                       </div>
-                      {/* Value inside bar */}
                       <div className="absolute inset-0 flex items-center px-2">
                         <span className="text-xs font-medium text-foreground">
-                          {row.real >= 1000000
-                            ? `${(row.real / 1000000).toFixed(1).replace('.0', '')}M`
-                            : row.real >= 1000
-                              ? `${(row.real / 1000).toFixed(0)}K`
-                              : row.real.toLocaleString()
-                          }
+                          {row.real >= 1000000 ? `${(row.real / 1000000).toFixed(1).replace('.0', '')}M`
+                            : row.real >= 1000 ? `${(row.real / 1000).toFixed(0)}K`
+                            : row.real.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </span>
                       </div>
                     </div>
-                    {/* Percentage */}
-                    <span className={cn(
-                      "text-xs font-medium w-10 text-right",
-                      row.status === 'over' ? "text-destructive" :
-                      row.status === 'warning' ? "text-warning" :
-                      "text-success"
-                    )}>
-                      {Math.round(row.percentUsed)}%
-                    </span>
+                    {selectedMonth !== 'custom' && (
+                      <span className={cn(
+                        "text-xs font-medium w-10 text-right",
+                        row.status === 'over' ? "text-destructive" :
+                        row.status === 'warning' ? "text-warning" : "text-success"
+                      )}>
+                        {Math.round(row.percentUsed)}%
+                      </span>
+                    )}
                   </div>
-
-                  {/* Budget */}
                   <div className="col-span-3 text-sm text-right text-muted-foreground">
-                    {row.proyectado >= 1000000
-                      ? `${(row.proyectado / 1000000).toFixed(1).replace('.0', '')}M`
-                      : row.proyectado >= 1000
-                        ? `${(row.proyectado / 1000).toFixed(0)}K`
-                        : row.proyectado.toLocaleString()
-                    }
+                    {selectedMonth === 'custom' ? `$${row.real.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                      : row.proyectado >= 1000000 ? `${(row.proyectado / 1000000).toFixed(1).replace('.0', '')}M`
+                      : row.proyectado >= 1000 ? `${(row.proyectado / 1000).toFixed(0)}K`
+                      : row.proyectado.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                   </div>
                 </div>
               );
             })}
 
-            {/* Total Row */}
             <div className="grid grid-cols-12 gap-2 items-center py-2 mt-2 border-t-2 border-border font-bold">
               <div className="col-span-4 text-sm text-foreground">TOTAL</div>
               <div className="col-span-5 flex items-center gap-2">
@@ -494,36 +567,36 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
                     <div
                       className={cn(
                         "h-full rounded transition-all duration-300",
+                        selectedMonth === 'custom' ? "bg-blue-400" :
                         selectedPeriodTotals.percentUsed > 100 ? "bg-red-400" :
-                        selectedPeriodTotals.percentUsed > 80 ? "bg-yellow-400" :
-                        "bg-green-400"
+                        selectedPeriodTotals.percentUsed > 80 ? "bg-yellow-400" : "bg-green-400"
                       )}
-                      style={{ width: `${Math.min(selectedPeriodTotals.percentUsed, 100)}%` }}
+                      style={{ width: `${selectedMonth === 'custom' ? 100 : Math.min(selectedPeriodTotals.percentUsed, 100)}%` }}
                     />
                   </div>
                   <div className="absolute inset-0 flex items-center px-2">
                     <span className="text-xs font-bold text-foreground">
                       {selectedPeriodTotals.real >= 1000000
                         ? `${(selectedPeriodTotals.real / 1000000).toFixed(1)}M`
-                        : `${(selectedPeriodTotals.real / 1000).toFixed(0)}K`
-                      }
+                        : `${(selectedPeriodTotals.real / 1000).toFixed(0)}K`}
                     </span>
                   </div>
                 </div>
-                <span className={cn(
-                  "text-xs font-bold w-10 text-right",
-                  selectedPeriodTotals.percentUsed > 100 ? "text-destructive" :
-                  selectedPeriodTotals.percentUsed > 80 ? "text-warning" :
-                  "text-success"
-                )}>
-                  {Math.round(selectedPeriodTotals.percentUsed)}%
-                </span>
+                {selectedMonth !== 'custom' && (
+                  <span className={cn(
+                    "text-xs font-bold w-10 text-right",
+                    selectedPeriodTotals.percentUsed > 100 ? "text-destructive" :
+                    selectedPeriodTotals.percentUsed > 80 ? "text-warning" : "text-success"
+                  )}>
+                    {Math.round(selectedPeriodTotals.percentUsed)}%
+                  </span>
+                )}
               </div>
               <div className="col-span-3 text-sm text-right text-muted-foreground">
-                {selectedPeriodTotals.proyectado >= 1000000
-                  ? `${(selectedPeriodTotals.proyectado / 1000000).toFixed(1)}M`
-                  : `${(selectedPeriodTotals.proyectado / 1000).toFixed(0)}K`
-                }
+                {selectedMonth === 'custom' ? `$${selectedPeriodTotals.real.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`
+                  : selectedPeriodTotals.proyectado >= 1000000
+                    ? `${(selectedPeriodTotals.proyectado / 1000000).toFixed(1)}M`
+                    : `${(selectedPeriodTotals.proyectado / 1000).toFixed(0)}K`}
               </div>
             </div>
           </div>
@@ -531,7 +604,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       )}
 
       {/* Detailed Table */}
-      {categoryBreakdown.length > 0 && (
+      {selectedMonth !== 'custom' && categoryBreakdown.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold text-foreground mb-4">Detalle de Ejecución - {periodLabels[selectedMonth]}</h3>
           <div className="overflow-x-auto">
@@ -550,19 +623,14 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
                 {categoryBreakdown.map((row, index) => (
                   <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
                     <td className="py-3 px-2 text-foreground">{row.categoria}</td>
-                    <td className="py-3 px-2 text-right text-muted-foreground">${row.proyectado.toLocaleString()}</td>
-                    <td className="py-3 px-2 text-right text-foreground font-medium">${row.real.toLocaleString()}</td>
-                    <td className={cn(
-                      "py-3 px-2 text-right font-medium",
-                      row.diferencia >= 0 ? "text-success" : "text-destructive"
-                    )}>
-                      {row.diferencia >= 0 ? '-' : '+'}${Math.abs(row.diferencia).toLocaleString()}
+                    <td className="py-3 px-2 text-right text-muted-foreground">${row.proyectado.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td className="py-3 px-2 text-right text-foreground font-medium">${row.real.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
+                    <td className={cn("py-3 px-2 text-right font-medium", row.diferencia >= 0 ? "text-success" : "text-destructive")}>
+                      {row.diferencia >= 0 ? '-' : '+'}${Math.abs(row.diferencia).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                     </td>
                     <td className={cn(
                       "py-3 px-2 text-right font-medium",
-                      row.percentUsed <= 80 ? "text-success" :
-                      row.percentUsed <= 100 ? "text-warning" :
-                      "text-destructive"
+                      row.percentUsed <= 80 ? "text-success" : row.percentUsed <= 100 ? "text-warning" : "text-destructive"
                     )}>
                       {row.percentUsed.toFixed(1)}%
                     </td>
@@ -584,69 +652,6 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         </div>
       )}
 
-      {/* Empresa y Dividendo Section */}
-      {budgetData?.gastos?.categorias && (() => {
-        const dividendoCategories = Object.entries(budgetData.gastos.categorias)
-          .filter(([cat]) => {
-            const upper = cat.toUpperCase();
-            return upper.includes('DIVIDENDO') || upper.includes('RESERVA') || upper.includes('TOTAL DAIRO');
-          })
-          .map(([categoria, data]) => {
-            const enero = data?.enero || DEFAULT_MONTH_TOTALS;
-            const febrero = data?.febrero || DEFAULT_MONTH_TOTALS;
-            const marzo = data?.marzo || DEFAULT_MONTH_TOTALS;
-
-            let proyectado: number;
-            let real: number;
-
-            if (selectedMonth === 'q1') {
-              proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado;
-              real = enero.real + febrero.real + marzo.real;
-            } else {
-              const monthData = data?.[selectedMonth] || DEFAULT_MONTH_TOTALS;
-              proyectado = monthData.proyectado;
-              real = monthData.real;
-            }
-
-            return { categoria, proyectado, real };
-          })
-          .filter(item => item.proyectado > 0 || item.real > 0);
-
-        if (dividendoCategories.length === 0) return null;
-
-        return (
-          <div className="rounded-xl border border-border bg-card p-6">
-            <h3 className="font-semibold text-foreground mb-4">
-              Empresa y Dividendo (75% Reserva) - {periodLabels[selectedMonth]}
-            </h3>
-            <div className="space-y-3">
-              {dividendoCategories.map((item) => {
-                const percentUsed = item.proyectado > 0 ? (item.real / item.proyectado) * 100 : 0;
-                return (
-                  <div key={item.categoria} className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-foreground">{item.categoria}</span>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-foreground">${item.real.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">de ${item.proyectado.toLocaleString()}</p>
-                      </div>
-                      <span className={cn(
-                        "text-xs font-medium px-2 py-1 rounded-full",
-                        percentUsed > 100 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" :
-                        percentUsed > 80 ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" :
-                        "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                      )}>
-                        {percentUsed.toFixed(0)}%
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* Info Card */}
       {categoryBreakdown.length === 0 && !isLoading && (
         <div className="rounded-xl border border-border bg-card p-6">
@@ -658,7 +663,6 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
               <h3 className="font-semibold text-foreground mb-2">Datos desde Google Sheets</h3>
               <p className="text-sm text-muted-foreground">
                 El presupuesto se carga desde la hoja "Presupuesto Q1" de Google Sheets.
-                Estructura: Columna A = Categoría, B-C = Enero (Proy/Real), D-E = Febrero (Proy/Real), F-G = Marzo (Proy/Real).
               </p>
             </div>
           </div>

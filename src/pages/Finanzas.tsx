@@ -20,6 +20,7 @@ import AccountsPanel from '@/components/finance/AccountsPanel';
 import InvoicesPanel from '@/components/finance/InvoicesPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
 import IncomeReport from '@/components/finance/IncomeReport';
+import IncomeStatement from '@/components/finance/IncomeStatement';
 import ClientGoalsPanel from '@/components/finance/ClientGoalsPanel';
 
 // Categorías predefinidas
@@ -126,7 +127,7 @@ interface DisponibleResponse {
 const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
   if (!categoria) return false;
   const upper = categoria.trim().toUpperCase();
-  return upper === 'AJUSTE SALDO' || upper === 'REEMBOLSO INVERSIÓN PUBLICIDAD';
+  return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
 };
 
 // Helper function to format currency in a compact way
@@ -958,12 +959,19 @@ export default function Finanzas() {
                   <TrendingUp className="h-4 w-4" />
                   Ingresos
                 </TabsTrigger>
+              <TabsTrigger value="estado-resultados" className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Estado de Resultados
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="gastos">
                 <BudgetComparisonReport gastos={gastos} />
               </TabsContent>
               <TabsContent value="ingresos">
                 <IncomeReport ingresos={ingresos} />
+              </TabsContent>
+              <TabsContent value="estado-resultados">
+                <IncomeStatement ingresos={ingresos} gastos={gastos} />
               </TabsContent>
             </Tabs>
           </TabsContent>
