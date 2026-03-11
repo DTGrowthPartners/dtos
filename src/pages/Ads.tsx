@@ -175,43 +175,9 @@ const formatNumber = (value: number) => {
 // ─── Main Component ──────────────────────────────────────
 
 export default function Ads() {
-  const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('dashboard');
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Ads</h1>
-        <p className="text-muted-foreground">Gestión directa de Meta Ads - Cuentas, campañas e insights</p>
-      </div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="dashboard" className="gap-2">
-            <Megaphone className="h-4 w-4" />
-            Dashboard
-          </TabsTrigger>
-          <TabsTrigger value="accounts" className="gap-2">
-            <CreditCard className="h-4 w-4" />
-            Cuentas
-          </TabsTrigger>
-          <TabsTrigger value="create" className="gap-2">
-            <Plus className="h-4 w-4" />
-            Crear Campaña
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="dashboard">
-          <DashboardTab />
-        </TabsContent>
-        <TabsContent value="accounts">
-          <AccountsTab />
-        </TabsContent>
-        <TabsContent value="create">
-          <CreateCampaignTab />
-        </TabsContent>
-      </Tabs>
+      <CreateCampaignTab />
     </div>
   );
 }
@@ -560,38 +526,164 @@ function AccountsTab() {
 
 // ─── Create Campaign Tab ─────────────────────────────────
 
+// ─── Campaign Templates ───────────────────────────────────
+
+interface CampaignTemplate {
+  id: string;
+  name: string;
+  category: 'trafico' | 'ventas' | 'leads' | 'interaccion' | 'reconocimiento';
+  categoryLabel: string;
+  categoryColor: string;
+  description: string;
+  icon: string;
+  objective: string;
+  destination: string;
+  requirements: string[];
+  ctas: string[];
+  budgetSuggested: number;
+}
+
+const TEMPLATES: CampaignTemplate[] = [
+  {
+    id: 'trafico-web',
+    name: 'Tráfico a Sitio Web',
+    category: 'trafico', categoryLabel: 'TRÁFICO', categoryColor: 'bg-blue-500/20 text-blue-400',
+    description: 'Lleva visitantes a tu sitio web o landing page. Optimizado para vistas de página.',
+    icon: '🌐', objective: 'OUTCOME_TRAFFIC', destination: 'WEBSITE',
+    requirements: ['URL'],
+    ctas: ['Más información', 'Registrarse', 'Obtener cotización'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'ventas-whatsapp',
+    name: 'Ventas WhatsApp',
+    category: 'ventas', categoryLabel: 'VENTAS', categoryColor: 'bg-green-500/20 text-green-400',
+    description: 'Genera ventas directamente por WhatsApp. Meta optimiza para personas con alta intención de compra que inicien conversación.',
+    icon: '💰', objective: 'OUTCOME_SALES', destination: 'WHATSAPP',
+    requirements: ['WhatsApp'],
+    ctas: ['WhatsApp', 'Comprar', 'Obtener cotización'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'leads-whatsapp',
+    name: 'Leads por WhatsApp',
+    category: 'leads', categoryLabel: 'CLIENTES POTENCIALES', categoryColor: 'bg-purple-500/20 text-purple-400',
+    description: 'Captura leads calificados a través de WhatsApp. Meta optimiza para personas que probablemente te escriban.',
+    icon: '📋', objective: 'OUTCOME_LEADS', destination: 'WHATSAPP',
+    requirements: ['WhatsApp'],
+    ctas: ['WhatsApp', 'Obtener cotización', 'Contactar'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'conversiones-web',
+    name: 'Conversiones Web',
+    category: 'ventas', categoryLabel: 'VENTAS', categoryColor: 'bg-green-500/20 text-green-400',
+    description: 'Genera ventas y conversiones en tu sitio web. Meta busca personas con alta intención de compra.',
+    icon: '💰', objective: 'OUTCOME_SALES', destination: 'WEBSITE',
+    requirements: ['Pixel', 'URL'],
+    ctas: ['Comprar', 'Comprar ahora', 'Obtener oferta'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'mensajes-whatsapp',
+    name: 'Mensajes WhatsApp',
+    category: 'interaccion', categoryLabel: 'INTERACCIÓN', categoryColor: 'bg-yellow-500/20 text-yellow-400',
+    description: 'Maximiza conversaciones en WhatsApp. Meta optimiza para personas que probablemente inicien un chat.',
+    icon: '💬', objective: 'OUTCOME_ENGAGEMENT', destination: 'WHATSAPP',
+    requirements: ['WhatsApp'],
+    ctas: ['WhatsApp', 'Enviar mensaje (Messenger)', 'Contactar'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'trafico-instagram',
+    name: 'Tráfico a Perfil Instagram',
+    category: 'trafico', categoryLabel: 'TRÁFICO', categoryColor: 'bg-blue-500/20 text-blue-400',
+    description: 'Lleva personas a tu perfil de Instagram para ganar seguidores y visibilidad. Meta optimiza para visitas al perfil.',
+    icon: '📱', objective: 'OUTCOME_TRAFFIC', destination: 'INSTAGRAM_PROFILE',
+    requirements: [],
+    ctas: ['Ir al perfil de Instagram'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'mensajes-instagram',
+    name: 'Mensajes Instagram',
+    category: 'interaccion', categoryLabel: 'INTERACCIÓN', categoryColor: 'bg-yellow-500/20 text-yellow-400',
+    description: 'Genera mensajes directos en Instagram. Meta optimiza para personas que abran conversación en tus DMs.',
+    icon: '📸', objective: 'OUTCOME_ENGAGEMENT', destination: 'INSTAGRAM_DIRECT',
+    requirements: [],
+    ctas: ['Enviar mensaje (Instagram)', 'Contactar', 'Obtener cotización'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'ventas-instagram-dm',
+    name: 'Ventas Instagram DM',
+    category: 'ventas', categoryLabel: 'VENTAS', categoryColor: 'bg-green-500/20 text-green-400',
+    description: 'Genera ventas directamente por DM de Instagram. Meta optimiza para personas con alta intención de compra que inicien conversación.',
+    icon: '💰', objective: 'OUTCOME_SALES', destination: 'INSTAGRAM_DIRECT',
+    requirements: [],
+    ctas: ['Enviar mensaje (Instagram)', 'Comprar', 'Obtener cotización'],
+    budgetSuggested: 20000,
+  },
+  {
+    id: 'reconocimiento-thruplay',
+    name: 'Reconocimiento ThruPlay',
+    category: 'reconocimiento', categoryLabel: 'RECONOCIMIENTO', categoryColor: 'bg-red-500/20 text-red-400',
+    description: 'Maximiza reproducciones de video (ThruPlay) para reconocimiento de marca. Dirige a Messenger para iniciar conversaciones con personas interesadas.',
+    icon: '📣', objective: 'OUTCOME_AWARENESS', destination: 'MESSENGER',
+    requirements: [],
+    ctas: ['Enviar mensaje (Messenger)', 'Más información', 'Contactar'],
+    budgetSuggested: 20000,
+  },
+];
+
+const TEMPLATE_CATEGORIES = [
+  { value: 'todas', label: 'Todas' },
+  { value: 'trafico', label: 'Tráfico' },
+  { value: 'ventas', label: 'Ventas' },
+  { value: 'leads', label: 'Clientes potenciales' },
+  { value: 'interaccion', label: 'Interacción' },
+  { value: 'reconocimiento', label: 'Reconocimiento' },
+];
+
 function CreateCampaignTab() {
   const { toast } = useToast();
-  const [accounts, setAccounts] = useState<AdAccount[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [selectedTemplate, setSelectedTemplate] = useState<CampaignTemplate | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState('todas');
 
-  // Form state
+  // Step 2 form
+  const [accounts, setAccounts] = useState<AdAccount[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState('');
   const [campaignName, setCampaignName] = useState('');
-  const [objective, setObjective] = useState('');
-  const [dailyBudget, setDailyBudget] = useState('');
-  const [destinationType, setDestinationType] = useState('');
+  const [dailyBudget, setDailyBudget] = useState('20000');
   const [targetCountry, setTargetCountry] = useState('CO');
   const [ageMin, setAgeMin] = useState('18');
   const [ageMax, setAgeMax] = useState('65');
+
+  // Step 3
+  const [isCreating, setIsCreating] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
-  useEffect(() => {
+  const loadAccounts = () => {
+    if (accountsLoaded) return;
     apiClient.get<any>('/api/ads/ad-accounts')
       .then(data => {
-        if (data.success) {
-          setAccounts((data.accounts || []).filter((a: AdAccount) => a.account_status === 1));
-        }
+        if (data.success) setAccounts((data.accounts || []).filter((a: AdAccount) => a.account_status === 1));
       })
-      .catch(() => {
-        toast({ title: 'Error', description: 'No se pudieron cargar las cuentas', variant: 'destructive' });
-      })
-      .finally(() => setIsLoading(false));
-  }, []);
+      .catch(() => toast({ title: 'Error', description: 'No se pudieron cargar las cuentas', variant: 'destructive' }))
+      .finally(() => setAccountsLoaded(true));
+  };
+
+  const handleSelectTemplate = (tpl: CampaignTemplate) => {
+    setSelectedTemplate(tpl);
+    setCampaignName(`${tpl.name} - ${new Date().toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })}`);
+    loadAccounts();
+    setStep(2);
+  };
 
   const getOptimizationGoal = () => {
-    switch (objective) {
+    switch (selectedTemplate?.objective) {
       case 'OUTCOME_TRAFFIC': return 'LANDING_PAGE_VIEWS';
       case 'OUTCOME_ENGAGEMENT': return 'CONVERSATIONS';
       case 'OUTCOME_LEADS': return 'LEAD_GENERATION';
@@ -604,31 +696,22 @@ function CreateCampaignTab() {
   const handleCreate = async () => {
     setShowConfirmDialog(false);
     setIsCreating(true);
-
     try {
-      const targeting: any = {
-        geo_locations: { countries: [targetCountry] },
-        age_min: parseInt(ageMin),
-        age_max: parseInt(ageMax),
-      };
-
       const res = await apiClient.post<any>('/api/ads/campaigns', {
         adAccountId: selectedAccount,
         name: campaignName,
-        objective,
+        objective: selectedTemplate?.objective,
         dailyBudget: dailyBudget ? parseInt(dailyBudget) : undefined,
-        targeting,
-        destinationType: destinationType || undefined,
+        targeting: { geo_locations: { countries: [targetCountry] }, age_min: parseInt(ageMin), age_max: parseInt(ageMax) },
+        destinationType: selectedTemplate?.destination || undefined,
         optimizationGoal: getOptimizationGoal(),
       });
-
       if (res.success) {
-        toast({ title: 'Campaña creada', description: `${campaignName} creada en PAUSED. Actívala desde Meta Ads Manager.` });
-        // Reset form
+        toast({ title: '¡Campaña creada!', description: `${campaignName} creada en PAUSED. Actívala desde Meta Ads Manager.` });
+        setStep(1);
+        setSelectedTemplate(null);
         setCampaignName('');
-        setObjective('');
-        setDailyBudget('');
-        setDestinationType('');
+        setDailyBudget('20000');
       }
     } catch (err: any) {
       toast({ title: 'Error al crear campaña', description: err?.message || 'Error desconocido', variant: 'destructive' });
@@ -637,169 +720,238 @@ function CreateCampaignTab() {
     }
   };
 
-  const canCreate = selectedAccount && campaignName && objective;
+  const filteredTemplates = categoryFilter === 'todas'
+    ? TEMPLATES
+    : TEMPLATES.filter(t => t.category === categoryFilter);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-      </div>
-    );
-  }
+  const canContinue = selectedAccount && campaignName;
+
+  // ── Stepper ──
+  const steps = [
+    { n: 1, label: 'Plantilla' },
+    { n: 2, label: 'Configurar' },
+    { n: 3, label: 'Crear' },
+  ];
 
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-1">Nueva Campaña</h2>
-        <p className="text-sm text-muted-foreground mb-6">
-          La campaña se crea en estado PAUSED. Actívala manualmente cuando esté lista.
-        </p>
-
-        <div className="space-y-5">
-          {/* Account */}
-          <div className="space-y-2">
-            <Label>Cuenta de Anuncios *</Label>
-            <Select value={selectedAccount} onValueChange={setSelectedAccount}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona una cuenta" />
-              </SelectTrigger>
-              <SelectContent>
-                {accounts.map(a => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} ({a.businessName})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Name */}
-          <div className="space-y-2">
-            <Label>Nombre de la Campaña *</Label>
-            <Input
-              placeholder="Ej: Ventas WhatsApp - Marzo 2026"
-              value={campaignName}
-              onChange={e => setCampaignName(e.target.value)}
-            />
-          </div>
-
-          {/* Objective */}
-          <div className="space-y-2">
-            <Label>Objetivo *</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {objectiveOptions.map(o => (
-                <button
-                  key={o.value}
-                  onClick={() => setObjective(o.value)}
-                  className={cn(
-                    'rounded-lg border p-3 text-left transition-all hover:shadow-sm',
-                    objective === o.value
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                      : 'border-border bg-card hover:border-primary/50'
-                  )}
-                >
-                  <div className="font-medium text-sm text-foreground">{o.label}</div>
-                  <div className="text-xs text-muted-foreground">{o.desc}</div>
-                </button>
-              ))}
+    <div className="space-y-6">
+      {/* Stepper */}
+      <div className="flex items-center justify-center gap-0">
+        {steps.map((s, i) => (
+          <div key={s.n} className="flex items-center">
+            <div className="flex items-center gap-2">
+              <div className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors',
+                step === s.n ? 'bg-primary text-primary-foreground' :
+                step > s.n ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'
+              )}>
+                {s.n}
+              </div>
+              <span className={cn(
+                'text-sm font-medium transition-colors',
+                step === s.n ? 'text-foreground' : step > s.n ? 'text-primary' : 'text-muted-foreground'
+              )}>{s.label}</span>
             </div>
+            {i < steps.length - 1 && (
+              <div className={cn('mx-4 h-px w-16 transition-colors', step > s.n ? 'bg-primary' : 'bg-border')} />
+            )}
           </div>
-
-          {/* Destination */}
-          <div className="space-y-2">
-            <Label>Destino</Label>
-            <Select value={destinationType} onValueChange={setDestinationType}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecciona destino (opcional)" />
-              </SelectTrigger>
-              <SelectContent>
-                {destinationOptions.map(d => (
-                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Budget */}
-          <div className="space-y-2">
-            <Label>Presupuesto Diario (COP)</Label>
-            <Input
-              type="number"
-              placeholder="Ej: 20000"
-              value={dailyBudget}
-              onChange={e => setDailyBudget(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">Si no se especifica, se usa el presupuesto a nivel de campaña (CBO)</p>
-          </div>
-
-          {/* Targeting */}
-          <div className="space-y-3">
-            <Label>Segmentación Básica</Label>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">País</Label>
-                <Select value={targetCountry} onValueChange={setTargetCountry}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CO">Colombia</SelectItem>
-                    <SelectItem value="MX">México</SelectItem>
-                    <SelectItem value="US">Estados Unidos</SelectItem>
-                    <SelectItem value="ES">España</SelectItem>
-                    <SelectItem value="AR">Argentina</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Edad mín.</Label>
-                <Input type="number" value={ageMin} onChange={e => setAgeMin(e.target.value)} min="13" max="65" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Edad máx.</Label>
-                <Input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} min="13" max="65" />
-              </div>
-            </div>
-          </div>
-
-          {/* Submit */}
-          <div className="pt-4 border-t border-border">
-            <Button
-              className="w-full"
-              disabled={!canCreate || isCreating}
-              onClick={() => setShowConfirmDialog(true)}
-            >
-              {isCreating ? (
-                <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Creando...</>
-              ) : (
-                <><Plus className="h-4 w-4 mr-2" /> Crear Campaña</>
-              )}
-            </Button>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar creación de campaña</DialogTitle>
-            <DialogDescription>
-              Se creará la campaña en estado PAUSED. Revísala en Meta Ads Manager antes de activarla.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Nombre:</span><span className="font-medium">{campaignName}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Objetivo:</span><span className="font-medium">{objectiveLabels[objective] || objective}</span></div>
-            {destinationType && <div className="flex justify-between"><span className="text-muted-foreground">Destino:</span><span className="font-medium">{destinationType}</span></div>}
-            {dailyBudget && <div className="flex justify-between"><span className="text-muted-foreground">Presupuesto diario:</span><span className="font-medium">{formatCurrency(parseInt(dailyBudget))}</span></div>}
-            <div className="flex justify-between"><span className="text-muted-foreground">País:</span><span className="font-medium">{targetCountry}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Edad:</span><span className="font-medium">{ageMin} - {ageMax} años</span></div>
+      {/* ── Step 1: Template Selection ── */}
+      {step === 1 && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-bold text-foreground">Selecciona una Plantilla</h2>
+            <p className="text-sm text-muted-foreground mt-1">Elige el tipo de campaña que quieres crear. Ya viene pre-configurada.</p>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>Cancelar</Button>
-            <Button onClick={handleCreate}>Confirmar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+          {/* Category filter */}
+          <div className="flex flex-wrap gap-2">
+            {TEMPLATE_CATEGORIES.map(cat => (
+              <button
+                key={cat.value}
+                onClick={() => setCategoryFilter(cat.value)}
+                className={cn(
+                  'rounded-full px-4 py-1.5 text-sm font-medium transition-colors',
+                  categoryFilter === cat.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                )}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Templates grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filteredTemplates.map(tpl => (
+              <button
+                key={tpl.id}
+                onClick={() => handleSelectTemplate(tpl)}
+                className="rounded-xl border border-border bg-card p-5 text-left hover:border-primary/50 hover:bg-muted/30 transition-all group"
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{tpl.icon}</span>
+                    <div>
+                      <h3 className="font-semibold text-foreground group-hover:text-primary transition-colors">{tpl.name}</h3>
+                      <span className={cn('inline-block mt-0.5 rounded px-2 py-0.5 text-xs font-bold', tpl.categoryColor)}>
+                        {tpl.categoryLabel}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-muted-foreground group-hover:text-primary transition-colors">→</span>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3 leading-relaxed">{tpl.description}</p>
+                {tpl.requirements.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {tpl.requirements.map(r => (
+                      <span key={r} className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{r}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-medium">Presupuesto:</span> ${tpl.budgetSuggested.toLocaleString()} COP/día
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  <span className="font-medium">CTAs:</span> {tpl.ctas.join(', ')}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 2: Configure ── */}
+      {step === 2 && selectedTemplate && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setStep(1)} className="text-muted-foreground hover:text-foreground transition-colors text-sm">← Volver</button>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Configurar Campaña</h2>
+              <p className="text-sm text-muted-foreground">Plantilla: <span className="text-foreground font-medium">{selectedTemplate.name}</span></p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-6 space-y-5">
+            {/* Account */}
+            <div className="space-y-2">
+              <Label>Cuenta de Anuncios *</Label>
+              <Select value={selectedAccount} onValueChange={setSelectedAccount}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecciona una cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.map(a => (
+                    <SelectItem key={a.id} value={a.id}>{a.name} ({a.businessName})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Name */}
+            <div className="space-y-2">
+              <Label>Nombre de la Campaña *</Label>
+              <Input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="Ej: Ventas WhatsApp - Marzo 2026" />
+            </div>
+
+            {/* Budget */}
+            <div className="space-y-2">
+              <Label>Presupuesto Diario (COP)</Label>
+              <Input type="number" value={dailyBudget} onChange={e => setDailyBudget(e.target.value)} placeholder="20000" />
+              <p className="text-xs text-muted-foreground">Si no se especifica, se usa presupuesto a nivel de campaña (CBO)</p>
+            </div>
+
+            {/* Targeting */}
+            <div className="space-y-3">
+              <Label>Segmentación Básica</Label>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">País</Label>
+                  <Select value={targetCountry} onValueChange={setTargetCountry}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CO">Colombia</SelectItem>
+                      <SelectItem value="MX">México</SelectItem>
+                      <SelectItem value="US">Estados Unidos</SelectItem>
+                      <SelectItem value="ES">España</SelectItem>
+                      <SelectItem value="AR">Argentina</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Edad mín.</Label>
+                  <Input type="number" value={ageMin} onChange={e => setAgeMin(e.target.value)} min="13" max="65" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Edad máx.</Label>
+                  <Input type="number" value={ageMax} onChange={e => setAgeMax(e.target.value)} min="13" max="65" />
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <Button className="w-full" disabled={!canContinue} onClick={() => setStep(3)}>
+                Continuar → Revisar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 3: Review & Create ── */}
+      {step === 3 && selectedTemplate && (
+        <div className="max-w-2xl mx-auto space-y-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => setStep(2)} className="text-muted-foreground hover:text-foreground transition-colors text-sm">← Volver</button>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Revisar y Crear</h2>
+              <p className="text-sm text-muted-foreground">La campaña se creará en estado PAUSED</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-6 space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-border">
+              <span className="text-2xl">{selectedTemplate.icon}</span>
+              <div>
+                <p className="font-semibold text-foreground">{selectedTemplate.name}</p>
+                <span className={cn('inline-block rounded px-2 py-0.5 text-xs font-bold', selectedTemplate.categoryColor)}>
+                  {selectedTemplate.categoryLabel}
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              {[
+                { label: 'Nombre', value: campaignName },
+                { label: 'Cuenta', value: accounts.find(a => a.id === selectedAccount)?.name || selectedAccount },
+                { label: 'Objetivo', value: objectiveLabels[selectedTemplate.objective] || selectedTemplate.objective },
+                { label: 'Presupuesto diario', value: dailyBudget ? `$${parseInt(dailyBudget).toLocaleString()} COP` : 'CBO' },
+                { label: 'País', value: targetCountry },
+                { label: 'Edad', value: `${ageMin} - ${ageMax} años` },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex justify-between">
+                  <span className="text-muted-foreground">{label}:</span>
+                  <span className="font-medium text-foreground">{value}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-4 border-t border-border">
+              <Button className="w-full" disabled={isCreating} onClick={handleCreate}>
+                {isCreating ? (
+                  <><RefreshCw className="h-4 w-4 mr-2 animate-spin" /> Creando campaña...</>
+                ) : (
+                  <><Megaphone className="h-4 w-4 mr-2" /> Crear Campaña</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
