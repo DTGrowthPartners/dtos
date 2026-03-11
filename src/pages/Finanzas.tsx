@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2 } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2, Pencil, Trash2, Check, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,6 +96,7 @@ interface ExpenseCategory {
 }
 
 interface Transaction {
+  rowIndex: number;
   fecha: string;
   importe: number;
   descripcion: string;
@@ -130,6 +131,25 @@ const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
   return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
 };
 
+// Helper to check if a category is REEMBOLSO (should not appear in reports)
+const isReembolso = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  return categoria.trim().toUpperCase().includes('REEMBOLSO');
+};
+
+// Helper to check if income category is "real income" (PAGO DE CLIENTE or FINANCIEROS)
+const isRealIncome = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  const cat = categoria.trim().toUpperCase();
+  return cat === 'PAGO DE CLIENTE' || cat === 'FINANCIEROS';
+};
+
+// Helper to check if expense is "real expense" (exclude AJUSTE SALDO and REEMBOLSO)
+const isRealExpense = (categoria: string | undefined | null): boolean => {
+  if (!categoria) return false;
+  return !isAjusteSaldo(categoria) && !isReembolso(categoria);
+};
+
 // Helper function to format currency in a compact way
 const formatCompactCurrency = (value: number): string => {
   const absValue = Math.abs(value);
@@ -161,6 +181,7 @@ export default function Finanzas() {
   const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
   const [totalDisponible, setTotalDisponible] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
   // Filters
   const [filterCategory, setFilterCategory] = useState<string>('todas');
@@ -175,6 +196,11 @@ export default function Finanzas() {
   const [showAddIncomeModal, setShowAddIncomeModal] = useState(false);
   const [showTercerosModal, setShowTercerosModal] = useState(false);
   const [showNominaModal, setShowNominaModal] = useState(false);
+
+  // Inline edit state
+  const [editingRow, setEditingRow] = useState<{ rowIndex: number; type: 'ingreso' | 'gasto' } | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [savingRow, setSavingRow] = useState(false);
 
   // Form states
   const [expenseForm, setExpenseForm] = useState({
@@ -374,6 +400,24 @@ export default function Finanzas() {
 
   useEffect(() => {
     fetchFinanceData();
+
+    // Auto-refresh every 30 seconds for real-time data
+    const intervalId = setInterval(() => {
+      fetchFinanceData(true);
+    }, 30000);
+
+    // Refresh when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchFinanceData(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, []);
 
   // Apply initial date preset filter
@@ -381,9 +425,9 @@ export default function Finanzas() {
     applyDatePreset('thisMonth');
   }, []);
 
-  const fetchFinanceData = async () => {
+  const fetchFinanceData = async (silent = false) => {
     try {
-      setIsLoading(true);
+      if (!silent) setIsLoading(true);
 
       // Fetch finance data and disponible in parallel
       const [data, disponibleData] = await Promise.all([
@@ -401,15 +445,18 @@ export default function Finanzas() {
       // Set disponible data
       setDisponible(disponibleData.cuentas || []);
       setTotalDisponible(disponibleData.totalDisponible || 0);
+      setLastSyncTime(new Date());
     } catch (error) {
       console.error('Error fetching finance data:', error);
-      toast({
-        title: 'Error',
-        description: 'No se pudieron cargar los datos financieros desde Google Sheets',
-        variant: 'destructive',
-      });
+      if (!silent) {
+        toast({
+          title: 'Error',
+          description: 'No se pudieron cargar los datos financieros desde Google Sheets',
+          variant: 'destructive',
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 
@@ -481,38 +528,18 @@ export default function Finanzas() {
     });
   }, [gastos, filterCategory, filterType, filterDateFrom, filterDateTo, gastosSearchTerm]);
 
-  // Calculate filtered totals (filteredIngresos/filteredGastos already exclude AJUSTE SALDO)
-  const filteredTotalIncome = filteredIngresos.reduce((sum, t) => sum + t.importe, 0);
-  const filteredTotalExpenses = filteredGastos.reduce((sum, t) => sum + t.importe, 0);
+  // Calculate filtered totals - income only counts PAGO DE CLIENTE + FINANCIEROS, expenses exclude AJUSTE SALDO and REEMBOLSO
+  const filteredTotalIncome = filteredIngresos.filter(t => isRealIncome(t.categoria)).reduce((sum, t) => sum + t.importe, 0);
+  const filteredTotalExpenses = filteredGastos.filter(t => isRealExpense(t.categoria)).reduce((sum, t) => sum + t.importe, 0);
 
-  // Debug filtered income
-  console.log('========== FILTERED INCOME DEBUG ==========');
-  console.log('Filter settings:', { filterDateFrom, filterDateTo, filterDatePreset, filterCategory, filterType });
-  console.log('All ingresos count:', ingresos.length);
-  console.log('Filtered ingresos count:', filteredIngresos.length);
-  console.log('Filtered ingresos:', filteredIngresos.map(t => ({ fecha: t.fecha, importe: t.importe, descripcion: t.descripcion })));
-  console.log('Filtered total income:', filteredTotalIncome);
-  console.log('==========================================');
-
-  // Calculate base totals (all transactions excluding AJUSTE SALDO, no other filters)
+// Calculate base totals - only "real income" (PAGO DE CLIENTE + FINANCIEROS) and "real expenses" (exclude AJUSTE SALDO and REEMBOLSO)
   const baseTotalIncome = useMemo(() => {
-    const filtered = ingresos.filter(t => !isAjusteSaldo(t.categoria));
-    const total = filtered.reduce((sum, t) => sum + t.importe, 0);
-    // Debug log to verify calculation
-    const excluded = ingresos.filter(t => isAjusteSaldo(t.categoria));
-    console.log('Finanzas Debug - Income calculation:', {
-      totalTransactions: ingresos.length,
-      excludedAjusteSaldo: excluded.length,
-      excludedCategories: excluded.map(t => t.categoria),
-      excludedAmount: excluded.reduce((sum, t) => sum + t.importe, 0),
-      includedTransactions: filtered.length,
-      baseTotalIncome: total,
-    });
-    return total;
+    const filtered = ingresos.filter(t => isRealIncome(t.categoria));
+    return filtered.reduce((sum, t) => sum + t.importe, 0);
   }, [ingresos]);
 
   const baseTotalExpenses = useMemo(() =>
-    gastos.filter(t => !isAjusteSaldo(t.categoria)).reduce((sum, t) => sum + t.importe, 0),
+    gastos.filter(t => isRealExpense(t.categoria)).reduce((sum, t) => sum + t.importe, 0),
     [gastos]
   );
 
@@ -558,27 +585,58 @@ export default function Finanzas() {
     const yearIngresos = filterByDateRange(ingresos, firstDayYearStr, todayStr);
     const yearGastos = filterByDateRange(gastos, firstDayYearStr, todayStr);
 
-    // Helper to exclude "AJUSTE SALDO" from totals
-    const excludeAjuste = (arr: Transaction[]) => arr.filter(t => !isAjusteSaldo(t.categoria));
+    // Helper: income only counts PAGO DE CLIENTE + FINANCIEROS; expenses exclude AJUSTE SALDO and REEMBOLSO
+    const realIncome = (arr: Transaction[]) => arr.filter(t => isRealIncome(t.categoria));
+    const realExpenses = (arr: Transaction[]) => arr.filter(t => isRealExpense(t.categoria));
 
     return {
       today: {
-        income: excludeAjuste(todayIngresos).reduce((sum, t) => sum + t.importe, 0),
-        expenses: excludeAjuste(todayGastos).reduce((sum, t) => sum + t.importe, 0),
+        income: realIncome(todayIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: realExpenses(todayGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       week: {
-        income: excludeAjuste(weekIngresos).reduce((sum, t) => sum + t.importe, 0),
-        expenses: excludeAjuste(weekGastos).reduce((sum, t) => sum + t.importe, 0),
+        income: realIncome(weekIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: realExpenses(weekGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       month: {
-        income: excludeAjuste(monthIngresos).reduce((sum, t) => sum + t.importe, 0),
-        expenses: excludeAjuste(monthGastos).reduce((sum, t) => sum + t.importe, 0),
+        income: realIncome(monthIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: realExpenses(monthGastos).reduce((sum, t) => sum + t.importe, 0),
       },
       year: {
-        income: excludeAjuste(yearIngresos).reduce((sum, t) => sum + t.importe, 0),
-        expenses: excludeAjuste(yearGastos).reduce((sum, t) => sum + t.importe, 0),
+        income: realIncome(yearIngresos).reduce((sum, t) => sum + t.importe, 0),
+        expenses: realExpenses(yearGastos).reduce((sum, t) => sum + t.importe, 0),
       },
     };
+  }, [ingresos, gastos]);
+
+  // Month-over-month trend calculation
+  const monthTrends = useMemo(() => {
+    const today = new Date();
+    const firstDayThisMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const firstDayLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastDayLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    const thisMonthStr = getLocalDateString(firstDayThisMonth);
+    const todayStr = getLocalDateString(today);
+    const lastMonthStartStr = getLocalDateString(firstDayLastMonth);
+    const lastMonthEndStr = getLocalDateString(lastDayLastMonth);
+
+    const realIncome = (arr: Transaction[]) => arr.filter(t => isRealIncome(t.categoria));
+    const realExpenses = (arr: Transaction[]) => arr.filter(t => isRealExpense(t.categoria));
+
+    const thisMonthIncome = realIncome(filterByDateRange(ingresos, thisMonthStr, todayStr)).reduce((s, t) => s + t.importe, 0);
+    const lastMonthIncome = realIncome(filterByDateRange(ingresos, lastMonthStartStr, lastMonthEndStr)).reduce((s, t) => s + t.importe, 0);
+    const thisMonthExpenses = realExpenses(filterByDateRange(gastos, thisMonthStr, todayStr)).reduce((s, t) => s + t.importe, 0);
+    const lastMonthExpenses = realExpenses(filterByDateRange(gastos, lastMonthStartStr, lastMonthEndStr)).reduce((s, t) => s + t.importe, 0);
+
+    const incomeChange = lastMonthIncome > 0 ? ((thisMonthIncome - lastMonthIncome) / lastMonthIncome) * 100 : 0;
+    const expenseChange = lastMonthExpenses > 0 ? ((thisMonthExpenses - lastMonthExpenses) / lastMonthExpenses) * 100 : 0;
+
+    const thisProfit = thisMonthIncome - thisMonthExpenses;
+    const lastProfit = lastMonthIncome - lastMonthExpenses;
+    const profitChange = lastProfit !== 0 ? ((thisProfit - lastProfit) / Math.abs(lastProfit)) * 100 : 0;
+
+    return { incomeChange, expenseChange, profitChange };
   }, [ingresos, gastos]);
 
   // Top 5 expenses and income (filtered)
@@ -594,13 +652,13 @@ export default function Finanzas() {
       .slice(0, 5);
   }, [filteredIngresos]);
 
-  // Filtered expense categories for PieChart (excluding "AJUSTE SALDO")
+  // Filtered expense categories for PieChart (excluding "AJUSTE SALDO" and "REEMBOLSO")
   const filteredExpenseCategories = useMemo(() => {
     const categoryMap = new Map<string, number>();
 
     filteredGastos.forEach(t => {
-      // Exclude "AJUSTE SALDO" from categories
-      if (t.categoria && !isAjusteSaldo(t.categoria)) {
+      // Exclude "AJUSTE SALDO" and "REEMBOLSO" from categories
+      if (t.categoria && isRealExpense(t.categoria)) {
         const current = categoryMap.get(t.categoria) || 0;
         categoryMap.set(t.categoria, current + t.importe);
       }
@@ -849,6 +907,55 @@ export default function Finanzas() {
     }
   };
 
+  // Handle inline edit
+  const startEditing = (transaction: Transaction, type: 'ingreso' | 'gasto') => {
+    setEditingRow({ rowIndex: transaction.rowIndex, type });
+    setEditForm({ ...transaction });
+  };
+
+  const cancelEditing = () => {
+    setEditingRow(null);
+    setEditForm({});
+  };
+
+  const saveEdit = async () => {
+    if (!editingRow || !editForm) return;
+    setSavingRow(true);
+    try {
+      const endpoint = editingRow.type === 'ingreso' ? 'income' : 'expense';
+      await apiClient.put(`/api/finance/${endpoint}/${editingRow.rowIndex}`, {
+        fecha: editForm.fecha,
+        importe: editForm.importe,
+        descripcion: editForm.descripcion,
+        categoria: editForm.categoria,
+        cuenta: editForm.cuenta,
+        entidad: editForm.entidad,
+      });
+      toast({ title: 'Actualizado', description: 'Movimiento actualizado correctamente' });
+      setEditingRow(null);
+      setEditForm({});
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error updating:', error);
+      toast({ title: 'Error', description: 'No se pudo actualizar el movimiento', variant: 'destructive' });
+    } finally {
+      setSavingRow(false);
+    }
+  };
+
+  const handleDelete = async (rowIndex: number, type: 'ingreso' | 'gasto') => {
+    if (!confirm('¿Estás seguro de eliminar este movimiento? Esta acción no se puede deshacer.')) return;
+    try {
+      const endpoint = type === 'ingreso' ? 'income' : 'expense';
+      await apiClient.delete(`/api/finance/${endpoint}/${rowIndex}`);
+      toast({ title: 'Eliminado', description: 'Movimiento eliminado correctamente' });
+      fetchFinanceData();
+    } catch (error) {
+      console.error('Error deleting:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar el movimiento', variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -856,7 +963,14 @@ export default function Finanzas() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">Finanzas</h1>
-            <p className="text-muted-foreground text-sm">Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</p>
+            <p className="text-muted-foreground text-sm">
+              Datos desde Google Sheets - {new Date().toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}
+              {lastSyncTime && (
+                <span className="ml-2 text-xs text-muted-foreground/70">
+                  (Sync: {lastSyncTime.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })})
+                </span>
+              )}
+            </p>
           </div>
           {/* Botones de acción globales */}
           <div className="flex items-center gap-2">
@@ -888,7 +1002,7 @@ export default function Finanzas() {
         </div>
 
         {/* Main Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (tab === 'resumen') fetchFinanceData(true); }} className="w-full">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <TabsList className="inline-flex w-max sm:w-auto gap-1">
@@ -902,7 +1016,7 @@ export default function Finanzas() {
                 </TabsTrigger>
                 <TabsTrigger value="cuentas-cobro" className="flex items-center gap-2 whitespace-nowrap">
                   <FileText className="h-4 w-4" />
-                  Cuentas de Cobro
+                  Facturas
                 </TabsTrigger>
                 <TabsTrigger value="reportes" className="flex items-center gap-2 whitespace-nowrap">
                   <TrendingUp className="h-4 w-4" />
@@ -965,7 +1079,7 @@ export default function Finanzas() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="gastos">
-                <BudgetComparisonReport gastos={gastos} />
+                <BudgetComparisonReport gastos={gastos} ingresos={ingresos} />
               </TabsContent>
               <TabsContent value="ingresos">
                 <IncomeReport ingresos={ingresos} />
@@ -1079,56 +1193,6 @@ export default function Finanzas() {
 
         {/* Quick Filter Buttons */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        {/* Hoy */}
-        <button
-          onClick={() => applyDatePreset('today')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'today'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
-            {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.today.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.today.expenses)}</span>
-            </div>
-          </div>
-        </button>
-
-        {/* Esta Semana */}
-        <button
-          onClick={() => applyDatePreset('last7days')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'last7days'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Semana</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">7 días</p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.week.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.week.expenses)}</span>
-            </div>
-          </div>
-        </button>
-
         {/* Este Mes */}
         <button
           onClick={() => applyDatePreset('thisMonth')}
@@ -1155,7 +1219,57 @@ export default function Finanzas() {
           </div>
         </button>
 
-        {/* Este Año */}
+        {/* Esta Semana */}
+        <button
+          onClick={() => applyDatePreset('last7days')}
+          className={cn(
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            filterDatePreset === 'last7days'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Semana</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">7 dias</p>
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.week.income)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.week.expenses)}</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Hoy */}
+        <button
+          onClick={() => applyDatePreset('today')}
+          className={cn(
+            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
+            filterDatePreset === 'today'
+              ? "border-primary bg-primary/10 shadow-sm"
+              : "border-border bg-card hover:border-primary/50"
+          )}
+        >
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
+          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
+            {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
+          </p>
+          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.today.income)}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
+              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.today.expenses)}</span>
+            </div>
+          </div>
+        </button>
+
+        {/* Este Ano */}
         <button
           onClick={() => applyDatePreset('thisYear')}
           className={cn(
@@ -1165,7 +1279,7 @@ export default function Finanzas() {
               : "border-border bg-card hover:border-primary/50"
           )}
         >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Año</p>
+          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Ano</p>
           <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">{new Date().getFullYear()}</p>
           <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
             <div className="flex items-center justify-between">
@@ -1180,8 +1294,8 @@ export default function Finanzas() {
         </button>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-4">
+      {/* Stats Grid - 3 cards */}
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3">
         <div className="stat-card p-3 sm:p-4">
           <div className="flex items-start justify-between">
             <div className="min-w-0 flex-1">
@@ -1189,6 +1303,12 @@ export default function Finanzas() {
                 Ingresos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
               <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayIncome)}</p>
+              {monthTrends.incomeChange !== 0 && !hasActiveFilters && (
+                <p className={cn("text-[10px] sm:text-xs mt-0.5 flex items-center gap-0.5", monthTrends.incomeChange > 0 ? "text-success" : "text-destructive")}>
+                  {monthTrends.incomeChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(monthTrends.incomeChange).toFixed(0)}% vs mes ant.
+                </p>
+              )}
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
                   Total: {formatCompactCurrency(baseTotalIncome)}
@@ -1208,6 +1328,12 @@ export default function Finanzas() {
                 Gastos {hasActiveFilters ? '(Filt.)' : ''}
               </p>
               <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayExpenses)}</p>
+              {monthTrends.expenseChange !== 0 && !hasActiveFilters && (
+                <p className={cn("text-[10px] sm:text-xs mt-0.5 flex items-center gap-0.5", monthTrends.expenseChange < 0 ? "text-success" : "text-destructive")}>
+                  {monthTrends.expenseChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(monthTrends.expenseChange).toFixed(0)}% vs mes ant.
+                </p>
+              )}
               {hasActiveFilters && (
                 <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
                   Total: {formatCompactCurrency(baseTotalExpenses)}
@@ -1216,25 +1342,6 @@ export default function Finanzas() {
             </div>
             <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-destructive/10 flex-shrink-0">
               <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card p-3 sm:p-4">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
-                Beneficio {hasActiveFilters ? '(Filt.)' : ''}
-              </p>
-              <p className={cn("text-base sm:text-2xl font-bold mt-0.5 sm:mt-1", netProfit >= 0 ? "text-success" : "text-destructive")}>
-                {formatCompactCurrency(netProfit)}
-              </p>
-              <p className={cn("text-[10px] sm:text-sm mt-1 sm:mt-2", profitMargin >= 0 ? "text-success" : "text-destructive")}>
-                {profitMargin.toFixed(1)}% margen
-              </p>
-            </div>
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
-              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
             </div>
           </div>
         </div>
@@ -1262,6 +1369,84 @@ export default function Finanzas() {
           </div>
         </div>
       </div>
+
+      {/* Utilidad Neta - Sección Destacada */}
+      <div className={cn(
+        "rounded-xl border-2 p-4 sm:p-6 transition-all",
+        netProfit >= 0
+          ? "bg-gradient-to-br from-success/10 to-success/5 border-success/40"
+          : "bg-gradient-to-br from-destructive/10 to-destructive/5 border-destructive/40"
+      )}>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className={cn(
+              "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl",
+              netProfit >= 0 ? "bg-success/20" : "bg-destructive/20"
+            )}>
+              <DollarSign className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: netProfit >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))' }} />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium mb-1">
+                Utilidad Neta {hasActiveFilters ? '(Filtrado)' : ''}
+              </p>
+              <p className={cn(
+                "text-2xl sm:text-4xl font-bold",
+                netProfit >= 0 ? "text-success" : "text-destructive"
+              )}>
+                {formatCompactCurrency(netProfit)}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-sm sm:text-base font-semibold",
+                profitMargin >= 0 ? "text-success" : "text-destructive"
+              )}>
+                {profitMargin.toFixed(1)}% margen
+              </span>
+              {monthTrends.profitChange !== 0 && !hasActiveFilters && (
+                <span className={cn(
+                  "text-xs sm:text-sm flex items-center gap-1 px-2 py-1 rounded-lg",
+                  monthTrends.profitChange > 0
+                    ? "bg-success/20 text-success"
+                    : "bg-destructive/20 text-destructive"
+                )}>
+                  {monthTrends.profitChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                  {Math.abs(monthTrends.profitChange).toFixed(0)}% vs mes ant.
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Ingresos - Gastos = Utilidad
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Financial Health Indicator */}
+      {!hasActiveFilters && (
+        <div className={cn(
+          "flex items-center gap-3 p-3 rounded-xl border text-sm",
+          profitMargin >= 20
+            ? "bg-success/10 border-success/30 text-success"
+            : profitMargin >= 0
+              ? "bg-warning/10 border-warning/30 text-warning"
+              : "bg-destructive/10 border-destructive/30 text-destructive"
+        )}>
+          <div className={cn(
+            "h-3 w-3 rounded-full flex-shrink-0",
+            profitMargin >= 20 ? "bg-success" : profitMargin >= 0 ? "bg-warning" : "bg-destructive"
+          )} />
+          <span className="font-medium">
+            {profitMargin >= 20 ? 'Salud financiera: Buena' : profitMargin >= 0 ? 'Salud financiera: Precaucion' : 'Salud financiera: Critica'}
+          </span>
+          <span className="text-xs opacity-70 ml-auto">
+            Margen: {profitMargin.toFixed(1)}%
+          </span>
+        </div>
+      )}
 
       {/* Disponible - Saldo por Cuenta */}
       {disponible.length > 0 && (
@@ -1328,7 +1513,20 @@ export default function Finanzas() {
                       dataKey="value"
                     >
                       {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.color}
+                          cursor="pointer"
+                          onClick={() => {
+                            if (filterCategory === entry.name) {
+                              setFilterCategory('todas');
+                            } else {
+                              setFilterCategory(entry.name);
+                              setFilterType('gastos');
+                            }
+                          }}
+                          opacity={filterCategory !== 'todas' && filterCategory !== entry.name ? 0.3 : 1}
+                        />
                       ))}
                     </Pie>
                     <Tooltip
@@ -1350,16 +1548,32 @@ export default function Finanzas() {
                   <span className="text-lg font-bold text-destructive">${(hasActiveFilters ? filteredTotalExpenses : baseTotalExpenses).toLocaleString()}</span>
                 </div>
               </div>
-              {/* Lista de categorías sin scroll */}
+              {/* Lista de categorías - click para filtrar */}
               <div className="space-y-1.5 sm:space-y-2 mt-3 sm:mt-4">
                 {(hasActiveFilters ? filteredExpenseCategories : expenseCategories).map((cat) => (
-                  <div key={cat.name} className="flex items-center justify-between text-xs sm:text-sm">
+                  <button
+                    key={cat.name}
+                    onClick={() => {
+                      if (filterCategory === cat.name) {
+                        setFilterCategory('todas');
+                      } else {
+                        setFilterCategory(cat.name);
+                        setFilterType('gastos');
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs sm:text-sm w-full px-2 py-1 rounded-md transition-colors",
+                      filterCategory === cat.name
+                        ? "bg-primary/10 ring-1 ring-primary/30"
+                        : "hover:bg-muted/50"
+                    )}
+                  >
                     <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 flex-1">
                       <div className="h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                      <span className="text-muted-foreground">{cat.name}</span>
+                      <span className="text-muted-foreground text-left">{cat.name}</span>
                     </div>
                     <span className="font-medium text-foreground whitespace-nowrap ml-2">${cat.value.toLocaleString()}</span>
-                  </div>
+                  </button>
                 ))}
               </div>
             </>
@@ -1475,27 +1689,67 @@ export default function Finanzas() {
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
                         <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
+                        <th className="text-center py-3 px-2 font-medium text-muted-foreground w-[80px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredIngresos.length > 0 ? (
-                        filteredIngresos.map((ingreso, index) => (
-                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
-                            <td className="py-3 px-2 text-foreground">
-                              <div className="max-w-[200px] sm:max-w-none">
-                                <p className="truncate">{ingreso.descripcion}</p>
-                                <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
-                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
-                            <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
-                          </tr>
-                        ))
+                        filteredIngresos.map((ingreso) => {
+                          const isEditing = editingRow?.rowIndex === ingreso.rowIndex && editingRow?.type === 'ingreso';
+                          return (
+                            <tr key={ingreso.rowIndex} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                              {isEditing ? (
+                                <>
+                                  <td className="py-2 px-2">
+                                    <Input type="date" value={editForm.fecha || ''} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} className="h-8 text-xs w-[130px]" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2 hidden sm:table-cell">
+                                    <select value={editForm.categoria || ''} onChange={(e) => setEditForm({ ...editForm, categoria: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                                      {INCOME_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 hidden md:table-cell">
+                                    <Input value={editForm.entidad || ''} onChange={(e) => setEditForm({ ...editForm, entidad: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input type="number" value={editForm.importe || ''} onChange={(e) => setEditForm({ ...editForm, importe: Number(e.target.value) })} className="h-8 text-xs text-right w-[100px]" />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={saveEdit} disabled={savingRow} className="p-1 rounded hover:bg-success/20 text-success"><Check className="h-4 w-4" /></button>
+                                      <button onClick={cancelEditing} className="p-1 rounded hover:bg-destructive/20 text-destructive"><X className="h-4 w-4" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{ingreso.fecha}</td>
+                                  <td className="py-3 px-2 text-foreground">
+                                    <div className="max-w-[200px] sm:max-w-none">
+                                      <p className="truncate">{ingreso.descripcion}</p>
+                                      <p className="text-xs text-muted-foreground sm:hidden truncate">{ingreso.categoria} • {ingreso.entidad}</p>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{ingreso.categoria}</td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{ingreso.entidad}</td>
+                                  <td className="py-3 px-2 text-right font-medium text-success whitespace-nowrap">${ingreso.importe.toLocaleString()}</td>
+                                  <td className="py-3 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => startEditing(ingreso, 'ingreso')} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => handleDelete(ingreso.rowIndex, 'ingreso')} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             {hasActiveFilters ? 'No hay ingresos con los filtros aplicados' : 'No hay ingresos registrados'}
                           </td>
                         </tr>
@@ -1553,27 +1807,67 @@ export default function Finanzas() {
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden sm:table-cell">Categoría</th>
                         <th className="text-left py-3 px-2 font-medium text-muted-foreground hidden md:table-cell">Entidad</th>
                         <th className="text-right py-3 px-2 font-medium text-muted-foreground whitespace-nowrap">Importe</th>
+                        <th className="text-center py-3 px-2 font-medium text-muted-foreground w-[80px]">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredGastos.length > 0 ? (
-                        filteredGastos.map((gasto, index) => (
-                          <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                            <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
-                            <td className="py-3 px-2 text-foreground">
-                              <div className="max-w-[200px] sm:max-w-none">
-                                <p className="truncate">{gasto.descripcion}</p>
-                                <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
-                            <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
-                            <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
-                          </tr>
-                        ))
+                        filteredGastos.map((gasto) => {
+                          const isEditing = editingRow?.rowIndex === gasto.rowIndex && editingRow?.type === 'gasto';
+                          return (
+                            <tr key={gasto.rowIndex} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                              {isEditing ? (
+                                <>
+                                  <td className="py-2 px-2">
+                                    <Input type="date" value={editForm.fecha || ''} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} className="h-8 text-xs w-[130px]" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input value={editForm.descripcion || ''} onChange={(e) => setEditForm({ ...editForm, descripcion: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2 hidden sm:table-cell">
+                                    <select value={editForm.categoria || ''} onChange={(e) => setEditForm({ ...editForm, categoria: e.target.value })} className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs">
+                                      {EXPENSE_CATEGORIES.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
+                                    </select>
+                                  </td>
+                                  <td className="py-2 px-2 hidden md:table-cell">
+                                    <Input value={editForm.entidad || ''} onChange={(e) => setEditForm({ ...editForm, entidad: e.target.value })} className="h-8 text-xs" />
+                                  </td>
+                                  <td className="py-2 px-2">
+                                    <Input type="number" value={editForm.importe || ''} onChange={(e) => setEditForm({ ...editForm, importe: Number(e.target.value) })} className="h-8 text-xs text-right w-[100px]" />
+                                  </td>
+                                  <td className="py-2 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={saveEdit} disabled={savingRow} className="p-1 rounded hover:bg-success/20 text-success"><Check className="h-4 w-4" /></button>
+                                      <button onClick={cancelEditing} className="p-1 rounded hover:bg-destructive/20 text-destructive"><X className="h-4 w-4" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              ) : (
+                                <>
+                                  <td className="py-3 px-2 text-foreground whitespace-nowrap text-xs sm:text-sm">{gasto.fecha}</td>
+                                  <td className="py-3 px-2 text-foreground">
+                                    <div className="max-w-[200px] sm:max-w-none">
+                                      <p className="truncate">{gasto.descripcion}</p>
+                                      <p className="text-xs text-muted-foreground sm:hidden truncate">{gasto.categoria} • {gasto.entidad}</p>
+                                    </div>
+                                  </td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden sm:table-cell">{gasto.categoria}</td>
+                                  <td className="py-3 px-2 text-muted-foreground hidden md:table-cell truncate max-w-[150px]">{gasto.entidad}</td>
+                                  <td className="py-3 px-2 text-right font-medium text-destructive whitespace-nowrap">${gasto.importe.toLocaleString()}</td>
+                                  <td className="py-3 px-2 text-center">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => startEditing(gasto, 'gasto')} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar"><Pencil className="h-3.5 w-3.5" /></button>
+                                      <button onClick={() => handleDelete(gasto.rowIndex, 'gasto')} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar"><Trash2 className="h-3.5 w-3.5" /></button>
+                                    </div>
+                                  </td>
+                                </>
+                              )}
+                            </tr>
+                          );
+                        })
                       ) : (
                         <tr>
-                          <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                          <td colSpan={6} className="py-8 text-center text-muted-foreground">
                             {hasActiveFilters ? 'No hay gastos con los filtros aplicados' : 'No hay gastos registrados'}
                           </td>
                         </tr>

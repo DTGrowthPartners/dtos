@@ -5,6 +5,7 @@ const CREDENTIALS_PATH = path.join(__dirname, '../../..', 'credencials.json');
 const SPREADSHEET_ID = '1SKHZBmxEsZgKjoEx_p5QtyOy21Z0o9twIsWWlICmuzE';
 
 interface TransactionRow {
+  rowIndex: number; // 1-based row number in the sheet (for update/delete)
   fecha: string;
   importe: number;
   descripcion: string;
@@ -110,11 +111,14 @@ export class GoogleSheetsService {
       console.log('Total income rows:', incomeRows.length);
       console.log('Total expenses rows:', expensesRows.length);
 
-      // Parsear ingresos
+      // Parsear ingresos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
+      // Row 1 = header, data starts at row 1 in array (index 0) = sheet row 1
       const ingresos: TransactionRow[] = incomeRows
-        .filter((row: any[]) => row[1]) // check importe exists
-        .map((row: any[]) => ({
+        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 })) // +1 because sheets are 1-based
+        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
+        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
+          rowIndex: sheetRow,
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -124,11 +128,13 @@ export class GoogleSheetsService {
           terceroId: row[6] ? String(row[6]) : undefined,
         }));
 
-      // Parsear gastos
+      // Parsear gastos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
       const gastos: TransactionRow[] = expensesRows
-        .filter((row: any[]) => row[1]) // check importe exists
-        .map((row: any[]) => ({
+        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 }))
+        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
+        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
+          rowIndex: sheetRow,
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -404,7 +410,10 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     entidad: string;
-    terceroId?: string;
+    tercero?: string;
+    clasificacionIngreso?: string;
+    noCuentaCobro?: string;
+    tipoTransaccion?: string;
   }): Promise<void> {
     try {
       // Parse YYYY-MM-DD and create date with current time
@@ -451,6 +460,7 @@ export class GoogleSheetsService {
       });
 
       // Now update the newly inserted row (row 2) with data
+      // Columns: Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, Tercero, Clasificación Ingreso, No. Cuenta de Cobro, Tipo Transacción
       const values = [[
         serialDate,
         income.importe,
@@ -458,12 +468,15 @@ export class GoogleSheetsService {
         income.categoria,
         income.cuenta,
         income.entidad,
-        income.terceroId || '',
+        income.tercero || '',
+        income.clasificacionIngreso || '',
+        income.noCuentaCobro || '',
+        income.tipoTransaccion || '',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:G2',
+        range: 'Entradas!A2:J2',
         valueInputOption: 'RAW',
         requestBody: {
           values,
@@ -474,6 +487,190 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error adding income to Google Sheets:', error);
       throw new Error('No se pudo agregar el ingreso a Google Sheets');
+    }
+  }
+
+  // ==================== UPDATE / DELETE MOVIMIENTOS ====================
+
+  async updateExpense(rowIndex: number, updates: Partial<{
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+    terceroId: string;
+  }>): Promise<void> {
+    try {
+      // Get current row data
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Salidas!A${rowIndex}:G${rowIndex}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const current = currentRow.data.values?.[0] || [];
+
+      // Build updated row, keeping current values for fields not being updated
+      let fecha = current[0]; // Keep existing serial date by default
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        fecha = this.dateToSerialNumber(new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()));
+      }
+
+      const values = [[
+        fecha,
+        updates.importe ?? current[1],
+        updates.descripcion ?? current[2] ?? '',
+        updates.categoria ?? current[3] ?? '',
+        updates.cuenta ?? current[4] ?? '',
+        updates.entidad ?? current[5] ?? '',
+        updates.terceroId ?? current[6] ?? '',
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Salidas!A${rowIndex}:G${rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Expense updated at row:', rowIndex);
+    } catch (error) {
+      console.error('Error updating expense:', error);
+      throw new Error('No se pudo actualizar el gasto');
+    }
+  }
+
+  async updateIncome(rowIndex: number, updates: Partial<{
+    fecha: string;
+    importe: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    entidad: string;
+    tercero: string;
+    clasificacionIngreso: string;
+    noCuentaCobro: string;
+    tipoTransaccion: string;
+  }>): Promise<void> {
+    try {
+      // Get current row data
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Entradas!A${rowIndex}:J${rowIndex}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const current = currentRow.data.values?.[0] || [];
+
+      let fecha = current[0];
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        fecha = this.dateToSerialNumber(new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()));
+      }
+
+      const values = [[
+        fecha,
+        updates.importe ?? current[1],
+        updates.descripcion ?? current[2] ?? '',
+        updates.categoria ?? current[3] ?? '',
+        updates.cuenta ?? current[4] ?? '',
+        updates.entidad ?? current[5] ?? '',
+        updates.tercero ?? current[6] ?? '',
+        updates.clasificacionIngreso ?? current[7] ?? '',
+        updates.noCuentaCobro ?? current[8] ?? '',
+        updates.tipoTransaccion ?? current[9] ?? '',
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `Entradas!A${rowIndex}:J${rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Income updated at row:', rowIndex);
+    } catch (error) {
+      console.error('Error updating income:', error);
+      throw new Error('No se pudo actualizar el ingreso');
+    }
+  }
+
+  async deleteExpense(rowIndex: number): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const salidasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Salidas'
+      );
+
+      if (!salidasSheet) throw new Error('No se encontró la hoja "Salidas"');
+
+      const sheetId = salidasSheet.properties?.sheetId;
+
+      // Delete the row (rowIndex is 1-based, startIndex is 0-based)
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex - 1,
+                endIndex: rowIndex,
+              },
+            },
+          }],
+        },
+      });
+
+      console.log('Expense deleted at row:', rowIndex);
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      throw new Error('No se pudo eliminar el gasto');
+    }
+  }
+
+  async deleteIncome(rowIndex: number): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: SPREADSHEET_ID,
+      });
+
+      const entradasSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Entradas'
+      );
+
+      if (!entradasSheet) throw new Error('No se encontró la hoja "Entradas"');
+
+      const sheetId = entradasSheet.properties?.sheetId;
+
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: {
+                sheetId: sheetId,
+                dimension: 'ROWS',
+                startIndex: rowIndex - 1,
+                endIndex: rowIndex,
+              },
+            },
+          }],
+        },
+      });
+
+      console.log('Income deleted at row:', rowIndex);
+    } catch (error) {
+      console.error('Error deleting income:', error);
+      throw new Error('No se pudo eliminar el ingreso');
     }
   }
 
@@ -627,34 +824,41 @@ export class GoogleSheetsService {
 
   async getTerceros(): Promise<Tercero[]> {
     try {
-      // Columnas: A=ID, B=Tipo, C=Nombre, D=NIT, E=Email, F=Teléfono, G=Dirección, H=Categoría, I=CuentaBancaria, J=SalarioBase, K=Cargo, L=Estado, M=CreatedAt
+      // Real sheet columns: A=Nombre/Razón Social, B=Tipo Tercero, C=NIT, D=Email, E=Teléfono, F=Tipo Cliente, G=Tipo Proveedor, H=Estado
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A2:M',
+        range: 'Terceros!A2:H',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const rows = response.data.values || [];
 
       return rows
-        .filter((row: any[]) => row[0]) // Has ID
-        .map((row: any[]) => ({
-          id: String(row[0]),
-          tipo: String(row[1] || 'proveedor') as Tercero['tipo'],
-          nombre: String(row[2] || ''),
-          nit: row[3] ? String(row[3]) : undefined,
-          email: row[4] ? String(row[4]) : undefined,
-          telefono: row[5] ? String(row[5]) : undefined,
-          direccion: row[6] ? String(row[6]) : undefined,
-          categoria: row[7] ? String(row[7]) : undefined,
-          cuentaBancaria: row[8] ? String(row[8]) : undefined,
-          salarioBase: row[9] ? Number(row[9]) : undefined,
-          cargo: row[10] ? String(row[10]) : undefined,
-          estado: (row[11] || 'activo') as Tercero['estado'],
-          createdAt: this.parseDate(row[12]) || new Date().toISOString().split('T')[0],
-        }));
+        .filter((row: any[]) => row[0]) // Has name
+        .map((row: any[], index: number) => {
+          const tipo = String(row[1] || 'proveedor');
+          // Read category from appropriate column: F (index 5) for clients, G (index 6) for providers
+          const categoria = tipo === 'cliente'
+            ? (row[5] ? String(row[5]) : undefined)
+            : (row[6] ? String(row[6]) : undefined);
+
+          return {
+            id: String(index + 2), // Row number as ID (row 2 = index 0)
+            nombre: String(row[0] || ''),
+            tipo: tipo as Tercero['tipo'],
+            nit: row[2] ? String(row[2]) : undefined,
+            email: row[3] ? String(row[3]) : undefined,
+            telefono: row[4] ? String(row[4]) : undefined,
+            categoria,
+            direccion: undefined,
+            cuentaBancaria: undefined,
+            salarioBase: undefined,
+            cargo: undefined,
+            estado: (row[7] || 'activo') as Tercero['estado'],
+            createdAt: new Date().toISOString().split('T')[0],
+          };
+        });
     } catch (error: any) {
-      // If sheet doesn't exist, return empty array
       if (error.message?.includes('Unable to parse range')) {
         console.log('Terceros sheet does not exist yet, returning empty array');
         return [];
@@ -666,42 +870,30 @@ export class GoogleSheetsService {
 
   async addTercero(tercero: Omit<Tercero, 'id' | 'createdAt'>): Promise<string> {
     try {
-      // Generate unique ID
-      const id = `T${Date.now()}`;
-      const createdAt = this.dateToSerialNumber(new Date());
+      // Columns: A=Nombre/Razón Social, B=Tipo Tercero, C=NIT, D=Email, E=Teléfono, F=Tipo Cliente, G=Tipo Proveedor, H=Estado
+      const tipoCliente = tercero.tipo === 'cliente' ? (tercero.categoria || 'Otros') : 'Otros';
+      const tipoProveedor = tercero.tipo === 'proveedor' ? (tercero.categoria || 'Gastos') : 'Gastos';
 
-      // Ensure sheet exists
-      await this.ensureSheetExists('Terceros', [
-        'ID', 'Tipo', 'Nombre', 'NIT', 'Email', 'Teléfono', 'Dirección',
-        'Categoría', 'CuentaBancaria', 'SalarioBase', 'Cargo', 'Estado', 'CreatedAt'
-      ]);
-
-      // Append new row
       const values = [[
-        id,
-        tercero.tipo,
         tercero.nombre,
+        tercero.tipo,
         tercero.nit || '',
         tercero.email || '',
         tercero.telefono || '',
-        tercero.direccion || '',
-        tercero.categoria || '',
-        tercero.cuentaBancaria || '',
-        tercero.salarioBase || '',
-        tercero.cargo || '',
-        tercero.estado,
-        createdAt,
+        tipoCliente,
+        tipoProveedor,
+        tercero.estado || 'activo',
       ]];
 
       await this.sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A:M',
+        range: 'Terceros!A:H',
         valueInputOption: 'RAW',
         requestBody: { values },
       });
 
-      console.log('Tercero added:', id, tercero.nombre);
-      return id;
+      console.log('Tercero added:', tercero.nombre);
+      return tercero.nombre;
     } catch (error) {
       console.error('Error adding Tercero:', error);
       throw new Error('No se pudo agregar el tercero');
@@ -710,48 +902,40 @@ export class GoogleSheetsService {
 
   async updateTercero(id: string, tercero: Partial<Tercero>): Promise<void> {
     try {
-      // Find row by ID
-      const response = await this.sheets.spreadsheets.values.get({
-        spreadsheetId: SPREADSHEET_ID,
-        range: 'Terceros!A:A',
-      });
-
-      const rows = response.data.values || [];
-      const rowIndex = rows.findIndex((row: any[]) => String(row[0]) === id);
-
-      if (rowIndex === -1) {
-        throw new Error('Tercero no encontrado');
-      }
+      // id is the row number
+      const rowIndex = parseInt(id);
+      if (isNaN(rowIndex)) throw new Error('ID de tercero inválido');
 
       // Get current row data
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        range: `Terceros!A${rowIndex}:H${rowIndex}`,
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const current = currentRow.data.values?.[0] || [];
 
-      // Update with new values
+      const tipoCliente = (tercero.tipo ?? current[1]) === 'cliente'
+        ? (tercero.categoria ?? current[5] ?? 'Otros')
+        : (current[5] ?? 'Otros');
+      const tipoProveedor = (tercero.tipo ?? current[1]) === 'proveedor'
+        ? (tercero.categoria ?? current[6] ?? 'Gastos')
+        : (current[6] ?? 'Gastos');
+
       const values = [[
-        id,
+        tercero.nombre ?? current[0],
         tercero.tipo ?? current[1],
-        tercero.nombre ?? current[2],
-        tercero.nit ?? current[3] ?? '',
-        tercero.email ?? current[4] ?? '',
-        tercero.telefono ?? current[5] ?? '',
-        tercero.direccion ?? current[6] ?? '',
-        tercero.categoria ?? current[7] ?? '',
-        tercero.cuentaBancaria ?? current[8] ?? '',
-        tercero.salarioBase ?? current[9] ?? '',
-        tercero.cargo ?? current[10] ?? '',
-        tercero.estado ?? current[11],
-        current[12], // Keep original createdAt
+        tercero.nit ?? current[2] ?? '',
+        tercero.email ?? current[3] ?? '',
+        tercero.telefono ?? current[4] ?? '',
+        tipoCliente,
+        tipoProveedor,
+        tercero.estado ?? current[7] ?? 'activo',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `Terceros!A${rowIndex + 1}:M${rowIndex + 1}`,
+        range: `Terceros!A${rowIndex}:H${rowIndex}`,
         valueInputOption: 'RAW',
         requestBody: { values },
       });
@@ -765,7 +949,6 @@ export class GoogleSheetsService {
 
   async deleteTercero(id: string): Promise<void> {
     try {
-      // Soft delete - just change status to inactive
       await this.updateTercero(id, { estado: 'inactivo' });
       console.log('Tercero deactivated:', id);
     } catch (error) {
@@ -932,6 +1115,152 @@ export class GoogleSheetsService {
     } catch (error) {
       console.error('Error getting expenses by tercero:', error);
       return [];
+    }
+  }
+
+  // ==================== METAS CLIENTES (Client Goals per Client) ====================
+
+  /**
+   * Get per-client income goals and actuals for a specific month.
+   * Reads goals from "Metas Clientes" sheet and cross-references with "Entradas" sheet.
+   * Sheet structure: A=Cliente/Proyecto, B=Meta Enero, C=Meta Febrero, D=Meta Marzo
+   */
+  async getClientGoalsByClient(month: number, year: number): Promise<{
+    month: number;
+    year: number;
+    monthName: string;
+    clients: Array<{
+      cliente: string;
+      meta: number;
+      ingresoReal: number;
+      porcentaje: number;
+      semaforo: 'verde' | 'amarillo' | 'rojo';
+    }>;
+    totals: {
+      meta: number;
+      ingresoReal: number;
+      porcentaje: number;
+      semaforo: 'verde' | 'amarillo' | 'rojo';
+    };
+  }> {
+    const monthNames = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+                        'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+    const monthName = monthNames[month - 1] || 'desconocido';
+
+    try {
+      // Ensure sheet exists with headers
+      await this.ensureSheetExists('Metas Clientes', [
+        'Cliente / Proyecto', 'Meta Enero', 'Meta Febrero', 'Meta Marzo'
+      ]);
+
+      // Read goals from "Metas Clientes" sheet
+      const goalsResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "'Metas Clientes'!A2:D",
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const goalRows = goalsResponse.data.values || [];
+
+      // Map month number to column index (B=1=Enero, C=2=Febrero, D=3=Marzo)
+      const monthColIndex = month; // 1-based (1=col B, 2=col C, 3=col D)
+      if (monthColIndex < 1 || monthColIndex > 3) {
+        return {
+          month, year, monthName,
+          clients: [],
+          totals: { meta: 0, ingresoReal: 0, porcentaje: 0, semaforo: 'rojo' },
+        };
+      }
+
+      // Parse client goals
+      const clientGoals: Array<{ cliente: string; meta: number }> = goalRows
+        .filter((row: any[]) => row[0] && row[monthColIndex])
+        .map((row: any[]) => ({
+          cliente: String(row[0]).trim(),
+          meta: typeof row[monthColIndex] === 'number' ? row[monthColIndex] : parseFloat(String(row[monthColIndex])) || 0,
+        }))
+        .filter((g: { meta: number }) => g.meta > 0);
+
+      // Read Entradas (income) for the target month
+      const incomeResponse = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Entradas!A1:J',
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const incomeRows = incomeResponse.data.values || [];
+
+      // Filter income rows for the target month and group by Tercero/Entidad
+      const incomeByClient = new Map<string, number>();
+
+      for (const row of incomeRows) {
+        if (!row[1]) continue; // No amount
+
+        const fecha = this.parseDate(row[0]);
+        if (!fecha) continue;
+
+        // Check if the date is in the target month/year
+        const [rowYear, rowMonth] = fecha.split('-').map(Number);
+        if (rowYear !== year || rowMonth !== month) continue;
+
+        // Skip AJUSTE SALDO and transfers
+        const categoria = String(row[3] || '').trim().toUpperCase();
+        if (categoria === 'AJUSTE SALDO' || categoria.startsWith('TRASLADO')) continue;
+
+        const amount = this.parseAmount(row[1]);
+        // Use Tercero (col G, index 6) first, fall back to Entidad (col F, index 5)
+        const clientName = String(row[6] || row[5] || '').trim();
+        if (!clientName) continue;
+
+        const current = incomeByClient.get(clientName.toLowerCase()) || 0;
+        incomeByClient.set(clientName.toLowerCase(), current + amount);
+      }
+
+      // Match goals with actual income
+      const clients = clientGoals.map(goal => {
+        const ingresoReal = incomeByClient.get(goal.cliente.toLowerCase()) || 0;
+        const porcentaje = goal.meta > 0 ? Math.round((ingresoReal / goal.meta) * 100) : 0;
+        const semaforo: 'verde' | 'amarillo' | 'rojo' =
+          porcentaje >= 80 ? 'verde' :
+          porcentaje >= 50 ? 'amarillo' : 'rojo';
+
+        return {
+          cliente: goal.cliente,
+          meta: goal.meta,
+          ingresoReal,
+          porcentaje,
+          semaforo,
+        };
+      });
+
+      // Sort by percentage descending
+      clients.sort((a, b) => b.porcentaje - a.porcentaje);
+
+      // Calculate totals
+      const totalMeta = clients.reduce((sum, c) => sum + c.meta, 0);
+      const totalIngreso = clients.reduce((sum, c) => sum + c.ingresoReal, 0);
+      const totalPorcentaje = totalMeta > 0 ? Math.round((totalIngreso / totalMeta) * 100) : 0;
+      const totalSemaforo: 'verde' | 'amarillo' | 'rojo' =
+        totalPorcentaje >= 80 ? 'verde' :
+        totalPorcentaje >= 50 ? 'amarillo' : 'rojo';
+
+      return {
+        month, year, monthName,
+        clients,
+        totals: {
+          meta: totalMeta,
+          ingresoReal: totalIngreso,
+          porcentaje: totalPorcentaje,
+          semaforo: totalSemaforo,
+        },
+      };
+    } catch (error) {
+      console.error('Error getting client goals by client:', error);
+      return {
+        month, year, monthName,
+        clients: [],
+        totals: { meta: 0, ingresoReal: 0, porcentaje: 0, semaforo: 'rojo' },
+      };
     }
   }
 

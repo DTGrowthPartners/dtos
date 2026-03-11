@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
 import { tercerosService } from '../services/terceros.service';
+import { googleSheetsService } from '../services/googleSheets.service';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 export class TercerosController {
   // ==================== TERCEROS ====================
@@ -168,6 +172,92 @@ export class TercerosController {
     } catch (error) {
       console.error('Error in getEstadisticas:', error);
       res.status(500).json({ message: 'Error al obtener estadísticas' });
+    }
+  }
+
+  // ==================== SYNC FROM GOOGLE SHEETS ====================
+
+  async syncFromSheets(req: Request, res: Response) {
+    try {
+      // 1. Read all terceros from Google Sheets
+      const sheetsTerceros = await googleSheetsService.getTerceros();
+
+      // 2. Read all existing terceros from Prisma
+      const existingTerceros = await prisma.tercero.findMany({
+        select: { id: true, nombre: true },
+      });
+
+      // Build a lookup map by normalized name
+      const existingMap = new Map<string, string>();
+      for (const t of existingTerceros) {
+        existingMap.set(t.nombre.toLowerCase().trim(), t.id);
+      }
+
+      let created = 0;
+      let updated = 0;
+      const details: { nombre: string; action: 'created' | 'updated' }[] = [];
+
+      for (const st of sheetsTerceros) {
+        if (!st.nombre || !st.nombre.trim()) continue;
+
+        // Map tipo to boolean flags
+        const esCliente = st.tipo === 'cliente';
+        const esProveedor = st.tipo === 'proveedor' || st.tipo === 'freelancer';
+        const esEmpleado = st.tipo === 'empleado';
+
+        const data = {
+          nombre: st.nombre.trim(),
+          email: st.email || undefined,
+          telefono: st.telefono || undefined,
+          documento: st.nit || undefined,
+          esCliente,
+          esProveedor,
+          esEmpleado,
+          categoriaProveedor: st.tipo === 'proveedor' || st.tipo === 'freelancer' ? (st.categoria || undefined) : undefined,
+          estado: st.estado || 'activo',
+        };
+
+        const existingId = existingMap.get(st.nombre.toLowerCase().trim());
+
+        if (existingId) {
+          // Update existing - only update fields that have values from Sheets
+          const updateData: any = {};
+          if (data.email) updateData.email = data.email;
+          if (data.telefono) updateData.telefono = data.telefono;
+          if (data.documento) updateData.documento = data.documento;
+          updateData.esCliente = data.esCliente;
+          updateData.esProveedor = data.esProveedor;
+          updateData.esEmpleado = data.esEmpleado;
+          if (data.categoriaProveedor) updateData.categoriaProveedor = data.categoriaProveedor;
+          updateData.estado = data.estado;
+
+          await prisma.tercero.update({
+            where: { id: existingId },
+            data: updateData,
+          });
+          updated++;
+          details.push({ nombre: st.nombre, action: 'updated' });
+        } else {
+          // Create new
+          await prisma.tercero.create({ data });
+          created++;
+          details.push({ nombre: st.nombre, action: 'created' });
+        }
+      }
+
+      console.log(`[Terceros Sync] ${created} creados, ${updated} actualizados de ${sheetsTerceros.length} en Sheets`);
+
+      res.json({
+        success: true,
+        message: `Sincronización completada: ${created} creados, ${updated} actualizados`,
+        created,
+        updated,
+        total: sheetsTerceros.length,
+        details,
+      });
+    } catch (error) {
+      console.error('Error in syncFromSheets:', error);
+      res.status(500).json({ message: 'Error al sincronizar terceros desde Google Sheets' });
     }
   }
 }

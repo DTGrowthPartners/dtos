@@ -21,6 +21,23 @@ router.get('/budget', authMiddleware, (req, res) =>
   financeController.getBudget(req, res)
 );
 
+// Update / Delete movimientos
+router.put('/expense/:rowIndex', authMiddleware, (req, res) =>
+  financeController.updateExpense(req, res)
+);
+
+router.put('/income/:rowIndex', authMiddleware, (req, res) =>
+  financeController.updateIncome(req, res)
+);
+
+router.delete('/expense/:rowIndex', authMiddleware, (req, res) =>
+  financeController.deleteExpense(req, res)
+);
+
+router.delete('/income/:rowIndex', authMiddleware, (req, res) =>
+  financeController.deleteIncome(req, res)
+);
+
 // Terceros (Third Parties)
 router.get('/terceros', authMiddleware, (req, res) =>
   financeController.getTerceros(req, res)
@@ -60,6 +77,10 @@ router.get('/disponible', authMiddleware, (req, res) =>
 // Client Goals (Meta de Clientes)
 router.get('/client-goals', authMiddleware, (req, res) =>
   financeController.getClientGoals(req, res)
+);
+
+router.get('/client-goals/by-client', authMiddleware, (req, res) =>
+  financeController.getClientGoalsByClient(req, res)
 );
 
 router.get('/client-goals/months', authMiddleware, (req, res) =>

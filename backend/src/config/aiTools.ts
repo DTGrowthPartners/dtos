@@ -104,9 +104,13 @@ export const AI_TOOLS = [
             enum: ["LOW", "MEDIUM", "HIGH"],
             description: "Prioridad de la tarea: LOW (baja), MEDIUM (media - por defecto), HIGH (alta)"
           },
+          project: {
+            type: "string",
+            description: "Nombre del proyecto al que pertenece la tarea (ej: 'Tennis Cartagena', 'San Autos'). Busca por nombre. Si no se especifica, la tarea se crea sin proyecto."
+          },
           projectId: {
             type: "string",
-            description: "ID del proyecto al que pertenece la tarea (opcional)"
+            description: "ID exacto del proyecto (opcional, usar 'project' con el nombre es más fácil)"
           }
         },
         required: ["title", "assignee"],
@@ -129,6 +133,51 @@ export const AI_TOOLS = [
           search: {
             type: "string",
             description: "Buscar por nombre del deal o cliente"
+          }
+        },
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getCampaigns",
+      description: "Obtener campañas publicitarias de un cliente con métricas de rendimiento (presupuesto, gasto, impresiones, clics, conversiones, CTR, CPC, CPA). Usa esto cuando pregunten por campañas, publicidad, ads, Meta Ads, o el rendimiento publicitario de un cliente.",
+      parameters: {
+        type: "object",
+        properties: {
+          client: {
+            type: "string",
+            description: "Nombre del cliente para buscar sus campañas (búsqueda parcial, ej: 'acbfit', 'autoexpress')"
+          },
+          status: {
+            type: "string",
+            enum: ["active", "paused", "completed"],
+            description: "Filtrar por estado: active (activa), paused (pausada), completed (completada)"
+          },
+          platform: {
+            type: "string",
+            enum: ["facebook", "google", "instagram", "tiktok", "linkedin"],
+            description: "Filtrar por plataforma publicitaria"
+          }
+        },
+        additionalProperties: false
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "getClientGoals",
+      description: "Obtener metas de ingresos por cliente/proyecto del mes con semáforo de cumplimiento. Usa esto cuando pregunten por metas de clientes, cumplimiento de ingresos, cómo van las metas, semáforo de clientes, o rendimiento mensual de clientes.",
+      parameters: {
+        type: "object",
+        properties: {
+          month: {
+            type: "string",
+            description: "Mes a consultar: enero, febrero, marzo, etc. Si no se especifica, usa el mes actual.",
+            enum: ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
           }
         },
         additionalProperties: false

@@ -71,6 +71,13 @@ export interface ProjectFolder {
   expanded?: boolean; // Whether folder is expanded in UI
 }
 
+export interface ProjectKPI {
+  id: string;
+  label: string; // ej: "Meta", "ROAS objetivo", "Ventas test"
+  value: string; // ej: "500", "3.5", "+30%"
+  icon?: string; // emoji o icono identificador
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -79,6 +86,10 @@ export interface Project {
   description?: string;
   chatLink?: string; // Link al grupo de WhatsApp u otro canal de comunicacion
   adsManagerLink?: string; // Link al Ads Manager del cliente
+  driveLink?: string; // Link a la carpeta de Drive del cliente
+  logo?: string; // Logo del proyecto/cliente (base64 o URL)
+  category?: string; // Categoría/tipo de negocio del cliente
+  kpis?: ProjectKPI[]; // KPIs personalizados del proyecto
   archived?: boolean;
   folderId?: string; // ID of parent folder (for grouping projects)
 }

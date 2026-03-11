@@ -9,6 +9,7 @@ import {
   Archive,
   ChevronDown,
   ChevronUp,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -84,6 +85,27 @@ interface AvailableMonth {
   isArchived: boolean;
 }
 
+interface ClientGoalRow {
+  cliente: string;
+  meta: number;
+  ingresoReal: number;
+  porcentaje: number;
+  semaforo: 'verde' | 'amarillo' | 'rojo';
+}
+
+interface ClientGoalsByClient {
+  month: number;
+  year: number;
+  monthName: string;
+  clients: ClientGoalRow[];
+  totals: {
+    meta: number;
+    ingresoReal: number;
+    porcentaje: number;
+    semaforo: 'verde' | 'amarillo' | 'rojo';
+  };
+}
+
 // Helper to format currency in Colombian pesos
 const formatCurrency = (value: number): string => {
   if (value >= 1000000) {
@@ -106,6 +128,9 @@ export default function ClientGoalsPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [recurringOpen, setRecurringOpen] = useState(true);
   const [projectsOpen, setProjectsOpen] = useState(true);
+  const [clientGoalsOpen, setClientGoalsOpen] = useState(true);
+  const [clientGoals, setClientGoals] = useState<ClientGoalsByClient | null>(null);
+  const [isLoadingClientGoals, setIsLoadingClientGoals] = useState(false);
   const { toast } = useToast();
 
   // Load available months on mount
@@ -142,10 +167,16 @@ export default function ClientGoalsPanel() {
   const fetchMetrics = async (month: number, year: number) => {
     try {
       setIsLoading(true);
-      const data = await apiClient.get<ClientGoalsMetrics>(
-        `/api/finance/client-goals?month=${month}&year=${year}`
-      );
-      setMetrics(data);
+      const [metricsData, clientGoalsData] = await Promise.all([
+        apiClient.get<ClientGoalsMetrics>(
+          `/api/finance/client-goals?month=${month}&year=${year}`
+        ),
+        apiClient.get<ClientGoalsByClient>(
+          `/api/finance/client-goals/by-client?month=${month}&year=${year}`
+        ),
+      ]);
+      setMetrics(metricsData);
+      setClientGoals(clientGoalsData);
     } catch (error) {
       console.error('Error fetching client goals metrics:', error);
       toast({
@@ -469,6 +500,121 @@ export default function ClientGoalsPanel() {
           </CollapsibleContent>
         </div>
       </Collapsible>
+
+      {/* 4. Metas por Cliente/Proyecto */}
+      {clientGoals && clientGoals.clients.length > 0 && (
+        <Collapsible open={clientGoalsOpen} onOpenChange={setClientGoalsOpen} className="mt-4">
+          <div className="rounded-lg bg-card border border-emerald-200 overflow-hidden">
+            <CollapsibleTrigger className="w-full">
+              <div className="flex items-center justify-between p-4 hover:bg-emerald-50/50 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+                    <Target className="h-5 w-5 text-emerald-500" />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      Metas por Cliente / Proyecto
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      {clientGoals.clients.length} clientes con meta -{' '}
+                      {clientGoals.monthName.charAt(0).toUpperCase() + clientGoals.monthName.slice(1)} {clientGoals.year}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">
+                    {clientGoals.totals.semaforo === 'verde' ? '🟢' :
+                     clientGoals.totals.semaforo === 'amarillo' ? '🟡' : '🔴'}
+                  </span>
+                  <span className={cn(
+                    "text-lg font-bold",
+                    clientGoals.totals.porcentaje >= 80 ? "text-emerald-600" :
+                    clientGoals.totals.porcentaje >= 50 ? "text-amber-600" : "text-red-500"
+                  )}>
+                    {clientGoals.totals.porcentaje}%
+                  </span>
+                  {clientGoalsOpen ? (
+                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-4 pb-4">
+                {/* Summary row */}
+                <div className="rounded-lg bg-emerald-50/50 border border-emerald-200 p-3 mb-3">
+                  <div className="grid grid-cols-4 gap-2 text-sm">
+                    <div>
+                      <span className="text-muted-foreground text-xs">Meta Total</span>
+                      <p className="font-bold text-foreground">{formatFullCurrency(clientGoals.totals.meta)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs">Ingreso Real</span>
+                      <p className="font-bold text-emerald-600">{formatFullCurrency(clientGoals.totals.ingresoReal)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs">Cumplimiento</span>
+                      <p className={cn(
+                        "font-bold",
+                        clientGoals.totals.porcentaje >= 80 ? "text-emerald-600" :
+                        clientGoals.totals.porcentaje >= 50 ? "text-amber-600" : "text-red-500"
+                      )}>{clientGoals.totals.porcentaje}%</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground text-xs">Faltante</span>
+                      <p className="font-bold text-foreground">
+                        {formatFullCurrency(Math.max(0, clientGoals.totals.meta - clientGoals.totals.ingresoReal))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-client table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground text-xs"></th>
+                        <th className="text-left py-2 px-2 font-medium text-muted-foreground text-xs">Cliente / Proyecto</th>
+                        <th className="text-right py-2 px-2 font-medium text-muted-foreground text-xs">Meta</th>
+                        <th className="text-right py-2 px-2 font-medium text-muted-foreground text-xs">Ingreso Real</th>
+                        <th className="text-right py-2 px-2 font-medium text-muted-foreground text-xs">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {clientGoals.clients.map((client, idx) => (
+                        <tr key={idx} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                          <td className="py-2 px-2 text-center text-lg">
+                            {client.semaforo === 'verde' ? '🟢' :
+                             client.semaforo === 'amarillo' ? '🟡' : '🔴'}
+                          </td>
+                          <td className="py-2 px-2 text-foreground font-medium">{client.cliente}</td>
+                          <td className="py-2 px-2 text-right text-muted-foreground">{formatCurrency(client.meta)}</td>
+                          <td className={cn(
+                            "py-2 px-2 text-right font-medium",
+                            client.ingresoReal > 0 ? "text-emerald-600" : "text-muted-foreground"
+                          )}>
+                            {formatCurrency(client.ingresoReal)}
+                          </td>
+                          <td className={cn(
+                            "py-2 px-2 text-right font-bold",
+                            client.porcentaje >= 80 ? "text-emerald-600" :
+                            client.porcentaje >= 50 ? "text-amber-600" : "text-red-500"
+                          )}>
+                            {client.porcentaje}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </CollapsibleContent>
+          </div>
+        </Collapsible>
+      )}
 
       {/* Footer info */}
       <div className="mt-4 pt-3 border-t border-border/50">

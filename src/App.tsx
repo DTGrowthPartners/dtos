@@ -10,6 +10,7 @@ import Dashboard from "@/pages/Dashboard";
 import Clientes from "@/pages/Clientes";
 import Servicios from "@/pages/Servicios";
 import Campanas from "@/pages/Campanas";
+import Ads from "@/pages/Ads";
 import Tareas from "@/pages/Tareas";
 import MisTareas from "@/pages/MisTareas";
 import Reportes from "@/pages/Reportes";
@@ -70,6 +71,7 @@ const App = () => (
               <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
               <Route path="/campanas" element={<Campanas />} />
+              <Route path="/ads" element={<Ads />} />
               <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
               <Route path="/mis-tareas" element={<MisTareas />} />
               <Route path="/reportes" element={<ProtectedRoute requiredPermission="reportes"><Reportes /></ProtectedRoute>} />

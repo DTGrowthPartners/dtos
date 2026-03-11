@@ -3,14 +3,44 @@ import OpenAI from 'openai';
 import { AI_TOOLS } from '../config/aiTools';
 import { AIToolsService } from '../services/aiTools.service';
 
-// Configure Kimi AI client via Hugging Face
-const kimiClient = new OpenAI({
-  baseURL: "https://router.huggingface.co/v1",
-  apiKey: process.env.HUGGINGFACE_API_KEY,
+// Configure AI client via OpenRouter
+const aiClient = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  defaultHeaders: {
+    "HTTP-Referer": "https://os.dtgrowthpartners.com",
+    "X-Title": "DT Growth Hub",
+  },
 });
 
+const AI_MODEL = process.env.OPENROUTER_MODEL || "moonshotai/kimi-k2";
+
+// Handle AI API errors with friendly messages
+function handleAIError(error: any, res: Response) {
+  console.error('[Chat] Error:', error);
+  const status = error?.status || error?.response?.status;
+  if (status === 402) {
+    return res.status(200).json({
+      success: true,
+      response: '⚠️ Los créditos de IA del mes se agotaron. El servicio se renueva automáticamente el próximo mes. Contacta al administrador si necesitas acceso inmediato.',
+      creditsDepleted: true,
+    });
+  }
+  if (status === 429) {
+    return res.status(200).json({
+      success: true,
+      response: '⏳ Demasiadas solicitudes al asistente. Espera unos segundos e intenta de nuevo.',
+      rateLimited: true,
+    });
+  }
+  return res.status(500).json({
+    success: false,
+    error: error.message || 'Error al procesar el mensaje',
+  });
+}
+
 export class ChatController {
-  // Send a message to Kimi AI and get a response
+  // Send a message to AI and get a response
   async sendMessage(req: Request, res: Response) {
     try {
       const { message, conversationHistory } = req.body;
@@ -35,9 +65,9 @@ export class ChatController {
       // Add current user message
       messages.push({ role: "user", content: message });
 
-      // Call Kimi AI
-      const completion = await kimiClient.chat.completions.create({
-        model: "moonshotai/Kimi-K2.5:novita",
+      // Call AI via OpenRouter
+      const completion = await aiClient.chat.completions.create({
+        model: AI_MODEL,
         messages: messages,
         temperature: 0.7,
         max_tokens: 2000,
@@ -59,15 +89,11 @@ export class ChatController {
       });
 
     } catch (error: any) {
-      console.error('[Chat] Error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Error al procesar el mensaje'
-      });
+      return handleAIError(error, res);
     }
   }
 
-  // Analyze an image with Kimi AI vision capabilities
+  // Analyze an image with AI vision capabilities
   async analyzeImage(req: Request, res: Response) {
     try {
       const { imageUrl, prompt } = req.body;
@@ -81,8 +107,8 @@ export class ChatController {
 
       console.log('[Chat] Analyzing image:', imageUrl);
 
-      const completion = await kimiClient.chat.completions.create({
-        model: "moonshotai/Kimi-K2.5:novita",
+      const completion = await aiClient.chat.completions.create({
+        model: AI_MODEL,
         messages: [
           {
             role: "user",
@@ -110,15 +136,11 @@ export class ChatController {
       });
 
     } catch (error: any) {
-      console.error('[Chat] Image analysis error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Error al analizar la imagen'
-      });
+      return handleAIError(error, res);
     }
   }
 
-  // Send a message to Kimi AI with Function Calling (tools) support
+  // Send a message to AI with Function Calling (tools) support
   async sendMessageWithTools(req: Request, res: Response) {
     try {
       const { message, conversationHistory } = req.body;
@@ -137,7 +159,7 @@ export class ChatController {
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `Eres Kimi AI, asistente inteligente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.
+          content: `Eres el asistente inteligente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.
 
 IMPORTANTE - Estilo de respuesta:
 - Responde de forma CONCISA y DIRECTA, máximo 3-4 líneas por pregunta
@@ -175,9 +197,9 @@ Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, 
         iterations++;
         console.log(`[Chat] Iteration ${iterations}/${MAX_ITERATIONS}`);
 
-        // Call Kimi AI with tools
-        const completion = await kimiClient.chat.completions.create({
-          model: "moonshotai/Kimi-K2.5:novita",
+        // Call AI with tools via OpenRouter
+        const completion = await aiClient.chat.completions.create({
+          model: AI_MODEL,
           messages: messages,
           tools: AI_TOOLS as any,
           tool_choice: "auto",
@@ -261,11 +283,7 @@ Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, 
       });
 
     } catch (error: any) {
-      console.error('[Chat] Error:', error);
-      res.status(500).json({
-        success: false,
-        error: error.message || 'Error al procesar el mensaje'
-      });
+      return handleAIError(error, res);
     }
   }
 }
