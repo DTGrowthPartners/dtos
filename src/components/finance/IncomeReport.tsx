@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
 import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight, Calendar as CalendarIcon, Target, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
@@ -77,6 +77,16 @@ const MONTH_TO_BUDGET_KEY: Record<string, 'enero' | 'febrero' | 'marzo'> = {
   '03': 'marzo',
 };
 
+interface InvoiceData {
+  id: string;
+  servicio: string | null;
+  concepto: string | null;
+  totalAmount: number;
+  status: string;
+  clientName: string;
+  fecha: string;
+}
+
 const fmt = (value: number) => value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 type FilterMode = 'all' | 'month' | 'custom';
@@ -87,17 +97,22 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceData[]>([]);
 
   useEffect(() => {
-    const fetchBudget = async () => {
+    const fetchData = async () => {
       try {
-        const data = await apiClient.get<BudgetQ1Data>('/api/finance/budget');
-        setBudgetData(data);
+        const [budgetRes, invoicesRes] = await Promise.all([
+          apiClient.get<BudgetQ1Data>('/api/finance/budget'),
+          apiClient.get<InvoiceData[]>('/api/invoices').catch(() => [] as InvoiceData[]),
+        ]);
+        setBudgetData(budgetRes);
+        setInvoices(invoicesRes);
       } catch (error) {
-        console.error('Error fetching budget data:', error);
+        console.error('Error fetching data:', error);
       }
     };
-    fetchBudget();
+    fetchData();
   }, []);
 
   const realIncome = useMemo(() => {
@@ -200,18 +215,134 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
       .sort((a, b) => b.total - a.total).slice(0, 10);
   }, [filteredIncome]);
 
-  const monthlyIncome = useMemo(() => {
-    const monthlyData = new Map<string, number>();
-    realIncome.forEach(t => {
-      const normalized = normalizeDate(t.fecha);
-      if (normalized && /^\d{4}-\d{2}/.test(normalized)) {
-        const monthKey = normalized.substring(0, 7);
-        monthlyData.set(monthKey, (monthlyData.get(monthKey) || 0) + t.importe);
+  const trendChartData = useMemo(() => {
+    if (filterMode === 'all') {
+      // Q1: group by month
+      const monthlyData = new Map<string, number>();
+      realIncome.forEach(t => {
+        const normalized = normalizeDate(t.fecha);
+        if (normalized && /^\d{4}-\d{2}/.test(normalized)) {
+          const monthKey = normalized.substring(0, 7);
+          monthlyData.set(monthKey, (monthlyData.get(monthKey) || 0) + t.importe);
+        }
+      });
+      return Array.from(monthlyData.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-6)
+        .map(([monthKey, total]) => {
+          const [year, month] = monthKey.split('-');
+          const budgetKey = MONTH_TO_BUDGET_KEY[month];
+          const meta = budgetKey && budgetData?.ingresos?.totales?.[budgetKey]?.proyectado || 0;
+          return { label: `${MONTH_NAMES_SHORT[parseInt(month) - 1]} ${year.slice(2)}`, ingresos: total, meta };
+        });
+    }
+
+    if (filterMode === 'month' && selectedMonth) {
+      // Single month: group by week
+      const [yearStr, monthStr] = selectedMonth.split('-');
+      const year = parseInt(yearStr);
+      const monthIdx = parseInt(monthStr) - 1;
+      const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+      const budgetKey = MONTH_TO_BUDGET_KEY[monthStr];
+      const monthMeta = budgetKey && budgetData?.ingresos?.totales?.[budgetKey]?.proyectado || 0;
+
+      const weeks: { label: string; startDay: number; endDay: number }[] = [];
+      let dayStart = 1;
+      while (dayStart <= daysInMonth) {
+        const dayEnd = Math.min(dayStart + 6, daysInMonth);
+        weeks.push({ label: `${dayStart}-${dayEnd} ${MONTH_NAMES_SHORT[monthIdx]}`, startDay: dayStart, endDay: dayEnd });
+        dayStart = dayEnd + 1;
       }
+
+      const weekMeta = weeks.length > 0 ? monthMeta / weeks.length : 0;
+
+      return weeks.map(w => {
+        let weekTotal = 0;
+        for (let d = w.startDay; d <= w.endDay; d++) {
+          const isoKey = `${year}-${monthStr}-${String(d).padStart(2, '0')}`;
+          filteredIncome.forEach(t => {
+            if (normalizeDate(t.fecha) === isoKey) weekTotal += t.importe;
+          });
+        }
+        return { label: w.label, ingresos: weekTotal, meta: weekMeta };
+      });
+    }
+
+    if (filterMode === 'custom' && dateRange?.from) {
+      const from = dateRange.from;
+      const to = dateRange.to || dateRange.from;
+      const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      if (diffDays <= 14) {
+        // Group by day
+        const result: { label: string; ingresos: number; meta: number }[] = [];
+        const cur = new Date(from);
+        while (cur <= to) {
+          const isoKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          const label = `${cur.getDate()} ${MONTH_NAMES_SHORT[cur.getMonth()]}`;
+          const dayTotal = filteredIncome.filter(t => normalizeDate(t.fecha) === isoKey).reduce((s, t) => s + t.importe, 0);
+          result.push({ label, ingresos: dayTotal, meta: 0 });
+          cur.setDate(cur.getDate() + 1);
+        }
+        return result;
+      } else {
+        // Group by week
+        const result: { label: string; ingresos: number; meta: number }[] = [];
+        let weekStart = new Date(from);
+        let weekNum = 1;
+        while (weekStart <= to) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          const actualEnd = weekEnd > to ? to : weekEnd;
+          let weekTotal = 0;
+          const cur = new Date(weekStart);
+          while (cur <= actualEnd) {
+            const isoKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            filteredIncome.forEach(t => {
+              if (normalizeDate(t.fecha) === isoKey) weekTotal += t.importe;
+            });
+            cur.setDate(cur.getDate() + 1);
+          }
+          result.push({ label: `Sem ${weekNum}`, ingresos: weekTotal, meta: 0 });
+          weekStart = new Date(actualEnd);
+          weekStart.setDate(weekStart.getDate() + 1);
+          weekNum++;
+        }
+        return result;
+      }
+    }
+
+    return [];
+  }, [realIncome, filteredIncome, filterMode, selectedMonth, dateRange, budgetData]);
+
+  // Filter invoices by period
+  const filteredInvoices = useMemo(() => {
+    if (filterMode === 'all') return invoices;
+    if (filterMode === 'month' && selectedMonth) {
+      return invoices.filter(inv => normalizeDate(inv.fecha).startsWith(selectedMonth));
+    }
+    if (filterMode === 'custom' && dateRange?.from) {
+      const fromStr = `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, '0')}-${String(dateRange.from.getDate()).padStart(2, '0')}`;
+      const toDate = dateRange.to || dateRange.from;
+      const toStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+      return invoices.filter(inv => {
+        const normalized = normalizeDate(inv.fecha);
+        return normalized >= fromStr && normalized <= toStr;
+      });
+    }
+    return invoices;
+  }, [invoices, filterMode, selectedMonth, dateRange]);
+
+  // Services from invoices (cuentas por cobrar)
+  const servicesByInvoice = useMemo(() => {
+    const serviceMap = new Map<string, number>();
+    filteredInvoices.forEach(inv => {
+      const serviceName = inv.servicio || inv.concepto || 'Sin clasificar';
+      serviceMap.set(serviceName, (serviceMap.get(serviceName) || 0) + inv.totalAmount);
     });
-    return Array.from(monthlyData.entries()).sort((a, b) => a[0].localeCompare(b[0])).slice(-6)
-      .map(([monthKey, total]) => { const [year, month] = monthKey.split('-'); return { month: `${MONTH_NAMES_SHORT[parseInt(month) - 1]} ${year.slice(2)}`, ingresos: total }; });
-  }, [realIncome]);
+    const colors = ['hsl(var(--success))', 'hsl(var(--primary))', 'hsl(var(--warning))', '#8884d8', '#82ca9d', '#ffc658', '#ff7c43', '#665191'];
+    return Array.from(serviceMap.entries())
+      .map(([name, value], index) => ({ name, value, color: colors[index % colors.length] }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredInvoices]);
 
   const stats = useMemo(() => {
     const total = filteredIncome.reduce((sum, t) => sum + t.importe, 0);
@@ -318,96 +449,151 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
       </div>
 
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* 1. Line Chart - Tendencia Mensual + Meta */}
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Ingresos por Categoría</h3>
-          {incomeByCategory.length > 0 ? (
-            <>
-              <div className="h-48">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={incomeByCategory} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} dataKey="value">
-                      {incomeByCategory.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} formatter={(value: number) => [`$${fmt(value)}`, '']} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="space-y-2 mt-4">
-                {incomeByCategory.slice(0, 5).map((cat) => (
-                  <div key={cat.name} className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-2 min-w-0 flex-1"><div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} /><span className="text-muted-foreground truncate">{cat.name}</span></div>
-                    <span className="font-medium text-foreground whitespace-nowrap ml-2">${fmt(cat.value)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (<div className="flex items-center justify-center h-48 text-muted-foreground text-sm">No hay datos de ingresos por categoría</div>)}
-        </div>
-
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Tendencia Mensual de Ingresos</h3>
-          {monthlyIncome.length > 0 ? (
+          <h3 className="font-semibold text-foreground mb-1">Tendencia de Ingresos</h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            {getFilterDisplayName()} - Crecimiento {filterMode === 'month' ? 'semanal' : filterMode === 'custom' ? 'por período' : 'mes a mes'} + meta
+          </p>
+          {trendChartData.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyIncome} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
-                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} tickFormatter={(value) => formatCurrency(value)} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} formatter={(value: number) => [`$${fmt(value)}`, 'Ingresos']} />
-                  <Bar dataKey="ingresos" name="Ingresos" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                <LineChart data={trendChartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.5} />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} tickFormatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number, name: string) => [`$${fmt(value)}`, name === 'ingresos' ? 'Ingresos' : 'Meta']}
+                  />
+                  <Legend
+                    verticalAlign="top"
+                    height={36}
+                    formatter={(value: string) => value === 'ingresos' ? 'Ingresos Reales' : 'Meta Proyectada'}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="ingresos"
+                    name="ingresos"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={3}
+                    dot={{ r: 5, fill: 'hsl(var(--primary))', strokeWidth: 2, stroke: 'hsl(var(--card))' }}
+                    activeDot={{ r: 7, strokeWidth: 2 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="meta"
+                    name="meta"
+                    stroke="hsl(var(--muted-foreground))"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                    dot={{ r: 4, fill: 'hsl(var(--muted-foreground))', strokeWidth: 0 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           ) : (<div className="flex items-center justify-center h-64 text-muted-foreground text-sm">No hay datos de tendencia mensual</div>)}
         </div>
       </div>
 
-      {incomeByEntity.length > 0 && (
+      {/* 2. Donut Chart - Servicios de Cuentas por Cobrar + 3. Horizontal Bar - Ingresos por Cliente */}
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
+        {/* Donut: Servicios facturados */}
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Ingresos por Cliente/Entidad</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left py-3 px-2 font-medium text-muted-foreground">Cliente/Entidad</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Total</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Transacciones</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">Promedio</th>
-                  <th className="text-right py-3 px-2 font-medium text-muted-foreground">% del Total</th>
-                </tr>
-              </thead>
-              <tbody>
-                {incomeByEntity.map((entity, index) => {
-                  const percentage = stats.total > 0 ? (entity.total / stats.total) * 100 : 0;
+          <h3 className="font-semibold text-foreground mb-1">Servicios Facturados</h3>
+          <p className="text-xs text-muted-foreground mb-4">Distribución por tipo de servicio en cuentas por cobrar</p>
+          {servicesByInvoice.length > 0 ? (
+            <>
+              <div className="h-52">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={servicesByInvoice}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={3}
+                      dataKey="value"
+                      stroke="hsl(var(--card))"
+                      strokeWidth={2}
+                    >
+                      {servicesByInvoice.map((entry, index) => (<Cell key={`svc-${index}`} fill={entry.color} />))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
+                      formatter={(value: number) => [`$${fmt(value)}`, '']}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2 mt-2">
+                {servicesByInvoice.map((svc) => {
+                  const totalSvc = servicesByInvoice.reduce((s, v) => s + v.value, 0);
+                  const pct = totalSvc > 0 ? ((svc.value / totalSvc) * 100).toFixed(1) : '0';
                   return (
-                    <tr key={index} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
-                      <td className="py-3 px-2 text-foreground" title={entity.fullName}>{entity.name}</td>
-                      <td className="py-3 px-2 text-right font-medium text-success">${fmt(entity.total)}</td>
-                      <td className="py-3 px-2 text-right text-muted-foreground">{entity.count}</td>
-                      <td className="py-3 px-2 text-right text-muted-foreground">${fmt(Math.round(entity.average))}</td>
-                      <td className="py-3 px-2 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-16 h-2 bg-muted rounded-full overflow-hidden"><div className="h-full bg-success rounded-full" style={{ width: `${Math.min(percentage, 100)}%` }} /></div>
-                          <span className="text-muted-foreground w-12 text-right">{percentage.toFixed(1)}%</span>
-                        </div>
-                      </td>
-                    </tr>
+                    <div key={svc.name} className="flex items-center justify-between text-sm">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: svc.color }} />
+                        <span className="text-muted-foreground truncate">{svc.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 whitespace-nowrap ml-2">
+                        <span className="font-medium text-foreground">${fmt(svc.value)}</span>
+                        <span className="text-xs text-muted-foreground">({pct}%)</span>
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-border font-bold">
-                  <td className="py-3 px-2 text-foreground">TOTAL</td>
-                  <td className="py-3 px-2 text-right text-success">${fmt(stats.total)}</td>
-                  <td className="py-3 px-2 text-right text-muted-foreground">{stats.count}</td>
-                  <td className="py-3 px-2 text-right text-muted-foreground">${fmt(Math.round(stats.average))}</td>
-                  <td className="py-3 px-2 text-right text-muted-foreground">100%</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-52 text-muted-foreground text-sm">
+              No hay datos de servicios facturados
+            </div>
+          )}
         </div>
-      )}
+
+        {/* Horizontal Bar Chart: Ingresos por Cliente */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <h3 className="font-semibold text-foreground mb-1">Ingresos por Cliente</h3>
+          <p className="text-xs text-muted-foreground mb-4">Importancia de cada cliente por ingreso</p>
+          {incomeByEntity.length > 0 ? (
+            <div className="space-y-3">
+              {incomeByEntity.slice(0, 8).map((entity, index) => {
+                const maxTotal = incomeByEntity[0]?.total || 1;
+                const barWidth = (entity.total / maxTotal) * 100;
+                const barColors = [
+                  'bg-primary', 'bg-primary/80', 'bg-primary/65', 'bg-primary/50',
+                  'bg-primary/40', 'bg-primary/30', 'bg-primary/25', 'bg-primary/20',
+                ];
+                return (
+                  <div key={index} className="group">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm font-medium text-foreground truncate" title={entity.fullName}>
+                        {entity.fullName.length > 20 ? entity.fullName.substring(0, 20) + '...' : entity.fullName}
+                      </span>
+                      <span className="text-sm font-bold text-foreground ml-2 whitespace-nowrap">
+                        {formatCurrency(entity.total)}
+                      </span>
+                    </div>
+                    <div className="w-full h-3 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn("h-full rounded-full transition-all duration-500", barColors[index] || 'bg-primary/20')}
+                        style={{ width: `${barWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-52 text-muted-foreground text-sm">
+              No hay datos de ingresos por cliente
+            </div>
+          )}
+        </div>
+      </div>
 
       <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="font-semibold text-foreground mb-4">Resumen Estadístico</h3>

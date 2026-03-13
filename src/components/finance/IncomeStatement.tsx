@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, TrendingDown, DollarSign, Target, Calendar, CalendarRange, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Target, Calendar, CalendarRange, FileDown, FileSpreadsheet } from 'lucide-react';
+import { exportIncomeStatementPDF, exportIncomeStatementExcel } from '@/lib/finance-exports';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
@@ -46,7 +46,7 @@ interface BudgetQ1Data {
 }
 
 type MonthKey = 'enero' | 'febrero' | 'marzo';
-type SelectedPeriod = MonthKey | 'q1' | 'custom';
+type SelectedPeriod = MonthKey | 'q1' | '2025' | 'custom';
 
 const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
 const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -124,6 +124,10 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   const filterByPeriod = (transactions: Transaction[]): Transaction[] => {
     const filtered = transactions.filter(t => !isExcluded(t.categoria));
 
+    if (selectedPeriod === '2025') {
+      return filtered.filter(t => normalizeDate(t.fecha).startsWith('2025-'));
+    }
+
     if (selectedPeriod === 'q1') return filtered;
 
     if (selectedPeriod === 'custom' && dateRange?.from) {
@@ -169,6 +173,13 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
     if (!dairoKey) return 0;
     const data = budgetData.gastos.categorias[dairoKey];
     
+    if (selectedPeriod === '2025') {
+      // For 2025, calculate from filtered gastos
+      return filteredGastos
+        .filter(t => t.categoria?.toUpperCase().includes('DAIRO'))
+        .reduce((sum, t) => sum + t.importe, 0);
+    }
+
     if (selectedPeriod === 'q1') {
       return (data?.enero?.real || 0) + (data?.febrero?.real || 0) + (data?.marzo?.real || 0);
     }
@@ -184,31 +195,136 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
 
   const totalDairo = sueldoDairo + dividendosDairo;
 
-  // Monthly chart data for Q1
-  const monthlyData = useMemo(() => {
-    const months = [
-      { key: '2026-01', name: 'Enero' },
-      { key: '2026-02', name: 'Febrero' },
-      { key: '2026-03', name: 'Marzo' },
-    ];
+  // Dynamic chart data based on selected period
+  const chartData = useMemo(() => {
+    // Helper: group transactions by a key function
+    const groupBy = (
+      ingresosArr: Transaction[],
+      gastosArr: Transaction[],
+      keyFn: (dateStr: string) => string,
+      sortedKeys: string[]
+    ) => {
+      const ingMap: Record<string, number> = {};
+      const gasMap: Record<string, number> = {};
+      sortedKeys.forEach(k => { ingMap[k] = 0; gasMap[k] = 0; });
 
-    return months.map(({ key, name }) => {
-      const monthIngresos = ingresos
-        .filter(t => !isExcluded(t.categoria) && normalizeDate(t.fecha).startsWith(key))
-        .reduce((sum, t) => sum + t.importe, 0);
-      const monthGastos = gastos
-        .filter(t => !isExcluded(t.categoria) && normalizeDate(t.fecha).startsWith(key))
-        .reduce((sum, t) => sum + t.importe, 0);
-      const utilidad = monthIngresos - monthGastos;
+      ingresosArr.forEach(t => {
+        const k = keyFn(normalizeDate(t.fecha));
+        if (k && ingMap[k] !== undefined) ingMap[k] += t.importe;
+      });
+      gastosArr.forEach(t => {
+        const k = keyFn(normalizeDate(t.fecha));
+        if (k && gasMap[k] !== undefined) gasMap[k] += t.importe;
+      });
 
-      return {
-        month: name,
-        ingresos: monthIngresos,
-        gastos: monthGastos,
-        utilidad,
-      };
-    });
-  }, [ingresos, gastos]);
+      return sortedKeys.map(k => ({
+        label: k,
+        ingresos: ingMap[k] || 0,
+        gastos: gasMap[k] || 0,
+        utilidad: (ingMap[k] || 0) - (gasMap[k] || 0),
+      }));
+    };
+
+    if (selectedPeriod === '2025') {
+      // Single consolidated entry for 2025
+      const totalIng = filteredIngresos.reduce((s, t) => s + t.importe, 0);
+      const totalGas = filteredGastos.reduce((s, t) => s + t.importe, 0);
+      return [{
+        label: 'Año 2025',
+        ingresos: totalIng,
+        gastos: totalGas,
+        utilidad: totalIng - totalGas,
+      }];
+    }
+
+    if (selectedPeriod === 'q1') {
+      // Group by month
+      const months = [
+        { key: '2026-01', name: 'Enero' },
+        { key: '2026-02', name: 'Febrero' },
+        { key: '2026-03', name: 'Marzo' },
+      ];
+      const keys = months.map(m => m.name);
+      return groupBy(
+        filteredIngresos, filteredGastos,
+        (d) => {
+          const m = months.find(m => d.startsWith(m.key));
+          return m ? m.name : '';
+        },
+        keys
+      );
+    }
+
+    if (selectedPeriod === 'custom' && dateRange?.from) {
+      const from = dateRange.from;
+      const to = dateRange.to || dateRange.from;
+      const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+      if (diffDays <= 14) {
+        // Group by day
+        const keys: string[] = [];
+        const keyLabels: Record<string, string> = {};
+        const cur = new Date(from);
+        while (cur <= to) {
+          const isoKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+          const label = `${cur.getDate()} ${MONTH_NAMES_SHORT[cur.getMonth()]}`;
+          keys.push(label);
+          keyLabels[isoKey] = label;
+          cur.setDate(cur.getDate() + 1);
+        }
+        return groupBy(filteredIngresos, filteredGastos, (d) => keyLabels[d] || '', keys);
+      } else {
+        // Group by week
+        const keys: string[] = [];
+        const keyMap: Record<string, string> = {};
+        let weekStart = new Date(from);
+        let weekNum = 1;
+        while (weekStart <= to) {
+          const weekEnd = new Date(weekStart);
+          weekEnd.setDate(weekEnd.getDate() + 6);
+          const actualEnd = weekEnd > to ? to : weekEnd;
+          const label = `Sem ${weekNum}`;
+          keys.push(label);
+          const cur = new Date(weekStart);
+          while (cur <= actualEnd) {
+            const isoKey = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+            keyMap[isoKey] = label;
+            cur.setDate(cur.getDate() + 1);
+          }
+          weekStart = new Date(actualEnd);
+          weekStart.setDate(weekStart.getDate() + 1);
+          weekNum++;
+        }
+        return groupBy(filteredIngresos, filteredGastos, (d) => keyMap[d] || '', keys);
+      }
+    }
+
+    // Single month: group by week of month
+    const monthMap: Record<string, number> = { enero: 0, febrero: 1, marzo: 2 };
+    const monthIdx = monthMap[selectedPeriod as MonthKey];
+    if (monthIdx !== undefined) {
+      const year = 2026;
+      const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+      const keys: string[] = [];
+      const keyMap: Record<string, string> = {};
+      let weekNum = 1;
+      let dayStart = 1;
+      while (dayStart <= daysInMonth) {
+        const dayEnd = Math.min(dayStart + 6, daysInMonth);
+        const label = `${dayStart}-${dayEnd} ${MONTH_NAMES_SHORT[monthIdx]}`;
+        keys.push(label);
+        for (let d = dayStart; d <= dayEnd; d++) {
+          const isoKey = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          keyMap[isoKey] = label;
+        }
+        dayStart = dayEnd + 1;
+        weekNum++;
+      }
+      return groupBy(filteredIngresos, filteredGastos, (d) => keyMap[d] || '', keys);
+    }
+
+    return [];
+  }, [filteredIngresos, filteredGastos, selectedPeriod, dateRange]);
 
   const formatCurrency = (value: number) => {
     if (Math.abs(value) >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
@@ -219,6 +335,7 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   const formatCurrencyFull = (value: number) => `$${value.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
 
   const periodLabels: Record<string, string> = {
+    '2025': 'Año 2025 (Cierre al 31 Dic)',
     q1: 'Q1 2026',
     enero: 'Enero 2026',
     febrero: 'Febrero 2026',
@@ -228,18 +345,50 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
       : 'Rango personalizado',
   };
 
+  const getExportData = () => ({
+    periodLabel: periodLabels[selectedPeriod],
+    totalIngresos,
+    totalGastos,
+    utilidadBruta,
+    margenBruto,
+    dividendosDairo,
+    reservaEmpresa,
+    sueldoDairo,
+    totalDairo,
+  });
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold text-foreground">Estado de Resultados</h2>
-        <p className="text-sm text-muted-foreground">
-          Resultados financieros reales - {periodLabels[selectedPeriod]}
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Estado de Resultados</h2>
+          <p className="text-sm text-muted-foreground">
+            Resultados financieros reales - {periodLabels[selectedPeriod]}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => exportIncomeStatementPDF(getExportData())}>
+            <FileDown className="h-4 w-4 mr-1" />
+            PDF
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exportIncomeStatementExcel(getExportData())}>
+            <FileSpreadsheet className="h-4 w-4 mr-1" />
+            Excel
+          </Button>
+        </div>
       </div>
 
       {/* Period Selector */}
       <div className="flex flex-wrap gap-2">
+        <Button
+          variant={selectedPeriod === '2025' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setSelectedPeriod('2025'); setDateRange(undefined); }}
+        >
+          <Calendar className="h-4 w-4 mr-1" />
+          2025
+        </Button>
         <Button
           variant={selectedPeriod === 'q1' ? 'default' : 'outline'}
           size="sm"
@@ -451,55 +600,97 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
         </div>
       </div>
 
-      {/* Monthly Comparison Chart - only for Q1 */}
-      {selectedPeriod === 'q1' && (
+      {/* Dynamic Chart - responds to all filters */}
+      {chartData.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Comparación Mensual Q1</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} tickFormatter={(value) => formatCurrency(value)} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
-                  formatter={(value: number, name: string) => [
-                    formatCurrencyFull(value),
-                    name === 'ingresos' ? 'Ingresos' : name === 'gastos' ? 'Gastos' : 'Utilidad'
-                  ]}
-                />
-                <Bar dataKey="ingresos" name="ingresos" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="gastos" name="gastos" fill="hsl(var(--destructive))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="utilidad" name="utilidad" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="font-semibold text-foreground mb-1">
+            Análisis Visual - {periodLabels[selectedPeriod]}
+          </h3>
+          <p className="text-xs text-muted-foreground mb-5">
+            Comparación de ingresos, gastos y utilidad por período
+          </p>
+
+          <div className="space-y-5">
+            {chartData.map((item) => {
+              const maxVal = Math.max(...chartData.map(d => Math.max(d.ingresos, d.gastos)));
+              const ingresosWidth = maxVal > 0 ? (item.ingresos / maxVal) * 100 : 0;
+              const gastosWidth = maxVal > 0 ? (item.gastos / maxVal) * 100 : 0;
+              const margen = item.ingresos > 0 ? ((item.utilidad / item.ingresos) * 100) : 0;
+
+              return (
+                <div key={item.label} className="group">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-foreground">{item.label}</span>
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "text-sm font-bold",
+                        item.utilidad >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                      )}>
+                        {item.utilidad >= 0 ? '+' : ''}{formatCurrency(item.utilidad)}
+                      </span>
+                      <span className={cn(
+                        "text-xs font-medium px-1.5 py-0.5 rounded-full",
+                        margen >= 25 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                          : margen >= 10 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                          : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                      )}>
+                        {margen.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Ingresos bar */}
+                  <div className="relative h-7 mb-1">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-emerald-500/20 rounded-lg"
+                      style={{ width: `${ingresosWidth}%`, minWidth: ingresosWidth > 0 ? '4px' : '0' }}
+                    />
+                    <div
+                      className="absolute top-0.5 left-0 h-6 bg-emerald-500/70 rounded-md transition-all duration-500"
+                      style={{ width: `${ingresosWidth}%`, minWidth: ingresosWidth > 0 ? '4px' : '0' }}
+                    />
+                    <div className="absolute inset-0 flex items-center px-3">
+                      <span className="text-xs font-medium text-foreground/80">
+                        Ingresos: {formatCurrency(item.ingresos)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Gastos bar */}
+                  <div className="relative h-7">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-red-500/20 rounded-lg"
+                      style={{ width: `${gastosWidth}%`, minWidth: gastosWidth > 0 ? '4px' : '0' }}
+                    />
+                    <div
+                      className="absolute top-0.5 left-0 h-6 bg-red-500/70 rounded-md transition-all duration-500"
+                      style={{ width: `${gastosWidth}%`, minWidth: gastosWidth > 0 ? '4px' : '0' }}
+                    />
+                    <div className="absolute inset-0 flex items-center px-3">
+                      <span className="text-xs font-medium text-foreground/80">
+                        Gastos: {formatCurrency(item.gastos)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {/* Monthly Summary Cards */}
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            {monthlyData.map((month) => (
-              <div
-                key={month.month}
-                className={cn(
-                  "p-3 rounded-lg border",
-                  month.utilidad >= 0 ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
-                )}
-              >
-                <p className="text-sm font-medium text-foreground">{month.month}</p>
-                <p className={cn(
-                  "text-lg font-bold mt-1",
-                  month.utilidad >= 0 ? "text-success" : "text-destructive"
-                )}>
-                  {formatCurrency(month.utilidad)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {formatCurrency(month.ingresos)} - {formatCurrency(month.gastos)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Margen: {month.ingresos > 0 ? ((month.utilidad / month.ingresos) * 100).toFixed(1) : 0}%
-                </p>
-              </div>
-            ))}
+          {/* Legend */}
+          <div className="flex items-center gap-4 mt-5 pt-4 border-t border-border">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-emerald-500/70" />
+              <span className="text-xs text-muted-foreground">Ingresos</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-red-500/70" />
+              <span className="text-xs text-muted-foreground">Gastos</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-1 rounded bg-foreground/30" />
+              <span className="text-xs text-muted-foreground">Utilidad = Ingresos - Gastos</span>
+            </div>
           </div>
         </div>
       )}
