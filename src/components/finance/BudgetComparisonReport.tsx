@@ -348,9 +348,15 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
           <p className="text-xs text-muted-foreground mb-5">{periodLabels[selectedMonth]}</p>
           <div className="space-y-4">
             {categoryBreakdown.map((row, index) => {
-              const maxVal = Math.max(...categoryBreakdown.map(r => Math.max(r.real, r.proyectado)));
-              const realWidth = maxVal > 0 ? (row.real / maxVal) * 100 : 0;
-              const budgetWidth = selectedMonth !== 'custom' && maxVal > 0 ? (row.proyectado / maxVal) * 100 : 0;
+              // Bar width = % ejecutado (capped at 100% visually)
+              const execPct = selectedMonth !== 'custom' && row.proyectado > 0
+                ? Math.min((row.real / row.proyectado) * 100, 100)
+                : 0;
+              // For custom mode, show proportional to max
+              const maxVal = Math.max(...categoryBreakdown.map(r => r.real));
+              const customWidth = maxVal > 0 ? (row.real / maxVal) * 100 : 0;
+              const barWidth = selectedMonth === 'custom' ? customWidth : execPct;
+
               return (
                 <div key={index} className="group">
                   <div className="flex items-center justify-between mb-1.5">
@@ -377,7 +383,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
                     {selectedMonth !== 'custom' && (
                       <div
                         className="absolute top-0 left-0 h-full bg-muted/50 rounded-full"
-                        style={{ width: `${budgetWidth}%` }}
+                        style={{ width: '100%' }}
                       />
                     )}
                     <div
@@ -388,7 +394,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
                           : row.status === 'warning' ? "bg-amber-500/70"
                           : "bg-emerald-500/70"
                       )}
-                      style={{ width: `${realWidth}%`, minWidth: realWidth > 0 ? '4px' : '0' }}
+                      style={{ width: `${barWidth}%`, minWidth: barWidth > 0 ? '4px' : '0' }}
                     />
                   </div>
                   {selectedMonth !== 'custom' && (

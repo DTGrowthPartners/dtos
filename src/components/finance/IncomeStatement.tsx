@@ -158,8 +158,23 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   const totalGastos = useMemo(() => filteredGastos.reduce((sum, t) => sum + t.importe, 0), [filteredGastos]);
   const utilidadBruta = totalIngresos - totalGastos;
   const margenBruto = totalIngresos > 0 ? (utilidadBruta / totalIngresos) * 100 : 0;
-  const dividendosDairo = utilidadBruta > 0 ? utilidadBruta * 0.25 : 0;
-  const reservaEmpresa = utilidadBruta > 0 ? utilidadBruta * 0.75 : 0;
+
+  // Comisión 1% sobre utilidad bruta — aplica a partir de febrero 2026
+  const aplicaComision = useMemo(() => {
+    if (selectedPeriod === 'enero' || selectedPeriod === '2025') return false;
+    if (selectedPeriod === 'febrero' || selectedPeriod === 'marzo' || selectedPeriod === 'q1') return true;
+    // Custom: aplica si el rango incluye febrero 2026 o posterior
+    if (selectedPeriod === 'custom' && dateRange?.from) {
+      const to = dateRange.to || dateRange.from;
+      return to >= new Date(2026, 1, 1); // >= 1 Feb 2026
+    }
+    return false;
+  }, [selectedPeriod, dateRange]);
+
+  const comisionParticipacion = aplicaComision && utilidadBruta > 0 ? utilidadBruta * 0.01 : 0;
+  const utilidadNeta = utilidadBruta - comisionParticipacion;
+  const dividendosDairo = utilidadNeta > 0 ? utilidadNeta * 0.25 : 0;
+  const reservaEmpresa = utilidadNeta > 0 ? utilidadNeta * 0.75 : 0;
 
   // Sueldo Dairo (from budget data or default)
   const sueldoDairo = useMemo(() => {
@@ -351,6 +366,7 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
     totalGastos,
     utilidadBruta,
     margenBruto,
+    comisionParticipacion,
     dividendosDairo,
     reservaEmpresa,
     sueldoDairo,
@@ -539,6 +555,29 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
               {formatCurrencyFull(utilidadBruta)}
             </span>
           </div>
+
+          {/* Comisión / Participación 1% */}
+          {comisionParticipacion > 0 && (
+            <>
+              <div className="flex items-center justify-between py-2.5 px-4 hover:bg-muted/50 rounded-lg transition-colors mt-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-amber-500"></div>
+                  <span className="text-sm text-foreground">(-)  Comisión / Participación (1%)</span>
+                </div>
+                <span className="text-sm font-medium text-foreground">{formatCurrencyFull(comisionParticipacion)}</span>
+              </div>
+
+              <div className={cn(
+                "flex items-center justify-between py-3 px-4 rounded-lg border mt-1",
+                utilidadNeta >= 0 ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
+              )}>
+                <span className="text-sm font-bold text-foreground">(=)  UTILIDAD NETA DESPUÉS DE COMISIÓN</span>
+                <span className={cn("text-lg font-bold", utilidadNeta >= 0 ? "text-success" : "text-destructive")}>
+                  {formatCurrencyFull(utilidadNeta)}
+                </span>
+              </div>
+            </>
+          )}
 
           {/* Separador distribución */}
           <div className="border-t border-dashed border-border my-4"></div>
