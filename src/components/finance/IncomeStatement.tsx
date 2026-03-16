@@ -91,7 +91,7 @@ const MONTH_KEY_MAP: Record<string, MonthKey> = {
 };
 
 export default function IncomeStatement({ ingresos, gastos }: IncomeStatementProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>('febrero');
+  const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>('q1');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);

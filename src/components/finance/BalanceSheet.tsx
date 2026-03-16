@@ -58,6 +58,13 @@ const isCuentaPorPagar = (cuenta: string | undefined | null): boolean => {
   return cuenta.trim().toUpperCase().startsWith('CUENTAS POR PAGA');
 };
 
+// Check if a cuenta is "Retenciones en la fuente"
+const isRetencion = (cuenta: string | undefined | null): boolean => {
+  if (!cuenta) return false;
+  const upper = cuenta.trim().toUpperCase();
+  return upper.includes('RETENCION') || upper.includes('RETENCIÓN');
+};
+
 // Get the tercero/client name from a transaction (use entidad field for Entradas, tercero-like field)
 const getTerceroName = (t: Transaction, isIngreso: boolean): string => {
   // In Salidas: Entidad = "DT Growth Partners", the client is in the "entidad" or we need to look at descripcion
@@ -164,7 +171,7 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
   const periodEndDate = useMemo(() => getPeriodEndDate(selectedPeriod, dateRange), [selectedPeriod, dateRange]);
 
   // DISPONIBLE DINÁMICO: Saldo actual - movimientos después del corte
-  // Excluir cuentas que son "Cuentas por Pagar a Clientes" del disponible
+  // Excluir "Cuentas por Pagar a Clientes" (va a Pasivos) y "Retenciones" (va a sección aparte)
   const disponibleAlCorte = useMemo(() => {
     const movimientosDespues = new Map<string, number>();
 
@@ -184,16 +191,20 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
       }
     });
 
-    // Filter out "Cuentas por Pagar a Clientes" from disponible (it goes to Pasivos)
-    const cuentas = disponibleActual
+    const todasCuentas = disponibleActual
       .filter(c => !isCuentaPorPagar(c.cuenta))
       .map(cuenta => {
         const ajuste = movimientosDespues.get(normalizeCuentaName(cuenta.cuenta)) || 0;
         return { cuenta: cuenta.cuenta, saldo: cuenta.saldo + ajuste };
       });
 
+    // Separar: disponible (sin retenciones) y retenciones
+    const cuentas = todasCuentas.filter(c => !isRetencion(c.cuenta));
+    const retenciones = todasCuentas.filter(c => isRetencion(c.cuenta));
+
     const total = cuentas.reduce((sum, c) => sum + c.saldo, 0);
-    return { cuentas, total };
+    const totalRetenciones = retenciones.reduce((sum, c) => sum + c.saldo, 0);
+    return { cuentas, total, retenciones, totalRetenciones };
   }, [disponibleActual, ingresos, gastos, periodEndDate]);
 
   // PASIVOS: Cuentas por Pagar a Clientes, agrupadas por Tercero/Cliente
@@ -282,7 +293,7 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
   const utilidadEjercicio = totalIngresosReal - totalGastosReal;
 
   // ECUACIÓN CONTABLE: ACTIVO = PASIVO + PATRIMONIO
-  const totalActivos = disponibleAlCorte.total + totalCuentasPorCobrar;
+  const totalActivos = disponibleAlCorte.total + totalCuentasPorCobrar + disponibleAlCorte.totalRetenciones;
   const totalPasivos = cuentasPorPagar.total;
 
   // Patrimonio = Activos - Pasivos
@@ -475,6 +486,28 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
             </div>
           </div>
 
+          {/* Retenciones en la Fuente */}
+          {disponibleAlCorte.retenciones.length > 0 && (
+            <div className="ml-4 mb-4">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">Retenciones en la Fuente</p>
+              <div className="space-y-1">
+                {disponibleAlCorte.retenciones.filter(c => Math.abs(c.saldo) > 0.01).map((cuenta, index) => (
+                  <div key={index} className="flex items-center justify-between py-2 px-4 hover:bg-muted/50 rounded-lg transition-colors">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                      <span className="text-sm text-foreground">{cuenta.cuenta}</span>
+                    </div>
+                    <span className="text-sm font-medium text-foreground">${fmt(cuenta.saldo)}</span>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between py-2 px-4 bg-blue-50 dark:bg-blue-950/30 rounded-lg border border-blue-200 dark:border-blue-800 mt-1">
+                  <span className="text-sm font-bold text-foreground">Total Retenciones</span>
+                  <span className="text-sm font-bold text-blue-600 dark:text-blue-400">${fmt(disponibleAlCorte.totalRetenciones)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* TOTAL ACTIVOS */}
           <div className="flex items-center justify-between py-3 px-4 bg-success/10 rounded-lg border-2 border-success/30 mt-2">
             <span className="text-base font-bold text-foreground">TOTAL ACTIVOS</span>
@@ -616,6 +649,17 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
               <div className="h-full bg-warning rounded-full transition-all duration-300" style={{ width: `${totalActivos > 0 ? (totalCuentasPorCobrar / totalActivos) * 100 : 0}%` }} />
             </div>
           </div>
+          {disponibleAlCorte.totalRetenciones > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Retenciones en la Fuente</span>
+                <span className="font-medium text-foreground">${fmt(disponibleAlCorte.totalRetenciones)} ({totalActivos > 0 ? ((disponibleAlCorte.totalRetenciones / totalActivos) * 100).toFixed(1) : 0}%)</span>
+              </div>
+              <div className="h-4 bg-muted/50 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${totalActivos > 0 ? (disponibleAlCorte.totalRetenciones / totalActivos) * 100 : 0}%` }} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

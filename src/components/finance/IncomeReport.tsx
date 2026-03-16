@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
-import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight, Calendar as CalendarIcon, Target, CalendarRange } from 'lucide-react';
+import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight, Calendar as CalendarIcon, Target, CalendarRange, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { Calendar } from '@/components/ui/calendar';
@@ -92,7 +92,7 @@ const fmt = (value: number) => value.toLocaleString('en-US', { minimumFractionDi
 type FilterMode = 'all' | 'month' | 'custom';
 
 export default function IncomeReport({ ingresos }: IncomeReportProps) {
-  const [filterMode, setFilterMode] = useState<FilterMode>('month');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -344,6 +344,25 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
       .sort((a, b) => b.value - a.value);
   }, [filteredInvoices]);
 
+  // Cartera por cobrar: facturas no pagadas agrupadas por cliente
+  const carteraPorCobrar = useMemo(() => {
+    const pendientes = filteredInvoices.filter(inv => inv.status !== 'pagada');
+    const clientMap = new Map<string, { total: number; count: number; statuses: Set<string> }>();
+    pendientes.forEach(inv => {
+      const client = inv.clientName || 'Sin cliente';
+      const current = clientMap.get(client) || { total: 0, count: 0, statuses: new Set<string>() };
+      current.total += inv.totalAmount;
+      current.count += 1;
+      current.statuses.add(inv.status);
+      clientMap.set(client, current);
+    });
+    const totalCartera = pendientes.reduce((s, inv) => s + inv.totalAmount, 0);
+    const items = Array.from(clientMap.entries())
+      .map(([name, data]) => ({ name, total: data.total, count: data.count, statuses: Array.from(data.statuses) }))
+      .sort((a, b) => b.total - a.total);
+    return { items, total: totalCartera, count: pendientes.length };
+  }, [filteredInvoices]);
+
   const stats = useMemo(() => {
     const total = filteredIncome.reduce((sum, t) => sum + t.importe, 0);
     const count = filteredIncome.length;
@@ -495,6 +514,56 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
             </div>
           ) : (<div className="flex items-center justify-center h-64 text-muted-foreground text-sm">No hay datos de tendencia mensual</div>)}
         </div>
+
+        {/* Cartera por Cobrar */}
+        <div className="rounded-xl border border-border bg-card p-6">
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="font-semibold text-foreground">Cartera por Cobrar</h3>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-warning" />
+              <span className="text-sm font-bold text-warning">{carteraPorCobrar.count} facturas</span>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">Facturas pendientes de pago por cliente</p>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-warning/5 border border-warning/20 mb-4">
+            <span className="text-sm text-muted-foreground">Total Cartera</span>
+            <span className="text-lg font-bold text-warning">${fmt(carteraPorCobrar.total)}</span>
+          </div>
+          {carteraPorCobrar.items.length > 0 ? (
+            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+              {carteraPorCobrar.items.map((client, idx) => {
+                const pct = carteraPorCobrar.total > 0 ? (client.total / carteraPorCobrar.total) * 100 : 0;
+                return (
+                  <div key={idx} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-muted/50 transition-colors border border-transparent hover:border-border">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground truncate" title={client.name}>{client.name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground">{client.count} factura{client.count > 1 ? 's' : ''}</span>
+                        {client.statuses.map(st => (
+                          <span key={st} className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                            st === 'pendiente' ? 'bg-yellow-100 text-yellow-800' :
+                            st === 'enviada' ? 'bg-blue-100 text-blue-800' :
+                            st === 'parcial' ? 'bg-orange-100 text-orange-800' : 'bg-gray-100 text-gray-800'
+                          )}>
+                            {st === 'pendiente' ? 'Pendiente' : st === 'enviada' ? 'Enviada' : st === 'parcial' ? 'Parcial' : st}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right ml-3 whitespace-nowrap">
+                      <p className="text-sm font-bold text-foreground">${fmt(client.total)}</p>
+                      <p className="text-xs text-muted-foreground">{pct.toFixed(1)}%</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+              No hay cartera pendiente
+            </div>
+          )}
+        </div>
       </div>
 
       {/* 2. Donut Chart - Servicios de Cuentas por Cobrar + 3. Horizontal Bar - Ingresos por Cliente */}
@@ -523,7 +592,11 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
                     </Pie>
                     <Tooltip
                       contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }}
-                      formatter={(value: number) => [`$${fmt(value)}`, '']}
+                      formatter={(value: number) => {
+                        const totalSvc = servicesByInvoice.reduce((s, v) => s + v.value, 0);
+                        const pct = totalSvc > 0 ? ((value / totalSvc) * 100).toFixed(1) : '0';
+                        return [`$${fmt(value)} (${pct}%)`, ''];
+                      }}
                     />
                   </PieChart>
                 </ResponsiveContainer>

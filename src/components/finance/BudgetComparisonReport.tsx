@@ -87,7 +87,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState<SelectedPeriod>('febrero');
+  const [selectedMonth, setSelectedMonth] = useState<SelectedPeriod>('q1');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
