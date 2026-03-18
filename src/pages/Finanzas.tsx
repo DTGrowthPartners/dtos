@@ -21,7 +21,7 @@ import InvoicesPanel from '@/components/finance/InvoicesPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
 import IncomeReport from '@/components/finance/IncomeReport';
 import IncomeStatement from '@/components/finance/IncomeStatement';
-import ClientGoalsPanel from '@/components/finance/ClientGoalsPanel';
+import BalanceSheet from '@/components/finance/BalanceSheet';import ClientGoalsPanel from '@/components/finance/ClientGoalsPanel';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -103,6 +103,7 @@ interface Transaction {
   categoria: string;
   cuenta: string;
   entidad: string;
+  terceroId?: string;
 }
 
 interface FinanceResponse {
@@ -1077,6 +1078,10 @@ export default function Finanzas() {
                   <DollarSign className="h-4 w-4" />
                   Estado de Resultados
                 </TabsTrigger>
+                <TabsTrigger value="balance-general" className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Situación Financiera
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="gastos">
                 <BudgetComparisonReport gastos={gastos} />
@@ -1086,6 +1091,9 @@ export default function Finanzas() {
               </TabsContent>
               <TabsContent value="estado-resultados">
                 <IncomeStatement ingresos={ingresos} gastos={gastos} />
+              </TabsContent>
+              <TabsContent value="balance-general">
+                <BalanceSheet ingresos={ingresos} gastos={gastos} />
               </TabsContent>
             </Tabs>
           </TabsContent>

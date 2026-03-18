@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { TrendingUp, TrendingDown, AlertTriangle, CheckCircle, RefreshCw, Target, Calendar, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -285,80 +284,161 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
 
       {selectedMonth !== 'custom' && monthlyComparisonData.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Comparación Mensual Q1</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyComparisonData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} tickFormatter={(value) => `$${(value / 1000000).toFixed(1)}M`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px', fontSize: '12px' }} formatter={(value: number, name: string) => [`$${fmt(value)}`, name === 'proyectado' ? 'Presupuesto' : 'Real']} />
-                <Legend formatter={(value) => value === 'proyectado' ? 'Presupuesto' : 'Real'} />
-                <Bar dataKey="proyectado" name="proyectado" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="real" name="real" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <h3 className="font-semibold text-foreground mb-1">Ejecución Presupuestal</h3>
+          <p className="text-xs text-muted-foreground mb-5">Presupuesto vs gasto real por mes</p>
+          <div className="space-y-5">
+            {monthlyComparisonData.map((month) => {
+              const maxVal = Math.max(...monthlyComparisonData.map(m => Math.max(m.proyectado, m.real)));
+              const budgetWidth = maxVal > 0 ? (month.proyectado / maxVal) * 100 : 0;
+              const realWidth = maxVal > 0 ? (month.real / maxVal) * 100 : 0;
+              return (
+                <div key={month.monthKey} className={cn("group", month.isCurrent && "relative")}>
+                  {month.isCurrent && <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-1.5 h-8 bg-primary rounded-full" />}
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-sm font-semibold text-foreground", month.isCurrent && "text-primary")}>{month.month}</span>
+                      {month.isCurrent && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded font-medium">Actual</span>}
+                    </div>
+                    <span className={cn(
+                      "text-sm font-bold",
+                      month.percentUsed <= 80 ? "text-success" : month.percentUsed <= 100 ? "text-warning" : "text-destructive"
+                    )}>
+                      {month.percentUsed.toFixed(0)}%
+                    </span>
+                  </div>
+                  {/* Budget bar (background) */}
+                  <div className="relative h-8 mb-1">
+                    <div
+                      className="absolute top-0 left-0 h-full bg-muted/60 rounded-lg"
+                      style={{ width: `${budgetWidth}%` }}
+                    />
+                    <div
+                      className={cn(
+                        "absolute top-1 left-0 h-6 rounded-md transition-all duration-500",
+                        month.percentUsed <= 80 ? "bg-emerald-500/80" : month.percentUsed <= 100 ? "bg-amber-500/80" : "bg-red-500/80"
+                      )}
+                      style={{ width: `${realWidth}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center justify-between px-3">
+                      <span className="text-xs font-medium text-foreground/80">{formatCurrency(month.real)}</span>
+                      <span className="text-xs text-muted-foreground">{formatCurrency(month.proyectado)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="grid grid-cols-3 gap-4 mt-4">
-            {monthlyComparisonData.map((month) => (
-              <div key={month.monthKey} className={cn("p-3 rounded-lg border", month.isCurrent && "ring-2 ring-primary", month.percentUsed <= 80 ? "bg-success/5 border-success/20" : month.percentUsed <= 100 ? "bg-warning/5 border-warning/20" : "bg-destructive/5 border-destructive/20")}>
-                <p className="text-sm font-medium text-foreground">{month.month}</p>
-                <p className={cn("text-lg font-bold mt-1", month.percentUsed <= 80 ? "text-success" : month.percentUsed <= 100 ? "text-warning" : "text-destructive")}>{month.percentUsed.toFixed(0)}%</p>
-                <p className="text-xs text-muted-foreground">{formatCurrency(month.real)} / {formatCurrency(month.proyectado)}</p>
-              </div>
-            ))}
+          {/* Legend */}
+          <div className="flex items-center gap-4 mt-5 pt-4 border-t border-border">
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-muted/60" />
+              <span className="text-xs text-muted-foreground">Presupuesto</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded bg-emerald-500/80" />
+              <span className="text-xs text-muted-foreground">Gasto real</span>
+            </div>
           </div>
         </div>
       )}
 
       {categoryBreakdown.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
-          <h3 className="font-semibold text-foreground mb-4">Desglose por Categoría - {periodLabels[selectedMonth]}</h3>
-          <div className="space-y-3">
-            <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground pb-2 border-b border-border">
-              <div className="col-span-4">Categoría</div>
-              <div className="col-span-5 text-center">{selectedMonth === 'custom' ? 'Gasto Real' : 'Ejecutado'}</div>
-              <div className="col-span-3 text-right">{selectedMonth === 'custom' ? 'Total' : 'Presupuesto'}</div>
-            </div>
+          <h3 className="font-semibold text-foreground mb-1">Desglose por Categoría</h3>
+          <p className="text-xs text-muted-foreground mb-5">{periodLabels[selectedMonth]}</p>
+          <div className="space-y-4">
             {categoryBreakdown.map((row, index) => {
-              const maxReal = Math.max(...categoryBreakdown.map(r => r.real));
-              const barWidth = selectedMonth === 'custom' ? (maxReal > 0 ? (row.real / maxReal) * 100 : 0) : Math.min(row.percentUsed, 100);
+              const maxVal = Math.max(...categoryBreakdown.map(r => Math.max(r.real, r.proyectado)));
+              const realWidth = maxVal > 0 ? (row.real / maxVal) * 100 : 0;
+              const budgetWidth = selectedMonth !== 'custom' && maxVal > 0 ? (row.proyectado / maxVal) * 100 : 0;
               return (
-                <div key={index} className="grid grid-cols-12 gap-2 items-center py-1">
-                  <div className="col-span-4 text-sm text-foreground truncate" title={row.categoria}>{row.categoria}</div>
-                  <div className="col-span-5 flex items-center gap-2">
-                    <div className="flex-1 relative">
-                      <div className="h-6 bg-muted/50 rounded overflow-hidden">
-                        <div className={cn("h-full rounded transition-all duration-300", selectedMonth === 'custom' ? "bg-blue-400" : row.status === 'over' ? "bg-red-400" : row.status === 'warning' ? "bg-yellow-400" : "bg-green-400")} style={{ width: `${barWidth}%` }} />
-                      </div>
-                      <div className="absolute inset-0 flex items-center px-2">
-                        <span className="text-xs font-medium text-foreground">{row.real >= 1000000 ? `${(row.real / 1000000).toFixed(1).replace('.0', '')}M` : row.real >= 1000 ? `${(row.real / 1000).toFixed(0)}K` : fmt(row.real)}</span>
-                      </div>
+                <div key={index} className="group">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-medium text-foreground truncate" title={row.categoria}>
+                      {row.categoria}
+                    </span>
+                    <div className="flex items-center gap-2 ml-2">
+                      <span className="text-sm font-semibold text-foreground whitespace-nowrap">
+                        {formatCurrency(row.real)}
+                      </span>
+                      {selectedMonth !== 'custom' && (
+                        <span className={cn(
+                          "text-xs font-medium px-1.5 py-0.5 rounded-full",
+                          row.status === 'over' ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                            : row.status === 'warning' ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                        )}>
+                          {Math.round(row.percentUsed)}%
+                        </span>
+                      )}
                     </div>
-                    {selectedMonth !== 'custom' && <span className={cn("text-xs font-medium w-10 text-right", row.status === 'over' ? "text-destructive" : row.status === 'warning' ? "text-warning" : "text-success")}>{Math.round(row.percentUsed)}%</span>}
                   </div>
-                  <div className="col-span-3 text-sm text-right text-muted-foreground">
-                    {selectedMonth === 'custom' ? `$${fmt(row.real)}` : row.proyectado >= 1000000 ? `${(row.proyectado / 1000000).toFixed(1).replace('.0', '')}M` : row.proyectado >= 1000 ? `${(row.proyectado / 1000).toFixed(0)}K` : fmt(row.proyectado)}
+                  <div className="relative h-5">
+                    {selectedMonth !== 'custom' && (
+                      <div
+                        className="absolute top-0 left-0 h-full bg-muted/50 rounded-full"
+                        style={{ width: `${budgetWidth}%` }}
+                      />
+                    )}
+                    <div
+                      className={cn(
+                        "absolute top-0.5 left-0 h-4 rounded-full transition-all duration-500",
+                        selectedMonth === 'custom' ? "bg-primary/70"
+                          : row.status === 'over' ? "bg-red-500/70"
+                          : row.status === 'warning' ? "bg-amber-500/70"
+                          : "bg-emerald-500/70"
+                      )}
+                      style={{ width: `${realWidth}%`, minWidth: realWidth > 0 ? '4px' : '0' }}
+                    />
                   </div>
+                  {selectedMonth !== 'custom' && (
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-[11px] text-muted-foreground">Real: ${fmt(row.real)}</span>
+                      <span className="text-[11px] text-muted-foreground">Ppto: ${fmt(row.proyectado)}</span>
+                    </div>
+                  )}
                 </div>
               );
             })}
-            <div className="grid grid-cols-12 gap-2 items-center py-2 mt-2 border-t-2 border-border font-bold">
-              <div className="col-span-4 text-sm text-foreground">TOTAL</div>
-              <div className="col-span-5 flex items-center gap-2">
-                <div className="flex-1 relative">
-                  <div className="h-6 bg-muted/50 rounded overflow-hidden">
-                    <div className={cn("h-full rounded transition-all duration-300", selectedMonth === 'custom' ? "bg-blue-400" : selectedPeriodTotals.percentUsed > 100 ? "bg-red-400" : selectedPeriodTotals.percentUsed > 80 ? "bg-yellow-400" : "bg-green-400")} style={{ width: `${selectedMonth === 'custom' ? 100 : Math.min(selectedPeriodTotals.percentUsed, 100)}%` }} />
-                  </div>
-                  <div className="absolute inset-0 flex items-center px-2">
-                    <span className="text-xs font-bold text-foreground">{selectedPeriodTotals.real >= 1000000 ? `${(selectedPeriodTotals.real / 1000000).toFixed(1)}M` : `${(selectedPeriodTotals.real / 1000).toFixed(0)}K`}</span>
-                  </div>
+            {/* Total */}
+            <div className="pt-4 mt-2 border-t-2 border-border">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-sm font-bold text-foreground">TOTAL</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground">{formatCurrency(selectedPeriodTotals.real)}</span>
+                  {selectedMonth !== 'custom' && (
+                    <span className={cn(
+                      "text-xs font-bold px-1.5 py-0.5 rounded-full",
+                      selectedPeriodTotals.percentUsed > 100 ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        : selectedPeriodTotals.percentUsed > 80 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                        : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                    )}>
+                      {Math.round(selectedPeriodTotals.percentUsed)}%
+                    </span>
+                  )}
                 </div>
-                {selectedMonth !== 'custom' && <span className={cn("text-xs font-bold w-10 text-right", selectedPeriodTotals.percentUsed > 100 ? "text-destructive" : selectedPeriodTotals.percentUsed > 80 ? "text-warning" : "text-success")}>{Math.round(selectedPeriodTotals.percentUsed)}%</span>}
               </div>
-              <div className="col-span-3 text-sm text-right text-muted-foreground">
-                {selectedMonth === 'custom' ? `$${fmt(selectedPeriodTotals.real)}` : selectedPeriodTotals.proyectado >= 1000000 ? `${(selectedPeriodTotals.proyectado / 1000000).toFixed(1)}M` : `${(selectedPeriodTotals.proyectado / 1000).toFixed(0)}K`}
+              <div className="relative h-5">
+                {selectedMonth !== 'custom' && (
+                  <div className="absolute top-0 left-0 h-full bg-muted/50 rounded-full w-full" />
+                )}
+                <div
+                  className={cn(
+                    "absolute top-0.5 left-0 h-4 rounded-full transition-all duration-500",
+                    selectedMonth === 'custom' ? "bg-primary/70"
+                      : selectedPeriodTotals.percentUsed > 100 ? "bg-red-500/70"
+                      : selectedPeriodTotals.percentUsed > 80 ? "bg-amber-500/70"
+                      : "bg-emerald-500/70"
+                  )}
+                  style={{ width: `${selectedMonth === 'custom' ? 100 : Math.min(selectedPeriodTotals.percentUsed, 100)}%` }}
+                />
               </div>
+              {selectedMonth !== 'custom' && (
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[11px] text-muted-foreground">Real: ${fmt(selectedPeriodTotals.real)}</span>
+                  <span className="text-[11px] text-muted-foreground">Ppto: ${fmt(selectedPeriodTotals.proyectado)}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
