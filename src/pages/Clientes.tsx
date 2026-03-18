@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase, ImagePlus, X, ArrowDownToLine, DollarSign, Check } from 'lucide-react';
+import { Plus, Search, Mail, Phone, MapPin, Edit, Trash2, Building2, Grid3x3, LayoutGrid, Columns3, Eye, EyeOff, List, Upload, Power, Users, ChevronDown, ChevronRight, UserCheck, Briefcase, ImagePlus, X, ArrowDownToLine, DollarSign, Check, FileText, Calendar, ArrowLeft, Download, ExternalLink, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,6 +82,22 @@ interface Tercero {
   estado: string;
 }
 
+interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  clientName: string;
+  clientNit: string;
+  totalAmount: number;
+  paidAmount: number;
+  fecha: string;
+  concepto?: string;
+  servicio?: string;
+  status: string;
+  paidAt?: string;
+  createdAt: string;
+  payments?: { id: string; amount: number; paidAt: string; method?: string }[];
+}
+
 type ViewMode = '1' | '2' | '3' | 'list';
 
 interface CRMProspect {
@@ -114,6 +130,11 @@ export default function Clientes() {
   const [crmProspects, setCrmProspects] = useState<CRMProspect[]>([]);
   const [loadingCRM, setLoadingCRM] = useState(false);
   const [selectedProspects, setSelectedProspects] = useState<Set<string>>(new Set());
+  // Client Profile
+  const [profileClient, setProfileClient] = useState<Client | null>(null);
+  const [profileInvoices, setProfileInvoices] = useState<Invoice[]>([]);
+  const [profileTab, setProfileTab] = useState('info');
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -235,6 +256,51 @@ export default function Clientes() {
     setIsImportCRMOpen(false);
     setSelectedProspects(new Set());
     fetchClients();
+  };
+
+  const openClientProfile = async (client: Client) => {
+    setProfileClient(client);
+    setProfileTab('info');
+    setLoadingInvoices(true);
+    try {
+      const allInvoices = await apiClient.get<Invoice[]>('/api/invoices');
+      const clientInvoices = allInvoices.filter(
+        (inv) => inv.clientName?.toLowerCase() === client.name.toLowerCase()
+      );
+      setProfileInvoices(clientInvoices);
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      setProfileInvoices([]);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/invoices/${invoiceId}/download`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      if (!response.ok) throw new Error('Error al descargar');
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cuenta_cobro_${invoiceId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast({ title: 'Error', description: 'No se pudo descargar la cuenta de cobro', variant: 'destructive' });
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pagada': return 'bg-green-500/20 text-green-400';
+      case 'parcial': return 'bg-yellow-500/20 text-yellow-400';
+      case 'pendiente': return 'bg-red-500/20 text-red-400';
+      default: return 'bg-muted text-muted-foreground';
+    }
   };
 
   const toggleOrgExpanded = (orgId: string) => {
@@ -552,7 +618,11 @@ export default function Clientes() {
                           }}
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell>
+                        <button onClick={() => openClientProfile(client)} className="font-medium text-left hover:text-primary transition-colors hover:underline">
+                          {client.name}
+                        </button>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{client.email}</TableCell>
                       <TableCell className="text-muted-foreground">{client.nit || '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
@@ -621,7 +691,9 @@ export default function Clientes() {
                         }}
                       />
                       <div>
-                        <h3 className="font-semibold text-lg">{client.name}</h3>
+                        <button onClick={() => openClientProfile(client)} className="font-semibold text-lg text-left hover:text-primary transition-colors hover:underline">
+                          {client.name}
+                        </button>
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1001,6 +1073,190 @@ export default function Clientes() {
                 />
               </div>
             </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Client Profile Sheet */}
+      <Sheet open={!!profileClient} onOpenChange={(open) => !open && setProfileClient(null)}>
+        <SheetContent className="sm:max-w-[640px] overflow-y-auto p-0">
+          {profileClient && (
+            <div className="flex flex-col h-full">
+              {/* Profile Header */}
+              <div className="p-6 border-b border-border bg-gradient-to-r from-primary/5 to-transparent">
+                <div className="flex items-start gap-4">
+                  <img
+                    src={profileClient.logo}
+                    alt={profileClient.name}
+                    className="h-16 w-16 rounded-xl object-contain bg-muted p-2 border border-border"
+                    onError={(e) => { e.currentTarget.src = '/img/logo.png'; }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h2 className="text-xl font-bold text-foreground truncate">{profileClient.name}</h2>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                        profileClient.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
+                      }`}>
+                        <Power className="h-3 w-3" />
+                        {profileClient.status === 'active' ? 'Activo' : 'Inactivo'}
+                      </span>
+                      {profileClient.nit && (
+                        <span className="text-xs text-muted-foreground">NIT: {profileClient.nit}</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { handleEdit(profileClient); setProfileClient(null); }} className="h-8 w-8 p-0">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Profile Tabs */}
+              <Tabs value={profileTab} onValueChange={setProfileTab} className="flex-1">
+                <TabsList className="w-full justify-start rounded-none border-b bg-transparent px-6 h-auto py-0">
+                  <TabsTrigger value="info" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 text-sm">
+                    Info
+                  </TabsTrigger>
+                  <TabsTrigger value="facturas" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 text-sm">
+                    Facturas ({profileInvoices.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="servicios" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 py-3 text-sm">
+                    Servicios
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Tab: Info */}
+                <TabsContent value="info" className="p-6 space-y-4 mt-0">
+                  <div className="space-y-3">
+                    {profileClient.email && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Email</p>
+                          <p className="text-sm font-medium">{profileClient.email}</p>
+                        </div>
+                      </div>
+                    )}
+                    {profileClient.phone && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Teléfono</p>
+                          <p className="text-sm font-medium">{profileClient.phone}</p>
+                        </div>
+                      </div>
+                    )}
+                    {profileClient.address && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Dirección</p>
+                          <p className="text-sm font-medium">{profileClient.address}</p>
+                        </div>
+                      </div>
+                    )}
+                    {profileClient.nit && (
+                      <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                        <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">NIT / RUT</p>
+                          <p className="text-sm font-medium">{profileClient.nit}</p>
+                        </div>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                      <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Cliente desde</p>
+                        <p className="text-sm font-medium">{new Date(profileClient.createdAt).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Stats */}
+                  {!loadingInvoices && (
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      <div className="rounded-xl border border-border p-4 text-center">
+                        <p className="text-2xl font-bold text-foreground">{profileInvoices.length}</p>
+                        <p className="text-xs text-muted-foreground">Facturas</p>
+                      </div>
+                      <div className="rounded-xl border border-border p-4 text-center">
+                        <p className="text-2xl font-bold text-green-400">
+                          ${profileInvoices.reduce((sum, inv) => sum + inv.paidAmount, 0).toLocaleString('es-CO')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Total Pagado</p>
+                      </div>
+                      <div className="rounded-xl border border-border p-4 text-center">
+                        <p className="text-2xl font-bold text-foreground">
+                          ${profileInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0).toLocaleString('es-CO')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Total Facturado</p>
+                      </div>
+                      <div className="rounded-xl border border-border p-4 text-center">
+                        <p className="text-2xl font-bold text-yellow-400">
+                          ${profileInvoices.reduce((sum, inv) => sum + (inv.totalAmount - inv.paidAmount), 0).toLocaleString('es-CO')}
+                        </p>
+                        <p className="text-xs text-muted-foreground">Pendiente</p>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Tab: Facturas */}
+                <TabsContent value="facturas" className="p-6 space-y-3 mt-0">
+                  {loadingInvoices ? (
+                    <div className="flex items-center justify-center py-12">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+                    </div>
+                  ) : profileInvoices.length === 0 ? (
+                    <div className="text-center py-12">
+                      <Receipt className="h-12 w-12 mx-auto mb-3 text-muted-foreground/40" />
+                      <p className="text-muted-foreground">No hay facturas para este cliente</p>
+                    </div>
+                  ) : (
+                    profileInvoices.map((inv) => (
+                      <div key={inv.id} className="rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <p className="font-semibold text-foreground">#{inv.invoiceNumber}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(inv.fecha).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' })}
+                              {inv.concepto && ` · ${inv.concepto}`}
+                            </p>
+                          </div>
+                          <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(inv.status)}`}>
+                            {inv.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <p className="text-lg font-bold text-foreground">${inv.totalAmount.toLocaleString('es-CO')}</p>
+                            {inv.paidAmount > 0 && inv.paidAmount < inv.totalAmount && (
+                              <p className="text-xs text-green-400">Pagado: ${inv.paidAmount.toLocaleString('es-CO')}</p>
+                            )}
+                          </div>
+                          <Button variant="ghost" size="sm" onClick={() => handleDownloadInvoice(inv.id)} className="h-8 w-8 p-0">
+                            <Download className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </TabsContent>
+
+                {/* Tab: Servicios */}
+                <TabsContent value="servicios" className="mt-0">
+                  <div className="p-6">
+                    <ClientServicesManager
+                      client={profileClient}
+                      onUpdate={() => {}}
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
         </SheetContent>
       </Sheet>
