@@ -1298,7 +1298,7 @@ export default function Finanzas() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="gastos">
-                <BudgetComparisonReport gastos={gastos} ingresos={ingresos} />
+                <BudgetComparisonReport gastos={gastos} />
               </TabsContent>
               <TabsContent value="ingresos">
                 <IncomeReport ingresos={ingresos} />
