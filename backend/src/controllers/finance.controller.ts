@@ -48,7 +48,7 @@ export class FinanceController {
 
   async addIncome(req: Request, res: Response) {
     try {
-      const { fecha, importe, descripcion, categoria, cuenta, entidad } = req.body;
+      const { fecha, importe, descripcion, categoria, cuenta, entidad, tercero, clasificacionIngreso, noCuentaCobro, tipoTransaccion } = req.body;
 
       // Validar campos requeridos
       if (!fecha || !importe || !descripcion || !categoria) {
@@ -64,6 +64,10 @@ export class FinanceController {
         categoria,
         cuenta: cuenta || '',
         entidad: entidad || '',
+        tercero: tercero || '',
+        clasificacionIngreso: clasificacionIngreso || '',
+        noCuentaCobro: noCuentaCobro || '',
+        tipoTransaccion: tipoTransaccion || '',
       });
 
       res.json({ message: 'Ingreso agregado correctamente' });

@@ -165,6 +165,7 @@ export interface IncomeStatementExportData {
   totalGastos: number;
   utilidadBruta: number;
   margenBruto: number;
+  comisionParticipacion: number;
   dividendosDairo: number;
   reservaEmpresa: number;
   sueldoDairo: number;
@@ -179,26 +180,43 @@ export async function exportIncomeStatementPDF(data: IncomeStatementExportData) 
   await drawHeader(doc, 'ESTADO DE RESULTADOS', `Con corte a ${data.periodLabel}`);
 
   const pct = `${data.margenBruto.toFixed(2)}%`;
+  const hasComision = data.comisionParticipacion > 0;
+  const utilidadNeta = data.utilidadBruta - data.comisionParticipacion;
 
   const rows: RowDef[] = [
-    [bold('(+)  Ingresos'), boldRight(fmtNum(data.totalIngresos))],
-    ['       Ventas y prestación de servicios', right(fmtNum(data.totalIngresos))],
-    [bold('(-)  Costos y gastos'), boldRight(fmtNum(data.totalGastos))],
-    ['       Costos de venta y prestación de servicios', right(fmtNum(data.totalGastos))],
-    ['', ''],
-    [bold(`(=)  Utilidad Bruta  (${pct})`), boldRight(fmtNum(data.utilidadBruta))],
-    ['', ''],
-    [bold('Distribución de Utilidad', { textColor: [100, 100, 100] }), ''],
-    ['       Dividendos Socio (25%)', right(fmtNum(data.dividendosDairo))],
-    ['       Reserva Empresa (75%)', right(fmtNum(data.reservaEmpresa))],
-    ['       Nómina (Dairo)', right(fmtNum(data.sueldoDairo))],
-    ['', ''],
-    [bold('(=)  Total Socio (Sueldo + Dividendos)'), boldRight(fmtNum(data.totalDairo))],
-    [bold('(=)  Utilidad Neta (Reserva Empresa)'), boldRight(fmtNum(data.reservaEmpresa))],
+    [bold('(+)  Ingresos'), boldRight(fmtNum(data.totalIngresos))],                              // 0
+    ['       Ventas y prestación de servicios', right(fmtNum(data.totalIngresos))],               // 1
+    [bold('(-)  Costos y gastos'), boldRight(fmtNum(data.totalGastos))],                          // 2
+    ['       Costos de venta y prestación de servicios', right(fmtNum(data.totalGastos))],        // 3
+    ['', ''],                                                                                      // 4
+    [bold(`(=)  Utilidad Bruta  (${pct})`), boldRight(fmtNum(data.utilidadBruta))],               // 5
   ];
 
-  const totalRows = [0, 2, 5, 12, 13];
-  const accentRows = [5, 13];
+  let rowIdx = 6;
+  const totalRows = [0, 2, 5];
+  const accentRows = [5];
+
+  if (hasComision) {
+    rows.push(['(-)  Comisión / Participación (1%)', right(fmtNum(data.comisionParticipacion))]); // 6
+    rows.push([bold('(=)  Utilidad Neta después de Comisión'), boldRight(fmtNum(utilidadNeta))]); // 7
+    totalRows.push(rowIdx + 1);
+    accentRows.push(rowIdx + 1);
+    rowIdx += 2;
+  }
+
+  rows.push(['', '']); rowIdx++;
+  rows.push([bold('Distribución de Utilidad', { textColor: [100, 100, 100] }), '']); rowIdx++;
+  rows.push(['       Dividendos Socio (25%)', right(fmtNum(data.dividendosDairo))]); rowIdx++;
+  rows.push(['       Reserva Empresa (75%)', right(fmtNum(data.reservaEmpresa))]); rowIdx++;
+  rows.push(['       Nómina (Dairo)', right(fmtNum(data.sueldoDairo))]); rowIdx++;
+  rows.push(['', '']); rowIdx++;
+  const totalSocioIdx = rowIdx;
+  rows.push([bold('(=)  Total Socio (Sueldo + Dividendos)'), boldRight(fmtNum(data.totalDairo))]); rowIdx++;
+  const utilNetaIdx = rowIdx;
+  rows.push([bold('(=)  Utilidad Neta (Reserva Empresa)'), boldRight(fmtNum(data.reservaEmpresa))]); rowIdx++;
+
+  totalRows.push(totalSocioIdx, utilNetaIdx);
+  accentRows.push(utilNetaIdx);
 
   autoTable(doc, {
     startY: 48,
@@ -241,7 +259,10 @@ export async function exportIncomeStatementPDF(data: IncomeStatementExportData) 
 // ---------- Excel ----------
 
 export function exportIncomeStatementExcel(data: IncomeStatementExportData) {
-  const rows = [
+  const hasComision = data.comisionParticipacion > 0;
+  const utilidadNeta = data.utilidadBruta - data.comisionParticipacion;
+
+  const rows: (string | number | null)[][] = [
     [COMPANY_NAME],
     [COMPANY_NIT],
     ['ESTADO DE RESULTADOS'],
@@ -254,6 +275,14 @@ export function exportIncomeStatementExcel(data: IncomeStatementExportData) {
     ['     Costos de venta y prestación de servicios', data.totalGastos],
     [],
     [`(=) Utilidad Bruta (${data.margenBruto.toFixed(2)}%)`, data.utilidadBruta],
+  ];
+
+  if (hasComision) {
+    rows.push(['(-) Comisión / Participación (1%)', data.comisionParticipacion]);
+    rows.push([`(=) Utilidad Neta después de Comisión`, utilidadNeta]);
+  }
+
+  rows.push(
     [],
     ['Distribución de Utilidad'],
     ['     Dividendos Socio (25%)', data.dividendosDairo],
@@ -268,7 +297,7 @@ export function exportIncomeStatementExcel(data: IncomeStatementExportData) {
     [REP_LEGAL_NAME, '', CONTADOR_NAME],
     [REP_LEGAL_CC, '', CONTADOR_CC],
     ['', '', CONTADOR_TP],
-  ];
+  );
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 48 }, { wch: 22 }, { wch: 42 }];

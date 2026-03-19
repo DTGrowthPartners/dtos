@@ -73,11 +73,11 @@ const TRANSFER_CATEGORIES = [
 
 // Cuentas disponibles
 const AVAILABLE_ACCOUNTS = [
-  'Bancolombia *5993',
-  'Bancolombia *7710',
+  'Bancolombia',
   'Nequi',
   'Daviplata',
-  'Rappicuenta',
+  'Efectivo',
+  'Cuentas por Pagar a Clientes',
 ];
 
 // Bancos preestablecidos para entradas (alias para compatibilidad)
@@ -124,6 +124,12 @@ interface DisponibleResponse {
   cuentas: CuentaDisponible[];
   totalDisponible: number;
 }
+
+// Check if a transaction account is "Cuentas por Pagar" (pasivo)
+const isCuentaPorPagar = (cuenta: string | undefined | null): boolean => {
+  if (!cuenta) return false;
+  return cuenta.trim().toUpperCase().startsWith('CUENTAS POR PAGA');
+};
 
 // Helper to check if a category is AJUSTE SALDO (case-insensitive, trim whitespace)
 const isAjusteSaldo = (categoria: string | undefined | null): boolean => {
@@ -181,6 +187,7 @@ export default function Finanzas() {
   const [gastos, setGastos] = useState<Transaction[]>([]);
   const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
   const [totalDisponible, setTotalDisponible] = useState(0);
+  const [resumenInvoices, setResumenInvoices] = useState<{ id: string; invoiceNumber: string; totalAmount: number; paidAmount: number; status: string; clientName: string; fecha: string; concepto: string | null; servicio: string | null }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
@@ -222,10 +229,28 @@ export default function Finanzas() {
     cuenta: '',
     entidad: '',
     cuentaOrigen: '', // For transfers: source account
+    clasificacionIngreso: '',
+    noCuentaCobro: '',
+    tipoTransaccion: '', // 'Pago Total' | 'Abono'
   });
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
 
   // Check if selected category is a transfer
   const isTransferCategory = TRANSFER_CATEGORIES.includes(incomeForm.categoria);
+  const isPagoCliente = incomeForm.categoria === 'PAGO DE CLIENTE';
+
+  // Clients with pending invoices (for income modal)
+  const clientesConCartera = useMemo(() => {
+    const pendientes = resumenInvoices.filter(inv => inv.status !== 'pagada');
+    const clientSet = new Set(pendientes.map(inv => inv.clientName).filter(Boolean));
+    return Array.from(clientSet).sort();
+  }, [resumenInvoices]);
+
+  // Pending invoices for selected client
+  const invoicesForSelectedClient = useMemo(() => {
+    if (!incomeForm.entidad) return [];
+    return resumenInvoices.filter(inv => inv.clientName === incomeForm.entidad && inv.status !== 'pagada');
+  }, [resumenInvoices, incomeForm.entidad]);
 
   // Date preset options (Shopify style)
   const datePresets = [
@@ -430,10 +455,11 @@ export default function Finanzas() {
     try {
       if (!silent) setIsLoading(true);
 
-      // Fetch finance data and disponible in parallel
-      const [data, disponibleData] = await Promise.all([
+      // Fetch finance data, disponible and invoices in parallel
+      const [data, disponibleData, invoicesData] = await Promise.all([
         apiClient.get<FinanceResponse>('/api/finance/data'),
         apiClient.get<DisponibleResponse>('/api/finance/disponible'),
+        apiClient.get<{ id: string; invoiceNumber: string; totalAmount: number; paidAmount: number; status: string; clientName: string; fecha: string; concepto: string | null; servicio: string | null }[]>('/api/invoices').catch(() => []),
       ]);
 
       setFinanceData(data.financeByMonth);
@@ -446,6 +472,7 @@ export default function Finanzas() {
       // Set disponible data
       setDisponible(disponibleData.cuentas || []);
       setTotalDisponible(disponibleData.totalDisponible || 0);
+      setResumenInvoices(invoicesData || []);
       setLastSyncTime(new Date());
     } catch (error) {
       console.error('Error fetching finance data:', error);
@@ -793,6 +820,151 @@ export default function Finanzas() {
 
   const hasActiveFilters = filterCategory !== 'todas' || filterType !== 'todas' || filterDatePreset !== 'todas';
 
+  // Top clientes por facturación (solo ingresos reales: PAGO DE CLIENTE)
+  const topClientesByFacturacion = useMemo(() => {
+    const source = hasActiveFilters ? filteredIngresos : ingresos;
+    const clientMap = new Map<string, number>();
+    source
+      .filter(t => isRealIncome(t.categoria))
+      .forEach(t => {
+        if (t.entidad) {
+          clientMap.set(t.entidad, (clientMap.get(t.entidad) || 0) + t.importe);
+        }
+      });
+    const total = Array.from(clientMap.values()).reduce((s, v) => s + v, 0);
+    return {
+      items: Array.from(clientMap.entries())
+        .map(([name, value]) => ({ name, value, pct: total > 0 ? (value / total) * 100 : 0 }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10),
+      total,
+    };
+  }, [hasActiveFilters, filteredIngresos, ingresos]);
+
+  // Cuentas por cobrar filtradas
+  // Cuentas por Cobrar (same logic as BalanceSheet: saldo > 0 and not pagada)
+  // Fecha de corte para Estado de Resultados y Situación Financiera
+  // Usa la misma lógica que IncomeStatement/BalanceSheet: fin de mes/período completo, no "hoy"
+  const resumenPeriod = useMemo(() => {
+    if (!hasActiveFilters || filterDatePreset === 'todas') {
+      // "Todo" = Q1 completo en IncomeStatement = sin límite de fecha
+      return { from: '', to: '2099-12-31' };
+    }
+    // Para meses: usar mes completo (como IncomeStatement que filtra por prefijo)
+    if (filterDatePreset === 'thisMonth') {
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+      return { from: getLocalDateString(firstDay), to: getLocalDateString(lastDay) };
+    }
+    if (filterDatePreset === 'lastMonth') {
+      const today = new Date();
+      const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { from: getLocalDateString(firstDay), to: getLocalDateString(lastDay) };
+    }
+    if (filterDatePreset === 'thisQuarter') {
+      const today = new Date();
+      const quarter = Math.floor(today.getMonth() / 3);
+      const firstDay = new Date(today.getFullYear(), quarter * 3, 1);
+      const lastDay = new Date(today.getFullYear(), quarter * 3 + 3, 0);
+      return { from: getLocalDateString(firstDay), to: getLocalDateString(lastDay) };
+    }
+    if (filterDatePreset === 'thisYear') {
+      const today = new Date();
+      return { from: `${today.getFullYear()}-01-01`, to: `${today.getFullYear()}-12-31` };
+    }
+    // Custom u otros: usar las fechas exactas del filtro
+    return { from: filterDateFrom, to: filterDateTo || '2099-12-31' };
+  }, [hasActiveFilters, filterDatePreset, filterDateFrom, filterDateTo]);
+
+  // Normalizar nombre de cuenta (misma lógica que BalanceSheet)
+  const normalizeCuentaName = (cuenta: string): string => {
+    const upper = cuenta.trim().toUpperCase();
+    if (upper.startsWith('BANCOLOMBIA')) return 'Bancolombia';
+    if (upper.startsWith('NEQUI')) return 'Nequi';
+    if (upper.startsWith('DAVIPLATA')) return 'Daviplata';
+    if (upper.startsWith('EFECTIVO')) return 'Efectivo';
+    if (upper.startsWith('CRUCE')) return 'Cuentas por Pagar a Clientes';
+    if (upper.startsWith('CUENTAS POR PAGA')) return 'Cuentas por Pagar a Clientes';
+    if (upper.startsWith('RAPPICUENTA') || upper.startsWith('RAPPI')) return 'Rappicuenta';
+    if (upper === 'PRINCIPAL') return 'Bancolombia';
+    return cuenta.trim();
+  };
+
+  // Helper para retenciones (misma lógica que BalanceSheet)
+  const isRetencionCuenta = (cuenta: string | undefined | null): boolean => {
+    if (!cuenta) return false;
+    const upper = cuenta.trim().toUpperCase();
+    return upper.includes('RETENCION') || upper.includes('RETENCIÓN');
+  };
+
+  // Disponible y Retenciones ajustados al corte (misma lógica que BalanceSheet.disponibleAlCorte)
+  const { disponibleSinPasivo, totalRetenciones } = useMemo(() => {
+    const endDate = resumenPeriod.to;
+    const movimientosDespues = new Map<string, number>();
+    ingresos.forEach(t => {
+      const fecha = normalizeDate(t.fecha);
+      if (fecha && fecha > endDate && t.cuenta && !isCuentaPorPagar(t.cuenta)) {
+        const cuentaNorm = normalizeCuentaName(t.cuenta);
+        movimientosDespues.set(cuentaNorm, (movimientosDespues.get(cuentaNorm) || 0) - t.importe);
+      }
+    });
+    gastos.forEach(t => {
+      const fecha = normalizeDate(t.fecha);
+      if (fecha && fecha > endDate && t.cuenta && !isCuentaPorPagar(t.cuenta)) {
+        const cuentaNorm = normalizeCuentaName(t.cuenta);
+        movimientosDespues.set(cuentaNorm, (movimientosDespues.get(cuentaNorm) || 0) + t.importe);
+      }
+    });
+    const todasCuentas = disponible
+      .filter(c => !isCuentaPorPagar(c.cuenta))
+      .map(c => {
+        const ajuste = movimientosDespues.get(normalizeCuentaName(c.cuenta)) || 0;
+        return { cuenta: c.cuenta, saldo: c.saldo + ajuste };
+      });
+    const disp = todasCuentas.filter(c => !isRetencionCuenta(c.cuenta)).reduce((s, c) => s + c.saldo, 0);
+    const ret = todasCuentas.filter(c => isRetencionCuenta(c.cuenta)).reduce((s, c) => s + c.saldo, 0);
+    return { disponibleSinPasivo: disp, totalRetenciones: ret };
+  }, [disponible, ingresos, gastos, resumenPeriod]);
+
+  // Cuentas por Cobrar (misma lógica que BalanceSheet.cuentasPorCobrar)
+  const cuentasPorCobrar = useMemo(() => {
+    const endDate = resumenPeriod.to;
+    return resumenInvoices
+      .filter(inv => {
+        const fechaInv = normalizeDate(inv.fecha);
+        if (fechaInv > endDate) return false;
+        const saldo = inv.totalAmount - (inv.paidAmount || 0);
+        if (saldo <= 0 || inv.status === 'pagada') return false;
+        return true;
+      })
+      .reduce((s, inv) => s + (inv.totalAmount - (inv.paidAmount || 0)), 0);
+  }, [resumenInvoices, resumenPeriod]);
+
+  // Cuentas por Pagar (misma lógica que BalanceSheet.cuentasPorPagar)
+  const cuentasPorPagarTotal = useMemo(() => {
+    const endDate = resumenPeriod.to;
+    let total = 0;
+    gastos.forEach(t => {
+      const fecha = normalizeDate(t.fecha);
+      if (fecha && fecha <= endDate && isCuentaPorPagar(t.cuenta)) {
+        total += t.importe;
+      }
+    });
+    ingresos.forEach(t => {
+      const fecha = normalizeDate(t.fecha);
+      if (fecha && fecha <= endDate && isCuentaPorPagar(t.cuenta)) {
+        total -= t.importe;
+      }
+    });
+    return total;
+  }, [ingresos, gastos, resumenPeriod]);
+
+  // Ecuación contable: Activo = Pasivo + Patrimonio
+  const totalActivos = useMemo(() => disponibleSinPasivo + cuentasPorCobrar + totalRetenciones, [disponibleSinPasivo, cuentasPorCobrar, totalRetenciones]);
+  const patrimonio = useMemo(() => totalActivos - cuentasPorPagarTotal, [totalActivos, cuentasPorPagarTotal]);
+
   // Calculations that depend on data
   const currentMonth = financeData[financeData.length - 1] || { month: '', income: 0, expenses: 0 };
   const previousMonth = financeData[financeData.length - 2] || { month: '', income: 0, expenses: 0 };
@@ -809,6 +981,36 @@ export default function Finanzas() {
   const displayExpenses = hasActiveFilters ? filteredTotalExpenses : baseTotalExpenses;
   const netProfit = displayIncome - displayExpenses;
   const profitMargin = displayIncome > 0 ? (netProfit / displayIncome) * 100 : 0;
+
+  // Estado de Resultados (misma lógica que IncomeStatement: excluye categorías + filtro de fechas por período completo)
+  const edoResultados = useMemo(() => {
+    const isExcluded = (cat: string | undefined | null) => {
+      if (!cat) return false;
+      const upper = cat.trim().toUpperCase();
+      return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
+    };
+    const { from, to } = resumenPeriod;
+    const inDateRange = (t: { fecha: string }) => {
+      const fecha = normalizeDate(t.fecha);
+      if (from && fecha < from) return false;
+      if (to && fecha > to) return false;
+      return true;
+    };
+    const ingresosEdoR = ingresos.filter(t => !isExcluded(t.categoria) && inDateRange(t));
+    const gastosEdoR = gastos.filter(t => !isExcluded(t.categoria) && inDateRange(t));
+    const totalIng = ingresosEdoR.reduce((s, t) => s + t.importe, 0);
+    const totalGas = gastosEdoR.reduce((s, t) => s + t.importe, 0);
+    const bruta = totalIng - totalGas;
+    const margen = totalIng > 0 ? (bruta / totalIng) * 100 : 0;
+    // Comisión aplica solo si el período incluye feb 2026+ (misma lógica que IncomeStatement)
+    const aplicaComision = to >= '2026-02-01';
+    const comision = aplicaComision && bruta > 0 ? bruta * 0.01 : 0;
+    const netaDespuesComision = bruta - comision;
+    const dividendos = netaDespuesComision > 0 ? netaDespuesComision * 0.25 : 0;
+    const reserva = netaDespuesComision > 0 ? netaDespuesComision * 0.75 : 0;
+    const margenNeto = totalIng > 0 ? (netaDespuesComision / totalIng) * 100 : 0;
+    return { totalIng, totalGas, bruta, margen, comision, netaDespuesComision, dividendos, reserva, margenNeto };
+  }, [ingresos, gastos, resumenPeriod]);
 
   // Loading state check AFTER all hooks
   if (isLoading) {
@@ -877,8 +1079,16 @@ export default function Finanzas() {
       } else {
         // Normal income registration
         await apiClient.post('/api/finance/income', {
-          ...incomeForm,
-          entidad: incomeForm.entidad || 'tercero', // Default to "tercero" if not specified
+          fecha: incomeForm.fecha,
+          importe: incomeForm.importe,
+          descripcion: incomeForm.descripcion,
+          categoria: incomeForm.categoria,
+          cuenta: incomeForm.cuenta,
+          entidad: incomeForm.entidad || 'tercero',
+          tercero: incomeForm.entidad || '',
+          clasificacionIngreso: incomeForm.clasificacionIngreso || '',
+          noCuentaCobro: incomeForm.noCuentaCobro || '',
+          tipoTransaccion: incomeForm.tipoTransaccion || '',
         });
         toast({
           title: 'Éxito',
@@ -896,7 +1106,11 @@ export default function Finanzas() {
         cuenta: '',
         entidad: '',
         cuentaOrigen: '',
+        clasificacionIngreso: '',
+        noCuentaCobro: '',
+        tipoTransaccion: '',
       });
+      setSelectedInvoiceId('');
       fetchFinanceData();
     } catch (error) {
       console.error('Error adding income:', error);
@@ -1100,361 +1314,195 @@ export default function Finanzas() {
 
           <TabsContent value="resumen" className="mt-6 space-y-6">
 
-        {/* Filter Panel */}
-        {showFilters && (
-          <div className="rounded-xl border border-border bg-card p-4 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
-              <div className="w-full">
-                <label className="text-sm font-medium text-foreground mb-2 block">Tipo</label>
-                <Select value={filterType} onValueChange={(value: 'todas' | 'ingresos' | 'gastos') => setFilterType(value)}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Seleccionar tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas las transacciones</SelectItem>
-                    <SelectItem value="ingresos">Solo ingresos</SelectItem>
-                    <SelectItem value="gastos">Solo gastos</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Time-based Filter Buttons */}
+        <div className="flex flex-wrap items-center gap-2">
+          {[
+            { key: 'thisMonth', label: 'Este Mes' },
+            { key: 'lastMonth', label: 'Mes Anterior' },
+            { key: 'thisQuarter', label: 'Trimestre' },
+            { key: 'thisYear', label: 'Este Año' },
+            { key: 'todas', label: 'Todo' },
+            { key: 'custom', label: 'Personalizado' },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              onClick={() => applyDatePreset(btn.key)}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border transition-all",
+                filterDatePreset === btn.key
+                  ? "border-primary bg-primary/10 text-primary shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/50 hover:text-foreground"
+              )}
+            >
+              {btn.label}
+            </button>
+          ))}
 
-              <div className="w-full">
-                <label className="text-sm font-medium text-foreground mb-2 block">Categoría</label>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Seleccionar categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {allCategories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat === 'todas' ? 'Todas las categorías' : cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium border border-destructive/30 text-destructive hover:bg-destructive/10 transition-all flex items-center gap-1"
+            >
+              <X className="h-3.5 w-3.5" />
+              Limpiar
+            </button>
+          )}
+        </div>
 
-              <div className="w-full">
-                <label className="text-sm font-medium text-foreground mb-2 block">Período</label>
-                <Select value={filterDatePreset} onValueChange={applyDatePreset}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Seleccionar período" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {datePresets.map((preset) => (
-                      <SelectItem key={preset.value} value={preset.value}>
-                        {preset.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* Custom Date Range */}
+        {filterDatePreset === 'custom' && (
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Desde</label>
+              <Input
+                type="date"
+                value={filterDateFrom}
+                onChange={(e) => setFilterDateFrom(e.target.value)}
+                className="w-[160px] h-9"
+              />
             </div>
-
-            {/* Custom date range inputs - only show when "Personalizado" is selected */}
-            {filterDatePreset === 'custom' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-border">
-                <div className="w-full">
-                  <label className="text-sm font-medium text-foreground mb-2 block">Fecha Desde</label>
-                  <Input
-                    type="date"
-                    value={filterDateFrom}
-                    onChange={(e) => setFilterDateFrom(e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-
-                <div className="w-full">
-                  <label className="text-sm font-medium text-foreground mb-2 block">Fecha Hasta</label>
-                  <Input
-                    type="date"
-                    value={filterDateTo}
-                    onChange={(e) => setFilterDateTo(e.target.value)}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* Show selected date range info */}
-            {filterDatePreset !== 'todas' && filterDateFrom && filterDateTo && (
-              <div className="mt-3 text-sm text-muted-foreground">
-                <Calendar className="h-4 w-4 inline mr-1" />
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">Hasta</label>
+              <Input
+                type="date"
+                value={filterDateTo}
+                onChange={(e) => setFilterDateTo(e.target.value)}
+                className="w-[160px] h-9"
+              />
+            </div>
+            {filterDateFrom && filterDateTo && (
+              <span className="text-xs text-muted-foreground pb-2">
+                <Calendar className="h-3.5 w-3.5 inline mr-1" />
                 {filterDateFrom} → {filterDateTo}
-              </div>
-            )}
-
-            {hasActiveFilters && (
-              <div className="mt-4 pt-4 border-t border-border flex justify-end">
-                <Button
-                  variant="ghost"
-                  onClick={clearFilters}
-                  size="sm"
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Limpiar filtros
-                </Button>
-              </div>
+              </span>
             )}
           </div>
         )}
 
-        {/* Quick Filter Buttons */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
-        {/* Este Mes */}
-        <button
-          onClick={() => applyDatePreset('thisMonth')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'thisMonth'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Mes</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
-            {new Date().toLocaleDateString('es-ES', { month: 'short' })}
-          </p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.month.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.month.expenses)}</span>
-            </div>
-          </div>
-        </button>
-
-        {/* Esta Semana */}
-        <button
-          onClick={() => applyDatePreset('last7days')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'last7days'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Semana</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">7 dias</p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.week.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.week.expenses)}</span>
-            </div>
-          </div>
-        </button>
-
-        {/* Hoy */}
-        <button
-          onClick={() => applyDatePreset('today')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'today'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Hoy</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1 capitalize line-clamp-1">
-            {new Date().toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}
-          </p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.today.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.today.expenses)}</span>
-            </div>
-          </div>
-        </button>
-
-        {/* Este Ano */}
-        <button
-          onClick={() => applyDatePreset('thisYear')}
-          className={cn(
-            "p-3 sm:p-4 rounded-xl border transition-all hover:shadow-md text-left",
-            filterDatePreset === 'thisYear'
-              ? "border-primary bg-primary/10 shadow-sm"
-              : "border-border bg-card hover:border-primary/50"
-          )}
-        >
-          <p className="text-[10px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wide">Ano</p>
-          <p className="text-xs sm:text-sm font-semibold text-foreground mt-0.5 sm:mt-1">{new Date().getFullYear()}</p>
-          <div className="mt-2 sm:mt-3 space-y-0.5 sm:space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Ing.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-success">{formatCompactCurrency(periodTotals.year.income)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] sm:text-xs text-muted-foreground">Gas.</span>
-              <span className="text-[10px] sm:text-xs font-medium text-destructive">{formatCompactCurrency(periodTotals.year.expenses)}</span>
-            </div>
-          </div>
-        </button>
-      </div>
-
-      {/* Stats Grid - 3 cards */}
-      <div className="grid gap-3 sm:gap-4 grid-cols-2 lg:grid-cols-3">
-        <div className="stat-card p-3 sm:p-4">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
-                Ingresos {hasActiveFilters ? '(Filt.)' : ''}
-              </p>
-              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayIncome)}</p>
-              {monthTrends.incomeChange !== 0 && !hasActiveFilters && (
-                <p className={cn("text-[10px] sm:text-xs mt-0.5 flex items-center gap-0.5", monthTrends.incomeChange > 0 ? "text-success" : "text-destructive")}>
-                  {monthTrends.incomeChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {Math.abs(monthTrends.incomeChange).toFixed(0)}% vs mes ant.
-                </p>
+        {/* Summary Cards: Estado de Resultados + Situación Financiera */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Estado de Resultados */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              Estado de Resultados
+            </h3>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm text-muted-foreground">Ingresos</span>
+                <span className="text-xs sm:text-sm font-semibold text-success">${edoResultados.totalIng.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm text-muted-foreground">Gastos</span>
+                <span className="text-xs sm:text-sm font-semibold text-destructive">${edoResultados.totalGas.toLocaleString()}</span>
+              </div>
+              <div className="border-t border-border pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-medium text-foreground">Utilidad Bruta</span>
+                  <span className={cn("text-xs sm:text-sm font-bold", edoResultados.bruta >= 0 ? "text-success" : "text-destructive")}>
+                    ${edoResultados.bruta.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground">Margen Bruto</span>
+                  <span className={cn("text-[10px] sm:text-xs font-medium", edoResultados.margen >= 0 ? "text-success" : "text-destructive")}>
+                    {edoResultados.margen.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
+              {edoResultados.comision > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">(-) Comisión 1%</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-destructive">-${Math.round(edoResultados.comision).toLocaleString()}</span>
+                  </div>
+                  <div className="border-t border-border pt-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs sm:text-sm font-medium text-foreground">(=) Utilidad Neta después de Comisión</span>
+                      <span className={cn("text-xs sm:text-sm font-bold", edoResultados.netaDespuesComision >= 0 ? "text-success" : "text-destructive")}>
+                        ${Math.round(edoResultados.netaDespuesComision).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                </>
               )}
-              {hasActiveFilters && (
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: {formatCompactCurrency(baseTotalIncome)}
-                </p>
+              {edoResultados.netaDespuesComision > 0 && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">Dividendos (25%)</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-foreground">${Math.round(edoResultados.dividendos).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] sm:text-xs text-muted-foreground">Reserva Empresa (75%)</span>
+                    <span className="text-[10px] sm:text-xs font-medium text-foreground">${Math.round(edoResultados.reserva).toLocaleString()}</span>
+                  </div>
+                </>
               )}
+              <div className="border-t border-border pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-medium text-foreground">Utilidad Neta (Reserva Empresa)</span>
+                  <span className={cn("text-sm sm:text-base font-bold", edoResultados.reserva >= 0 ? "text-success" : "text-destructive")}>
+                    ${Math.round(edoResultados.reserva).toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-0.5">
+                  <span className="text-[10px] sm:text-xs text-muted-foreground">Margen Neto</span>
+                  <span className={cn("text-[10px] sm:text-xs font-medium", edoResultados.margenNeto >= 0 ? "text-success" : "text-destructive")}>
+                    {edoResultados.margenNeto.toFixed(1)}%
+                  </span>
+                </div>
+              </div>
             </div>
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-success/10 flex-shrink-0">
-              <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-success" />
+          </div>
+
+          {/* Situación Financiera */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Wallet className="h-4 w-4 text-primary" />
+              Situación Financiera
+            </h3>
+            <div className="space-y-2">
+              {/* Activos */}
+              <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide">Activos</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm text-muted-foreground">Disponible</span>
+                <span className="text-xs sm:text-sm font-semibold text-primary">${Math.round(disponibleSinPasivo).toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm text-muted-foreground">Cuentas por Cobrar</span>
+                <span className="text-xs sm:text-sm font-semibold text-warning">${Math.round(cuentasPorCobrar).toLocaleString()}</span>
+              </div>
+              {totalRetenciones > 0 && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm text-muted-foreground">Retenciones en la Fuente</span>
+                  <span className="text-xs sm:text-sm font-semibold text-blue-600 dark:text-blue-400">${Math.round(totalRetenciones).toLocaleString()}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between border-t border-border pt-1">
+                <span className="text-xs sm:text-sm font-medium text-foreground">Total Activos</span>
+                <span className="text-xs sm:text-sm font-bold text-primary">${Math.round(totalActivos).toLocaleString()}</span>
+              </div>
+
+              {/* Pasivos */}
+              <p className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide pt-1">Pasivos</p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs sm:text-sm text-muted-foreground">Cuentas por Pagar</span>
+                <span className="text-xs sm:text-sm font-semibold text-destructive">${Math.round(cuentasPorPagarTotal).toLocaleString()}</span>
+              </div>
+
+              {/* Patrimonio */}
+              <div className="border-t border-border pt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-medium text-foreground">Patrimonio</span>
+                  <span className={cn("text-sm sm:text-base font-bold", patrimonio >= 0 ? "text-primary" : "text-destructive")}>
+                    ${Math.round(patrimonio).toLocaleString()}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="stat-card p-3 sm:p-4">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-sm text-muted-foreground truncate">
-                Gastos {hasActiveFilters ? '(Filt.)' : ''}
-              </p>
-              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">{formatCompactCurrency(displayExpenses)}</p>
-              {monthTrends.expenseChange !== 0 && !hasActiveFilters && (
-                <p className={cn("text-[10px] sm:text-xs mt-0.5 flex items-center gap-0.5", monthTrends.expenseChange < 0 ? "text-success" : "text-destructive")}>
-                  {monthTrends.expenseChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {Math.abs(monthTrends.expenseChange).toFixed(0)}% vs mes ant.
-                </p>
-              )}
-              {hasActiveFilters && (
-                <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">
-                  Total: {formatCompactCurrency(baseTotalExpenses)}
-                </p>
-              )}
-            </div>
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-destructive/10 flex-shrink-0">
-              <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-destructive" />
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card p-3 sm:p-4">
-          <div className="flex items-start justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-sm text-muted-foreground">Transac.</p>
-              <p className="text-base sm:text-2xl font-bold text-foreground mt-0.5 sm:mt-1">
-                {hasActiveFilters
-                  ? filteredIngresos.length + filteredGastos.length
-                  : ingresos.length + gastos.length
-                }
-              </p>
-              <p className="text-[10px] sm:text-sm text-muted-foreground mt-1 sm:mt-2">
-                {hasActiveFilters
-                  ? `${filteredIngresos.length}↑ / ${filteredGastos.length}↓`
-                  : `${ingresos.length}↑ / ${gastos.length}↓`
-                }
-              </p>
-            </div>
-            <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-warning/10 flex-shrink-0">
-              <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 text-warning" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Utilidad Neta - Sección Destacada */}
-      <div className={cn(
-        "rounded-xl border-2 p-4 sm:p-6 transition-all",
-        netProfit >= 0
-          ? "bg-gradient-to-br from-success/10 to-success/5 border-success/40"
-          : "bg-gradient-to-br from-destructive/10 to-destructive/5 border-destructive/40"
-      )}>
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className={cn(
-              "flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl",
-              netProfit >= 0 ? "bg-success/20" : "bg-destructive/20"
-            )}>
-              <DollarSign className="h-6 w-6 sm:h-7 sm:w-7" style={{ color: netProfit >= 0 ? 'hsl(var(--success))' : 'hsl(var(--destructive))' }} />
-            </div>
-            <div>
-              <p className="text-xs sm:text-sm text-muted-foreground font-medium mb-1">
-                Utilidad Neta {hasActiveFilters ? '(Filtrado)' : ''}
-              </p>
-              <p className={cn(
-                "text-2xl sm:text-4xl font-bold",
-                netProfit >= 0 ? "text-success" : "text-destructive"
-              )}>
-                {formatCompactCurrency(netProfit)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col items-start sm:items-end gap-2 w-full sm:w-auto">
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-sm sm:text-base font-semibold",
-                profitMargin >= 0 ? "text-success" : "text-destructive"
-              )}>
-                {profitMargin.toFixed(1)}% margen
-              </span>
-              {monthTrends.profitChange !== 0 && !hasActiveFilters && (
-                <span className={cn(
-                  "text-xs sm:text-sm flex items-center gap-1 px-2 py-1 rounded-lg",
-                  monthTrends.profitChange > 0
-                    ? "bg-success/20 text-success"
-                    : "bg-destructive/20 text-destructive"
-                )}>
-                  {monthTrends.profitChange > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                  {Math.abs(monthTrends.profitChange).toFixed(0)}% vs mes ant.
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Ingresos - Gastos = Utilidad
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Financial Health Indicator */}
-      {!hasActiveFilters && (
-        <div className={cn(
-          "flex items-center gap-3 p-3 rounded-xl border text-sm",
-          profitMargin >= 20
-            ? "bg-success/10 border-success/30 text-success"
-            : profitMargin >= 0
-              ? "bg-warning/10 border-warning/30 text-warning"
-              : "bg-destructive/10 border-destructive/30 text-destructive"
-        )}>
-          <div className={cn(
-            "h-3 w-3 rounded-full flex-shrink-0",
-            profitMargin >= 20 ? "bg-success" : profitMargin >= 0 ? "bg-warning" : "bg-destructive"
-          )} />
-          <span className="font-medium">
-            {profitMargin >= 20 ? 'Salud financiera: Buena' : profitMargin >= 0 ? 'Salud financiera: Precaucion' : 'Salud financiera: Critica'}
-          </span>
-          <span className="text-xs opacity-70 ml-auto">
-            Margen: {profitMargin.toFixed(1)}%
-          </span>
-        </div>
-      )}
 
       {/* Disponible - Saldo por Cuenta */}
       {disponible.length > 0 && (
@@ -1471,14 +1519,14 @@ export default function Finanzas() {
             </div>
             <div className="text-left sm:text-right">
               <p className="text-xl sm:text-2xl font-bold text-primary">
-                ${Math.round(totalDisponible).toLocaleString()}
+                ${Math.round(disponibleSinPasivo).toLocaleString()}
               </p>
               <p className="text-[10px] sm:text-xs text-muted-foreground">Total disponible</p>
             </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-            {disponible.filter(c => c.saldo > 0).map((cuenta, index) => (
+            {disponible.filter(c => c.saldo > 0 && !isCuentaPorPagar(c.cuenta) && !isRetencionCuenta(c.cuenta)).map((cuenta, index) => (
               <div
                 key={index}
                 className="p-2 sm:p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
@@ -1588,6 +1636,53 @@ export default function Finanzas() {
           ) : (
             <div className="flex items-center justify-center h-40 sm:h-48 text-muted-foreground text-xs sm:text-sm">
               No hay categorías de gastos
+            </div>
+          )}
+        </div>
+
+        {/* Top Clientes por Facturación */}
+        <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
+          <h3 className="font-semibold text-foreground mb-1 sm:mb-2 text-sm sm:text-base">Top Clientes por Facturación</h3>
+          <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">
+            {hasActiveFilters ? 'Filtrado por período' : 'Mayor facturación acumulada'}
+          </p>
+          {topClientesByFacturacion.items.length > 0 ? (
+            <>
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 mb-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-primary">Total Facturado:</span>
+                  <span className="text-lg font-bold text-primary">${topClientesByFacturacion.total.toLocaleString()}</span>
+                </div>
+              </div>
+              <div className="space-y-2.5">
+                {topClientesByFacturacion.items.map((client, idx) => {
+                  const maxVal = topClientesByFacturacion.items[0]?.value || 1;
+                  const barWidth = (client.value / maxVal) * 100;
+                  return (
+                    <div key={idx}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs sm:text-sm font-medium text-foreground truncate flex-1" title={client.name}>
+                          {client.name.length > 22 ? client.name.substring(0, 22) + '...' : client.name}
+                        </span>
+                        <div className="flex items-center gap-2 ml-2 whitespace-nowrap">
+                          <span className="text-xs sm:text-sm font-bold text-foreground">${client.value.toLocaleString()}</span>
+                          <span className="text-[10px] sm:text-xs text-muted-foreground">({client.pct.toFixed(1)}%)</span>
+                        </div>
+                      </div>
+                      <div className="w-full h-2.5 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500 bg-primary"
+                          style={{ width: `${barWidth}%`, opacity: Math.max(0.3, 1 - idx * 0.1) }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-center h-40 sm:h-48 text-muted-foreground text-xs sm:text-sm">
+              No hay datos de facturación
             </div>
           )}
         </div>
@@ -1889,22 +1984,6 @@ export default function Finanzas() {
         </div>
       </div>
 
-      {/* Info Card */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 flex-shrink-0">
-            <TrendingUp className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-foreground mb-2">Datos desde Google Sheets</h3>
-            <p className="text-sm text-muted-foreground">
-              Los datos financieros se cargan automáticamente desde tu hoja de cálculo de Google Sheets.
-              Las hojas "Entrada" y "Salida" contienen los registros de ingresos y gastos respectivamente.
-              Haz clic en "Actualizar" para obtener los datos más recientes.
-            </p>
-          </div>
-        </div>
-      </div>
           </TabsContent>
         </Tabs>
       </div>
@@ -2010,14 +2089,130 @@ export default function Finanzas() {
 
               <div>
                 <label className="text-sm font-medium text-foreground mb-2 block">
-                  {isTransferCategory ? 'Quién hace el traslado' : 'Quién paga (Tercero)'}
+                  {isTransferCategory ? 'Quién hace el traslado' : 'Tercero (Cliente)'}
                 </label>
-                <Input
-                  value={incomeForm.entidad}
-                  onChange={(e) => setIncomeForm({ ...incomeForm, entidad: e.target.value })}
-                  placeholder={isTransferCategory ? 'Ej: Dairo Traslaviña' : 'Ej: Nombre del cliente que paga'}
-                />
+                {isPagoCliente && clientesConCartera.length > 0 ? (
+                  <Select
+                    value={incomeForm.entidad}
+                    onValueChange={(value) => {
+                      setIncomeForm({ ...incomeForm, entidad: value, noCuentaCobro: '', tipoTransaccion: '', clasificacionIngreso: '' });
+                      setSelectedInvoiceId('');
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientesConCartera.map((client) => (
+                        <SelectItem key={client} value={client}>{client}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={incomeForm.entidad}
+                    onChange={(e) => setIncomeForm({ ...incomeForm, entidad: e.target.value })}
+                    placeholder={isTransferCategory ? 'Ej: Dairo Traslaviña' : 'Ej: Nombre del cliente que paga'}
+                  />
+                )}
               </div>
+
+              {/* Invoice selection when PAGO DE CLIENTE and client selected */}
+              {isPagoCliente && incomeForm.entidad && invoicesForSelectedClient.length > 0 && (
+                <div className="p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800 space-y-3">
+                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                    Cuentas de Cobro pendientes de {incomeForm.entidad}
+                  </p>
+
+                  <div>
+                    <label className="text-xs font-medium text-foreground mb-1 block">Cuenta de Cobro</label>
+                    <Select
+                      value={selectedInvoiceId}
+                      onValueChange={(value) => {
+                        setSelectedInvoiceId(value);
+                        const inv = invoicesForSelectedClient.find(i => i.id === value);
+                        if (inv) {
+                          const saldo = inv.totalAmount - (inv.paidAmount || 0);
+                          setIncomeForm(prev => ({
+                            ...prev,
+                            noCuentaCobro: inv.invoiceNumber,
+                            clasificacionIngreso: 'Ingreso Operacional',
+                            descripcion: prev.descripcion || `Abono cuenta #${inv.invoiceNumber} - ${inv.servicio || inv.concepto || 'Servicios'}`,
+                            importe: prev.importe || String(saldo),
+                          }));
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecciona cuenta de cobro" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {invoicesForSelectedClient.map((inv) => {
+                          const saldo = inv.totalAmount - (inv.paidAmount || 0);
+                          return (
+                            <SelectItem key={inv.id} value={inv.id}>
+                              #{inv.invoiceNumber} - ${saldo.toLocaleString()} pendiente
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedInvoiceId && (() => {
+                    const inv = invoicesForSelectedClient.find(i => i.id === selectedInvoiceId);
+                    if (!inv) return null;
+                    const saldo = inv.totalAmount - (inv.paidAmount || 0);
+                    return (
+                      <div className="space-y-2">
+                        <div className="text-xs text-muted-foreground space-y-1 bg-card/50 p-2 rounded">
+                          <div className="flex justify-between"><span>Total cuenta:</span><span className="font-medium">${inv.totalAmount.toLocaleString()}</span></div>
+                          <div className="flex justify-between"><span>Abonado:</span><span className="font-medium">${(inv.paidAmount || 0).toLocaleString()}</span></div>
+                          <div className="flex justify-between border-t pt-1"><span>Saldo:</span><span className="font-bold text-foreground">${saldo.toLocaleString()}</span></div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-medium text-foreground mb-1 block">Tipo de Ingreso</label>
+                          <Select
+                            value={incomeForm.clasificacionIngreso}
+                            onValueChange={(value) => setIncomeForm({ ...incomeForm, clasificacionIngreso: value })}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Clasificación" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Ingreso Operacional">Ingreso Operacional</SelectItem>
+                              <SelectItem value="Recurrente">Recurrente</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-medium text-foreground mb-1 block">Pago Total / Abono</label>
+                          <Select
+                            value={incomeForm.tipoTransaccion}
+                            onValueChange={(value) => {
+                              const updates: Record<string, string> = { tipoTransaccion: value };
+                              if (value === 'Pago Total') {
+                                updates.importe = String(saldo);
+                              }
+                              setIncomeForm(prev => ({ ...prev, ...updates }));
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Seleccionar" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Pago Total">Pago Total (${saldo.toLocaleString()})</SelectItem>
+                              <SelectItem value="Abono">Abono (parcial)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
             </div>
 
             <div className="mt-6 flex justify-end gap-2">
@@ -2091,16 +2286,24 @@ export default function Finanzas() {
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Cuenta</label>
-                <Input
+                <label className="text-sm font-medium text-foreground mb-2 block">Cuenta (Banco)</label>
+                <Select
                   value={expenseForm.cuenta}
-                  onChange={(e) => setExpenseForm({ ...expenseForm, cuenta: e.target.value })}
-                  placeholder="Ej: Principal, Ahorros"
-                />
+                  onValueChange={(value) => setExpenseForm({ ...expenseForm, cuenta: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona una cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {AVAILABLE_ACCOUNTS.map((acc) => (
+                      <SelectItem key={acc} value={acc}>{acc}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
-                <label className="text-sm font-medium text-foreground mb-2 block">Entidad</label>
+                <label className="text-sm font-medium text-foreground mb-2 block">Tercero (A quien se le paga o transfiere)</label>
                 <Input
                   value={expenseForm.entidad}
                   onChange={(e) => setExpenseForm({ ...expenseForm, entidad: e.target.value })}
