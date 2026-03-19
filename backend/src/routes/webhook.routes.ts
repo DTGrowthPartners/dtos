@@ -3216,4 +3216,229 @@ router.get('/bot/briefs/:id', verifyBotApiKey, async (req: Request, res: Respons
   }
 });
 
+
+
+/**
+ * PATCH /api/webhook/bot/sheets/transacciones
+ *
+ * Edita una transaccion existente en Google Sheets (hoja "Entradas" o "Salidas").
+ * Busca por fecha + importe (+ descripcion si hay ambiguedad).
+ *
+ * Body:
+ * {
+ *   "fecha": "2026-03-19",
+ *   "importe": 59800,
+ *   "descripcion": "Compra en RAPPI",
+ *   "categoria": "Nomina (Dairo)",
+ *   "entidad": "Dairo Alberto",
+ *   "descripcion_nueva": "Pago nomina",
+ *   "cuenta": "Bancolombia",
+ *   "terceroId": "T123",
+ *   "tipo": "salida"
+ * }
+ */
+router.patch('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const {
+      fecha, date,
+      importe, monto, amount,
+      descripcion, description,
+      categoria, category,
+      entidad, entity,
+      descripcion_nueva, new_description,
+      cuenta, account,
+      terceroId, tercero,
+      tipo, type,
+    } = req.body;
+
+    const searchFecha = fecha || date;
+    const searchImporte = importe || monto || amount;
+    const searchDescripcion = descripcion || description;
+
+    const newCategoria = categoria || category;
+    const newEntidad = entidad || entity;
+    const newDescripcion = descripcion_nueva || new_description;
+    const newCuenta = cuenta || account;
+    const newTerceroId = terceroId || tercero;
+    const newTipo = tipo || type;
+
+    if (!searchFecha) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: fecha (YYYY-MM-DD o DD/MM/YYYY)',
+      });
+    }
+
+    if (!searchImporte || isNaN(Number(searchImporte))) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: importe (numero valido)',
+      });
+    }
+
+    if (!newCategoria && !newEntidad && !newDescripcion && !newCuenta && !newTerceroId && newTipo === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere al menos un campo editable: categoria, entidad, descripcion_nueva, cuenta, terceroId, tipo',
+      });
+    }
+
+    // Normalizar fecha a YYYY-MM-DD
+    let normalizedFecha = searchFecha;
+    const ddmmyyyyMatch = searchFecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (ddmmyyyyMatch) {
+      const [, dd, mm, yyyy] = ddmmyyyyMatch;
+      normalizedFecha = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+    }
+
+    const financeData = await googleSheetsService.getFinanceData();
+    const importeNum = Number(searchImporte);
+
+    type MatchResult = {
+      tipo: 'entrada' | 'salida';
+      rowIndex: number;
+      fecha: string;
+      importe: number;
+      descripcion: string;
+      categoria: string;
+      cuenta: string;
+      entidad: string;
+      terceroId?: string;
+    };
+
+    const matches: MatchResult[] = [];
+
+    financeData.ingresos.forEach(t => {
+      if (t.fecha === normalizedFecha && Math.abs(t.importe - importeNum) < 1) {
+        matches.push({ tipo: 'entrada', ...t });
+      }
+    });
+
+    financeData.gastos.forEach(t => {
+      if (t.fecha === normalizedFecha && Math.abs(t.importe - importeNum) < 1) {
+        matches.push({ tipo: 'salida', ...t });
+      }
+    });
+
+    if (matches.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: `No se encontro transaccion con fecha=${normalizedFecha} e importe=${importeNum}`,
+        sugerencia: 'Verifica la fecha (YYYY-MM-DD) y el importe exacto. Usa GET /api/webhook/bot/sheets/transacciones para listar.',
+      });
+    }
+
+    let finalMatches = matches;
+    if (matches.length > 1 && searchDescripcion) {
+      const descLower = searchDescripcion.toLowerCase();
+      finalMatches = matches.filter(m =>
+        m.descripcion.toLowerCase().includes(descLower) ||
+        descLower.includes(m.descripcion.toLowerCase())
+      );
+      if (finalMatches.length > 1) {
+        const exactMatch = finalMatches.filter(m =>
+          m.descripcion.toLowerCase() === descLower
+        );
+        if (exactMatch.length === 1) finalMatches = exactMatch;
+      }
+      if (finalMatches.length === 0) finalMatches = matches;
+    }
+
+    if (finalMatches.length > 1) {
+      return res.status(409).json({
+        success: false,
+        error: `Se encontraron ${finalMatches.length} transacciones con esos criterios. Proporciona la descripcion exacta para desambiguar.`,
+        opciones: finalMatches.map((m, i) => ({
+          opcion: i + 1,
+          tipo: m.tipo,
+          fecha: m.fecha,
+          importe: m.importe,
+          descripcion: m.descripcion,
+          categoria: m.categoria,
+          cuenta: m.cuenta,
+          entidad: m.entidad,
+        })),
+      });
+    }
+
+    const target = finalMatches[0];
+    const updates: Record<string, any> = {};
+    if (newCategoria) updates.categoria = newCategoria;
+    if (newEntidad) updates.entidad = newEntidad;
+    if (newDescripcion) updates.descripcion = newDescripcion;
+    if (newCuenta) updates.cuenta = newCuenta;
+    if (newTerceroId) updates.terceroId = newTerceroId;
+
+    // Cambio de tipo: mover entre hojas
+    if (newTipo && newTipo !== target.tipo) {
+      const transactionData = {
+        fecha: normalizedFecha,
+        importe: target.importe,
+        descripcion: newDescripcion || target.descripcion,
+        categoria: newCategoria || target.categoria,
+        cuenta: newCuenta || target.cuenta,
+        entidad: newEntidad || target.entidad,
+        terceroId: newTerceroId || target.terceroId || '',
+      };
+
+      if (target.tipo === 'entrada') {
+        await googleSheetsService.deleteIncome(target.rowIndex);
+        await googleSheetsService.addExpense(transactionData);
+      } else {
+        await googleSheetsService.deleteExpense(target.rowIndex);
+        await googleSheetsService.addIncome(transactionData);
+      }
+
+      console.log(`[Bot API] Transaccion movida de ${target.tipo} a ${newTipo}: $${target.importe}`);
+
+      return res.json({
+        success: true,
+        message: `Transaccion movida de ${target.tipo} a ${newTipo} y actualizada`,
+        updated: {
+          tipo: newTipo,
+          fecha: normalizedFecha,
+          importe: target.importe,
+          descripcion: newDescripcion || target.descripcion,
+          categoria: newCategoria || target.categoria,
+          cuenta: newCuenta || target.cuenta,
+          entidad: newEntidad || target.entidad,
+        },
+      });
+    }
+
+    // Actualizacion normal
+    if (target.tipo === 'entrada') {
+      await googleSheetsService.updateIncome(target.rowIndex, {
+        ...updates,
+        tercero: updates.terceroId,
+      });
+    } else {
+      await googleSheetsService.updateExpense(target.rowIndex, updates);
+    }
+
+    console.log(`[Bot API] Transaccion editada (${target.tipo}): $${target.importe} - campos: ${Object.keys(updates).join(', ')}`);
+
+    res.json({
+      success: true,
+      message: 'Transaccion actualizada correctamente',
+      updated: {
+        tipo: target.tipo,
+        fecha: normalizedFecha,
+        importe: target.importe,
+        descripcion: newDescripcion || target.descripcion,
+        categoria: newCategoria || target.categoria,
+        cuenta: newCuenta || target.cuenta,
+        entidad: newEntidad || target.entidad,
+      },
+    });
+  } catch (error) {
+    console.error('[Bot API] Error editando transaccion:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al editar la transaccion en Google Sheets',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 export default router;
