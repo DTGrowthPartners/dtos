@@ -2511,16 +2511,16 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
       tercero,
     } = req.body;
 
-    // Resolver valores con fallbacks
+    // Resolver valores (sin fallbacks genéricos para campos críticos)
     const expenseDate = fecha || date;
     const expenseAmount = importe || monto || amount;
-    const expenseDescription = descripcion || description || '';
-    const expenseCategory = categoria || category || 'Otros';
+    const expenseDescription = descripcion || description;
+    const expenseCategory = categoria || category;
     const expenseAccount = cuenta || account || 'Principal';
-    const expenseEntity = entidad || entity || 'DT Growth Partners';
+    const expenseEntity = entidad || entity || tercero || terceroId;
     const expenseTerceroId = terceroId || tercero;
 
-    // Validaciones
+    // Validaciones estrictas
     if (!expenseDate) {
       return res.status(400).json({
         success: false,
@@ -2532,6 +2532,27 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
       return res.status(400).json({
         success: false,
         error: 'Campo requerido: importe (número válido)',
+      });
+    }
+
+    if (!expenseCategory) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: categoria (ej: Meriendas, Nómina, Herramientas, Publicidad, Transportes, etc.)',
+      });
+    }
+
+    if (!expenseEntity) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: entidad/tercero (nombre del beneficiario, nunca usar DT Growth Partners como genérico)',
+      });
+    }
+
+    if (!expenseDescription) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: descripcion (incluir beneficiario, ej: "Merienda Edgardo", "Almuerzo equipo")',
       });
     }
 
