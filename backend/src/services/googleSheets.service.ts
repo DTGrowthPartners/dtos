@@ -113,12 +113,12 @@ export class GoogleSheetsService {
 
       // Parsear ingresos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
-      // Row 1 = header, data starts at row 1 in array (index 0) = sheet row 1
-      const ingresos: TransactionRow[] = incomeRows
-        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 })) // +1 because sheets are 1-based
-        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
-        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
-          rowIndex: sheetRow,
+      // rowIndex = original array index + 1 (sheet row, A1-based)
+      const ingresos: Array<TransactionRow & { rowIndex: number }> = incomeRows
+        .map((row: any[], index: number) => ({ row, originalIndex: index }))
+        .filter(({ row }) => row[1]) // check importe exists
+        .map(({ row, originalIndex }) => ({
+          rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -130,11 +130,11 @@ export class GoogleSheetsService {
 
       // Parsear gastos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
-      const gastos: TransactionRow[] = expensesRows
-        .map((row: any[], index: number) => ({ row, sheetRow: index + 1 }))
-        .filter(({ row }: { row: any[] }) => row[1]) // check importe exists
-        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
-          rowIndex: sheetRow,
+      const gastos: Array<TransactionRow & { rowIndex: number }> = expensesRows
+        .map((row: any[], index: number) => ({ row, originalIndex: index }))
+        .filter(({ row }) => row[1]) // check importe exists
+        .map(({ row, originalIndex }) => ({
+          rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -817,6 +817,69 @@ export class GoogleSheetsService {
           },
         },
       };
+    }
+  }
+
+  // ==================== UPDATE TRANSACTIONS ====================
+
+  async updateTransaction(
+    hoja: 'Entradas' | 'Salidas',
+    rowIndex: number,
+    updates: Partial<{
+      fecha: string;
+      importe: number;
+      descripcion: string;
+      categoria: string;
+      cuenta: string;
+      entidad: string;
+      terceroId: string;
+    }>
+  ): Promise<void> {
+    try {
+      // Read the current row to merge with updates
+      const range = `${hoja}!A${rowIndex}:G${rowIndex}`;
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+
+      const existing = currentRow.data.values?.[0] || [];
+      console.log(`[updateTransaction] Current row ${rowIndex} in ${hoja}:`, existing);
+
+      // Build updated row: keep existing values, override with updates
+      // Columns: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
+      let fecha = existing[0];
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        const fechaConHora = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+        fecha = this.dateToSerialNumber(fechaConHora);
+      }
+
+      const values = [[
+        fecha,
+        updates.importe !== undefined ? updates.importe : existing[1],
+        updates.descripcion !== undefined ? updates.descripcion : (existing[2] || ''),
+        updates.categoria !== undefined ? updates.categoria : (existing[3] || ''),
+        updates.cuenta !== undefined ? updates.cuenta : (existing[4] || ''),
+        updates.entidad !== undefined ? updates.entidad : (existing[5] || ''),
+        updates.terceroId !== undefined ? updates.terceroId : (existing[6] || ''),
+      ]];
+
+      console.log(`[updateTransaction] Writing to ${range}:`, JSON.stringify(values));
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log(`[updateTransaction] Successfully updated row ${rowIndex} in ${hoja}`);
+    } catch (error) {
+      console.error(`[updateTransaction] Error updating row ${rowIndex} in ${hoja}:`, error);
+      throw new Error(`No se pudo actualizar la transacción en la fila ${rowIndex} de ${hoja}`);
     }
   }
 

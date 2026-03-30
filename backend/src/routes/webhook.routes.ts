@@ -2392,6 +2392,8 @@ router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, re
 
     let transacciones: Array<{
       tipo: 'entrada' | 'salida';
+      hoja: 'Entradas' | 'Salidas';
+      rowIndex: number;
       fecha: string;
       importe: number;
       descripcion: string;
@@ -2406,6 +2408,8 @@ router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, re
       financeData.ingresos.forEach(t => {
         transacciones.push({
           tipo: 'entrada',
+          hoja: 'Entradas',
+          rowIndex: (t as any).rowIndex,
           fecha: t.fecha,
           importe: t.importe,
           descripcion: t.descripcion,
@@ -2422,6 +2426,8 @@ router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, re
       financeData.gastos.forEach(t => {
         transacciones.push({
           tipo: 'salida',
+          hoja: 'Salidas',
+          rowIndex: (t as any).rowIndex,
           fecha: t.fecha,
           importe: t.importe,
           descripcion: t.descripcion,
@@ -2471,6 +2477,90 @@ router.get('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, re
     res.status(500).json({
       success: false,
       error: 'Error al obtener transacciones de Google Sheets',
+    });
+  }
+});
+
+/**
+ * PATCH /api/webhook/bot/sheets/transacciones
+ *
+ * Actualiza una transacción existente en Google Sheets.
+ *
+ * Body:
+ * {
+ *   "hoja": "Salidas",              // "Entradas" o "Salidas"
+ *   "rowIndex": 5,                  // Fila en la hoja (obtenida del GET /transacciones)
+ *   "categoria": "Herramientas",    // Campos a actualizar (todos opcionales)
+ *   "descripcion": "...",
+ *   "importe": 150000,
+ *   "cuenta": "Bancolombia",
+ *   "entidad": "Proveedor X",
+ *   "terceroId": "T123"
+ * }
+ */
+router.patch('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { hoja, sheet, rowIndex, row, ...fields } = req.body;
+
+    const targetSheet = hoja || sheet;
+    const targetRow = rowIndex || row;
+
+    if (!targetSheet || !['Entradas', 'Salidas'].includes(targetSheet)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: hoja ("Entradas" o "Salidas")',
+      });
+    }
+
+    if (!targetRow || isNaN(Number(targetRow)) || Number(targetRow) < 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'Campo requerido: rowIndex (número de fila válido, obtenido del GET /transacciones)',
+      });
+    }
+
+    // Sanitize string fields to prevent JSON/Sheets issues with special characters
+    const sanitize = (val: any) => typeof val === 'string' ? val.replace(/[\x00-\x1F]/g, '') : val;
+
+    const updates: Record<string, any> = {};
+    if (fields.categoria !== undefined) updates.categoria = sanitize(fields.categoria || fields.category);
+    if (fields.category !== undefined && updates.categoria === undefined) updates.categoria = sanitize(fields.category);
+    if (fields.descripcion !== undefined) updates.descripcion = sanitize(fields.descripcion || fields.description);
+    if (fields.description !== undefined && updates.descripcion === undefined) updates.descripcion = sanitize(fields.description);
+    if (fields.importe !== undefined || fields.monto !== undefined || fields.amount !== undefined) {
+      updates.importe = Number(fields.importe || fields.monto || fields.amount);
+    }
+    if (fields.cuenta !== undefined || fields.account !== undefined) updates.cuenta = sanitize(fields.cuenta || fields.account);
+    if (fields.entidad !== undefined || fields.entity !== undefined) updates.entidad = sanitize(fields.entidad || fields.entity);
+    if (fields.terceroId !== undefined || fields.tercero !== undefined) updates.terceroId = sanitize(fields.terceroId || fields.tercero);
+    if (fields.fecha !== undefined || fields.date !== undefined) updates.fecha = fields.fecha || fields.date;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Debe enviar al menos un campo para actualizar (categoria, descripcion, importe, cuenta, entidad, terceroId, fecha)',
+      });
+    }
+
+    console.log(`[Bot API] Actualizando transacción en ${targetSheet} fila ${targetRow}:`, updates);
+
+    await googleSheetsService.updateTransaction(
+      targetSheet as 'Entradas' | 'Salidas',
+      Number(targetRow),
+      updates
+    );
+
+    res.json({
+      success: true,
+      message: `Transacción actualizada en ${targetSheet} fila ${targetRow}`,
+      updates,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error actualizando transacción:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al actualizar la transacción en Google Sheets',
+      details: error instanceof Error ? error.message : 'Unknown error',
     });
   }
 });
