@@ -68,6 +68,14 @@ const isCuentaPorPagar = (cuenta: string | undefined | null): boolean => {
   return cuenta.trim().toUpperCase().startsWith('CUENTAS POR PAGA');
 };
 
+// "Principal" y "Cruce con Empleados" son ajustes contables (no son cuentas reales con saldo).
+// El contador los usa para cuadrar cuentas de cobro / cruces internos. Excluir del Disponible.
+const isAjusteContable = (cuenta: string | undefined | null): boolean => {
+  if (!cuenta) return false;
+  const upper = cuenta.trim().toUpperCase();
+  return upper === 'PRINCIPAL' || upper.startsWith('CRUCE');
+};
+
 // Check if a cuenta is "Retenciones en la fuente"
 const isRetencion = (cuenta: string | undefined | null): boolean => {
   if (!cuenta) return false;
@@ -121,10 +129,10 @@ const normalizeCuentaName = (cuenta: string): string => {
   if (upper.startsWith('NEQUI')) return 'Nequi';
   if (upper.startsWith('DAVIPLATA')) return 'Daviplata';
   if (upper.startsWith('EFECTIVO')) return 'Efectivo';
-  if (upper.startsWith('CRUCE')) return 'Cuentas por Pagar a Clientes';
   if (upper.startsWith('CUENTAS POR PAGA')) return 'Cuentas por Pagar a Clientes';
   if (upper.startsWith('RAPPICUENTA') || upper.startsWith('RAPPI')) return 'Rappicuenta';
-  if (upper === 'PRINCIPAL') return 'Bancolombia';
+  // "Principal" y "Cruce con Empleados" se preservan como están: son ajustes contables
+  // y se filtran via isAjusteContable() antes de sumarlos al Disponible.
   return cuenta.trim();
 };
 
@@ -184,7 +192,8 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
     const saldosPorCuenta = new Map<string, number>();
 
     const apply = (t: Transaction, sign: 1 | -1) => {
-      if (!t.cuenta || isCuentaPorPagar(t.cuenta)) return;
+      if (!t.cuenta) return;
+      if (isCuentaPorPagar(t.cuenta) || isAjusteContable(t.cuenta)) return;
       const fecha = normalizeDate(t.fecha);
       if (!fecha || fecha > periodEndDate) return;
       const cuentaNorm = normalizeCuentaName(t.cuenta);
