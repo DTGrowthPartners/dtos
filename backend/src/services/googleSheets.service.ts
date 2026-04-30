@@ -674,6 +674,36 @@ export class GoogleSheetsService {
     }
   }
 
+  // Lee la hoja "Presupuesto Mensual" - lista plana de gastos recurrentes mensuales (cols A:B).
+  // Devuelve una unica cifra mensual por categoria que aplica a cualquier mes (Abr..Dic).
+  async getMonthlyBudget(): Promise<{ categorias: Record<string, number>; total: number }> {
+    try {
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "'Presupuesto Mensual'!A1:B40",
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+      const rows = response.data.values || [];
+      const categorias: Record<string, number> = {};
+      for (const row of rows) {
+        const name = String(row[0] || '').trim();
+        if (!name) continue;
+        const upper = name.toUpperCase();
+        if (upper === 'EMPRESA' || upper === 'CATEGORIA' || upper === 'CONCEPTO' || upper === 'TOTAL') continue;
+        if (upper.startsWith('AÑADIR') || upper.startsWith('ANADIR')) continue;
+        const amount = typeof row[1] === 'number' ? row[1] : Number(row[1]) || 0;
+        if (amount <= 0) continue;
+        categorias[name] = amount;
+      }
+      const total = Object.values(categorias).reduce((s, v) => s + v, 0);
+      console.log('Presupuesto Mensual cargado:', Object.keys(categorias).length, 'categorias, total:', total);
+      return { categorias, total };
+    } catch (error) {
+      console.error('Error fetching Presupuesto Mensual:', error);
+      return { categorias: {}, total: 0 };
+    }
+  }
+
   async getBudgetData(): Promise<{
     ingresos: {
       categorias: Record<string, { proyectado: number; real: number }>;
@@ -683,6 +713,7 @@ export class GoogleSheetsService {
       categorias: Record<string, { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } }>;
       totales: { enero: { proyectado: number; real: number }; febrero: { proyectado: number; real: number }; marzo: { proyectado: number; real: number } };
     };
+    monthlyBudget: { categorias: Record<string, number>; total: number };
   }> {
     try {
       // Read from "Presupuesto Q1" sheet - Full data
@@ -791,14 +822,13 @@ export class GoogleSheetsService {
       }
 
       console.log('Budget Q1 data parsed - Gastos categories:', Object.keys(result.gastos.categorias).length);
-      console.log('Budget Q1 totales ingresos:', JSON.stringify(result.ingresos.totales, null, 2));
-      console.log('Budget Q1 totales gastos:', JSON.stringify(result.gastos.totales, null, 2));
-      console.log('Full budget result:', JSON.stringify(result, null, 2));
 
-      return result;
+      // Adjuntar Presupuesto Mensual (gastos recurrentes para cualquier mes)
+      const monthlyBudget = await this.getMonthlyBudget();
+      return { ...result, monthlyBudget };
     } catch (error) {
       console.error('Error fetching budget data from Google Sheets:', error);
-      // Return empty budget data on error
+      const monthlyBudget = await this.getMonthlyBudget().catch(() => ({ categorias: {}, total: 0 }));
       return {
         ingresos: {
           categorias: {},
@@ -816,6 +846,7 @@ export class GoogleSheetsService {
             marzo: { proyectado: 0, real: 0 },
           },
         },
+        monthlyBudget,
       };
     }
   }

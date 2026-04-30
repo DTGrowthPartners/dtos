@@ -38,6 +38,8 @@ interface BudgetQ1Data {
       marzo: { proyectado: number; real: number };
     };
   };
+  // Presupuesto mensual recurrente (hoja "Presupuesto Mensual"), aplica a Abr-Dic
+  monthlyBudget?: { categorias: Record<string, number>; total: number };
 }
 
 interface BudgetComparisonReportProps {
@@ -165,6 +167,7 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
   }, [budgetData]);
 
   const monthlyComparisonData = useMemo(() => {
+    const monthlyTotal = budgetData?.monthlyBudget?.total || 0;
     return ALL_MONTHS.map((key) => {
       const name = MONTH_NAMES_FULL[monthNumberOf(key) - 1];
       const budgetTotales = isQ1Key(key) ? (budgetData?.gastos?.totales?.[key] || DEFAULT_MONTH_TOTALS) : DEFAULT_MONTH_TOTALS;
@@ -173,33 +176,79 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       const realFromGastos = gastos.filter(t => !isExcludedCategory(t.categoria) && normalizeDate(t.fecha).startsWith(ym))
         .reduce((sum, t) => sum + t.importe, 0);
       const real = isQ1Key(key) && budgetTotales.real ? budgetTotales.real : realFromGastos;
-      const proyectado = budgetTotales.proyectado;
+      // Proyectado: Q1 usa Presupuesto Q1; Abr-Dic usan total de Presupuesto Mensual recurrente
+      const proyectado = isQ1Key(key) ? budgetTotales.proyectado : monthlyTotal;
       const percentUsed = proyectado > 0 ? (real / proyectado) * 100 : 0;
       return { month: name, monthKey: key, proyectado, real, diferencia: proyectado - real, percentUsed, isCurrent: key === currentMonthKey };
     });
   }, [budgetData, gastos, currentMonthKey]);
 
-  const categoryBreakdown = useMemo(() => {
-    // Non-Q1 months (abril..diciembre) and custom: derive breakdown from real gastos[]
-    if (selectedMonth === 'custom') return gastosCategoryBreakdown;
-    if (selectedMonth !== 'q1' && !isQ1Key(selectedMonth as MonthKey)) return gastosCategoryBreakdown;
+  // Helper: matches a real category in gastos[] against a budget category from Presupuesto Mensual.
+  // Tolerant: case-insensitive contains in either direction.
+  const matchesMonthlyCategory = (realCat: string, budgetCat: string): boolean => {
+    const a = realCat.trim().toUpperCase();
+    const b = budgetCat.trim().toUpperCase();
+    if (!a || !b) return false;
+    if (a === b) return true;
+    if (a.includes(b) || b.includes(a)) return true;
+    return false;
+  };
 
-    if (!budgetData?.gastos?.categorias) return [];
-    return Object.entries(budgetData.gastos.categorias).map(([categoria, data]) => {
-      const enero = data?.enero || DEFAULT_MONTH_TOTALS;
-      const febrero = data?.febrero || DEFAULT_MONTH_TOTALS;
-      const marzo = data?.marzo || DEFAULT_MONTH_TOTALS;
-      let proyectado: number, real: number;
-      if (selectedMonth === 'q1') { proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado; real = enero.real + febrero.real + marzo.real; }
-      else { const md = data?.[selectedMonth as Q1Key] || DEFAULT_MONTH_TOTALS; proyectado = md.proyectado; real = md.real; }
+  const categoryBreakdown = useMemo(() => {
+    if (selectedMonth === 'custom') return gastosCategoryBreakdown;
+
+    // Q1 (enero/febrero/marzo/q1): usa Presupuesto Q1
+    if (selectedMonth === 'q1' || isQ1Key(selectedMonth as MonthKey)) {
+      if (!budgetData?.gastos?.categorias) return [];
+      return Object.entries(budgetData.gastos.categorias).map(([categoria, data]) => {
+        const enero = data?.enero || DEFAULT_MONTH_TOTALS;
+        const febrero = data?.febrero || DEFAULT_MONTH_TOTALS;
+        const marzo = data?.marzo || DEFAULT_MONTH_TOTALS;
+        let proyectado: number, real: number;
+        if (selectedMonth === 'q1') { proyectado = enero.proyectado + febrero.proyectado + marzo.proyectado; real = enero.real + febrero.real + marzo.real; }
+        else { const md = data?.[selectedMonth as Q1Key] || DEFAULT_MONTH_TOTALS; proyectado = md.proyectado; real = md.real; }
+        const diferencia = proyectado - real;
+        const percentUsed = proyectado > 0 ? (real / proyectado) * 100 : (real > 0 ? 100 : 0);
+        return { categoria, proyectado, real, diferencia, percentUsed, status: percentUsed > 100 ? 'over' : percentUsed > 80 ? 'warning' : 'ok' as 'over' | 'warning' | 'ok' };
+      }).filter(item => {
+        const u = item.categoria.toUpperCase();
+        return !(u.includes('UTILIDAD') || u.includes('MARGEN') || u.includes('DIVIDENDO') || u.includes('RESERVA') || u.includes('TOTAL DAIRO')) && (item.proyectado > 0 || item.real > 0);
+      }).sort((a, b) => b.proyectado - a.proyectado);
+    }
+
+    // Abr..Dic: cruza el real del mes con el Presupuesto Mensual recurrente
+    const monthly = budgetData?.monthlyBudget?.categorias || {};
+    const monthlyEntries = Object.entries(monthly);
+    if (monthlyEntries.length === 0) return gastosCategoryBreakdown;
+
+    const realByCategory = new Map<string, number>();
+    filteredGastos.forEach(t => {
+      if (t.categoria) realByCategory.set(t.categoria, (realByCategory.get(t.categoria) || 0) + t.importe);
+    });
+
+    // Match each budget category with realByCategory entries
+    const matched = monthlyEntries.map(([budgetCat, proyectado]) => {
+      let real = 0;
+      const matchedRealKeys: string[] = [];
+      realByCategory.forEach((amount, realCat) => {
+        if (matchesMonthlyCategory(realCat, budgetCat)) { real += amount; matchedRealKeys.push(realCat); }
+      });
+      matchedRealKeys.forEach(k => realByCategory.delete(k));
       const diferencia = proyectado - real;
       const percentUsed = proyectado > 0 ? (real / proyectado) * 100 : (real > 0 ? 100 : 0);
-      return { categoria, proyectado, real, diferencia, percentUsed, status: percentUsed > 100 ? 'over' : percentUsed > 80 ? 'warning' : 'ok' };
-    }).filter(item => {
-      const u = item.categoria.toUpperCase();
-      return !(u.includes('UTILIDAD') || u.includes('MARGEN') || u.includes('DIVIDENDO') || u.includes('RESERVA') || u.includes('TOTAL DAIRO')) && (item.proyectado > 0 || item.real > 0);
-    }).sort((a, b) => b.proyectado - a.proyectado);
-  }, [budgetData, selectedMonth, gastosCategoryBreakdown]);
+      const status: 'over' | 'warning' | 'ok' = percentUsed > 100 ? 'over' : percentUsed > 80 ? 'warning' : 'ok';
+      return { categoria: budgetCat, proyectado, real, diferencia, percentUsed, status };
+    });
+
+    // Add unmatched real categories (no budget) at the end
+    const unmatched = Array.from(realByCategory.entries()).map(([categoria, real]) => ({
+      categoria, proyectado: 0, real, diferencia: -real, percentUsed: real > 0 ? 100 : 0, status: 'ok' as 'over' | 'warning' | 'ok',
+    }));
+
+    return [...matched, ...unmatched]
+      .filter(r => r.proyectado > 0 || r.real > 0)
+      .sort((a, b) => b.proyectado - a.proyectado);
+  }, [budgetData, selectedMonth, gastosCategoryBreakdown, filteredGastos]);
 
   const selectedPeriodTotals = useMemo(() => {
     if (selectedMonth === 'custom') return filteredGastosTotals;
@@ -208,8 +257,10 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
       const totales = budgetData.gastos.totales[selectedMonth as Q1Key] || DEFAULT_MONTH_TOTALS;
       return { proyectado: totales.proyectado, real: totales.real, percentUsed: totales.proyectado > 0 ? (totales.real / totales.proyectado) * 100 : 0 };
     }
-    // Abril..diciembre: no budget data, use real from filtered gastos
-    return filteredGastosTotals;
+    // Abr..Dic: presupuesto recurrente desde Presupuesto Mensual
+    const proyectado = budgetData?.monthlyBudget?.total || 0;
+    const real = filteredGastosTotals.real;
+    return { proyectado, real, percentUsed: proyectado > 0 ? (real / proyectado) * 100 : 0 };
   }, [budgetData, selectedMonth, q1Totals, filteredGastosTotals]);
 
   const formatCurrency = (value: number) => { if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`; return `$${(value / 1000).toFixed(0)}k`; };
@@ -232,9 +283,11 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
         <div>
           <h2 className="text-xl font-bold text-foreground">Presupuesto vs Real - {periodLabels[selectedMonth] || `Q1 ${BUDGET_YEAR}`}</h2>
           <p className="text-sm text-muted-foreground">
-            {selectedMonth !== 'custom' && !isQ1Key(selectedMonth as MonthKey) && selectedMonth !== 'q1'
-              ? 'Gasto real desde movimientos (sin presupuesto cargado para este mes)'
-              : 'Comparación de gastos operativos desde Google Sheets (Presupuesto Q1)'}
+            {selectedMonth === 'custom'
+              ? 'Gasto real desde movimientos (rango personalizado, sin presupuesto)'
+              : selectedMonth === 'q1' || isQ1Key(selectedMonth as MonthKey)
+              ? 'Comparación de gastos operativos desde Google Sheets (Presupuesto Q1)'
+              : 'Comparación contra presupuesto recurrente mensual (hoja Presupuesto Mensual)'}
           </p>
         </div>
         <Button variant="outline" onClick={() => window.location.reload()} disabled={isLoading}>
