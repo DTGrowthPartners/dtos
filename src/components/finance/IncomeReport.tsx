@@ -390,15 +390,26 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
         <p className="text-sm text-muted-foreground">Análisis de entradas de dinero - {getFilterDisplayName()}</p>
       </div>
 
-      {availableMonths.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleAllClick} className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors", filterMode === 'all' ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80")}>
             <CalendarIcon className="h-3.5 w-3.5" /> Q1 Completo
           </button>
-          {availableMonths.map((monthKey) => {
+          {Array.from({ length: 12 }, (_, i) => `2026-${String(i + 1).padStart(2, '0')}`).map((monthKey) => {
             const [, month] = monthKey.split('-');
+            const hasData = availableMonths.includes(monthKey);
             return (
-              <button key={monthKey} onClick={() => handleMonthClick(monthKey)} className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors", filterMode === 'month' && selectedMonth === monthKey ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:bg-muted/80")}>
+              <button
+                key={monthKey}
+                onClick={() => handleMonthClick(monthKey)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                  filterMode === 'month' && selectedMonth === monthKey
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : hasData
+                      ? "bg-muted text-muted-foreground hover:bg-muted/80"
+                      : "bg-muted/40 text-muted-foreground/60 hover:bg-muted/60"
+                )}
+              >
                 <CalendarIcon className="h-3.5 w-3.5" /> {MONTH_NAMES[parseInt(month) - 1]}
               </button>
             );
@@ -415,7 +426,6 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
             </PopoverContent>
           </Popover>
         </div>
-      )}
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4">

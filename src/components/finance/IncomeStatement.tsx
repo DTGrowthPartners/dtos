@@ -45,11 +45,20 @@ interface BudgetQ1Data {
   };
 }
 
-type MonthKey = 'enero' | 'febrero' | 'marzo';
+const ALL_MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'] as const;
+type MonthKey = typeof ALL_MONTHS[number];
+type Q1Key = 'enero' | 'febrero' | 'marzo';
 type SelectedPeriod = MonthKey | 'q1' | '2025' | 'custom';
+
+const Q1_KEYS: readonly Q1Key[] = ['enero','febrero','marzo'];
+const BUDGET_YEAR = 2026;
+const isQ1 = (k: MonthKey): k is Q1Key => (Q1_KEYS as readonly string[]).includes(k);
+const monthNum = (k: MonthKey) => ALL_MONTHS.indexOf(k) + 1;
+const monthYm = (k: MonthKey) => `${BUDGET_YEAR}-${String(monthNum(k)).padStart(2, '0')}`;
 
 const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
 const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 // Helper to check if a category is excluded
 const isExcluded = (categoria: string | undefined | null): boolean => {
@@ -84,11 +93,9 @@ const formatDateShort = (date: Date): string => {
   return `${date.getDate()} ${MONTH_NAMES_SHORT[date.getMonth()]} ${date.getFullYear()}`;
 };
 
-const MONTH_KEY_MAP: Record<string, MonthKey> = {
-  '01': 'enero',
-  '02': 'febrero',
-  '03': 'marzo',
-};
+const MONTH_KEY_MAP: Record<string, MonthKey> = Object.fromEntries(
+  ALL_MONTHS.map((k, i) => [String(i + 1).padStart(2, '0'), k])
+) as Record<string, MonthKey>;
 
 export default function IncomeStatement({ ingresos, gastos }: IncomeStatementProps) {
   const [selectedPeriod, setSelectedPeriod] = useState<SelectedPeriod>('q1');
@@ -99,13 +106,7 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   // Get current month
   const currentDate = new Date();
   const currentMonthIndex = currentDate.getMonth();
-  const getMonthKey = (index: number): MonthKey | null => {
-    if (index === 0) return 'enero';
-    if (index === 1) return 'febrero';
-    if (index === 2) return 'marzo';
-    return null;
-  };
-  const currentMonthKey = getMonthKey(currentMonthIndex);
+  const currentMonthKey: MonthKey | null = ALL_MONTHS[currentMonthIndex] ?? null;
 
   // Fetch budget data
   useEffect(() => {
@@ -140,10 +141,9 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
       });
     }
 
-    // Month filter
-    const monthMap: Record<string, string> = { enero: '2026-01', febrero: '2026-02', marzo: '2026-03' };
-    const prefix = monthMap[selectedPeriod];
-    if (prefix) {
+    // Month filter (enero..diciembre)
+    if (ALL_MONTHS.includes(selectedPeriod as MonthKey)) {
+      const prefix = monthYm(selectedPeriod as MonthKey);
       return filtered.filter(t => normalizeDate(t.fecha).startsWith(prefix));
     }
 
@@ -198,8 +198,8 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
     if (selectedPeriod === 'q1') {
       return (data?.enero?.real || 0) + (data?.febrero?.real || 0) + (data?.marzo?.real || 0);
     }
-    if (selectedPeriod !== 'custom' && data?.[selectedPeriod]) {
-      return data[selectedPeriod].real || 0;
+    if (selectedPeriod !== 'custom' && selectedPeriod !== '2025' && isQ1(selectedPeriod as MonthKey) && data?.[selectedPeriod as Q1Key]) {
+      return data[selectedPeriod as Q1Key].real || 0;
     }
     
     // For custom, calculate from filtered gastos
@@ -314,10 +314,9 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
       }
     }
 
-    // Single month: group by week of month
-    const monthMap: Record<string, number> = { enero: 0, febrero: 1, marzo: 2 };
-    const monthIdx = monthMap[selectedPeriod as MonthKey];
-    if (monthIdx !== undefined) {
+    // Single month: group by week of month (supports all 12)
+    const monthIdx = ALL_MONTHS.includes(selectedPeriod as MonthKey) ? ALL_MONTHS.indexOf(selectedPeriod as MonthKey) : -1;
+    if (monthIdx >= 0) {
       const year = 2026;
       const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
       const keys: string[] = [];
@@ -351,10 +350,8 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
 
   const periodLabels: Record<string, string> = {
     '2025': 'Año 2025 (Cierre al 31 Dic)',
-    q1: 'Q1 2026',
-    enero: 'Enero 2026',
-    febrero: 'Febrero 2026',
-    marzo: 'Marzo 2026',
+    q1: `Q1 ${BUDGET_YEAR}`,
+    ...Object.fromEntries(ALL_MONTHS.map((k, i) => [k, `${MONTH_NAMES_FULL[i]} ${BUDGET_YEAR}`])),
     custom: dateRange?.from
       ? `${formatDateShort(dateRange.from)}${dateRange.to ? ` - ${formatDateShort(dateRange.to)}` : ''}`
       : 'Rango personalizado',
@@ -413,7 +410,7 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
           <Target className="h-4 w-4 mr-1" />
           Q1 Completo
         </Button>
-        {(['enero', 'febrero', 'marzo'] as MonthKey[]).map((month) => (
+        {ALL_MONTHS.map((month) => (
           <Button
             key={month}
             variant={selectedPeriod === month ? 'default' : 'outline'}
