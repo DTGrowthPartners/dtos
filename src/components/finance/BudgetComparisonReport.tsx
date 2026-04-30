@@ -183,11 +183,18 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     });
   }, [budgetData, gastos, currentMonthKey]);
 
-  // Helper: matches a real category in gastos[] against a budget category from Presupuesto Mensual.
-  // Tolerant: case-insensitive contains in either direction.
+  // Normaliza para matching tolerante: minusculas, sin parens/puntuacion, espacios colapsados.
+  // Ej: "Nómina (Stiven)" -> "nomina stiven", "Nómina Stiven" -> "nomina stiven"
+  const normalizeForMatch = (s: string): string =>
+    s.toLowerCase()
+      .normalize('NFD').replace(/\p{Diacritic}/gu, '') // remove accents
+      .replace(/[^a-z0-9]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
   const matchesMonthlyCategory = (realCat: string, budgetCat: string): boolean => {
-    const a = realCat.trim().toUpperCase();
-    const b = budgetCat.trim().toUpperCase();
+    const a = normalizeForMatch(realCat);
+    const b = normalizeForMatch(budgetCat);
     if (!a || !b) return false;
     if (a === b) return true;
     if (a.includes(b) || b.includes(a)) return true;

@@ -159,11 +159,15 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   const utilidadBruta = totalIngresos - totalGastos;
   const margenBruto = totalIngresos > 0 ? (utilidadBruta / totalIngresos) * 100 : 0;
 
-  // Comisión 1% sobre utilidad bruta — aplica a partir de febrero 2026
+  // Comisión 1% sobre utilidad bruta — aplica a partir de febrero 2026 (todos los meses)
   const aplicaComision = useMemo(() => {
     if (selectedPeriod === 'enero' || selectedPeriod === '2025') return false;
-    if (selectedPeriod === 'febrero' || selectedPeriod === 'marzo' || selectedPeriod === 'q1') return true;
-    // Custom: aplica si el rango incluye febrero 2026 o posterior
+    // Q1 (feb/mar dentro), o cualquier mes de febrero..diciembre
+    if (selectedPeriod === 'q1') return true;
+    if (ALL_MONTHS.includes(selectedPeriod as MonthKey)) {
+      // Excluir solo enero; febrero en adelante aplica
+      return selectedPeriod !== 'enero';
+    }
     if (selectedPeriod === 'custom' && dateRange?.from) {
       const to = dateRange.to || dateRange.from;
       return to >= new Date(2026, 1, 1); // >= 1 Feb 2026
