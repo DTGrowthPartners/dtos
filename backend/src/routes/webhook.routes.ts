@@ -2725,6 +2725,13 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
       entity,
       terceroId,
       tercero,
+      noCuentaCobro,
+      numeroCuentaCobro,
+      invoiceNumber,
+      clasificacionIngreso,
+      clasificacion,
+      tipoTransaccion,
+      tipoIngreso,
     } = req.body;
 
     // Resolver valores con fallbacks
@@ -2735,6 +2742,9 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
     const incomeAccount = cuenta || account || 'Principal';
     const incomeEntity = entidad || entity || '';
     const incomeTerceroId = terceroId || tercero;
+    const incomeNoCuenta = noCuentaCobro || numeroCuentaCobro || invoiceNumber || '';
+    const incomeClasif = clasificacionIngreso || clasificacion || '';
+    const incomeTipo = tipoTransaccion || tipoIngreso || '';
 
     // Validaciones
     if (!incomeDate) {
@@ -2769,9 +2779,12 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
       cuenta: incomeAccount,
       entidad: incomeEntity,
       tercero: incomeTerceroId,
+      noCuentaCobro: incomeNoCuenta,
+      clasificacionIngreso: incomeClasif,
+      tipoTransaccion: incomeTipo,
     });
 
-    console.log(`[Bot API] Ingreso registrado: $${incomeAmount} - ${incomeDescription}`);
+    console.log(`[Bot API] Ingreso registrado: $${incomeAmount} - ${incomeDescription}${incomeNoCuenta ? ` (cuenta #${incomeNoCuenta})` : ''}`);
 
     res.status(201).json({
       success: true,

@@ -116,8 +116,8 @@ export class GoogleSheetsService {
       // rowIndex = original array index + 1 (sheet row, A1-based)
       const ingresos: Array<TransactionRow & { rowIndex: number }> = incomeRows
         .map((row: any[], index: number) => ({ row, originalIndex: index }))
-        .filter(({ row }) => row[1]) // check importe exists
-        .map(({ row, originalIndex }) => ({
+        .filter(({ row }: { row: any[]; originalIndex: number }) => row[1])
+        .map(({ row, originalIndex }: { row: any[]; originalIndex: number }) => ({
           rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
@@ -132,8 +132,8 @@ export class GoogleSheetsService {
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
       const gastos: Array<TransactionRow & { rowIndex: number }> = expensesRows
         .map((row: any[], index: number) => ({ row, originalIndex: index }))
-        .filter(({ row }) => row[1]) // check importe exists
-        .map(({ row, originalIndex }) => ({
+        .filter(({ row }: { row: any[]; originalIndex: number }) => row[1])
+        .map(({ row, originalIndex }: { row: any[]; originalIndex: number }) => ({
           rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
