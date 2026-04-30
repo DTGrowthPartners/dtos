@@ -42,9 +42,19 @@ interface BalanceSheetProps {
   gastos: Transaction[];
 }
 
-type SelectedPeriod = 'dic2025' | 'enero' | 'febrero' | 'marzo' | 'q1' | 'custom';
+const ALL_MONTHS = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'] as const;
+type MonthKey = typeof ALL_MONTHS[number];
+type SelectedPeriod = 'dic2025' | MonthKey | 'q1' | 'custom';
+const BUDGET_YEAR = 2026;
 
 const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const monthEndDate = (key: MonthKey): string => {
+  const idx = ALL_MONTHS.indexOf(key);
+  // last day of that month in BUDGET_YEAR
+  const d = new Date(BUDGET_YEAR, idx + 1, 0);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const isExcludedForUtilidad = (categoria: string | undefined | null): boolean => {
   if (!categoria) return false;
@@ -127,14 +137,10 @@ const getPeriodEndDate = (period: SelectedPeriod, dateRange?: DateRange): string
     const d = dateRange.from;
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
-  const endDates: Record<string, string> = {
-    dic2025: '2025-12-31',
-    enero: '2026-01-31',
-    febrero: '2026-02-28',
-    marzo: '2026-03-31',
-    q1: '2026-03-31',
-  };
-  return endDates[period] || '2026-03-31';
+  if (period === 'dic2025') return '2025-12-31';
+  if (period === 'q1') return `${BUDGET_YEAR}-03-31`;
+  if (ALL_MONTHS.includes(period as MonthKey)) return monthEndDate(period as MonthKey);
+  return `${BUDGET_YEAR}-03-31`;
 };
 
 export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
@@ -147,7 +153,7 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
 
   const currentDate = new Date();
   const currentMonthIndex = currentDate.getMonth();
-  const currentMonthKey = currentMonthIndex === 0 ? 'enero' : currentMonthIndex === 1 ? 'febrero' : currentMonthIndex === 2 ? 'marzo' : null;
+  const currentMonthKey: MonthKey | null = ALL_MONTHS[currentMonthIndex] ?? null;
 
   useEffect(() => {
     const fetchData = async () => {
@@ -170,33 +176,36 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
 
   const periodEndDate = useMemo(() => getPeriodEndDate(selectedPeriod, dateRange), [selectedPeriod, dateRange]);
 
-  // DISPONIBLE DINÁMICO: Saldo actual - movimientos después del corte
-  // Excluir "Cuentas por Pagar a Clientes" (va a Pasivos) y "Retenciones" (va a sección aparte)
+  // DISPONIBLE AL CORTE: saldo por cuenta = Σ entradas (fecha ≤ corte) - Σ salidas (fecha ≤ corte)
+  // Calculado desde los movimientos crudos. La hoja "Disponible" se usa solo para listar las
+  // cuentas que existen (no como balance), porque su columna B representa el cierre de un mes
+  // específico (mantenido manualmente) y no el balance al corte que pide el usuario.
   const disponibleAlCorte = useMemo(() => {
-    const movimientosDespues = new Map<string, number>();
+    const saldosPorCuenta = new Map<string, number>();
 
-    ingresos.forEach(t => {
+    const apply = (t: Transaction, sign: 1 | -1) => {
+      if (!t.cuenta || isCuentaPorPagar(t.cuenta)) return;
       const fecha = normalizeDate(t.fecha);
-      if (fecha && fecha > periodEndDate && t.cuenta && !isCuentaPorPagar(t.cuenta)) {
-        const cuentaNorm = normalizeCuentaName(t.cuenta);
-        movimientosDespues.set(cuentaNorm, (movimientosDespues.get(cuentaNorm) || 0) - t.importe);
-      }
+      if (!fecha || fecha > periodEndDate) return;
+      const cuentaNorm = normalizeCuentaName(t.cuenta);
+      saldosPorCuenta.set(cuentaNorm, (saldosPorCuenta.get(cuentaNorm) || 0) + sign * t.importe);
+    };
+
+    ingresos.forEach(t => apply(t, 1));
+    gastos.forEach(t => apply(t, -1));
+
+    // Preserve original cuenta display names from the Disponible sheet, fallback to normalized name
+    const displayName = new Map<string, string>();
+    disponibleActual.forEach(c => {
+      if (!isCuentaPorPagar(c.cuenta)) displayName.set(normalizeCuentaName(c.cuenta), c.cuenta);
     });
 
-    gastos.forEach(t => {
-      const fecha = normalizeDate(t.fecha);
-      if (fecha && fecha > periodEndDate && t.cuenta && !isCuentaPorPagar(t.cuenta)) {
-        const cuentaNorm = normalizeCuentaName(t.cuenta);
-        movimientosDespues.set(cuentaNorm, (movimientosDespues.get(cuentaNorm) || 0) + t.importe);
-      }
-    });
-
-    const todasCuentas = disponibleActual
-      .filter(c => !isCuentaPorPagar(c.cuenta))
-      .map(cuenta => {
-        const ajuste = movimientosDespues.get(normalizeCuentaName(cuenta.cuenta)) || 0;
-        return { cuenta: cuenta.cuenta, saldo: cuenta.saldo + ajuste };
-      });
+    const todasCuentas = Array.from(saldosPorCuenta.entries())
+      .filter(([, saldo]) => Math.abs(saldo) > 0.005)
+      .map(([cuentaNorm, saldo]) => ({
+        cuenta: displayName.get(cuentaNorm) || cuentaNorm,
+        saldo,
+      }));
 
     // Separar: disponible (sin retenciones) y retenciones
     const cuentas = todasCuentas.filter(c => !isRetencion(c.cuenta));
@@ -312,10 +321,8 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
 
   const periodLabels: Record<string, string> = {
     dic2025: 'Diciembre 2025 (Saldos Iniciales)',
-    q1: 'Q1 2026',
-    enero: 'Enero 2026',
-    febrero: 'Febrero 2026',
-    marzo: 'Marzo 2026',
+    q1: `Q1 ${BUDGET_YEAR}`,
+    ...Object.fromEntries(ALL_MONTHS.map((k, i) => [k, `${MONTH_NAMES_FULL[i]} ${BUDGET_YEAR}`])),
     custom: dateRange?.from
       ? `${formatDateShort(dateRange.from)}${dateRange.to ? ` - ${formatDateShort(dateRange.to)}` : ''}`
       : 'Rango personalizado',
@@ -367,7 +374,7 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
         <Button variant={selectedPeriod === 'q1' ? 'default' : 'outline'} size="sm" onClick={() => { setSelectedPeriod('q1'); setDateRange(undefined); }}>
           <Target className="h-4 w-4 mr-1" /> Q1 Completo
         </Button>
-        {(['enero', 'febrero', 'marzo'] as const).map((month) => (
+        {ALL_MONTHS.map((month) => (
           <Button key={month} variant={selectedPeriod === month ? 'default' : 'outline'} size="sm" onClick={() => { setSelectedPeriod(month); setDateRange(undefined); }}
             className={cn(month === currentMonthKey && selectedPeriod !== month && 'border-primary')}>
             {month === currentMonthKey && <Calendar className="h-4 w-4 mr-1" />}

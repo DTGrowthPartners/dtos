@@ -283,13 +283,17 @@ export default function InvoicesPanel() {
 
   const handleSubmitAbono = async () => {
     if (!selectedInvoiceForAbono) return;
-    const amount = parseFloat(abonoForm.amount);
+    // Locale-tolerant parse: accepts "0.9", "0,9", "1.234,56"
+    const raw = String(abonoForm.amount ?? '').trim();
+    const hasComma = raw.includes(','); const hasDot = raw.includes('.');
+    const normalized = hasComma && hasDot ? raw.replace(/\./g, '').replace(',', '.') : hasComma ? raw.replace(',', '.') : raw;
+    const amount = parseFloat(normalized);
     if (isNaN(amount) || amount <= 0) {
-      toast({ title: 'Error', description: 'El monto debe ser mayor a 0.', variant: 'destructive' });
+      toast({ title: 'Monto inválido', description: 'Ingresa un valor mayor a 0 (ej: 0.9 o 0,9).', variant: 'destructive' });
       return;
     }
     const saldo = selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0);
-    if (amount > saldo) {
+    if (amount > saldo + 0.005) {
       toast({ title: 'Error', description: `El monto no puede superar el saldo pendiente (${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(saldo)}).`, variant: 'destructive' });
       return;
     }
@@ -1109,8 +1113,9 @@ export default function InvoicesPanel() {
             <div className="space-y-2">
               <Label>Monto del Abono *</Label>
               <Input
-                type="number"
-                placeholder="0"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ej: 0.9 o 0,9"
                 value={abonoForm.amount}
                 onChange={(e) => setAbonoForm({ ...abonoForm, amount: e.target.value })}
               />

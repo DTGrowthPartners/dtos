@@ -201,6 +201,27 @@ const CATEGORIES = [
   'Otros',
 ];
 
+// Parse a user-entered amount tolerant of comma decimals ("0,9"), spaces and thousand dots ("1.234,56").
+// Returns NaN for invalid input so callers can distinguish from zero.
+const parseAmount = (raw: string | number | undefined | null): number => {
+  if (raw === null || raw === undefined) return NaN;
+  if (typeof raw === 'number') return raw;
+  const s = String(raw).trim();
+  if (!s) return NaN;
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  let normalized = s;
+  if (hasComma && hasDot) {
+    // e.g. "1.234,56" → "1234.56"
+    normalized = s.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma) {
+    // e.g. "0,9" → "0.9"
+    normalized = s.replace(',', '.');
+  }
+  const n = parseFloat(normalized);
+  return isFinite(n) ? n : NaN;
+};
+
 export function AccountsPanel() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -492,7 +513,7 @@ export function AccountsPanel() {
     try {
       const data = {
         ...formData,
-        amount: parseFloat(formData.amount),
+        amount: parseAmount(formData.amount),
         frequencyDays: formData.frequencyDays ? parseInt(formData.frequencyDays) : undefined,
         clientId: formData.clientId && formData.clientId !== 'custom' ? formData.clientId : undefined,
         endDate: formData.endDate || undefined,
@@ -524,7 +545,7 @@ export function AccountsPanel() {
 
     try {
       await apiClient.post(`/api/accounts/${selectedAccountForPayment.id}/payments`, {
-        amount: parseFloat(paymentForm.amount),
+        amount: parseAmount(paymentForm.amount),
         paidAt: paymentForm.paidAt,
         paymentMethod: paymentForm.paymentMethod,
         reference: paymentForm.reference || undefined,
@@ -682,11 +703,14 @@ export function AccountsPanel() {
 
   const handleSubmitAbono = async () => {
     if (!selectedInvoiceForAbono) return;
-    const amount = parseFloat(abonoForm.amount);
-    if (!amount || amount <= 0) return;
+    const amount = parseAmount(abonoForm.amount);
+    if (isNaN(amount) || amount <= 0) {
+      toast({ title: 'Monto inválido', description: 'Ingresa un valor mayor a 0 (acepta decimales con coma o punto, ej: 0.9 o 0,9).', variant: 'destructive' });
+      return;
+    }
 
     const saldo = selectedInvoiceForAbono.totalAmount - (selectedInvoiceForAbono.paidAmount || 0);
-    if (amount > saldo) {
+    if (amount > saldo + 0.005) {
       toast({ title: 'Error', description: 'El monto del abono supera el saldo pendiente.', variant: 'destructive' });
       return;
     }
@@ -1492,8 +1516,9 @@ export function AccountsPanel() {
             <div className="space-y-2">
               <Label>Monto del Abono *</Label>
               <Input
-                type="number"
-                placeholder="0"
+                type="text"
+                inputMode="decimal"
+                placeholder="Ej: 0.9 o 0,9"
                 value={abonoForm.amount}
                 onChange={(e) => setAbonoForm({ ...abonoForm, amount: e.target.value })}
               />
