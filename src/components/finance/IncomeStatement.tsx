@@ -586,11 +586,11 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
             Distribución de Utilidad
           </p>
 
-          {/* Dividendos Dairo (25%) */}
+          {/* Participación en utilidades socio (25%) */}
           <div className="flex items-center justify-between py-2.5 px-4 hover:bg-muted/50 rounded-lg transition-colors">
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-              <span className="text-sm text-foreground">Dividendos Dairo (25%)</span>
+              <span className="text-sm text-foreground">Participación en utilidades socio (25%)</span>
             </div>
             <span className="text-sm font-medium text-foreground">{formatCurrencyFull(dividendosDairo)}</span>
           </div>
@@ -604,38 +604,48 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
             <span className="text-sm font-medium text-foreground">{formatCurrencyFull(reservaEmpresa)}</span>
           </div>
 
-          {/* Línea divisora */}
-          <div className="border-t border-dashed border-border my-3"></div>
-
-          {/* Nómina Dairo */}
-          {sueldoDairo > 0 && (
-            <div className="flex items-center justify-between py-2.5 px-4 hover:bg-muted/50 rounded-lg transition-colors">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-orange-500"></div>
-                <span className="text-sm text-foreground">Nómina (Dairo)</span>
-              </div>
-              <span className="text-sm font-medium text-foreground">{formatCurrencyFull(sueldoDairo)}</span>
-            </div>
-          )}
-
-          {/* Total Dairo */}
-          <div className="flex items-center justify-between py-3 px-4 bg-primary/5 rounded-lg border border-primary/20 mt-2">
-            <span className="text-sm font-bold text-foreground">TOTAL DAIRO (Sueldo + Dividendos)</span>
-            <span className="text-lg font-bold text-primary">{formatCurrencyFull(totalDairo)}</span>
-          </div>
-
           {/* Utilidad Neta */}
           <div className={cn(
             "flex items-center justify-between py-3 px-4 rounded-lg border mt-3",
-            (utilidadBruta - dividendosDairo) >= 0 ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
+            reservaEmpresa >= 0 ? "bg-success/5 border-success/20" : "bg-destructive/5 border-destructive/20"
           )}>
-            <span className="text-sm font-bold text-foreground">UTILIDAD NETA (Reserva Empresa)</span>
+            <span className="text-sm font-bold text-foreground">(=) UTILIDAD NETA (Reserva Empresa)</span>
             <span className={cn(
               "text-lg font-bold",
               reservaEmpresa >= 0 ? "text-success" : "text-destructive"
             )}>
               {formatCurrencyFull(reservaEmpresa)}
             </span>
+          </div>
+
+          {/* ===== Sección informativa: Compensación al Socio ===== */}
+          <div className="border-t border-dashed border-border my-4"></div>
+          <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider px-4 mb-2">
+            Informativo — Compensación al Socio
+          </p>
+
+          {/* Nómina + Bonificaciones */}
+          <div className="flex items-center justify-between py-2.5 px-4 hover:bg-muted/50 rounded-lg transition-colors">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-orange-500"></div>
+              <span className="text-sm text-muted-foreground italic">Nómina + Bonificaciones Dairo Traslaviña</span>
+            </div>
+            <span className="text-sm font-medium text-muted-foreground italic">{formatCurrencyFull(sueldoDairo)}</span>
+          </div>
+
+          {/* Participación en utilidades socio (25%) */}
+          <div className="flex items-center justify-between py-2.5 px-4 hover:bg-muted/50 rounded-lg transition-colors">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+              <span className="text-sm text-muted-foreground italic">Participación en utilidades socio (25%)</span>
+            </div>
+            <span className="text-sm font-medium text-muted-foreground italic">{formatCurrencyFull(dividendosDairo)}</span>
+          </div>
+
+          {/* Total Socio */}
+          <div className="flex items-center justify-between py-3 px-4 bg-muted/40 rounded-lg border border-border mt-1">
+            <span className="text-sm font-semibold text-muted-foreground italic">Total Socio (Sueldo + Dividendos)</span>
+            <span className="text-base font-bold text-foreground italic">{formatCurrencyFull(totalDairo)}</span>
           </div>
         </div>
       </div>

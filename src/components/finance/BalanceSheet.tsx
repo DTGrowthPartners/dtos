@@ -289,26 +289,55 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
 
   const totalCuentasPorCobrar = useMemo(() => cuentasPorCobrar.reduce((sum, c) => sum + c.saldo, 0), [cuentasPorCobrar]);
 
-  // Utilidad del ejercicio (excluyendo traslados, reembolsos, ajustes)
-  const filteredIngresos = useMemo(() => {
-    return ingresos.filter(t => {
-      if (isExcludedForUtilidad(t.categoria)) return false;
-      const fecha = normalizeDate(t.fecha);
-      return fecha && fecha <= periodEndDate;
-    });
-  }, [ingresos, periodEndDate]);
+  // Utilidad del Ejercicio: replica EXACTAMENTE la "Utilidad Neta (Reserva Empresa)"
+  // del Estado de Resultados (IncomeStatement). Por eso el filtro es por período
+  // (no acumulado por fecha-corte), y se aplica comisión 1% + 75% sobre utilidad neta.
+  const filterByPeriodForUtilidad = (transactions: Transaction[]): Transaction[] => {
+    const filtered = transactions.filter(t => !isExcludedForUtilidad(t.categoria));
+    if (selectedPeriod === 'dic2025') {
+      return filtered.filter(t => normalizeDate(t.fecha).startsWith('2025-'));
+    }
+    if (selectedPeriod === 'q1') return filtered;
+    if (selectedPeriod === 'custom' && dateRange?.from) {
+      const fromStr = `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth() + 1).padStart(2, '0')}-${String(dateRange.from.getDate()).padStart(2, '0')}`;
+      const toDate = dateRange.to || dateRange.from;
+      const toStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+      return filtered.filter(t => {
+        const n = normalizeDate(t.fecha);
+        return n >= fromStr && n <= toStr;
+      });
+    }
+    if (ALL_MONTHS.includes(selectedPeriod as MonthKey)) {
+      const idx = ALL_MONTHS.indexOf(selectedPeriod as MonthKey);
+      const prefix = `${BUDGET_YEAR}-${String(idx + 1).padStart(2, '0')}`;
+      return filtered.filter(t => normalizeDate(t.fecha).startsWith(prefix));
+    }
+    return filtered;
+  };
 
-  const filteredGastos = useMemo(() => {
-    return gastos.filter(t => {
-      if (isExcludedForUtilidad(t.categoria)) return false;
-      const fecha = normalizeDate(t.fecha);
-      return fecha && fecha <= periodEndDate;
-    });
-  }, [gastos, periodEndDate]);
+  const filteredIngresos = useMemo(() => filterByPeriodForUtilidad(ingresos), [ingresos, selectedPeriod, dateRange]);
+  const filteredGastos = useMemo(() => filterByPeriodForUtilidad(gastos), [gastos, selectedPeriod, dateRange]);
 
   const totalIngresosReal = useMemo(() => filteredIngresos.reduce((sum, t) => sum + t.importe, 0), [filteredIngresos]);
   const totalGastosReal = useMemo(() => filteredGastos.reduce((sum, t) => sum + t.importe, 0), [filteredGastos]);
-  const utilidadEjercicio = totalIngresosReal - totalGastosReal;
+  const utilidadBruta = totalIngresosReal - totalGastosReal;
+
+  // Comisión 1% sobre utilidad bruta — aplica feb 2026 en adelante (igual que IncomeStatement)
+  const aplicaComision = useMemo(() => {
+    if (selectedPeriod === 'dic2025' || selectedPeriod === 'enero') return false;
+    if (selectedPeriod === 'q1') return true;
+    if (ALL_MONTHS.includes(selectedPeriod as MonthKey)) return selectedPeriod !== 'enero';
+    if (selectedPeriod === 'custom' && dateRange?.from) {
+      const to = dateRange.to || dateRange.from;
+      return to >= new Date(2026, 1, 1);
+    }
+    return false;
+  }, [selectedPeriod, dateRange]);
+
+  const comisionParticipacion = aplicaComision && utilidadBruta > 0 ? utilidadBruta * 0.01 : 0;
+  const utilidadNeta = utilidadBruta - comisionParticipacion;
+  // Utilidad del Ejercicio = Reserva Empresa (75% de la Utilidad Neta después de comisión)
+  const utilidadEjercicio = utilidadNeta > 0 ? utilidadNeta * 0.75 : 0;
 
   // ECUACIÓN CONTABLE: ACTIVO = PASIVO + PATRIMONIO
   const totalActivos = disponibleAlCorte.total + totalCuentasPorCobrar + disponibleAlCorte.totalRetenciones;
@@ -588,7 +617,9 @@ export default function BalanceSheet({ ingresos, gastos }: BalanceSheetProps) {
                 <div className={cn("h-2 w-2 rounded-full", utilidadEjercicio >= 0 ? "bg-success" : "bg-destructive")}></div>
                 <div>
                   <span className="text-sm text-foreground">Utilidad del Ejercicio</span>
-                  <p className="text-xs text-muted-foreground">Ingresos (${fmt(totalIngresosReal)}) - Gastos (${fmt(totalGastosReal)})</p>
+                  <p className="text-xs text-muted-foreground">
+                    Reserva Empresa (75% de Utilidad Neta tras comisión){comisionParticipacion > 0 ? ` — Bruta $${fmt(utilidadBruta)} − Comisión $${fmt(comisionParticipacion)}` : ''}
+                  </p>
                 </div>
               </div>
               <span className={cn("text-sm font-medium", utilidadEjercicio >= 0 ? "text-success" : "text-destructive")}>${fmt(utilidadEjercicio)}</span>

@@ -14,11 +14,13 @@ const LOGO_PATH = '/img/logo.png';
 const REP_LEGAL_TITLE = 'Representante Legal';
 const REP_LEGAL_NAME = 'DAIRO ALBERTO TRASLAVIÑA TORRES';
 const REP_LEGAL_CC = 'C.C. 1.143.397.563';
+const REP_LEGAL_SIGNATURE_PATH = '/img/firma-dairo.png';
 
 const CONTADOR_TITLE = 'Contador Público';
 const CONTADOR_NAME = 'JHONATAN DE JESÚS PORTO MARTÍNEZ';
 const CONTADOR_CC = 'C.C.: 1.143.404.396';
 const CONTADOR_TP = 'T.P.: 282454-T';
+const CONTADOR_SIGNATURE_PATH = '/img/firma-jhonatan.png';
 
 // Brand blue from DT logo
 const BRAND_BLUE: [number, number, number] = [13, 92, 157];
@@ -53,10 +55,11 @@ const boldRight = (text: string, extra?: Record<string, unknown>): CellDef => ({
   styles: { fontStyle: 'bold', halign: 'right' as const, ...extra },
 });
 
-// Fetch logo as base64
-async function fetchLogoBase64(): Promise<string | null> {
+// Fetch a public asset as a base64 data URL. Returns null if the file is missing.
+async function fetchAssetBase64(path: string): Promise<string | null> {
   try {
-    const resp = await fetch(LOGO_PATH);
+    const resp = await fetch(path);
+    if (!resp.ok) return null;
     const blob = await resp.blob();
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -67,6 +70,13 @@ async function fetchLogoBase64(): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+const fetchLogoBase64 = () => fetchAssetBase64(LOGO_PATH);
+
+// Detect image format from a data URL ("data:image/png;base64,...") for jsPDF.addImage
+function detectImageFormat(dataUrl: string): 'PNG' | 'JPEG' {
+  return /^data:image\/jpe?g/i.test(dataUrl) ? 'JPEG' : 'PNG';
 }
 
 // ---- Shared PDF header with logo ----
@@ -117,9 +127,10 @@ async function drawHeader(doc: jsPDF, title: string, subtitle: string) {
 }
 
 // ---- Shared PDF signatures ----
-function drawSignatures(doc: jsPDF, startY: number) {
+async function drawSignatures(doc: jsPDF, startY: number) {
   const pw = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
+  // Reserve enough vertical space for: gap, signature image, line, 4 text rows
   let y = startY + 25;
 
   if (y + 25 > pageH - 15) {
@@ -127,11 +138,27 @@ function drawSignatures(doc: jsPDF, startY: number) {
     y = 40;
   }
 
+  // Load signature images in parallel (graceful fallback if missing)
+  const [firmaRepLegal, firmaContador] = await Promise.all([
+    fetchAssetBase64(REP_LEGAL_SIGNATURE_PATH),
+    fetchAssetBase64(CONTADOR_SIGNATURE_PATH),
+  ]);
+
+  // Signature image dims (placed above the line). Width matches the line span (76mm).
+  const sigW = 50;
+  const sigH = 18;
+  const sigGap = 1.5; // gap between bottom of image and the line
+
   doc.setDrawColor(120, 120, 125);
   doc.setLineWidth(0.25);
 
-  // Left — Rep Legal
+  // Left — Rep Legal (Dairo)
   const lx = 58;
+  if (firmaRepLegal) {
+    try {
+      doc.addImage(firmaRepLegal, detectImageFormat(firmaRepLegal), lx - sigW / 2, y - sigH - sigGap, sigW, sigH);
+    } catch { /* ignore image errors */ }
+  }
   doc.line(lx - 38, y, lx + 38, y);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
@@ -142,8 +169,13 @@ function drawSignatures(doc: jsPDF, startY: number) {
   doc.text(REP_LEGAL_NAME, lx, y + 9, { align: 'center' });
   doc.text(REP_LEGAL_CC, lx, y + 13, { align: 'center' });
 
-  // Right — Contador
+  // Right — Contador (Jhonatan)
   const rx = pw - 58;
+  if (firmaContador) {
+    try {
+      doc.addImage(firmaContador, detectImageFormat(firmaContador), rx - sigW / 2, y - sigH - sigGap, sigW, sigH);
+    } catch { /* ignore image errors */ }
+  }
   doc.line(rx - 38, y, rx + 38, y);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(35, 35, 35);
@@ -206,14 +238,21 @@ export async function exportIncomeStatementPDF(data: IncomeStatementExportData) 
 
   rows.push(['', '']); rowIdx++;
   rows.push([bold('Distribución de Utilidad', { textColor: [100, 100, 100] }), '']); rowIdx++;
-  rows.push(['       Dividendos Socio (25%)', right(fmtNum(data.dividendosDairo))]); rowIdx++;
+  rows.push(['       Participación en utilidades socio (25%)', right(fmtNum(data.dividendosDairo))]); rowIdx++;
   rows.push(['       Reserva Empresa (75%)', right(fmtNum(data.reservaEmpresa))]); rowIdx++;
-  rows.push(['       Nómina (Dairo)', right(fmtNum(data.sueldoDairo))]); rowIdx++;
   rows.push(['', '']); rowIdx++;
-  const totalSocioIdx = rowIdx;
-  rows.push([bold('(=)  Total Socio (Sueldo + Dividendos)'), boldRight(fmtNum(data.totalDairo))]); rowIdx++;
   const utilNetaIdx = rowIdx;
   rows.push([bold('(=)  Utilidad Neta (Reserva Empresa)'), boldRight(fmtNum(data.reservaEmpresa))]); rowIdx++;
+
+  // Sección informativa: Compensación al Socio (no afecta el cálculo)
+  const italicGray = { fontStyle: 'italic' as const, textColor: [90, 90, 90] };
+  const boldItalicGray = { fontStyle: 'bolditalic' as const, textColor: [60, 60, 60] };
+  rows.push(['', '']); rowIdx++;
+  rows.push([{ content: 'Informativo — Compensación al Socio', styles: { fontStyle: 'italic', textColor: [100, 100, 100] } }, '']); rowIdx++;
+  rows.push([{ content: '       Nómina + Bonificaciones Dairo Traslaviña', styles: italicGray }, { content: fmtNum(data.sueldoDairo), styles: { ...italicGray, halign: 'right' as const } }]); rowIdx++;
+  rows.push([{ content: '       Participación en utilidades socio (25%)', styles: italicGray }, { content: fmtNum(data.dividendosDairo), styles: { ...italicGray, halign: 'right' as const } }]); rowIdx++;
+  const totalSocioIdx = rowIdx;
+  rows.push([{ content: '       Total Socio (Sueldo + Dividendos)', styles: boldItalicGray }, { content: fmtNum(data.totalDairo), styles: { ...boldItalicGray, halign: 'right' as const } }]); rowIdx++;
 
   totalRows.push(totalSocioIdx, utilNetaIdx);
   accentRows.push(utilNetaIdx);
@@ -251,7 +290,7 @@ export async function exportIncomeStatementPDF(data: IncomeStatementExportData) 
   });
 
   const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-  drawSignatures(doc, finalY);
+  await drawSignatures(doc, finalY);
 
   doc.save(`Estado_Resultados_${data.periodLabel.replace(/\s+/g, '_')}.pdf`);
 }
@@ -285,12 +324,15 @@ export function exportIncomeStatementExcel(data: IncomeStatementExportData) {
   rows.push(
     [],
     ['Distribución de Utilidad'],
-    ['     Dividendos Socio (25%)', data.dividendosDairo],
+    ['     Participación en utilidades socio (25%)', data.dividendosDairo],
     ['     Reserva Empresa (75%)', data.reservaEmpresa],
-    ['     Nómina (Dairo)', data.sueldoDairo],
     [],
-    ['(=) Total Socio (Sueldo + Dividendos)', data.totalDairo],
     ['(=) Utilidad Neta (Reserva Empresa)', data.reservaEmpresa],
+    [],
+    ['Informativo — Compensación al Socio'],
+    ['     Nómina + Bonificaciones Dairo Traslaviña', data.sueldoDairo],
+    ['     Participación en utilidades socio (25%)', data.dividendosDairo],
+    ['     Total Socio (Sueldo + Dividendos)', data.totalDairo],
     [],
     [],
     [REP_LEGAL_TITLE, '', CONTADOR_TITLE],
@@ -440,7 +482,7 @@ export async function exportBalanceSheetPDF(data: BalanceSheetExportData) {
   doc.text(diff < 1 ? `✓  ${checkText}` : `⚠  ${checkText}`, 20, checkY);
   doc.setTextColor(35, 35, 35);
 
-  drawSignatures(doc, checkY + 5);
+  await drawSignatures(doc, checkY + 5);
 
   doc.save(`Situacion_Financiera_${data.periodLabel.replace(/\s+/g, '_')}.pdf`);
 }
