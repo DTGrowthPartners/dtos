@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { authService } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -556,10 +557,11 @@ export function ClientDataManager({ clientId }: ClientDataManagerProps) {
         formData.append('description', excelForm.description);
       }
 
+      const token = await authService.getToken();
       await fetch(`${import.meta.env.VITE_API_URL || ''}/api/client-portal/admin/clients/${clientId}/excel`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${token || ''}`,
         },
         body: formData,
       }).then(async (res) => {

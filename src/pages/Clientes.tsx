@@ -40,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { authService } from '@/lib/auth';
 import { convertImageToBase64 } from '@/lib/imageService';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
 
@@ -231,10 +232,22 @@ export default function Clientes() {
 
   const handleDownloadInvoice = async (invoiceId: string) => {
     try {
+      const token = await authService.getToken();
+      if (!token) {
+        toast({ title: 'Sesión expirada', description: 'Vuelve a iniciar sesión.', variant: 'destructive' });
+        return;
+      }
       const response = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/invoices/${invoiceId}/download`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
-      if (!response.ok) throw new Error('Error');
+      if (!response.ok) {
+        if (response.status === 404) {
+          toast({ title: 'PDF no disponible', description: 'El archivo PDF de esta cuenta de cobro no existe en el servidor. Si fue creada hace tiempo, puede haberse perdido al limpiar archivos.', variant: 'destructive' });
+        } else {
+          toast({ title: 'Error', description: `No se pudo descargar (HTTP ${response.status}).`, variant: 'destructive' });
+        }
+        return;
+      }
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
