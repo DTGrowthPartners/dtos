@@ -2655,7 +2655,42 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
       });
     }
 
-    // Registrar el gasto
+    // Detectar si es gasto personal de Dairo (hoja "Personal Dairo")
+    // Acepta: entidad === "Dairo" | "Personal Dairo" | "Personal" o cuentaPersonal/personal=true
+    const isPersonalDairo = (
+      expenseEntity && ['dairo', 'personal dairo', 'personal'].includes(String(expenseEntity).toLowerCase().trim())
+    ) || req.body.cuentaPersonal === true || req.body.personal === true;
+
+    if (isPersonalDairo) {
+      // Registrar en hoja "Personal Dairo" - solo necesita: fecha, valor, descripcion, categoria, cuenta, tipo
+      await googleSheetsService.addPersonalDairo({
+        fecha: expenseDate,
+        valor: Number(expenseAmount),
+        descripcion: expenseDescription,
+        categoria: expenseCategory,
+        cuenta: expenseAccount,
+        tipo: 'Salida',
+      });
+
+      console.log(`[Bot API] Gasto PERSONAL DAIRO registrado: $${expenseAmount} - ${expenseDescription}`);
+
+      return res.status(201).json({
+        success: true,
+        hoja: 'Personal Dairo',
+        message: `Gasto personal de Dairo registrado: $${Number(expenseAmount).toLocaleString('es-CO')} en ${expenseCategory}`,
+        gasto: {
+          fecha: expenseDate,
+          valor: Number(expenseAmount),
+          descripcion: expenseDescription,
+          categoria: expenseCategory,
+          cuenta: expenseAccount,
+          tipo: 'Salida',
+          entidad: 'Dairo',
+        },
+      });
+    }
+
+    // Caso normal: gasto de DT Growth Partners → hoja "Salidas"
     await googleSheetsService.addExpense({
       fecha: expenseDate,
       importe: Number(expenseAmount),
@@ -2670,6 +2705,7 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
 
     res.status(201).json({
       success: true,
+      hoja: 'Salidas',
       message: `Gasto registrado: $${Number(expenseAmount).toLocaleString('es-CO')} en ${expenseCategory}`,
       gasto: {
         fecha: expenseDate,
@@ -2770,7 +2806,40 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
       });
     }
 
-    // Registrar el ingreso
+    // Detectar si es ingreso personal de Dairo (hoja "Personal Dairo")
+    const isPersonalDairo = (
+      incomeEntity && ['dairo', 'personal dairo', 'personal'].includes(String(incomeEntity).toLowerCase().trim())
+    ) || req.body.cuentaPersonal === true || req.body.personal === true;
+
+    if (isPersonalDairo) {
+      await googleSheetsService.addPersonalDairo({
+        fecha: incomeDate,
+        valor: Number(incomeAmount),
+        descripcion: incomeDescription,
+        categoria: incomeCategory,
+        cuenta: incomeAccount,
+        tipo: 'Entrada',
+      });
+
+      console.log(`[Bot API] Ingreso PERSONAL DAIRO registrado: $${incomeAmount} - ${incomeDescription}`);
+
+      return res.status(201).json({
+        success: true,
+        hoja: 'Personal Dairo',
+        message: `Ingreso personal de Dairo registrado: $${Number(incomeAmount).toLocaleString('es-CO')} en ${incomeCategory}`,
+        ingreso: {
+          fecha: incomeDate,
+          valor: Number(incomeAmount),
+          descripcion: incomeDescription,
+          categoria: incomeCategory,
+          cuenta: incomeAccount,
+          tipo: 'Entrada',
+          entidad: 'Dairo',
+        },
+      });
+    }
+
+    // Caso normal: ingreso de DT Growth Partners → hoja "Entradas"
     await googleSheetsService.addIncome({
       fecha: incomeDate,
       importe: Number(incomeAmount),
@@ -2788,6 +2857,7 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
 
     res.status(201).json({
       success: true,
+      hoja: 'Entradas',
       message: `Ingreso registrado: $${Number(incomeAmount).toLocaleString('es-CO')} de ${incomeEntity || 'Sin entidad'}`,
       ingreso: {
         fecha: incomeDate,
@@ -3564,5 +3634,65 @@ router.patch('/bot/sheets/transacciones', verifyBotApiKey, async (req: Request, 
     });
   }
 });
+
+
+
+/**
+ * GET /api/webhook/bot/sheets/personal-dairo
+ *
+ * Lista las transacciones personales de Dairo (hoja "Personal Dairo").
+ * Estas son SEPARADAS de las de DT Growth Partners.
+ *
+ * Query params:
+ *   - tipo: Salida, Entrada, all (default: all)
+ *   - categoria: filtrar por categoria
+ *   - limit: maximo de resultados (default: 50)
+ */
+router.get('/bot/sheets/personal-dairo', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { tipo, categoria, limit } = req.query;
+    const limitNum = parseInt((limit as string) || '50', 10);
+
+    let transacciones = await googleSheetsService.getPersonalDairo();
+
+    if (tipo && tipo !== 'all') {
+      const tipoLower = (tipo as string).toLowerCase();
+      transacciones = transacciones.filter(t => t.tipo.toLowerCase() === tipoLower);
+    }
+
+    if (categoria) {
+      const catLower = (categoria as string).toLowerCase();
+      transacciones = transacciones.filter(t => t.categoria.toLowerCase().includes(catLower));
+    }
+
+    transacciones.sort((a, b) => b.fecha.localeCompare(a.fecha));
+    const totalCount = transacciones.length;
+    transacciones = transacciones.slice(0, limitNum);
+
+    const totalSalidas = transacciones.filter(t => t.tipo === 'Salida').reduce((sum, t) => sum + t.valor, 0);
+    const totalEntradas = transacciones.filter(t => t.tipo === 'Entrada').reduce((sum, t) => sum + t.valor, 0);
+
+    res.json({
+      success: true,
+      hoja: 'Personal Dairo',
+      count: transacciones.length,
+      totalCount,
+      resumen: {
+        totalSalidas: Math.round(totalSalidas),
+        totalEntradas: Math.round(totalEntradas),
+        balance: Math.round(totalEntradas - totalSalidas),
+      },
+      transacciones,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error listando Personal Dairo:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Error al obtener transacciones personales de Dairo',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
 
 export default router;

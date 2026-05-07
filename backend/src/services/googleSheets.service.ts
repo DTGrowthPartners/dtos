@@ -674,6 +674,177 @@ export class GoogleSheetsService {
     }
   }
 
+
+  // ==================== PERSONAL DAIRO ====================
+  // Hoja "Personal Dairo" - Gastos personales de Dairo (separados de DT Growth Partners)
+  // Columnas: A=Fecha, B=Valor, C=Descripcion, D=Categoria, E=Cuenta, F=Tipo de Movimiento (Salida/Entrada)
+
+  async getPersonalDairo(): Promise<Array<{
+    rowIndex: number;
+    fecha: string;
+    valor: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    tipo: string; // 'Salida' | 'Entrada'
+  }>> {
+    try {
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "'Personal Dairo'!A2:F",
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+      const rows = response.data.values || [];
+      // Solo incluir filas con fecha numerica Y valor numerico (excluye header y catalogos en D/E)
+      return rows
+        .map((row: any[], index: number) => ({ row, sheetRow: index + 2 }))
+        .filter(({ row }: { row: any[] }) => typeof row[0] === 'number' && typeof row[1] === 'number')
+        .map(({ row, sheetRow }: { row: any[]; sheetRow: number }) => ({
+          rowIndex: sheetRow,
+          fecha: this.parseDate(row[0]),
+          valor: this.parseAmount(row[1]),
+          descripcion: String(row[2] || ''),
+          categoria: String(row[3] || ''),
+          cuenta: String(row[4] || ''),
+          tipo: String(row[5] || 'Salida'),
+        }));
+    } catch (error) {
+      console.error('Error reading Personal Dairo:', error);
+      throw new Error('No se pudieron leer las transacciones personales de Dairo');
+    }
+  }
+
+  async addPersonalDairo(data: {
+    fecha: string;
+    valor: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    tipo: 'Salida' | 'Entrada';
+  }): Promise<void> {
+    try {
+      const [year, month, day] = data.fecha.split('-').map(Number);
+      const now = new Date();
+      const fechaConHora = new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds());
+      const serialDate = this.dateToSerialNumber(fechaConHora);
+
+      // Buscar el sheetId de "Personal Dairo"
+      const spreadsheet = await this.sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const personalSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Personal Dairo'
+      );
+      if (!personalSheet) throw new Error('No se encontro la hoja "Personal Dairo"');
+      const sheetId = personalSheet.properties?.sheetId;
+
+      // Insertar nueva fila en posicion 2 (despues del header)
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            insertDimension: {
+              range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: 2 },
+              inheritFromBefore: false,
+            },
+          }],
+        },
+      });
+
+      // Escribir los valores en la fila 2
+      const values = [[
+        serialDate,
+        data.valor,
+        data.descripcion,
+        data.categoria,
+        data.cuenta,
+        data.tipo,
+      ]];
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: "'Personal Dairo'!A2:F2",
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Personal Dairo transaction added at row 2:', data, 'Serial date:', serialDate);
+    } catch (error) {
+      console.error('Error adding Personal Dairo:', error);
+      throw new Error('No se pudo agregar la transaccion personal de Dairo');
+    }
+  }
+
+  async updatePersonalDairo(rowIndex: number, updates: Partial<{
+    fecha: string;
+    valor: number;
+    descripcion: string;
+    categoria: string;
+    cuenta: string;
+    tipo: string;
+  }>): Promise<void> {
+    try {
+      const currentRow = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'Personal Dairo'!A${rowIndex}:F${rowIndex}`,
+        valueRenderOption: 'UNFORMATTED_VALUE',
+      });
+      const current = currentRow.data.values?.[0] || [];
+
+      let fecha = current[0];
+      if (updates.fecha) {
+        const [year, month, day] = updates.fecha.split('-').map(Number);
+        const now = new Date();
+        fecha = this.dateToSerialNumber(new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds()));
+      }
+
+      const values = [[
+        fecha,
+        updates.valor ?? current[1],
+        updates.descripcion ?? current[2] ?? '',
+        updates.categoria ?? current[3] ?? '',
+        updates.cuenta ?? current[4] ?? '',
+        updates.tipo ?? current[5] ?? 'Salida',
+      ]];
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'Personal Dairo'!A${rowIndex}:F${rowIndex}`,
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+
+      console.log('Personal Dairo updated at row:', rowIndex);
+    } catch (error) {
+      console.error('Error updating Personal Dairo:', error);
+      throw new Error('No se pudo actualizar la transaccion personal de Dairo');
+    }
+  }
+
+  async deletePersonalDairo(rowIndex: number): Promise<void> {
+    try {
+      const spreadsheet = await this.sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+      const personalSheet = spreadsheet.data.sheets?.find(
+        (sheet: { properties?: { title?: string; sheetId?: number } }) => sheet.properties?.title === 'Personal Dairo'
+      );
+      if (!personalSheet) throw new Error('No se encontro la hoja "Personal Dairo"');
+      const sheetId = personalSheet.properties?.sheetId;
+
+      await this.sheets.spreadsheets.batchUpdate({
+        spreadsheetId: SPREADSHEET_ID,
+        requestBody: {
+          requests: [{
+            deleteDimension: {
+              range: { sheetId, dimension: 'ROWS', startIndex: rowIndex - 1, endIndex: rowIndex },
+            },
+          }],
+        },
+      });
+
+      console.log('Personal Dairo deleted at row:', rowIndex);
+    } catch (error) {
+      console.error('Error deleting Personal Dairo:', error);
+      throw new Error('No se pudo eliminar la transaccion personal de Dairo');
+    }
+  }
+
   // Lee la hoja "Presupuesto Mensual" - lista plana de gastos recurrentes mensuales (cols A:B).
   // Devuelve una unica cifra mensual por categoria que aplica a cualquier mes (Abr..Dic).
   async getMonthlyBudget(): Promise<{ categorias: Record<string, number>; total: number }> {
