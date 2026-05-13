@@ -139,14 +139,28 @@ export default function BudgetComparisonReport({ gastos }: BudgetComparisonRepor
     return gastos.filter(t => notExcluded(t) && normalizeDate(t.fecha).startsWith(ym));
   }, [gastos, selectedMonth, dateRange]);
 
-  // Category breakdown derived from actual gastos[] for any non-Q1 period (covers abril..diciembre + custom)
+  // Category breakdown derived from actual gastos[] for any non-Q1 period (covers abril..diciembre + custom).
+  // Consolida variantes equivalentes ("Nómina (Dairo)" y "Nómina Dairo") usando la misma normalizacion
+  // que el matching de presupuesto, conservando el nombre mas corto/canonico como display.
   const gastosCategoryBreakdown = useMemo(() => {
-    const categoryMap = new Map<string, number>();
+    const normKey = (s: string) => s.toLowerCase()
+      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const grouped = new Map<string, { display: string; total: number }>();
     filteredGastos.forEach(t => {
-      if (t.categoria) categoryMap.set(t.categoria, (categoryMap.get(t.categoria) || 0) + t.importe);
+      if (!t.categoria) return;
+      const key = normKey(t.categoria);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.total += t.importe;
+        // Keep the shortest display name (usually the canonical one)
+        if (t.categoria.length < existing.display.length) existing.display = t.categoria;
+      } else {
+        grouped.set(key, { display: t.categoria, total: t.importe });
+      }
     });
-    return Array.from(categoryMap.entries())
-      .map(([categoria, real]) => ({ categoria, proyectado: 0, real, diferencia: -real, percentUsed: 0, status: 'ok' as const }))
+    return Array.from(grouped.values())
+      .map(({ display, total }) => ({ categoria: display, proyectado: 0, real: total, diferencia: -total, percentUsed: 0, status: 'ok' as const }))
       .sort((a, b) => b.real - a.real);
   }, [filteredGastos]);
 

@@ -194,11 +194,25 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
   }, [budgetData, filterMode, selectedMonth, filteredIncome]);
 
   const incomeByCategory = useMemo(() => {
-    const categoryMap = new Map<string, number>();
-    filteredIncome.forEach(t => { if (t.categoria) { categoryMap.set(t.categoria, (categoryMap.get(t.categoria) || 0) + t.importe); } });
+    // Consolida variantes equivalentes (ej: "Nómina (Dairo)" y "Nómina Dairo") por normalizacion
+    const normKey = (s: string) => s.toLowerCase()
+      .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+      .replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const grouped = new Map<string, { display: string; total: number }>();
+    filteredIncome.forEach(t => {
+      if (!t.categoria) return;
+      const key = normKey(t.categoria);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.total += t.importe;
+        if (t.categoria.length < existing.display.length) existing.display = t.categoria;
+      } else {
+        grouped.set(key, { display: t.categoria, total: t.importe });
+      }
+    });
     const colors = ['hsl(var(--success))', 'hsl(var(--primary))', 'hsl(var(--warning))', '#8884d8', '#82ca9d', '#ffc658', '#ff7c43', '#665191'];
-    return Array.from(categoryMap.entries())
-      .map(([name, value], index) => ({ name, value, color: colors[index % colors.length] }))
+    return Array.from(grouped.values())
+      .map(({ display, total }, index) => ({ name: display, value: total, color: colors[index % colors.length] }))
       .sort((a, b) => b.value - a.value);
   }, [filteredIncome]);
 
