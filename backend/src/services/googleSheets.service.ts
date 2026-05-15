@@ -687,11 +687,12 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     tipo: string; // 'Salida' | 'Entrada'
+    subcategoria: string;
   }>> {
     try {
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: "'Personal Dairo'!A2:F",
+        range: "'Personal Dairo'!A2:G",
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
       const rows = response.data.values || [];
@@ -707,6 +708,7 @@ export class GoogleSheetsService {
           categoria: String(row[3] || ''),
           cuenta: String(row[4] || ''),
           tipo: String(row[5] || 'Salida'),
+          subcategoria: String(row[6] || ''),
         }));
     } catch (error) {
       console.error('Error reading Personal Dairo:', error);
@@ -721,6 +723,7 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     tipo: 'Salida' | 'Entrada';
+    subcategoria?: string;
   }): Promise<void> {
     try {
       const [year, month, day] = data.fecha.split('-').map(Number);
@@ -749,7 +752,7 @@ export class GoogleSheetsService {
         },
       });
 
-      // Escribir los valores en la fila 2
+      // Escribir los valores en la fila 2 (columnas A:G incluyendo subcategoria)
       const values = [[
         serialDate,
         data.valor,
@@ -757,10 +760,11 @@ export class GoogleSheetsService {
         data.categoria,
         data.cuenta,
         data.tipo,
+        data.subcategoria || '',
       ]];
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: "'Personal Dairo'!A2:F2",
+        range: "'Personal Dairo'!A2:G2",
         valueInputOption: 'RAW',
         requestBody: { values },
       });
@@ -779,11 +783,12 @@ export class GoogleSheetsService {
     categoria: string;
     cuenta: string;
     tipo: string;
+    subcategoria: string;
   }>): Promise<void> {
     try {
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'Personal Dairo'!A${rowIndex}:F${rowIndex}`,
+        range: `'Personal Dairo'!A${rowIndex}:G${rowIndex}`,
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
       const current = currentRow.data.values?.[0] || [];
@@ -802,11 +807,12 @@ export class GoogleSheetsService {
         updates.categoria ?? current[3] ?? '',
         updates.cuenta ?? current[4] ?? '',
         updates.tipo ?? current[5] ?? 'Salida',
+        updates.subcategoria ?? current[6] ?? '',
       ]];
 
       await this.sheets.spreadsheets.values.update({
         spreadsheetId: SPREADSHEET_ID,
-        range: `'Personal Dairo'!A${rowIndex}:F${rowIndex}`,
+        range: `'Personal Dairo'!A${rowIndex}:G${rowIndex}`,
         valueInputOption: 'RAW',
         requestBody: { values },
       });

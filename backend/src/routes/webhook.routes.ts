@@ -2662,7 +2662,10 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
     ) || req.body.cuentaPersonal === true || req.body.personal === true;
 
     if (isPersonalDairo) {
-      // Registrar en hoja "Personal Dairo" - solo necesita: fecha, valor, descripcion, categoria, cuenta, tipo
+      // Subcategoria opcional (col G) - util para distinguir tipos dentro de una misma categoria
+      const expenseSubcategoria = req.body.subcategoria || req.body.subcategory || '';
+
+      // Registrar en hoja "Personal Dairo" - cols A:G (fecha, valor, descripcion, categoria, cuenta, tipo, subcategoria)
       await googleSheetsService.addPersonalDairo({
         fecha: expenseDate,
         valor: Number(expenseAmount),
@@ -2670,19 +2673,21 @@ router.post('/bot/sheets/gastos', verifyBotApiKey, async (req: Request, res: Res
         categoria: expenseCategory,
         cuenta: expenseAccount,
         tipo: 'Salida',
+        subcategoria: expenseSubcategoria,
       });
 
-      console.log(`[Bot API] Gasto PERSONAL DAIRO registrado: $${expenseAmount} - ${expenseDescription}`);
+      console.log(`[Bot API] Gasto PERSONAL DAIRO registrado: $${expenseAmount} - ${expenseDescription}${expenseSubcategoria ? ` (subcat: ${expenseSubcategoria})` : ''}`);
 
       return res.status(201).json({
         success: true,
         hoja: 'Personal Dairo',
-        message: `Gasto personal de Dairo registrado: $${Number(expenseAmount).toLocaleString('es-CO')} en ${expenseCategory}`,
+        message: `Gasto personal de Dairo registrado: $${Number(expenseAmount).toLocaleString('es-CO')} en ${expenseCategory}${expenseSubcategoria ? ` / ${expenseSubcategoria}` : ''}`,
         gasto: {
           fecha: expenseDate,
           valor: Number(expenseAmount),
           descripcion: expenseDescription,
           categoria: expenseCategory,
+          subcategoria: expenseSubcategoria,
           cuenta: expenseAccount,
           tipo: 'Salida',
           entidad: 'Dairo',
@@ -2812,6 +2817,8 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
     ) || req.body.cuentaPersonal === true || req.body.personal === true;
 
     if (isPersonalDairo) {
+      const incomeSubcategoria = req.body.subcategoria || req.body.subcategory || '';
+
       await googleSheetsService.addPersonalDairo({
         fecha: incomeDate,
         valor: Number(incomeAmount),
@@ -2819,19 +2826,21 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
         categoria: incomeCategory,
         cuenta: incomeAccount,
         tipo: 'Entrada',
+        subcategoria: incomeSubcategoria,
       });
 
-      console.log(`[Bot API] Ingreso PERSONAL DAIRO registrado: $${incomeAmount} - ${incomeDescription}`);
+      console.log(`[Bot API] Ingreso PERSONAL DAIRO registrado: $${incomeAmount} - ${incomeDescription}${incomeSubcategoria ? ` (subcat: ${incomeSubcategoria})` : ''}`);
 
       return res.status(201).json({
         success: true,
         hoja: 'Personal Dairo',
-        message: `Ingreso personal de Dairo registrado: $${Number(incomeAmount).toLocaleString('es-CO')} en ${incomeCategory}`,
+        message: `Ingreso personal de Dairo registrado: $${Number(incomeAmount).toLocaleString('es-CO')} en ${incomeCategory}${incomeSubcategoria ? ` / ${incomeSubcategoria}` : ''}`,
         ingreso: {
           fecha: incomeDate,
           valor: Number(incomeAmount),
           descripcion: incomeDescription,
           categoria: incomeCategory,
+          subcategoria: incomeSubcategoria,
           cuenta: incomeAccount,
           tipo: 'Entrada',
           entidad: 'Dairo',
@@ -3663,6 +3672,11 @@ router.get('/bot/sheets/personal-dairo', verifyBotApiKey, async (req: Request, r
     if (categoria) {
       const catLower = (categoria as string).toLowerCase();
       transacciones = transacciones.filter(t => t.categoria.toLowerCase().includes(catLower));
+    }
+
+    if (req.query.subcategoria || req.query.subcategory) {
+      const subLower = String(req.query.subcategoria || req.query.subcategory).toLowerCase();
+      transacciones = transacciones.filter(t => t.subcategoria.toLowerCase().includes(subLower));
     }
 
     transacciones.sort((a, b) => b.fecha.localeCompare(a.fecha));
