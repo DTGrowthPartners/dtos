@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Users, Target, Plus, FileText, TrendingUp, UserPlus } from 'lucide-react';
+import { Users, LayoutGrid, Plus, FileText, TrendingUp, UserPlus } from 'lucide-react';
 
 const quickActions = [
   { title: 'Nuevo Cliente', icon: UserPlus, path: '/clientes', color: 'bg-primary/10 text-primary' },
   { title: 'Nueva Tarea', icon: Plus, path: '/tareas', color: 'bg-success/10 text-success' },
-  { title: 'Ver Campañas', icon: Target, path: '/campanas', color: 'bg-warning/10 text-warning' },
+  { title: 'Centro de Apps', icon: LayoutGrid, path: '/apps', color: 'bg-warning/10 text-warning' },
   { title: 'Crear Reporte', icon: FileText, path: '/reportes', color: 'bg-chart-4/10 text-chart-4' },
   { title: 'Ver Clientes', icon: Users, path: '/clientes', color: 'bg-chart-1/10 text-chart-1' },
   { title: 'Finanzas', icon: TrendingUp, path: '/finanzas', color: 'bg-success/10 text-success' },

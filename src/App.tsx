@@ -9,8 +9,6 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
 import Clientes from "@/pages/Clientes";
 import Servicios from "@/pages/Servicios";
-import Campanas from "@/pages/Campanas";
-import Ads from "@/pages/Ads";
 import Tareas from "@/pages/Tareas";
 import MisTareas from "@/pages/MisTareas";
 import Reportes from "@/pages/Reportes";
@@ -21,6 +19,7 @@ import CRM from "@/pages/CRM";
 import Terceros from "@/pages/Terceros";
 import Calendario from "@/pages/Calendario";
 import CuentasCobro from "@/pages/CuentasCobro";
+import Apps from "@/pages/Apps";
 // import Brief from "@/pages/Brief"; // Moved to Tareas
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
@@ -36,9 +35,6 @@ import ClientCampaigns from "@/pages/portal/ClientCampaigns";
 import ClientBudgetSales from "@/pages/portal/ClientBudgetSales";
 import ClientServices from "@/pages/portal/ClientServices";
 import ClientReports from "@/pages/portal/ClientReports";
-
-// Admin
-import ClientsPortalManagement from "@/pages/admin/ClientsPortalManagement";
 
 const queryClient = new QueryClient();
 
@@ -70,8 +66,6 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
-              <Route path="/campanas" element={<Campanas />} />
-              <Route path="/ads" element={<Ads />} />
               <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
               <Route path="/mis-tareas" element={<MisTareas />} />
               <Route path="/reportes" element={<ProtectedRoute requiredPermission="reportes"><Reportes /></ProtectedRoute>} />
@@ -83,10 +77,8 @@ const App = () => (
               <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
               <Route path="/calendario" element={<ProtectedRoute requiredPermission="calendario"><Calendario /></ProtectedRoute>} />
-              {/* Brief moved to Tareas as a view */}
+              <Route path="/apps" element={<Apps />} />
               <Route path="/perfil" element={<Profile />} />
-              {/* Admin: Portal de Clientes Management */}
-              <Route path="/admin/portal-clientes" element={<ProtectedRoute requiredPermission="admin"><ClientsPortalManagement /></ProtectedRoute>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

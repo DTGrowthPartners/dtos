@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield, Circle, EyeOff, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -106,12 +106,17 @@ const roleConfig: Record<string, { label: string; className: string }> = {
   marketing: { label: 'Marketing', className: 'bg-pink-500/10 text-pink-500 border-pink-500/20' },
 };
 
+// Heuristic: an "active" team member is one with a Firebase account synced
+// (firebaseUid present). Users sin firebaseUid suelen ser registros legacy o de prueba.
+const isActiveUser = (u: User) => !!u.firebaseUid;
+
 export default function Equipo() {
   const { toast } = useToast();
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [showInactive, setShowInactive] = useState(false);
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -321,6 +326,11 @@ export default function Equipo() {
     return roleConfig[roleName] || { label: roleName, className: 'bg-muted text-muted-foreground' };
   };
 
+  // Activos vs inactivos
+  const activeUsers = useMemo(() => users.filter(isActiveUser), [users]);
+  const inactiveUsers = useMemo(() => users.filter((u) => !isActiveUser(u)), [users]);
+  const visibleUsers = showInactive ? users : activeUsers;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -335,38 +345,53 @@ export default function Equipo() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Equipo</h1>
-          <p className="text-muted-foreground">Gestiona los miembros del equipo</p>
+          <p className="text-muted-foreground">Agentes activos del equipo DT Growth Partners</p>
         </div>
-        {isAdmin && (
-          <Button onClick={() => setShowCreateModal(true)} className="w-full md:w-auto">
-            <UserPlus className="h-4 w-4 mr-2" />
-            Nuevo Usuario
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {inactiveUsers.length > 0 && isAdmin && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowInactive((v) => !v)}
+            >
+              {showInactive ? (
+                <><EyeOff className="h-4 w-4 mr-2" /> Solo activos</>
+              ) : (
+                <><Eye className="h-4 w-4 mr-2" /> Mostrar inactivos ({inactiveUsers.length})</>
+              )}
+            </Button>
+          )}
+          {isAdmin && (
+            <Button onClick={() => setShowCreateModal(true)}>
+              <UserPlus className="h-4 w-4 mr-2" />
+              Nuevo Usuario
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Team Stats */}
       <div className="grid gap-4 md:grid-cols-3">
         <div className="stat-card">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-              <Users className="h-5 w-5 text-primary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+              <Circle className="h-5 w-5 text-success fill-success" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Total Usuarios</p>
-              <p className="text-2xl font-bold text-foreground">{users.length}</p>
+              <p className="text-sm text-muted-foreground">Agentes Activos</p>
+              <p className="text-2xl font-bold text-foreground">{activeUsers.length}</p>
             </div>
           </div>
         </div>
         <div className="stat-card">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
-              <Users className="h-5 w-5 text-success" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Shield className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Administradores</p>
               <p className="text-2xl font-bold text-foreground">
-                {users.filter((u) => u.role.name === 'admin').length}
+                {activeUsers.filter((u) => u.role.name === 'admin').length}
               </p>
             </div>
           </div>
@@ -377,9 +402,9 @@ export default function Equipo() {
               <Users className="h-5 w-5 text-chart-4" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Usuarios</p>
+              <p className="text-sm text-muted-foreground">Otros roles</p>
               <p className="text-2xl font-bold text-foreground">
-                {users.filter((u) => u.role.name !== 'admin').length}
+                {activeUsers.filter((u) => u.role.name !== 'admin').length}
               </p>
             </div>
           </div>
@@ -387,17 +412,32 @@ export default function Equipo() {
       </div>
 
       {/* Team Members Grid */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {users.map((user) => {
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {visibleUsers.map((user) => {
           const roleDisplay = getRoleDisplay(user.role.name);
+          const active = isActiveUser(user);
 
           return (
             <div
               key={user.id}
-              className="rounded-xl border border-border bg-card p-6 hover:shadow-md transition-shadow"
+              className={cn(
+                "relative rounded-xl border bg-card p-5 transition-all hover:shadow-md hover:-translate-y-0.5",
+                active ? "border-border" : "border-dashed border-border/60 opacity-70"
+              )}
             >
-              <div className="flex items-start gap-4">
-                <Avatar className="h-14 w-14">
+              {/* Status indicator */}
+              <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                <span className={cn(
+                  "h-2 w-2 rounded-full",
+                  active ? "bg-success animate-pulse" : "bg-muted-foreground/40"
+                )} />
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  {active ? 'Activo' : 'Inactivo'}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center text-center">
+                <Avatar className="h-16 w-16 mb-3">
                   {user.photoUrl && (
                     <AvatarImage src={user.photoUrl} alt={`${user.firstName} ${user.lastName}`} />
                   )}
@@ -405,52 +445,56 @@ export default function Equipo() {
                     {getInitials(user.firstName, user.lastName)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-foreground truncate">
-                    {user.firstName} {user.lastName}
-                  </h3>
-                  <Badge variant="outline" className={cn('text-xs mt-1', roleDisplay.className)}>
-                    {roleDisplay.label}
-                  </Badge>
-                  <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
-                    <Mail className="h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{user.email}</span>
-                  </div>
-                  {user.role.name !== 'admin' && user.permissions && user.permissions.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {user.permissions.slice(0, 4).map((perm) => (
-                        <Badge key={perm} variant="secondary" className="text-xs">
-                          {MODULE_PERMISSIONS.find((m) => m.value === perm)?.label || perm}
-                        </Badge>
-                      ))}
-                      {user.permissions.length > 4 && (
-                        <Badge variant="secondary" className="text-xs">
-                          +{user.permissions.length - 4}
-                        </Badge>
-                      )}
-                    </div>
-                  )}
+                <h3 className="font-semibold text-foreground truncate w-full">
+                  {user.firstName} {user.lastName}
+                </h3>
+                <Badge variant="outline" className={cn('text-xs mt-1.5', roleDisplay.className)}>
+                  {roleDisplay.label}
+                </Badge>
+                <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground w-full justify-center">
+                  <Mail className="h-3 w-3 flex-shrink-0" />
+                  <span className="truncate">{user.email}</span>
                 </div>
               </div>
 
+              {user.role.name !== 'admin' && user.permissions && user.permissions.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-border/50">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5">
+                    Permisos ({user.permissions.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1">
+                    {user.permissions.slice(0, 3).map((perm) => (
+                      <Badge key={perm} variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {MODULE_PERMISSIONS.find((m) => m.value === perm)?.label || perm}
+                      </Badge>
+                    ))}
+                    {user.permissions.length > 3 && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                        +{user.permissions.length - 3}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {isAdmin && (
-                <div className="mt-4 pt-4 border-t border-border flex gap-2">
+                <div className="mt-3 pt-3 border-t border-border/50 flex gap-2">
                   <Button
                     variant="outline"
                     size="sm"
-                    className="flex-1"
+                    className="flex-1 h-8"
                     onClick={() => openEditModal(user)}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
+                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
                     Editar
                   </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => openDeleteDialog(user)}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               )}
@@ -458,6 +502,13 @@ export default function Equipo() {
           );
         })}
       </div>
+
+      {visibleUsers.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
+          <Users className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">No hay agentes para mostrar.</p>
+        </div>
+      )}
 
       {/* Create User Modal */}
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>

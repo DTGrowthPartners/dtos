@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -18,7 +18,11 @@ const app = initializeApp(firebaseConfig);
 // Initialize Cloud Firestore
 const db = getFirestore(app);
 
-// Initialize Firebase Auth
+// Initialize Firebase Auth with explicit local persistence so the session
+// survives reloads, browser restarts and even network drops.
 const auth = getAuth(app);
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.warn('Firebase: could not set local persistence', err);
+});
 
 export { db, auth };

@@ -15,8 +15,6 @@ import {
   UsersRound,
   CalendarDays,
   LayoutGrid,
-  Megaphone,
-  MonitorSmartphone,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -37,14 +35,11 @@ const navItems: NavItem[] = [
   { title: 'Terceros', path: '/terceros', icon: UsersRound, permission: 'terceros' },
   { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
   { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
-  { title: 'Campañas', path: '/campanas', icon: Megaphone },
-  { title: 'Ads', path: '/ads', icon: MonitorSmartphone },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
-  // Briefs moved inside Tareas as a view
   { title: 'Calendario', path: '/calendario', icon: CalendarDays, permission: 'calendario' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
-  { title: 'Portal Clientes', path: '/admin/portal-clientes', icon: LayoutGrid, permission: 'admin' },
+  { title: 'Apps', path: '/apps', icon: LayoutGrid },
 ];
 
 export function AppSidebar() {

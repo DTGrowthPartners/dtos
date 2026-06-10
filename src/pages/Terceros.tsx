@@ -430,13 +430,21 @@ export default function Terceros() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Terceros</h1>
-          <p className="text-muted-foreground">Gestiona organizaciones y contactos</p>
+        <div className="flex items-center gap-4">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 flex-shrink-0">
+            <Users className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Terceros</h1>
+            <p className="text-sm text-muted-foreground">
+              Directorio unificado de organizaciones, clientes, proveedores y empleados
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button
             variant="outline"
+            size="sm"
             onClick={handleSyncFromSheets}
             disabled={isSyncing}
           >
@@ -445,15 +453,17 @@ export default function Terceros() {
           </Button>
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               resetOrgForm();
               setIsOrgDialogOpen(true);
             }}
           >
             <Building2 className="h-4 w-4 mr-2" />
-            Nueva Organizacion
+            Nueva Organización
           </Button>
           <Button
+            size="sm"
             onClick={() => {
               resetTerceroForm();
               setIsTerceroDialogOpen(true);
@@ -465,59 +475,71 @@ export default function Terceros() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats con accent borders */}
       {estadisticas && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-5 w-5 text-muted-foreground" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+          <Card className="p-4 border-l-4 border-l-primary/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                <Users className="h-5 w-5 text-primary" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.totalTerceros}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.totalTerceros}</p>
                 <p className="text-xs text-muted-foreground">Total</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <User className="h-5 w-5 text-blue-500" />
+          <Card className="p-4 border-l-4 border-l-blue-500/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                <User className="h-5 w-5 text-blue-500" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.prospectos}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.prospectos}</p>
                 <p className="text-xs text-muted-foreground">Prospectos</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5 text-green-500" />
+          <Card className="p-4 border-l-4 border-l-green-500/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
+                <UserCheck className="h-5 w-5 text-green-500" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.clientes}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.clientes}</p>
                 <p className="text-xs text-muted-foreground">Clientes</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Truck className="h-5 w-5 text-purple-500" />
+          <Card className="p-4 border-l-4 border-l-purple-500/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10">
+                <Truck className="h-5 w-5 text-purple-500" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.proveedores}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.proveedores}</p>
                 <p className="text-xs text-muted-foreground">Proveedores</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Briefcase className="h-5 w-5 text-orange-500" />
+          <Card className="p-4 border-l-4 border-l-orange-500/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/10">
+                <Briefcase className="h-5 w-5 text-orange-500" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.empleados}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.empleados}</p>
                 <p className="text-xs text-muted-foreground">Empleados</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-slate-500" />
+          <Card className="p-4 border-l-4 border-l-slate-400/60 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-500/10">
+                <Building2 className="h-5 w-5 text-slate-500" />
+              </div>
               <div>
-                <p className="text-2xl font-bold">{estadisticas.organizaciones}</p>
+                <p className="text-2xl font-bold leading-tight">{estadisticas.organizaciones}</p>
                 <p className="text-xs text-muted-foreground">Organizaciones</p>
               </div>
             </div>

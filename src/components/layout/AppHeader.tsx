@@ -19,13 +19,13 @@ import { TEAM_MEMBERS } from '@/types/taskTypes';
 const pathNames: Record<string, string> = {
   '/': 'Dashboard',
   '/clientes': 'Gestión de Clientes',
-  '/campanas': 'Campañas Meta Ads',
   '/tareas': 'Tareas & Proyectos',
   '/mis-tareas': 'Mis Tareas',
   '/reportes': 'Reportes',
   '/equipo': 'Equipo',
   '/productos': 'Productos DT Cloud Hub',
   '/finanzas': 'Finanzas',
+  '/apps': 'Centro de Apps',
   '/perfil': 'Mi Perfil',
 };
 

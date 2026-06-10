@@ -8,10 +8,15 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredPermission }: ProtectedRouteProps) {
-  const { firebaseUser, user, isLoading } = useAuthStore();
+  const { firebaseUser, user, token, isLoading } = useAuthStore();
 
-  // Wait for Firebase to initialize before checking auth
-  if (isLoading) {
+  // Tenemos sesion del backend (JWT persistido) si user + token existen en zustand.
+  // Eso es suficiente para considerar al usuario autenticado mientras Firebase termina
+  // de restaurar su propio estado en background. Evita el flash de redireccion a /login.
+  const hasBackendSession = !!(user && token);
+
+  // Solo mostrar spinner si NO tenemos sesion del backend Y Firebase aun esta cargando.
+  if (isLoading && !hasBackendSession) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -22,7 +27,8 @@ export default function ProtectedRoute({ children, requiredPermission }: Protect
     );
   }
 
-  if (!firebaseUser) {
+  // Si no hay sesion del backend Y Firebase tampoco tiene usuario, mandar a login.
+  if (!hasBackendSession && !firebaseUser) {
     return <Navigate to="/login" replace />;
   }
 
