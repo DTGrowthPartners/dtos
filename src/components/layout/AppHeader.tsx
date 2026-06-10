@@ -18,6 +18,7 @@ import { TEAM_MEMBERS } from '@/types/taskTypes';
 
 const pathNames: Record<string, string> = {
   '/': 'Dashboard',
+  '/crm': 'Ventas',
   '/clientes': 'Gestión de Clientes',
   '/tareas': 'Tareas & Proyectos',
   '/mis-tareas': 'Mis Tareas',

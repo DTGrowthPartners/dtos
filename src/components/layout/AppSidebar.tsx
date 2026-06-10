@@ -11,9 +11,8 @@ import {
   Briefcase,
   Menu,
   X,
-  Target,
+  TrendingUp,
   UsersRound,
-  CalendarDays,
   LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,12 +30,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard, permission: 'dashboard' },
-  { title: 'CRM', path: '/crm', icon: Target, permission: 'crm' },
+  { title: 'Ventas', path: '/crm', icon: TrendingUp, permission: 'crm' },
   { title: 'Terceros', path: '/terceros', icon: UsersRound, permission: 'terceros' },
   { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
   { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
   { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
-  { title: 'Calendario', path: '/calendario', icon: CalendarDays, permission: 'calendario' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
   { title: 'Apps', path: '/apps', icon: LayoutGrid },

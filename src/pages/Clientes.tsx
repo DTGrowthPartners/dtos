@@ -640,7 +640,7 @@ export default function Clientes() {
                 <Upload className="h-4 w-4 mr-2" /> Importar
               </Button>
               <Button variant="outline" onClick={handleOpenImportCRM} className="w-full md:w-auto">
-                <ArrowDownToLine className="h-4 w-4 mr-2" /> Desde CRM
+                <ArrowDownToLine className="h-4 w-4 mr-2" /> Desde Ventas
               </Button>
               <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="w-full md:w-auto">
                 <Plus className="h-4 w-4 mr-2" /> Nueva Empresa
@@ -1003,7 +1003,7 @@ export default function Clientes() {
       <Dialog open={isImportCRMOpen} onOpenChange={setIsImportCRMOpen}>
         <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><ArrowDownToLine className="h-5 w-5" /> Importar desde CRM</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><ArrowDownToLine className="h-5 w-5" /> Importar desde Ventas</DialogTitle>
             <DialogDescription>Selecciona los prospectos que deseas convertir en clientes</DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4">

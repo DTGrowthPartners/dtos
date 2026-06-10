@@ -67,12 +67,12 @@ export function CommandPalette() {
     },
     {
       id: 'nav-crm',
-      label: 'CRM',
-      description: 'Pipeline de ventas',
+      label: 'Ventas',
+      description: 'Pipeline comercial',
       icon: <Target className="h-4 w-4" />,
       action: () => navigate('/crm'),
       category: 'navigation',
-      keywords: ['ventas', 'pipeline', 'prospectos', 'deals'],
+      keywords: ['ventas', 'crm', 'pipeline', 'prospectos', 'deals'],
     },
     {
       id: 'nav-terceros',

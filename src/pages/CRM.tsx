@@ -868,8 +868,8 @@ export default function CRM() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">CRM / Pipeline de Ventas</h1>
-          <p className="text-muted-foreground">Gestiona tus prospectos y oportunidades</p>
+          <h1 className="text-2xl font-bold text-foreground">Ventas</h1>
+          <p className="text-muted-foreground">Pipeline comercial, prospectos y oportunidades</p>
         </div>
         <div className="flex items-center gap-2">
           <Button

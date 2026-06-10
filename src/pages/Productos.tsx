@@ -62,7 +62,7 @@ const statusConfig = {
 const roadmapItems = [
   { id: '1', title: 'Sistema de autenticación', product: 'DT-OS', status: 'completed', date: 'Dic 2024' },
   { id: '2', title: 'Dashboard principal', product: 'DT-OS', status: 'in_progress', date: 'Dic 2024' },
-  { id: '3', title: 'Módulo CRM', product: 'DT-OS', status: 'planned', date: 'Ene 2025' },
+  { id: '3', title: 'Módulo Ventas', product: 'DT-OS', status: 'planned', date: 'Ene 2025' },
   { id: '4', title: 'Integración Stripe', product: 'CobraFlow', status: 'completed', date: 'Nov 2024' },
   { id: '5', title: 'Panel de facturación', product: 'CobraFlow', status: 'in_progress', date: 'Dic 2024' },
   { id: '6', title: 'API WhatsApp Business', product: 'ChatSuite', status: 'in_progress', date: 'Dic 2024' },

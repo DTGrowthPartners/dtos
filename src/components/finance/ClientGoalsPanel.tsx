@@ -619,7 +619,7 @@ export default function ClientGoalsPanel() {
       {/* Footer info */}
       <div className="mt-4 pt-3 border-t border-border/50">
         <p className="text-xs text-muted-foreground text-center">
-          Datos del presupuesto Q1 2026 desde Google Sheets - Ejecutado desde CRM (Deals Ganados)
+          Datos del presupuesto Q1 2026 desde Google Sheets - Ejecutado desde Ventas (Deals Ganados)
         </p>
       </div>
     </div>

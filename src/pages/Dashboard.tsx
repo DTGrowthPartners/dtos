@@ -562,7 +562,7 @@ export default function Dashboard() {
             variant="primary"
           />
           <StatCard
-            title="Pipeline CRM"
+            title="Pipeline de Ventas"
             value={isLoading ? '...' : crmDeals.length}
             subtitle="oportunidades activas"
             icon={Target}
@@ -745,11 +745,11 @@ export default function Dashboard() {
               <CardTitle className="text-base flex items-center justify-between">
                 <span className="flex items-center gap-2">
                   <Target className="h-4 w-4" />
-                  Pipeline CRM
+                  Pipeline de Ventas
                 </span>
                 <Link to="/crm">
                   <Button variant="ghost" size="sm" className="h-7 text-xs">
-                    Ver CRM <ArrowRight className="ml-1 h-3 w-3" />
+                    Ver Ventas <ArrowRight className="ml-1 h-3 w-3" />
                   </Button>
                 </Link>
               </CardTitle>
@@ -1107,7 +1107,7 @@ export default function Dashboard() {
             <Link to="/crm">
               <Button variant="outline" size="sm" className="gap-2">
                 <Target className="h-4 w-4" />
-                CRM
+                Ventas
               </Button>
             </Link>
           </div>
