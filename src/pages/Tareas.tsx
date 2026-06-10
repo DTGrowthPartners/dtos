@@ -1908,10 +1908,18 @@ export default function Tareas() {
 
   const cardMidpointsRef = useRef<Map<string, number[]>>(new Map());
   const [dragOverGap, setDragOverGap] = useState<{ status: string; index: number } | null>(null);
+  // Altura de la card arrastrada — usada para que el placeholder tenga su mismo tamano
+  // (asi se ve un "drop zone" claro en vez de una linea fina).
+  const [draggedCardHeight, setDraggedCardHeight] = useState<number>(0);
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', taskId);
+
+    // Capturar altura de la card arrastrada (para el placeholder).
+    const draggedEl = (e.currentTarget as HTMLElement);
+    const draggedRect = draggedEl.getBoundingClientRect();
+    setDraggedCardHeight(draggedRect.height);
 
     // Truco 1: snapshot de los Y-midpoints de cada tarjeta por columna.
     // Estos valores se cachean y no cambian durante todo el drag, evitando feedback loops.
@@ -1938,6 +1946,7 @@ export default function Tareas() {
   const handleDragEnd = (_e: React.DragEvent) => {
     setDraggedTask(null);
     setDragOverGap(null);
+    setDraggedCardHeight(0);
     cardMidpointsRef.current.clear();
   };
 
@@ -3797,15 +3806,21 @@ export default function Tareas() {
                       {columnTasks.map((task, index) => {
                         const project = getProject(task.projectId);
                         const assignee = getTeamMember(task.assignee);
-                        // Indicador de gap visual: linea fina entre tarjetas cuando se esta
-                        // arrastrando una. Solo se renderiza si el cursor cae JUSTO antes de esta card.
+                        // Indicador de gap visual: placeholder del tamano real de la card
+                        // arrastrada para que se vea claramente donde caera el drop.
                         const showGapBefore =
                           dragOverGap?.status === column.status &&
                           dragOverGap.index === index &&
                           draggedTask !== task.id;
                         const gap = showGapBefore ? (
-                          <div className="h-0.5 my-1 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                          <div
+                            className="rounded-lg border-2 border-dashed border-primary bg-primary/10 transition-all duration-150"
+                            style={{ height: draggedCardHeight > 0 ? draggedCardHeight : 60 }}
+                          />
                         ) : null;
+                        // Si la card es la que se esta arrastrando, la sacamos del flujo visual
+                        // para que el placeholder ocupe su lugar y no se vea la card "fantasma".
+                        const isBeingDragged = draggedTask === task.id;
 
                         if (viewMode === 'compact') {
                           // Compact View
@@ -3817,7 +3832,7 @@ export default function Tareas() {
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
-                              className={`p-2 bg-card rounded border-l-4 hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                              className={`p-2 bg-card rounded border-l-4 hover:shadow transition-all ${isBeingDragged ? 'hidden' : ''
                                 } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                             >
                               <div className="flex items-center gap-2">
@@ -3866,7 +3881,7 @@ export default function Tareas() {
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
-                              className={`p-2 bg-card rounded-lg border hover:shadow transition-all ${draggedTask === task.id ? 'opacity-50' : ''
+                              className={`p-2 bg-card rounded-lg border hover:shadow transition-all ${isBeingDragged ? 'hidden' : ''
                                 }`}
                             >
                               {/* Row 1: checkbox + full title */}
@@ -3927,7 +3942,7 @@ export default function Tareas() {
                                 onDragStart={(e) => !selectionMode && handleDragStart(e, task.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => selectionMode ? handleToggleSelectTask(task.id) : handleEdit(task)}
-                                className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${draggedTask === task.id ? 'opacity-50 scale-105' : ''
+                                className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${isBeingDragged ? 'hidden' : ''
                                   } ${selectedTaskIds.has(task.id) ? 'ring-2 ring-primary' : ''
                                   } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                               >
