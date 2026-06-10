@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -2241,90 +2241,81 @@ export default function Tareas() {
     return TEAM_MEMBERS.find((m) => m.name === name);
   };
 
-  // Debug: Log user info to console
-  console.log('User:', user?.firstName, '-> Mapped to:', loggedUserName, '| Admin:', isAdmin);
-
   // Filter tasks - only show tasks where user is creator or assignee
   // Admins can see ALL tasks from all team members
-  const filteredTasks = tasks.filter((task) => {
-    // SECURITY FILTER:
-    // 1. Admins see everything.
-    // 2. Regular users see tasks where they are the assignee OR the creator.
-    // 3. If we can't identify the user (loggedUserName is undefined), and they aren't admin,
-    //    they shouldn't see anything (unless we want to matching by email as fallback).
+  // Memoizado: solo recalcula cuando cambian las dependencias reales.
+  const filteredTasks = useMemo(() => {
+    const normalizedLoggedUser = loggedUserName ? normalizeString(loggedUserName) : '';
+    const searchLower = searchQuery.toLowerCase();
 
-    let isUserTask = isAdmin;
+    return tasks.filter((task) => {
+      // SECURITY FILTER (exact match contra el canonical TEAM_MEMBER name):
+      // - Admins ven todo.
+      // - Usuarios regulares ven tareas donde son asignado o creador.
+      // - Antes usabamos .includes() pero generaba falsos positivos
+      //   (ej: "Jose" matcheaba con "Jose Maria"). Ahora solo exact match.
+      let isUserTask = isAdmin;
+      if (!isUserTask && normalizedLoggedUser) {
+        const normalizedAssignee = task.assignee ? normalizeString(task.assignee) : '';
+        const normalizedCreator = task.creator ? normalizeString(task.creator) : '';
+        isUserTask = normalizedAssignee === normalizedLoggedUser ||
+          normalizedCreator === normalizedLoggedUser;
+      }
+      if (!isUserTask) return false;
 
-    if (!isUserTask && loggedUserName) {
-      const normalizedLoggedUser = normalizeString(loggedUserName);
-      const normalizedAssignee = task.assignee ? normalizeString(task.assignee) : '';
-      const normalizedCreator = task.creator ? normalizeString(task.creator) : '';
-
-      isUserTask = normalizedAssignee === normalizedLoggedUser ||
-        normalizedCreator === normalizedLoggedUser ||
-        normalizedAssignee.includes(normalizedLoggedUser) ||
-        normalizedLoggedUser.includes(normalizedAssignee);
-    }
-
-    // If we still haven't identified it as a user task, and user is NOT admin, reject.
-    if (!isUserTask) return false;
-
-    const matchesSearch =
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesProject = filterProject === 'all' || task.projectId === filterProject;
-    const matchesAssignee = filterAssignee === 'all' || task.assignee === filterAssignee;
-    const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
-
-    // Date filter
-    let matchesDate = true;
-    if (dateFilter === 'today') {
-      matchesDate = isToday(task.dueDate);
-    } else if (dateFilter === 'week') {
-      matchesDate = isThisWeek(task.dueDate);
-    } else if (dateFilter === 'month') {
-      matchesDate = isThisMonth(task.dueDate);
-    } else if (dateFilter === 'overdue') {
-      matchesDate = isOverdue(task.dueDate) && task.status !== TaskStatus.DONE;
-    }
-
-    // Show all tasks including recurring ones (we no longer create separate instances)
-    // const isRecurringTemplate = task.recurrence?.enabled === true;
-    // if (isRecurringTemplate) return false;
-
-    return matchesSearch && matchesProject && matchesAssignee && matchesPriority && matchesDate;
-  });
-
-  const getTasksByColumn = (status: string) => {
-    const columnTasks = filteredTasks.filter((task) => task.status === status);
-
-    // Sort tasks: overdue first, then by due date (soonest first), then tasks without due date
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    const nowTimestamp = now.getTime();
-
-    return columnTasks.sort((a, b) => {
-      const aIsOverdue = a.dueDate && a.dueDate < nowTimestamp;
-      const bIsOverdue = b.dueDate && b.dueDate < nowTimestamp;
-
-      // Overdue tasks first
-      if (aIsOverdue && !bIsOverdue) return -1;
-      if (!aIsOverdue && bIsOverdue) return 1;
-
-      // Both overdue or both not overdue - sort by due date
-      if (a.dueDate && b.dueDate) {
-        return a.dueDate - b.dueDate; // Soonest first
+      // Search filter
+      if (searchLower) {
+        const titleMatch = task.title.toLowerCase().includes(searchLower);
+        const descMatch = task.description?.toLowerCase().includes(searchLower) ?? false;
+        if (!titleMatch && !descMatch) return false;
       }
 
-      // Tasks with due date before tasks without
+      if (filterProject !== 'all' && task.projectId !== filterProject) return false;
+      if (filterAssignee !== 'all' && task.assignee !== filterAssignee) return false;
+      if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
+
+      // Date filter
+      if (dateFilter === 'today' && !isToday(task.dueDate)) return false;
+      if (dateFilter === 'week' && !isThisWeek(task.dueDate)) return false;
+      if (dateFilter === 'month' && !isThisMonth(task.dueDate)) return false;
+      if (dateFilter === 'overdue' && !(isOverdue(task.dueDate) && task.status !== TaskStatus.DONE)) return false;
+
+      return true;
+    });
+  }, [tasks, isAdmin, loggedUserName, searchQuery, filterProject, filterAssignee, filterPriority, dateFilter]);
+
+  // Pre-agrupa filteredTasks por columna y las ordena (overdue first, dueDate asc, prioridad).
+  // Antes getTasksByColumn() se llamaba multiples veces por render y re-ordenaba todo cada vez.
+  const tasksByColumn = useMemo(() => {
+    const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const nowTimestamp = todayStart.getTime();
+
+    const compare = (a: Task, b: Task) => {
+      const aIsOverdue = !!(a.dueDate && a.dueDate < nowTimestamp);
+      const bIsOverdue = !!(b.dueDate && b.dueDate < nowTimestamp);
+      if (aIsOverdue && !bIsOverdue) return -1;
+      if (!aIsOverdue && bIsOverdue) return 1;
+      if (a.dueDate && b.dueDate) return a.dueDate - b.dueDate;
       if (a.dueDate && !b.dueDate) return -1;
       if (!a.dueDate && b.dueDate) return 1;
+      return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
+    };
 
-      // No due dates - sort by priority (high first)
-      const priorityOrder = { high: 0, medium: 1, low: 2 };
-      return (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2);
-    });
-  };
+    const grouped: Record<string, Task[]> = { TODO: [], IN_PROGRESS: [], DONE: [] };
+    for (const task of filteredTasks) {
+      if (grouped[task.status]) grouped[task.status].push(task);
+    }
+    for (const status of Object.keys(grouped)) {
+      grouped[status].sort(compare);
+    }
+    return grouped;
+  }, [filteredTasks]);
+
+  const getTasksByColumn = useCallback((status: string) => {
+    return tasksByColumn[status] || [];
+  }, [tasksByColumn]);
 
   const cycleViewMode = () => {
     const modes: ViewMode[] = ['card', 'list', 'compact'];
@@ -2388,9 +2379,9 @@ export default function Tareas() {
 
   // Project landing header variables
   const selectedProject = filterProject !== 'all' ? projects.find(p => p.id === filterProject) : null;
-  const todoCount = filteredTasks.filter(t => t.status === 'TODO').length;
-  const inProgressCount = filteredTasks.filter(t => t.status === 'IN_PROGRESS').length;
-  const doneCount = filteredTasks.filter(t => t.status === 'DONE').length;
+  const todoCount = tasksByColumn.TODO.length;
+  const inProgressCount = tasksByColumn.IN_PROGRESS.length;
+  const doneCount = tasksByColumn.DONE.length;
 
   return (
     <div className="animate-fade-in h-full flex gap-2 md:gap-4">
