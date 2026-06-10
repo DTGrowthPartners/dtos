@@ -39,14 +39,14 @@ import { useToast } from '@/hooks/use-toast';
 const MODULE_PERMISSIONS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'crm', label: 'Ventas' },
-  { value: 'terceros', label: 'Terceros' },
   { value: 'clientes', label: 'Clientes' },
-  { value: 'servicios', label: 'Servicios' },
-  { value: 'tareas', label: 'Tareas' },
+  { value: 'tareas', label: 'Proyectos' },
+  { value: 'servicios', label: 'Operaciones' },
+  { value: 'equipo', label: 'Equipo' },
+  { value: 'terceros', label: 'Directorio' },
   { value: 'brief', label: 'Briefs' },
   { value: 'reportes', label: 'Reportes' },
   { value: 'productos', label: 'Productos' },
-  { value: 'equipo', label: 'Equipo' },
   { value: 'finanzas', label: 'Finanzas' },
   { value: 'cuentas-cobro', label: 'Cuentas de Cobro' },
 ] as const;

@@ -435,7 +435,7 @@ export default function Terceros() {
             <Users className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Terceros</h1>
+            <h1 className="text-2xl font-bold text-foreground">Directorio</h1>
             <p className="text-sm text-muted-foreground">
               Directorio unificado de organizaciones, clientes, proveedores y empleados
             </p>

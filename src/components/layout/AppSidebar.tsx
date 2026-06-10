@@ -3,16 +3,16 @@ import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
-  CheckSquare,
+  FolderKanban,
   UserCog,
   DollarSign,
   ChevronLeft,
   ChevronRight,
-  Briefcase,
+  Cog,
   Menu,
   X,
   TrendingUp,
-  UsersRound,
+  BookUser,
   LayoutGrid,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,11 +31,11 @@ interface NavItem {
 const navItems: NavItem[] = [
   { title: 'Dashboard', path: '/', icon: LayoutDashboard, permission: 'dashboard' },
   { title: 'Ventas', path: '/crm', icon: TrendingUp, permission: 'crm' },
-  { title: 'Terceros', path: '/terceros', icon: UsersRound, permission: 'terceros' },
   { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
-  { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
-  { title: 'Tareas', path: '/tareas', icon: CheckSquare, permission: 'tareas' },
+  { title: 'Proyectos', path: '/tareas', icon: FolderKanban, permission: 'tareas' },
+  { title: 'Operaciones', path: '/servicios', icon: Cog, permission: 'servicios' },
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
+  { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
   { title: 'Apps', path: '/apps', icon: LayoutGrid },
 ];
