@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
@@ -122,6 +122,8 @@ import {
   updateNoteItem,
   deleteNoteItem,
   moveNoteItemToColumn,
+  moveTaskToPosition,
+  getNextPositionForStatus,
 } from '@/lib/firestoreTaskService';
 import {
   type Task,
@@ -760,7 +762,10 @@ export default function Tareas() {
           description: 'La tarea se actualizó correctamente',
         });
       } else {
-        const newTaskId = await createTask(taskData as Omit<Task, 'id' | 'createdAt'>);
+        // Asignar position = max(positions de esta columna) + 1, para que aparezca al final.
+        const newPosition = getNextPositionForStatus(tasks, taskData.status);
+        const taskWithPosition = { ...taskData, position: newPosition };
+        const newTaskId = await createTask(taskWithPosition as Omit<Task, 'id' | 'createdAt'>);
 
         // Send notifications for all tasks (recurring or not)
         if (taskData.assignee && user?.firstName && taskData.assignee !== user.firstName) {
@@ -1894,71 +1899,208 @@ export default function Tareas() {
   };
 
   // Drag and Drop handlers
+  // ============= DRAG & DROP CON REORDENAMIENTO MANUAL =============
+  // Implementacion HTML5 nativa con los 4 trucos:
+  // 1. Snapshot de midpoints al inicio (evita flicker)
+  // 2. setTimeout 0 para no cancelar el drag
+  // 3. Calculo de gap con midpoints cacheados
+  // 4. Ajuste de -1 en same-column down
+
+  const cardMidpointsRef = useRef<Map<string, number[]>>(new Map());
+  const [dragOverGap, setDragOverGap] = useState<{ status: string; index: number } | null>(null);
+
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', taskId);
-    setDraggedTask(taskId);
-    // Add a slight delay to set dragging state for visual feedback
-    setTimeout(() => {
-      const element = e.target as HTMLElement;
-      element.style.opacity = '0.5';
-    }, 0);
+
+    // Truco 1: snapshot de los Y-midpoints de cada tarjeta por columna.
+    // Estos valores se cachean y no cambian durante todo el drag, evitando feedback loops.
+    const snapshot = new Map<string, number[]>();
+    document.querySelectorAll<HTMLElement>('[data-column]').forEach((colEl) => {
+      const status = colEl.dataset.column;
+      if (!status) return;
+      const mids: number[] = [];
+      colEl.querySelectorAll<HTMLElement>('[data-task-card]').forEach((cardEl) => {
+        // Excluir la propia tarjeta arrastrada del calculo (ya quedara "fuera de su slot")
+        if (cardEl.dataset.taskCard === taskId) return;
+        const r = cardEl.getBoundingClientRect();
+        mids.push(r.top + r.height / 2);
+      });
+      snapshot.set(status, mids);
+    });
+    cardMidpointsRef.current = snapshot;
+
+    // Truco 2: diferir el cambio de estado al siguiente tick para que el browser capture
+    // el ghost de la tarjeta a tamano completo antes de aplicar opacity-50.
+    setTimeout(() => setDraggedTask(taskId), 0);
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
-    const element = e.target as HTMLElement;
-    element.style.opacity = '1';
+  const handleDragEnd = (_e: React.DragEvent) => {
     setDraggedTask(null);
+    setDragOverGap(null);
+    cardMidpointsRef.current.clear();
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
+  const handleDragOver = (e: React.DragEvent, status?: string) => {
+    e.preventDefault(); // CRITICO: sin esto el drop no dispara
     e.dataTransfer.dropEffect = 'move';
+    if (!status) return;
+
+    // Truco 3: calcular gap usando midpoints cacheados (no leer DOM otra vez)
+    const mids = cardMidpointsRef.current.get(status) ?? [];
+    const y = e.clientY;
+    let gap = mids.length; // default: al final de la columna
+    for (let i = 0; i < mids.length; i++) {
+      if (y < mids[i]) {
+        gap = i;
+        break;
+      }
+    }
+    setDragOverGap((prev) => {
+      if (prev?.status === status && prev.index === gap) return prev;
+      return { status, index: gap };
+    });
   };
 
   const handleDrop = async (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
     const taskId = e.dataTransfer.getData('text/plain');
-    const task = tasks.find(t => t.id === taskId);
+    const task = tasks.find((t) => t.id === taskId);
+    if (!taskId || !task) {
+      setDragOverGap(null);
+      setDraggedTask(null);
+      return;
+    }
 
-    if (taskId && task && task.status !== newStatus) {
-      try {
-        const updateData: Partial<Task> = { status: newStatus };
-        if (newStatus === TaskStatus.DONE) {
-          updateData.completedAt = Date.now();
-          await copyTaskToCompleted(taskId, { ...task, status: newStatus });
+    const gap = dragOverGap?.status === newStatus ? dragOverGap.index : 0;
+    const sourceStatus = task.status;
+    const sameColumn = sourceStatus === newStatus;
 
-          // Notify creator that task was completed
-          if (task.creator && user?.firstName && task.creator !== user.firstName) {
-            sendTaskNotification({
-              type: 'task_completed',
-              taskTitle: task.title,
-              taskId: task.id,
-              assigneeName: task.creator,
-              senderName: user.firstName,
-            });
-          }
-        }
-        await updateTask(taskId, updateData);
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === taskId ? { ...t, status: newStatus } : t
-          )
-        );
-        toast({
-          title: 'Tarea actualizada',
-          description: 'El estado de la tarea se actualizó correctamente',
-        });
-      } catch (error) {
-        console.error('Error updating task:', error);
-        toast({
-          title: 'Error',
-          description: 'No se pudo actualizar la tarea',
-          variant: 'destructive',
-        });
+    // Truco 4: si es mismo status y el destino visual esta debajo del origen,
+    // ajustar -1 porque al quitar la tarjeta de su slot original las de abajo suben uno.
+    let targetPosition = gap;
+    if (sameColumn) {
+      const sortedCol = tasksByColumn[newStatus] || [];
+      const currentIdx = sortedCol.findIndex((t) => t.id === taskId);
+      if (currentIdx >= 0 && currentIdx < gap) targetPosition = gap - 1;
+      if (targetPosition === currentIdx) {
+        setDragOverGap(null);
+        setDraggedTask(null);
+        return;
       }
     }
+
+    // Snapshot pre-sorted de las columnas afectadas (usado tanto para optimistic UI como para Firestore)
+    const sourceColSorted = [...(tasksByColumn[sourceStatus] || [])];
+    const targetColSorted = sameColumn ? sourceColSorted : [...(tasksByColumn[newStatus] || [])];
+
+    // Snapshot del estado completo para rollback
+    const previousTasks = tasks;
+
+    // OPTIMISTIC UI: aplica el move en local antes del round-trip
+    const optimistic = applyMoveLocally(tasks, taskId, sourceStatus, newStatus, targetPosition, sourceColSorted, targetColSorted);
+    setTasks(optimistic);
+    setDragOverGap(null);
     setDraggedTask(null);
+
+    try {
+      // Si pasa a DONE, copiar a completed y notificar creador (logica existente)
+      if (newStatus === TaskStatus.DONE && task.status !== TaskStatus.DONE) {
+        await copyTaskToCompleted(taskId, { ...task, status: newStatus, completedAt: Date.now() });
+        if (task.creator && user?.firstName && task.creator !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_completed',
+            taskTitle: task.title,
+            taskId: task.id,
+            assigneeName: task.creator,
+            senderName: user.firstName,
+          });
+        }
+      }
+
+      // Persistir nuevas positions + status en Firestore (batch atomico)
+      const updates = await moveTaskToPosition(
+        taskId,
+        sourceStatus,
+        newStatus,
+        targetPosition,
+        sourceColSorted,
+        targetColSorted
+      );
+
+      // Reconciliar el estado local con lo que realmente quedo en Firestore
+      setTasks((prev) =>
+        prev.map((t) => {
+          const u = updates.get(t.id);
+          if (!u) return t;
+          const updated = { ...t, status: u.status, position: u.position };
+          if (t.id === taskId && newStatus === TaskStatus.DONE && sourceStatus !== TaskStatus.DONE) {
+            (updated as Task).completedAt = Date.now();
+          }
+          return updated;
+        })
+      );
+
+      if (sourceStatus !== newStatus) {
+        toast({
+          title: 'Tarea movida',
+          description: 'El estado se actualizó correctamente',
+        });
+      }
+    } catch (error) {
+      console.error('Error moving task:', error);
+      setTasks(previousTasks);
+      toast({
+        title: 'Error',
+        description: 'No se pudo mover la tarea. Se revirtió el cambio.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Mismo algoritmo que moveTaskToPosition pero in-memory, para el optimistic UI.
+  // Reasigna position = index a cada tarea de las columnas afectadas.
+  const applyMoveLocally = (
+    taskList: Task[],
+    movedTaskId: string,
+    sourceStatus: string,
+    targetStatus: string,
+    targetPosition: number,
+    sourceColSorted: Task[],
+    targetColSorted: Task[]
+  ): Task[] => {
+    const moved = taskList.find((t) => t.id === movedTaskId);
+    if (!moved) return taskList;
+    const sameColumn = sourceStatus === targetStatus;
+
+    let finalSource: Task[] | null = null;
+    let finalTarget: Task[];
+
+    if (sameColumn) {
+      const without = sourceColSorted.filter((t) => t.id !== movedTaskId);
+      finalTarget = [...without];
+      finalTarget.splice(Math.min(Math.max(targetPosition, 0), without.length), 0, moved);
+    } else {
+      finalSource = sourceColSorted.filter((t) => t.id !== movedTaskId);
+      finalTarget = [...targetColSorted];
+      finalTarget.splice(
+        Math.min(Math.max(targetPosition, 0), targetColSorted.length),
+        0,
+        { ...moved, status: targetStatus }
+      );
+    }
+
+    const updates = new Map<string, { status: string; position: number }>();
+    const apply = (col: Task[], status: string) => {
+      col.forEach((t, idx) => updates.set(t.id, { status, position: idx }));
+    };
+    if (finalSource) apply(finalSource, sourceStatus);
+    apply(finalTarget, targetStatus);
+
+    return taskList.map((t) => {
+      const u = updates.get(t.id);
+      return u ? { ...t, status: u.status, position: u.position } : t;
+    });
   };
 
   // Project Drag and Drop handlers
@@ -2284,15 +2426,18 @@ export default function Tareas() {
     });
   }, [tasks, isAdmin, loggedUserName, searchQuery, filterProject, filterAssignee, filterPriority, dateFilter]);
 
-  // Pre-agrupa filteredTasks por columna y las ordena (overdue first, dueDate asc, prioridad).
-  // Antes getTasksByColumn() se llamaba multiples veces por render y re-ordenaba todo cada vez.
+  // Pre-agrupa filteredTasks por columna y las ordena.
+  // PRIORIDAD DE ORDEN:
+  // 1. Si AMBAS tienen position: ordenar por position ASC (orden manual del usuario).
+  // 2. Si solo una tiene position: la que tiene va primero (las legacy quedan al final).
+  // 3. Si NINGUNA tiene position (legacy): fallback al orden anterior (overdue, dueDate, prioridad).
   const tasksByColumn = useMemo(() => {
     const priorityOrder: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const nowTimestamp = todayStart.getTime();
 
-    const compare = (a: Task, b: Task) => {
+    const legacyCompare = (a: Task, b: Task) => {
       const aIsOverdue = !!(a.dueDate && a.dueDate < nowTimestamp);
       const bIsOverdue = !!(b.dueDate && b.dueDate < nowTimestamp);
       if (aIsOverdue && !bIsOverdue) return -1;
@@ -2301,6 +2446,15 @@ export default function Tareas() {
       if (a.dueDate && !b.dueDate) return -1;
       if (!a.dueDate && b.dueDate) return 1;
       return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
+    };
+
+    const compare = (a: Task, b: Task) => {
+      const aHas = typeof a.position === 'number';
+      const bHas = typeof b.position === 'number';
+      if (aHas && bHas) return (a.position as number) - (b.position as number);
+      if (aHas) return -1;
+      if (bHas) return 1;
+      return legacyCompare(a, b);
     };
 
     const grouped: Record<string, Task[]> = { TODO: [], IN_PROGRESS: [], DONE: [] };
@@ -3622,8 +3776,9 @@ export default function Tareas() {
                 return (
                   <div
                     key={column.id}
+                    data-column={column.status}
                     className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'flex-1 min-w-[280px]'}`}
-                    onDragOver={handleDragOver}
+                    onDragOver={(e) => handleDragOver(e, column.status)}
                     onDrop={(e) => handleDrop(e, column.status)}
                   >
                     {/* Column Header */}
@@ -3639,15 +3794,26 @@ export default function Tareas() {
 
                     {/* Tasks */}
                     <div className={`space-y-3 flex-1 overflow-y-auto ${viewMode === 'compact' ? 'space-y-1' : ''}`}>
-                      {columnTasks.map((task) => {
+                      {columnTasks.map((task, index) => {
                         const project = getProject(task.projectId);
                         const assignee = getTeamMember(task.assignee);
+                        // Indicador de gap visual: linea fina entre tarjetas cuando se esta
+                        // arrastrando una. Solo se renderiza si el cursor cae JUSTO antes de esta card.
+                        const showGapBefore =
+                          dragOverGap?.status === column.status &&
+                          dragOverGap.index === index &&
+                          draggedTask !== task.id;
+                        const gap = showGapBefore ? (
+                          <div className="h-0.5 my-1 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                        ) : null;
 
                         if (viewMode === 'compact') {
                           // Compact View
                           return (
+                            <Fragment key={task.id}>
+                              {gap}
                             <div
-                              key={task.id}
+                              data-task-card={task.id}
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
@@ -3686,14 +3852,17 @@ export default function Tareas() {
                                 )}
                               </div>
                             </div>
+                            </Fragment>
                           );
                         }
 
                         if (viewMode === 'list') {
                           // List View - title on top, badges below
                           return (
+                            <Fragment key={task.id}>
+                              {gap}
                             <div
-                              key={task.id}
+                              data-task-card={task.id}
                               draggable={true}
                               onDragStart={(e) => handleDragStart(e, task.id)}
                               onDragEnd={handleDragEnd}
@@ -3742,14 +3911,18 @@ export default function Tareas() {
                                 )}
                               </div>
                             </div>
+                            </Fragment>
                           );
                         }
 
                         // Card View (default)
                         return (
-                          <ContextMenu key={task.id}>
+                          <Fragment key={task.id}>
+                            {gap}
+                          <ContextMenu>
                             <ContextMenuTrigger asChild>
                               <Card
+                                data-task-card={task.id}
                                 draggable={!selectionMode}
                                 onDragStart={(e) => !selectionMode && handleDragStart(e, task.id)}
                                 onDragEnd={handleDragEnd}
@@ -4072,8 +4245,14 @@ export default function Tareas() {
                               </ContextMenuItem>
                             </ContextMenuContent>
                           </ContextMenu>
+                          </Fragment>
                         );
                       })}
+
+                      {/* Indicador de gap AL FINAL de la columna (cuando arrastras al fondo) */}
+                      {dragOverGap?.status === column.status && dragOverGap.index === columnTasks.length && (
+                        <div className="h-0.5 my-1 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                      )}
 
                       {columnTasks.length === 0 && (
                         <div className="h-32 border-2 border-dashed rounded-lg flex items-center justify-center text-muted-foreground text-sm">

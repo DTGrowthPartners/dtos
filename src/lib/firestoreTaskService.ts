@@ -11,7 +11,8 @@ import {
   where,
   arrayUnion,
   increment,
-  getDoc
+  getDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import type { Task, Project, ProjectFolder, BoardColumn, PomodoroSession, ProjectNoteColumn, NoteItem } from '@/types/taskTypes';
 import { apiClient } from './api';
@@ -56,6 +57,92 @@ export const updateTask = async (id: string, task: Partial<Task>): Promise<void>
 
 export const deleteTask = async (id: string): Promise<void> => {
   await deleteDoc(doc(db, TASKS_COLLECTION, id));
+};
+
+/**
+ * Mueve una tarea a una nueva columna y posicion, reordenando las demas via writeBatch atomico.
+ *
+ * - Cross-column: compacta la columna origen (todas las que estaban DESPUES bajan -1) y abre hueco
+ *   en la columna destino (todas las que estaban en la posicion destino o despues suben +1).
+ * - Same-column: solo desplaza las que estan entre origen y destino.
+ *
+ * Recibe `allTasks` (snapshot del estado en memoria) para evitar leer Firestore otra vez.
+ * Devuelve la lista actualizada con las posiciones recalculadas, para que el caller pueda
+ * aplicarla a su estado local (optimistic UI ya aplicado por el caller; esto sirve para
+ * reconciliar despues del await).
+ *
+ * Nota: usar writeBatch en vez de runTransaction porque no necesitamos leer fresh (tenemos
+ * el snapshot del cliente). Para un equipo pequeno sin contencion real, es suficiente.
+ */
+export const moveTaskToPosition = async (
+  taskId: string,
+  sourceStatus: string,
+  targetStatus: string,
+  targetPosition: number,
+  sourceColSorted: Task[],
+  targetColSorted: Task[]
+): Promise<Map<string, { status: string; position: number }>> => {
+  // Estrategia simple y robusta: reconstruir el orden visual final de cada columna
+  // (con la tarea ya removida del origen y reinsertada en el destino), y escribir
+  // position = index para cada tarea. Esto migra automaticamente las tareas legacy
+  // sin position y evita colisiones por positions duplicadas/sparse.
+  const sameColumn = sourceStatus === targetStatus;
+  let finalTarget: Task[];
+  let finalSource: Task[] | null;
+
+  const taskRef = sourceColSorted.find((t) => t.id === taskId);
+  if (!taskRef) throw new Error(`Task ${taskId} not found in source column`);
+
+  if (sameColumn) {
+    const without = sourceColSorted.filter((t) => t.id !== taskId);
+    finalTarget = [...without];
+    finalTarget.splice(Math.min(Math.max(targetPosition, 0), without.length), 0, taskRef);
+    finalSource = null;
+  } else {
+    finalSource = sourceColSorted.filter((t) => t.id !== taskId);
+    finalTarget = [...targetColSorted];
+    finalTarget.splice(
+      Math.min(Math.max(targetPosition, 0), targetColSorted.length),
+      0,
+      { ...taskRef, status: targetStatus }
+    );
+  }
+
+  const batch = writeBatch(db);
+  const updates = new Map<string, { status: string; position: number }>();
+
+  const writeColumn = (col: Task[], status: string) => {
+    col.forEach((t, idx) => {
+      const needsStatusUpdate = t.id === taskId && t.status !== status;
+      // Solo escribir si position cambio o si la tarea movida cambia de status (evita writes innecesarios)
+      if (t.position !== idx || needsStatusUpdate) {
+        const payload: Record<string, unknown> = { position: idx };
+        if (needsStatusUpdate) payload.status = status;
+        batch.update(doc(db, TASKS_COLLECTION, t.id), payload);
+      }
+      updates.set(t.id, { status, position: idx });
+    });
+  };
+
+  if (finalSource) writeColumn(finalSource, sourceStatus);
+  writeColumn(finalTarget, targetStatus);
+
+  await batch.commit();
+  return updates;
+};
+
+/**
+ * Devuelve la siguiente posicion disponible al final de una columna.
+ * Util al crear una nueva tarea: position = max + 1 (o 0 si la columna esta vacia).
+ */
+export const getNextPositionForStatus = (tasks: Task[], status: string): number => {
+  let max = -1;
+  for (const t of tasks) {
+    if (t.status === status && typeof t.position === 'number' && t.position > max) {
+      max = t.position;
+    }
+  }
+  return max + 1;
 };
 
 // ============= PROJECTS =============

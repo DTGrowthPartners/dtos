@@ -188,6 +188,10 @@ export interface Task {
   recurringTemplateId?: string; // ID of the original recurring task template
   // Checklist/subtasks fields
   checklist?: TaskChecklistItem[];
+  // Posicion manual dentro de su columna (status). Sirve para drag-and-drop
+  // con reordenamiento. Las tareas se ordenan por position ASC. Tareas legacy
+  // sin position se ordenan al final por fallback de dueDate/prioridad.
+  position?: number;
 }
 
 export interface PomodoroSession {
