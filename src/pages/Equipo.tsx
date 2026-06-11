@@ -49,6 +49,7 @@ const MODULE_PERMISSIONS = [
   { value: 'productos', label: 'Productos' },
   { value: 'finanzas', label: 'Finanzas' },
   { value: 'cuentas-cobro', label: 'Cuentas de Cobro' },
+  { value: 'agentes', label: 'Agentes (WhatsApp bots)' },
 ] as const;
 
 // Permisos por defecto para nuevos usuarios (todos excepto finanzas y equipo)

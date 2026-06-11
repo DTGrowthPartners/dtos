@@ -20,6 +20,7 @@ import clientPortalRoutes from './routes/clientPortal.routes';
 import campaignsRoutes from './routes/campaigns.routes';
 import chatRoutes from './routes/chat.routes';
 import adsRoutes from './routes/ads.routes';
+import agentsRoutes from './routes/agents.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -61,6 +62,7 @@ app.use('/api/client-portal', clientPortalRoutes);
 app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ads', adsRoutes);
+app.use('/api/agents', agentsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

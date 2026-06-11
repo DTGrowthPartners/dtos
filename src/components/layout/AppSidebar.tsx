@@ -14,6 +14,7 @@ import {
   TrendingUp,
   BookUser,
   LayoutGrid,
+  Bot,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -37,6 +38,7 @@ const navItems: NavItem[] = [
   { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
   { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
+  { title: 'Agentes', path: '/agentes', icon: Bot, permission: 'agentes' },
   { title: 'Apps', path: '/apps', icon: LayoutGrid },
 ];
 
