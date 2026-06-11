@@ -5,8 +5,6 @@ import {
   MessageSquare,
   PenSquare,
   Mail,
-  UtensilsCrossed,
-  Bot,
   Search,
 } from 'lucide-react';
 
@@ -51,22 +49,6 @@ const APPS: AppItem[] = [
     icon: PenSquare,
     iconColor: 'text-indigo-500',
     bgColor: 'bg-indigo-500/10',
-  },
-  {
-    title: 'Bot Dairo WhatsApp',
-    description: 'Panel admin del bot conversacional de Dairo en WhatsApp.',
-    url: 'https://david.dtgrowthpartners.com/admin/',
-    icon: Bot,
-    iconColor: 'text-teal-500',
-    bgColor: 'bg-teal-500/10',
-  },
-  {
-    title: 'CantinaBot',
-    description: 'Panel admin del bot conversacional de La Cantina.',
-    url: 'https://cantinabot.dtgrowthpartners.com/admin',
-    icon: UtensilsCrossed,
-    iconColor: 'text-red-500',
-    bgColor: 'bg-red-500/10',
   },
   {
     title: 'Buscar',

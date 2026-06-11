@@ -21,6 +21,7 @@ import campaignsRoutes from './routes/campaigns.routes';
 import chatRoutes from './routes/chat.routes';
 import adsRoutes from './routes/ads.routes';
 import agentsRoutes from './routes/agents.routes';
+import cronsRoutes from './routes/crons.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -63,6 +64,7 @@ app.use('/api/campaigns', campaignsRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/ads', adsRoutes);
 app.use('/api/agents', agentsRoutes);
+app.use('/api/crons', cronsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

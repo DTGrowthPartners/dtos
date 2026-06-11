@@ -20,6 +20,7 @@ import Terceros from "@/pages/Terceros";
 import CuentasCobro from "@/pages/CuentasCobro";
 import Apps from "@/pages/Apps";
 import Agentes from "@/pages/Agentes";
+import Crons from "@/pages/Crons";
 // import Brief from "@/pages/Brief"; // Moved to Tareas
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
@@ -78,6 +79,7 @@ const App = () => (
               <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
               <Route path="/apps" element={<Apps />} />
               <Route path="/agentes" element={<ProtectedRoute requiredPermission="agentes"><Agentes /></ProtectedRoute>} />
+              <Route path="/crons" element={<ProtectedRoute requiredPermission="crons"><Crons /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

@@ -29,6 +29,7 @@ const pathNames: Record<string, string> = {
   '/productos': 'Productos DT Cloud Hub',
   '/finanzas': 'Finanzas',
   '/agentes': 'Agentes',
+  '/crons': 'Crons',
   '/apps': 'Centro de Apps',
   '/perfil': 'Mi Perfil',
 };

@@ -15,6 +15,7 @@ import {
   BookUser,
   LayoutGrid,
   Bot,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },
   { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
   { title: 'Agentes', path: '/agentes', icon: Bot, permission: 'agentes' },
+  { title: 'Crons', path: '/crons', icon: Clock, permission: 'crons' },
   { title: 'Apps', path: '/apps', icon: LayoutGrid },
 ];
 
