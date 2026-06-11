@@ -4,17 +4,24 @@ import {
   RefreshCw,
   Search as SearchIcon,
   Terminal,
-  ServerCog,
-  FolderCog,
-  CalendarClock,
   Circle,
+  Pause,
+  Play,
+  Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import {
-  Tabs, TabsList, TabsTrigger,
-} from '@/components/ui/tabs';
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -33,23 +40,13 @@ interface CronEntry {
   lastRun?: string;
 }
 
-const SOURCE_META: Record<CronEntry['source'], {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}> = {
-  user: { label: 'Usuario', icon: Terminal, color: 'text-emerald-500 bg-emerald-500/10' },
-  'cron.d': { label: 'cron.d', icon: FolderCog, color: 'text-blue-500 bg-blue-500/10' },
-  system: { label: 'Sistema', icon: ServerCog, color: 'text-purple-500 bg-purple-500/10' },
-  systemd: { label: 'systemd', icon: CalendarClock, color: 'text-orange-500 bg-orange-500/10' },
-};
-
 export default function Crons() {
   const { toast } = useToast();
   const [crons, setCrons] = useState<CronEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [sourceFilter, setSourceFilter] = useState<'all' | CronEntry['source']>('all');
+  const [pendingToggle, setPendingToggle] = useState<CronEntry | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -73,23 +70,50 @@ export default function Crons() {
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase().trim();
-    return crons.filter((c) => {
-      if (sourceFilter !== 'all' && c.source !== sourceFilter) return false;
-      if (!s) return true;
-      return (
+    if (!s) return crons;
+    return crons.filter(
+      (c) =>
         c.command.toLowerCase().includes(s) ||
         c.schedule.toLowerCase().includes(s) ||
         c.sourceLabel.toLowerCase().includes(s) ||
         (c.description || '').toLowerCase().includes(s)
-      );
-    });
-  }, [crons, search, sourceFilter]);
+    );
+  }, [crons, search]);
 
-  const counts = useMemo(() => {
-    const c = { all: crons.length, user: 0, 'cron.d': 0, system: 0, systemd: 0 } as Record<string, number>;
-    crons.forEach((x) => { c[x.source] = (c[x.source] || 0) + 1; });
-    return c;
-  }, [crons]);
+  const performToggle = async (cron: CronEntry) => {
+    const targetEnable = !cron.enabled;
+    setTogglingId(cron.id);
+    setPendingToggle(null);
+    try {
+      const res = await apiClient.post<{ success: boolean; before: string; after: string; error?: string }>(
+        '/api/crons/toggle',
+        {
+          schedule: cron.schedule,
+          command: cron.command,
+          enable: targetEnable,
+        }
+      );
+      if (!res.success) throw new Error(res.error || 'Error desconocido');
+      // Actualizacion optimista
+      setCrons((prev) => prev.map((c) => (c.id === cron.id ? { ...c, enabled: targetEnable } : c)));
+      toast({
+        title: targetEnable ? 'Cron reanudado' : 'Cron pausado',
+        description: targetEnable
+          ? 'El cron volverá a ejecutarse en su próximo horario.'
+          : 'El cron quedó deshabilitado y no se ejecutará hasta que lo reanudes.',
+      });
+      // Recargar de fondo para confirmar
+      load();
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'No se pudo cambiar el estado',
+        variant: 'destructive',
+      });
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -101,7 +125,7 @@ export default function Crons() {
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-foreground">Crons</h1>
           <p className="text-muted-foreground">
-            Tareas programadas en el VPS: crontab del usuario, /etc/cron.d, /etc/crontab y systemd timers.
+            Tareas programadas del crontab del VPS. Puedes pausarlas o reanudarlas desde aquí.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={load} disabled={loading}>
@@ -110,26 +134,15 @@ export default function Crons() {
         </Button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-col md:flex-row gap-3 md:items-center">
-        <Tabs value={sourceFilter} onValueChange={(v) => setSourceFilter(v as typeof sourceFilter)}>
-          <TabsList>
-            <TabsTrigger value="all">Todos ({counts.all})</TabsTrigger>
-            <TabsTrigger value="user">Usuario ({counts.user || 0})</TabsTrigger>
-            <TabsTrigger value="cron.d">cron.d ({counts['cron.d'] || 0})</TabsTrigger>
-            <TabsTrigger value="system">Sistema ({counts.system || 0})</TabsTrigger>
-            <TabsTrigger value="systemd">systemd ({counts.systemd || 0})</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="relative flex-1 max-w-md md:ml-auto">
-          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar comando, horario, descripción..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+      {/* Buscador */}
+      <div className="relative max-w-md">
+        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar comando, horario, descripción..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
       </div>
 
       {/* Tabla */}
@@ -150,29 +163,24 @@ export default function Crons() {
                   <th className="px-4 py-3 font-medium">Horario</th>
                   <th className="px-4 py-3 font-medium">Comando / Descripción</th>
                   <th className="px-4 py-3 font-medium">Estado</th>
+                  <th className="px-4 py-3 font-medium text-right">Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((c) => {
-                  const meta = SOURCE_META[c.source];
-                  const Icon = meta.icon;
+                  const isToggling = togglingId === c.id;
                   return (
                     <tr key={c.id} className="border-t border-border hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3 align-top">
                         <div className="flex items-start gap-2">
-                          <div className={cn('flex h-7 w-7 items-center justify-center rounded-md flex-shrink-0', meta.color)}>
-                            <Icon className="h-3.5 w-3.5" />
+                          <div className="flex h-7 w-7 items-center justify-center rounded-md flex-shrink-0 text-emerald-500 bg-emerald-500/10">
+                            <Terminal className="h-3.5 w-3.5" />
                           </div>
                           <div className="min-w-0">
-                            <div className="text-xs font-medium text-foreground">{meta.label}</div>
+                            <div className="text-xs font-medium text-foreground">Usuario</div>
                             <div className="text-[10px] text-muted-foreground truncate max-w-[200px]" title={c.sourceLabel}>
                               {c.sourceLabel}
                             </div>
-                            {c.user && (
-                              <div className="text-[10px] text-muted-foreground mt-0.5">
-                                usuario: <code className="text-foreground">{c.user}</code>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </td>
@@ -180,16 +188,6 @@ export default function Crons() {
                       <td className="px-4 py-3 align-top">
                         <div className="text-foreground text-xs font-medium">{c.scheduleHuman}</div>
                         <code className="text-[10px] text-muted-foreground font-mono block mt-0.5">{c.schedule}</code>
-                        {c.nextRun && (
-                          <div className="text-[10px] text-muted-foreground mt-1">
-                            <span className="text-foreground">Próx:</span> {c.nextRun}
-                          </div>
-                        )}
-                        {c.lastRun && (
-                          <div className="text-[10px] text-muted-foreground">
-                            <span className="text-foreground">Últ:</span> {c.lastRun}
-                          </div>
-                        )}
                       </td>
 
                       <td className="px-4 py-3 align-top max-w-[500px]">
@@ -210,8 +208,32 @@ export default function Crons() {
                           )}
                         >
                           <Circle className={cn('h-2 w-2', c.enabled ? 'fill-emerald-500' : 'fill-muted-foreground')} />
-                          {c.enabled ? 'Activo' : 'Inactivo'}
+                          {c.enabled ? 'Activo' : 'Pausado'}
                         </Badge>
+                      </td>
+
+                      <td className="px-4 py-3 align-top text-right">
+                        <Button
+                          variant={c.enabled ? 'outline' : 'default'}
+                          size="sm"
+                          disabled={isToggling || loading}
+                          onClick={() => setPendingToggle(c)}
+                          className={cn(c.enabled && 'text-amber-600 border-amber-500/40 hover:bg-amber-500/10')}
+                        >
+                          {isToggling ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : c.enabled ? (
+                            <>
+                              <Pause className="h-3.5 w-3.5 mr-1.5" />
+                              Pausar
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-3.5 w-3.5 mr-1.5" />
+                              Reanudar
+                            </>
+                          )}
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -220,10 +242,42 @@ export default function Crons() {
             </table>
           </div>
           <div className="px-4 py-2 text-[11px] text-muted-foreground border-t border-border bg-muted/20">
-            Vista de solo lectura. Para editar usa <code>crontab -e</code> en el VPS o los archivos en <code>/etc/cron.d/</code>.
+            Pausar comenta la línea en <code>crontab -l</code> (la prefija con <code>#</code>). Reanudar la des-comenta. Se respalda automáticamente antes de modificar.
           </div>
         </div>
       )}
+
+      {/* Confirmacion */}
+      <AlertDialog open={!!pendingToggle} onOpenChange={(o) => !o && setPendingToggle(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingToggle?.enabled ? '¿Pausar este cron?' : '¿Reanudar este cron?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <div>
+                  {pendingToggle?.enabled
+                    ? 'El cron quedará deshabilitado y no se ejecutará hasta que lo reanudes.'
+                    : 'El cron volverá a ejecutarse en su próximo horario programado.'}
+                </div>
+                {pendingToggle?.description && (
+                  <div className="text-xs italic text-muted-foreground">{pendingToggle.description}</div>
+                )}
+                <code className="block text-[11px] bg-muted p-2 rounded font-mono break-all">
+                  {pendingToggle?.schedule} {pendingToggle?.command}
+                </code>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => pendingToggle && performToggle(pendingToggle)}>
+              {pendingToggle?.enabled ? 'Pausar' : 'Reanudar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

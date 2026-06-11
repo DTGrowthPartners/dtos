@@ -6,5 +6,6 @@ const router = Router();
 router.use(authMiddleware);
 
 router.get('/', cronsController.list);
+router.post('/toggle', cronsController.toggle);
 
 export default router;

@@ -5,6 +5,27 @@ import * as path from 'path';
 
 const execAsync = promisify(exec);
 
+/**
+ * Whitelist de comandos del crontab del usuario que queremos exponer en DTOS.
+ * Cada string es un substring que debe aparecer en el `command` para que el cron
+ * pase el filtro. Se valida tambien que el source sea 'user'.
+ *
+ * Esto permite pausar/reanudar SOLO los crons del negocio sin tocar los del
+ * sistema o crons de otros equipos que vivan en el mismo VPS.
+ */
+const ALLOWED_USER_CRON_PATTERNS = [
+  'context_monitor.py',
+  'bot-health-monitor.sh',
+  'send_pending.js',
+  'meta-daily-report/main.py',
+  'beds24-price-sync/sync.py',
+  'monitor_bloqueos.py',
+  'cartera-daily-report/cartera_report.py',
+];
+
+const matchesAllowed = (command: string): boolean =>
+  ALLOWED_USER_CRON_PATTERNS.some((p) => command.includes(p));
+
 export interface CronEntry {
   id: string;
   source: 'user' | 'system' | 'cron.d' | 'systemd';
@@ -231,5 +252,99 @@ export const listAllCrons = async (): Promise<CronEntry[]> => {
     // ignore
   }
 
-  return all;
+  // Filtrado: solo crons del usuario que pertenezcan al whitelist.
+  // Los crons de sistema, /etc/cron.d y systemd timers se ocultan; estos
+  // los gestiona el sysadmin directamente en el VPS, no DTOS.
+  return all.filter((c) => c.source === 'user' && matchesAllowed(c.command));
+};
+
+/**
+ * Activa o pausa un cron del usuario.
+ *
+ * Pausar = anteponer "#" a la linea. Reanudar = quitar el "#" inicial.
+ * Identifica la linea por la combinacion (schedule + command), que es unica
+ * dentro de un crontab bien formado.
+ *
+ * Como medida de seguridad:
+ * 1. Hace backup del crontab actual en /tmp/crontab.bak-<ts> antes de modificar.
+ * 2. Solo modifica una linea por llamada.
+ * 3. Si no encuentra la linea, throws (no modifica nada).
+ * 4. Verifica que el comando este en el whitelist antes de tocar.
+ */
+export const toggleUserCron = async (
+  schedule: string,
+  command: string,
+  enable: boolean
+): Promise<{ before: 'enabled' | 'disabled'; after: 'enabled' | 'disabled' }> => {
+  if (!matchesAllowed(command)) {
+    throw Object.assign(new Error('Comando no permitido por el whitelist'), { status: 403 });
+  }
+
+  const { stdout: current } = await execAsync('crontab -l', { timeout: 5000 });
+  const lines = current.split('\n');
+
+  let foundIdx = -1;
+  let wasEnabled = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    let payload = trimmed;
+    let isCommented = false;
+    if (trimmed.startsWith('#')) {
+      payload = trimmed.replace(/^#+\s*/, '').trim();
+      isCommented = true;
+    }
+
+    const m = payload.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/);
+    if (!m) continue;
+    const lineSchedule = `${m[1]} ${m[2]} ${m[3]} ${m[4]} ${m[5]}`;
+    const lineCommand = m[6].trim();
+
+    if (lineSchedule === schedule.trim() && lineCommand === command.trim()) {
+      foundIdx = i;
+      wasEnabled = !isCommented;
+      const target = enable ? 'enabled' : 'disabled';
+      const beforeState = wasEnabled ? 'enabled' : 'disabled';
+
+      // Idempotente: si ya esta en el estado deseado, no toca nada.
+      if (beforeState === target) {
+        return { before: beforeState, after: target };
+      }
+
+      if (enable) {
+        // Quitar el primer "#" + posibles espacios despues
+        lines[i] = raw.replace(/^(\s*)#+\s*/, '$1');
+      } else {
+        // Antepone "#" (preservando indentacion previa por si la hubiera)
+        lines[i] = raw.replace(/^(\s*)/, '$1#');
+      }
+      break;
+    }
+  }
+
+  if (foundIdx === -1) {
+    throw Object.assign(new Error('No se encontro el cron en el crontab'), { status: 404 });
+  }
+
+  // Backup antes de escribir
+  const ts = Date.now();
+  await fs.writeFile(`/tmp/crontab.bak-${ts}`, current).catch(() => {});
+
+  // Escribir nuevo crontab via temp file
+  const tempPath = `/tmp/crontab-new-${ts}.txt`;
+  const newContent = lines.join('\n');
+  await fs.writeFile(tempPath, newContent);
+  try {
+    await execAsync(`crontab "${tempPath}"`, { timeout: 5000 });
+  } finally {
+    fs.unlink(tempPath).catch(() => {});
+  }
+
+  return {
+    before: wasEnabled ? 'enabled' : 'disabled',
+    after: enable ? 'enabled' : 'disabled',
+  };
 };
