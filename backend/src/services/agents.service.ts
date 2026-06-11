@@ -20,7 +20,16 @@ interface AgentConfig {
   name: string;
   description: string;
   baseUrl: string;
-  envKey: string; // nombre de la env var donde vive el API key
+  /** Prefijo de path bajo el baseUrl. Ej: '/api/externo' o '/api/v1'. */
+  pathPrefix: string;
+  /** Como se envia el API key. 'x-api-key' = header X-API-Key; 'bearer' = Authorization: Bearer */
+  auth: 'x-api-key' | 'bearer';
+  /** Nombre de la env var donde vive el API key. */
+  envKey: string;
+  /** El bot soporta envio de mensajes via /enviar? (no todos lo exponen). */
+  supportsSend?: boolean;
+  /** El bot soporta el concepto de "modo" (solo_prospectos, etc.)? */
+  supportsModo?: boolean;
   whatsappNumber?: string;
 }
 
@@ -30,7 +39,22 @@ const AGENTS: AgentConfig[] = [
     name: 'Bot Dairo WhatsApp',
     description: 'Asistente conversacional de Dairo en WhatsApp.',
     baseUrl: 'https://david.dtgrowthpartners.com',
+    pathPrefix: '/api/externo',
+    auth: 'x-api-key',
     envKey: 'AGENT_DAIRO_API_KEY',
+    supportsSend: true,
+    supportsModo: true,
+  },
+  {
+    id: 'cantina',
+    name: 'CantinaBot',
+    description: 'Bot conversacional de La Cantina: reservas, comprobantes, mesas.',
+    baseUrl: 'https://cantinabot.dtgrowthpartners.com',
+    pathPrefix: '/api/v1',
+    auth: 'bearer',
+    envKey: 'AGENT_CANTINA_API_KEY',
+    supportsSend: false,
+    supportsModo: false,
   },
 ];
 
@@ -64,13 +88,18 @@ const callAgent = async <T = unknown>(
   if (!agent) throw new Error(`Agente ${agentId} no encontrado`);
   const apiKey = getApiKey(agent);
 
-  const url = `${agent.baseUrl}${path}`;
+  const url = `${agent.baseUrl}${agent.pathPrefix}${path}`;
+  const authHeaders: Record<string, string> =
+    agent.auth === 'bearer'
+      ? { Authorization: `Bearer ${apiKey}` }
+      : { 'X-API-Key': apiKey };
+
   try {
     const res = await axios.request<T>({
       url,
       method,
       headers: {
-        'X-API-Key': apiKey,
+        ...authHeaders,
         'Content-Type': 'application/json; charset=utf-8',
         Accept: 'application/json',
       },
@@ -97,7 +126,7 @@ const callAgent = async <T = unknown>(
 };
 
 export const agentHealth = (id: string) =>
-  callAgent<{ status?: string; [k: string]: unknown }>(id, 'GET', '/api/externo/health');
+  callAgent<{ status?: string; [k: string]: unknown }>(id, 'GET', '/health');
 
 export const agentGetEstado = (id: string) =>
   callAgent<{
@@ -105,7 +134,7 @@ export const agentGetEstado = (id: string) =>
     modo?: string;
     trafico_24h?: unknown;
     [k: string]: unknown;
-  }>(id, 'GET', '/api/externo/estado');
+  }>(id, 'GET', '/estado');
 
 export interface SetEstadoBody {
   activo?: boolean;
@@ -113,16 +142,29 @@ export interface SetEstadoBody {
   razon?: string;
   por?: string;
 }
-export const agentSetEstado = (id: string, body: SetEstadoBody) =>
-  callAgent(id, 'POST', '/api/externo/estado', body);
+export const agentSetEstado = (id: string, body: SetEstadoBody) => {
+  // Cantina (sin supportsModo) no acepta `modo` ni `por` — limpiamos antes de enviar.
+  const agent = getAgent(id);
+  const cleanBody: SetEstadoBody = { activo: body.activo, razon: body.razon };
+  if (agent?.supportsModo && body.modo) cleanBody.modo = body.modo;
+  if (agent?.supportsModo && body.por) cleanBody.por = body.por;
+  return callAgent(id, 'POST', '/estado', cleanBody);
+};
 
 export const agentGetStats = (id: string) =>
-  callAgent<Record<string, unknown>>(id, 'GET', '/api/externo/stats');
+  callAgent<Record<string, unknown>>(id, 'GET', '/stats');
 
 export interface SendMessageBody {
   numero?: string;
   grupo?: string;
   mensaje: string;
 }
-export const agentSendMessage = (id: string, body: SendMessageBody) =>
-  callAgent(id, 'POST', '/api/externo/enviar', body);
+export const agentSendMessage = (id: string, body: SendMessageBody) => {
+  const agent = getAgent(id);
+  if (!agent?.supportsSend) {
+    const err: any = new Error(`Agente ${id} no soporta envio de mensajes`);
+    err.status = 400;
+    throw err;
+  }
+  return callAgent(id, 'POST', '/enviar', body);
+};

@@ -30,27 +30,46 @@ interface AgentMeta {
   name: string;
   description: string;
   baseUrl: string;
+  pathPrefix?: string;
+  auth?: 'x-api-key' | 'bearer';
+  supportsSend?: boolean;
+  supportsModo?: boolean;
   whatsappNumber?: string;
   configured: boolean;
 }
 
-// El bot externo devuelve { ok, estado: { activo, modo, ... }, trafico_24h: { inbound, outbound } }
+// Schema flexible — distintos bots reportan campos distintos. Mantenemos las
+// claves opcionales y el renderizado decide que mostrar segun lo que llegue.
+// Dairo: estado anidado en {estado: {activo, modo}}, conversaciones/prospectos/citas/claude.
+// Cantina: estado al root {activo}, reservas_hoy/mensajes_hoy/pendientes/whatsapp.
 interface AgentEstado {
   ok?: boolean;
+  bot_id?: string;
+  // Dairo wrap
   estado?: {
     activo?: boolean;
     modo?: string;
     pausado_por?: string | null;
     pausado_en?: string | null;
     razon?: string | null;
-    actualizado_en?: string;
   };
+  // Cantina root
+  activo?: boolean;
+  modo?: string;
+  pausado_por?: string | null;
+  pausado_en?: string | null;
+  razon?: string | null;
+  // Extras varios
   trafico_24h?: { inbound?: number; outbound?: number };
+  whatsapp?: { conectado?: boolean; estado?: string };
 }
 
 interface AgentStats {
   ok?: boolean;
+  bot_id?: string;
   estado?: AgentEstado['estado'];
+  bot_activo?: boolean;
+  // Dairo
   conversaciones?: {
     inbound_hoy?: number;
     outbound_hoy?: number;
@@ -82,6 +101,20 @@ interface AgentStats {
     cache_write?: number;
   };
   alertas_abiertas?: number;
+  // Cantina
+  reservas_hoy?: {
+    ok?: boolean;
+    mesas_ocupadas?: number;
+    mesas_totales?: number;
+    total_personas?: number;
+    covers_pendientes?: number;
+    evento?: string;
+    error?: string;
+  };
+  mensajes_hoy?: { recibidos?: number; enviados?: number; total?: number };
+  chats_activos_hoy?: number;
+  clientes_activos_7d?: number;
+  pendientes?: number;
 }
 
 const MODOS: { value: string; label: string }[] = [
@@ -138,7 +171,7 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
       ]);
       setEstado(e);
       setStats(s);
-      const m = e?.estado?.modo ?? s?.estado?.modo;
+      const m = e?.estado?.modo ?? e?.modo ?? s?.estado?.modo;
       if (m) setModoLocal(String(m));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo conectar con el agente');
@@ -176,8 +209,15 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
     }
   };
 
+  // Normaliza estado: algunos bots lo retornan anidado (Dairo: {estado:{activo}}),
+  // otros al root (Cantina: {activo}).
   const currentEstado = estado?.estado || stats?.estado;
-  const currentModo = currentEstado?.modo;
+  const activo =
+    (currentEstado?.activo ?? estado?.activo ?? stats?.bot_activo) === true;
+  const currentModo = currentEstado?.modo ?? estado?.modo;
+  const showModoDropdown = agent.supportsModo !== false && (!!currentModo || agent.supportsModo === true);
+  const whatsappOk = estado?.whatsapp?.conectado;
+  const whatsappState = estado?.whatsapp?.estado;
 
   const cambiarModo = async (newModo: string) => {
     if (newModo === currentModo) return;
@@ -202,8 +242,7 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
     }
   };
 
-  const activo = currentEstado?.activo === true;
-  const alertas = Number(stats?.alertas_abiertas ?? 0);
+  const alertas = Number(stats?.alertas_abiertas ?? stats?.pendientes ?? 0);
   const tieneAlertas = alertas > 0;
 
   // ====== UI: estado/error/loading ======
@@ -293,22 +332,40 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
             {activo ? 'Pausar' : 'Activar'}
           </Button>
 
-          <Select value={modoLocal} onValueChange={cambiarModo} disabled={busy || loading || !!error}>
-            <SelectTrigger className="h-9 max-w-[220px]">
-              <SelectValue placeholder="Cambiar modo…" />
-            </SelectTrigger>
-            <SelectContent>
-              {MODOS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
-              {/* Si el agente reporta un modo que no está en MODOS, lo agregamos como opción */}
-              {currentModo && !MODOS.some((m) => m.value === currentModo) && (
-                <SelectItem value={String(currentModo)}>{String(currentModo)}</SelectItem>
+          {showModoDropdown && (
+            <Select value={modoLocal} onValueChange={cambiarModo} disabled={busy || loading || !!error}>
+              <SelectTrigger className="h-9 max-w-[220px]">
+                <SelectValue placeholder="Cambiar modo…" />
+              </SelectTrigger>
+              <SelectContent>
+                {MODOS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+                {/* Si el agente reporta un modo que no está en MODOS, lo agregamos como opción */}
+                {currentModo && !MODOS.some((m) => m.value === currentModo) && (
+                  <SelectItem value={String(currentModo)}>{String(currentModo)}</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Indicador de conexion WhatsApp (Cantina lo reporta) */}
+          {typeof whatsappOk === 'boolean' && (
+            <Badge
+              variant="outline"
+              className={cn(
+                'gap-1.5',
+                whatsappOk
+                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600'
+                  : 'border-red-500/40 bg-red-500/10 text-red-600'
               )}
-            </SelectContent>
-          </Select>
+            >
+              <Circle className={cn('h-2 w-2', whatsappOk ? 'fill-emerald-500' : 'fill-red-500')} />
+              WhatsApp {whatsappOk ? whatsappState || 'OK' : 'desconectado'}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -330,27 +387,90 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
 
         {!loading && !error && stats && (
           <div className="space-y-4">
-            {/* Conversaciones hoy */}
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Hoy</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <StatBox label="In" value={stats.conversaciones?.inbound_hoy} icon={MessageCircle} accent="primary" />
-                <StatBox label="Out" value={stats.conversaciones?.outbound_hoy} icon={Send} accent="success" />
-                <StatBox label="Clientes" value={stats.conversaciones?.clientes_unicos_hoy} icon={Users} accent="primary" />
+            {/* === Cantina === Reservas (solo si el bot las reporta) */}
+            {stats.reservas_hoy && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                  Reservas hoy{stats.reservas_hoy.evento ? <span className="text-foreground"> · {stats.reservas_hoy.evento}</span> : null}
+                </p>
+                {stats.reservas_hoy.ok === false ? (
+                  <div className="text-xs text-amber-600 flex items-center gap-2">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    No se pudo cargar el backend de mesas{stats.reservas_hoy.error ? `: ${stats.reservas_hoy.error}` : ''}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <StatBox
+                      label="Mesas"
+                      value={
+                        typeof stats.reservas_hoy.mesas_ocupadas === 'number'
+                          ? `${stats.reservas_hoy.mesas_ocupadas}/${stats.reservas_hoy.mesas_totales ?? '—'}`
+                          : undefined
+                      }
+                      icon={CalendarCheck}
+                      accent="success"
+                    />
+                    <StatBox label="Personas" value={stats.reservas_hoy.total_personas} icon={Users} accent="primary" />
+                    <StatBox
+                      label="Covers"
+                      value={stats.reservas_hoy.covers_pendientes}
+                      icon={Activity}
+                      accent={Number(stats.reservas_hoy.covers_pendientes ?? 0) > 0 ? 'warning' : 'success'}
+                    />
+                  </div>
+                )}
               </div>
-            </div>
+            )}
 
-            {/* Conversaciones mes */}
-            <div>
-              <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Mes</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                <StatBox label="In" value={stats.conversaciones?.inbound_mes} icon={MessageCircle} accent="primary" />
-                <StatBox label="Clientes" value={stats.conversaciones?.clientes_unicos_mes} icon={Users} accent="primary" />
-                <StatBox label="Citas" value={stats.citas?.mes} icon={CalendarCheck} accent="success" />
+            {/* === Cantina === Mensajes hoy */}
+            {stats.mensajes_hoy && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Mensajes hoy</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <StatBox label="Recibidos" value={stats.mensajes_hoy.recibidos} icon={MessageCircle} accent="primary" />
+                  <StatBox label="Enviados" value={stats.mensajes_hoy.enviados} icon={Send} accent="success" />
+                  <StatBox label="Chats activos" value={stats.chats_activos_hoy} icon={Activity} accent="primary" />
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Prospectos */}
+            {/* === Cantina === Clientes activos 7d + pendientes */}
+            {(typeof stats.clientes_activos_7d === 'number' || typeof stats.pendientes === 'number') && (
+              <div className="grid grid-cols-2 gap-2">
+                {typeof stats.clientes_activos_7d === 'number' && (
+                  <StatBox label="Clientes 7d" value={stats.clientes_activos_7d} icon={Users} accent="primary" />
+                )}
+                {typeof stats.pendientes === 'number' && (
+                  <StatBox label="Pendientes" value={stats.pendientes} icon={AlertOctagon} accent={stats.pendientes > 0 ? 'warning' : 'success'} />
+                )}
+              </div>
+            )}
+
+            {/* === Dairo === Conversaciones hoy */}
+            {stats.conversaciones && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Conversaciones hoy</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <StatBox label="In" value={stats.conversaciones.inbound_hoy} icon={MessageCircle} accent="primary" />
+                  <StatBox label="Out" value={stats.conversaciones.outbound_hoy} icon={Send} accent="success" />
+                  <StatBox label="Clientes" value={stats.conversaciones.clientes_unicos_hoy} icon={Users} accent="primary" />
+                </div>
+              </div>
+            )}
+
+            {/* === Dairo === Mes */}
+            {stats.conversaciones && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Mes</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <StatBox label="In" value={stats.conversaciones.inbound_mes} icon={MessageCircle} accent="primary" />
+                  <StatBox label="Clientes" value={stats.conversaciones.clientes_unicos_mes} icon={Users} accent="primary" />
+                  <StatBox label="Citas" value={stats.citas?.mes} icon={CalendarCheck} accent="success" />
+                </div>
+              </div>
+            )}
+
+            {/* === Dairo === Prospectos */}
             {stats.prospectos && (
               <div>
                 <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Prospectos</p>
@@ -362,7 +482,7 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
               </div>
             )}
 
-            {/* Claude tokens */}
+            {/* === Dairo === Claude tokens */}
             {stats.claude_hoy && (
               <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-border/50">
                 {typeof stats.claude_hoy.tokens_input === 'number' && (
