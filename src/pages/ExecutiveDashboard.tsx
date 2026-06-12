@@ -13,6 +13,15 @@ import {
   Sparkles,
   ChevronRight,
   Circle,
+  BarChart3,
+  Users,
+  Target,
+  CheckSquare,
+  Clock,
+  Briefcase,
+  Wallet,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,27 +32,44 @@ import { loadTasks } from '@/lib/firestoreTaskService';
 import { TaskStatus, type Task } from '@/types/taskTypes';
 import { cn } from '@/lib/utils';
 
+// ========== Types ==========
+
 interface CRMDeal {
   id: string;
   name: string;
   value: number;
   stage?: { id: string; name: string; color?: string };
-  createdAt?: string;
-  organizacion?: { nombre?: string } | null;
+}
+interface FinanceTransactionFull {
+  fecha: string;
+  importe: number;
+  categoria?: string;
+  terceroNombre?: string;
 }
 interface FinanceData {
   totalIncome: number;
   totalExpenses: number;
+  ingresos?: FinanceTransactionFull[];
+  gastos?: FinanceTransactionFull[];
 }
-interface FinanceTransaction {
-  id?: string;
-  fecha: string;
-  detalle?: string;
-  valor: number;
-  tipo: 'ingreso' | 'egreso';
-  terceroNombre?: string;
-  categoria?: string;
-  cuenta?: string;
+interface CuentaDisponible {
+  cuenta: string;
+  saldo: number;
+}
+interface DisponibleResponse {
+  cuentas: CuentaDisponible[];
+  totalDisponible: number;
+}
+interface ServiceRevenueMetrics {
+  totalMRR: number;
+  totalARR?: number;
+  activeServicesCount?: number;
+  clientsWithServices: number;
+}
+interface ClientItem {
+  id: string;
+  name: string;
+  status: string;
 }
 interface AgentStats {
   ok?: boolean;
@@ -65,8 +91,11 @@ interface AgentInfo {
   stats?: AgentStats;
 }
 
+// ========== Formatters ==========
+
 const COP = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n || 0);
+
 const COPshort = (n: number): string => {
   const abs = Math.abs(n);
   if (abs >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}MM`;
@@ -75,54 +104,69 @@ const COPshort = (n: number): string => {
   return COP(n);
 };
 
+const COPfull = (n: number): string =>
+  '$' + Math.round(n || 0).toLocaleString('en-US');
+
+const formatMoney = (n: number, hidden: boolean): string => (hidden ? '••••••' : COPfull(n));
+
 // Saludo según hora local de Colombia
 const greeting = (): string => {
-  const h = parseInt(new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', hour12: false }), 10);
+  const h = parseInt(
+    new Date().toLocaleTimeString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', hour12: false }),
+    10
+  );
   if (h < 12) return 'Buenos días';
   if (h < 19) return 'Buenas tardes';
   return 'Buenas noches';
 };
 
+const monthName = (m: number): string =>
+  ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m] || '';
+
 // ========== Componentes auxiliares ==========
 
-function KPICard({
-  label,
+type Variant = 'success' | 'warning' | 'primary' | 'destructive' | 'default';
+
+const variantColors: Record<Variant, string> = {
+  success: 'text-emerald-500 bg-emerald-500/10',
+  warning: 'text-amber-500 bg-amber-500/10',
+  primary: 'text-blue-500 bg-blue-500/10',
+  destructive: 'text-red-500 bg-red-500/10',
+  default: 'text-slate-500 bg-slate-500/10',
+};
+
+function StatCard({
+  title,
   value,
-  hint,
+  subtitle,
   icon: Icon,
-  accent,
+  variant = 'default',
   to,
 }: {
-  label: string;
-  value: string;
-  hint?: string;
+  title: string;
+  value: string | number;
+  subtitle?: string;
   icon: React.ComponentType<{ className?: string }>;
-  accent: 'blue' | 'emerald' | 'amber' | 'violet';
+  variant?: Variant;
   to?: string;
 }) {
-  const colors = {
-    blue: 'text-blue-500 bg-blue-500/10',
-    emerald: 'text-emerald-500 bg-emerald-500/10',
-    amber: 'text-amber-500 bg-amber-500/10',
-    violet: 'text-violet-500 bg-violet-500/10',
-  };
   const inner = (
-    <div className="group rounded-xl border border-border bg-card p-5 transition-all hover:shadow-md hover:border-primary/40">
-      <div className="flex items-center justify-between mb-3">
-        <div className={cn('flex h-10 w-10 items-center justify-center rounded-lg', colors[accent])}>
-          <Icon className="h-5 w-5" />
+    <div className="group rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md hover:border-primary/40 h-full">
+      <div className="flex items-start justify-between mb-3">
+        <div className="text-xs text-muted-foreground font-medium">{title}</div>
+        <div className={cn('flex h-8 w-8 items-center justify-center rounded-lg flex-shrink-0', variantColors[variant])}>
+          <Icon className="h-4 w-4" />
         </div>
-        {to && (
-          <ArrowUpRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-        )}
       </div>
-      <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
-      <div className="text-xs uppercase tracking-wider text-muted-foreground mt-1 font-medium">{label}</div>
-      {hint && <div className="text-[11px] text-muted-foreground mt-1">{hint}</div>}
+      <div className="text-xl font-bold text-foreground tabular-nums leading-tight break-words">{value}</div>
+      {subtitle && <div className="text-[11px] text-muted-foreground mt-1">{subtitle}</div>}
+      {to && (
+        <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity absolute top-3 right-12" />
+      )}
     </div>
   );
   return to ? (
-    <Link to={to} className="block">
+    <Link to={to} className="block h-full">
       {inner}
     </Link>
   ) : (
@@ -162,10 +206,22 @@ export default function ExecutiveDashboard() {
 
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState<CRMDeal[]>([]);
-  const [finance, setFinance] = useState<FinanceData>({ totalIncome: 0, totalExpenses: 0 });
-  const [expensesAll, setExpensesAll] = useState<FinanceTransaction[]>([]);
+  const [financeData, setFinanceData] = useState<FinanceData>({ totalIncome: 0, totalExpenses: 0 });
+  const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
+  const [totalDisponible, setTotalDisponible] = useState(0);
+  const [services, setServices] = useState<ServiceRevenueMetrics>({ totalMRR: 0, clientsWithServices: 0 });
+  const [clients, setClients] = useState<ClientItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
+
+  const [hideFinances, setHideFinances] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('dashboard:hideFinances') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [showAccounts, setShowAccounts] = useState(true);
 
   const today = new Date();
   const todayFormatted = today.toLocaleDateString('es-CO', {
@@ -175,25 +231,57 @@ export default function ExecutiveDashboard() {
     year: 'numeric',
     timeZone: 'America/Bogota',
   });
+  const currentMonthName = monthName(today.getMonth());
+
+  const toggleHide = () => {
+    setHideFinances((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('dashboard:hideFinances', next ? '1' : '0');
+      } catch {
+        /* noop */
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        // Llamadas en paralelo. Cada una con .catch que falla silencioso para
-        // que un endpoint roto no tumbe todo el dashboard.
-        const [dealsRes, financeRes, expensesRes, tasksRes, agentsList] = await Promise.all([
+        // Llamadas paralelas. Cada una con catch silencioso para que un endpoint
+        // caido no tumbe el dashboard completo.
+        const [
+          dealsRes,
+          financeRes,
+          disponibleRes,
+          servicesRes,
+          clientsRes,
+          tasksRes,
+          agentsList,
+        ] = await Promise.all([
           isAdmin
             ? apiClient.get<CRMDeal[]>('/api/crm/deals').catch(() => [])
             : Promise.resolve([] as CRMDeal[]),
           isAdmin
-            ? apiClient
-                .get<FinanceData>('/api/finance/data')
-                .catch(() => ({ totalIncome: 0, totalExpenses: 0 }))
-            : Promise.resolve({ totalIncome: 0, totalExpenses: 0 }),
+            ? apiClient.get<FinanceData>('/api/finance/data').catch(() => ({
+                totalIncome: 0,
+                totalExpenses: 0,
+                ingresos: [],
+                gastos: [],
+              }))
+            : Promise.resolve({ totalIncome: 0, totalExpenses: 0, ingresos: [], gastos: [] } as FinanceData),
           isAdmin
-            ? apiClient.get<FinanceTransaction[]>('/api/finance/expense').catch(() => [])
-            : Promise.resolve([] as FinanceTransaction[]),
+            ? apiClient
+                .get<DisponibleResponse>('/api/finance/disponible')
+                .catch(() => ({ cuentas: [], totalDisponible: 0 }))
+            : Promise.resolve({ cuentas: [], totalDisponible: 0 } as DisponibleResponse),
+          isAdmin
+            ? apiClient
+                .get<ServiceRevenueMetrics>('/api/services/metrics/revenue')
+                .catch(() => ({ totalMRR: 0, clientsWithServices: 0 }))
+            : Promise.resolve({ totalMRR: 0, clientsWithServices: 0 } as ServiceRevenueMetrics),
+          apiClient.get<ClientItem[]>('/api/clients').catch(() => [] as ClientItem[]),
           loadTasks().catch(() => [] as Task[]),
           apiClient
             .get<{ agents: AgentInfo[] }>('/api/agents')
@@ -202,11 +290,14 @@ export default function ExecutiveDashboard() {
         ]);
 
         setDeals(dealsRes);
-        setFinance(financeRes);
-        setExpensesAll(expensesRes);
+        setFinanceData(financeRes);
+        setDisponible(disponibleRes.cuentas || []);
+        setTotalDisponible(disponibleRes.totalDisponible || 0);
+        setServices(servicesRes);
+        setClients(clientsRes);
         setTasks(tasksRes);
 
-        // Por cada agente configurado, cargamos sus stats en paralelo
+        // Por cada agente configurado, cargamos stats en paralelo
         if (agentsList.length > 0) {
           const withStats = await Promise.all(
             agentsList.map(async (a) => {
@@ -230,9 +321,23 @@ export default function ExecutiveDashboard() {
     fetchAll();
   }, [isAdmin]);
 
-  // ============ KPIs derivados ============
+  // ============ KPIs derivados (mismas reglas que el dashboard clásico) ============
 
-  // Pipeline value: suma de deals abiertos (excluye stage que parezca cerrado)
+  // Ingresos / Gastos del mes actual filtrando AJUSTE SALDO
+  const monthly = useMemo(() => {
+    const prefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const ingMes = (financeData.ingresos || []).filter(
+      (t) => t.fecha?.startsWith(prefix) && t.categoria !== 'AJUSTE SALDO'
+    );
+    const gasMes = (financeData.gastos || []).filter(
+      (t) => t.fecha?.startsWith(prefix) && t.categoria !== 'AJUSTE SALDO'
+    );
+    const income = ingMes.reduce((acc, t) => acc + (t.importe || 0), 0);
+    const expenses = gasMes.reduce((acc, t) => acc + (t.importe || 0), 0);
+    return { income, expenses, profit: income - expenses };
+  }, [financeData, today]);
+
+  // Pipeline value y count (suma deals abiertos)
   const pipeline = useMemo(() => {
     const open = deals.filter((d) => {
       const name = (d.stage?.name || '').toLowerCase();
@@ -241,32 +346,56 @@ export default function ExecutiveDashboard() {
     return {
       count: open.length,
       value: open.reduce((acc, d) => acc + (Number(d.value) || 0), 0),
+      total: deals.length,
     };
   }, [deals]);
 
-  // Tareas: si admin ve todas overdue/done del mes; si user ve solo las suyas
+  // Tareas: stats globales para admin, personales para todos
   const tasksKPI = useMemo(() => {
-    const now = today;
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const userName = user?.firstName || '';
-    const visible = isAdmin
-      ? tasks
-      : tasks.filter((t) => (t.assignee || '').toLowerCase() === userName.toLowerCase());
+    const mine = tasks.filter((t) => (t.assignee || '').toLowerCase() === userName.toLowerCase());
+    const myDone = mine.filter((t) => t.status === TaskStatus.DONE).length;
+    const myTotal = mine.length;
+    const productivity = myTotal > 0 ? Math.round((myDone / myTotal) * 100) : 0;
 
-    const overdue = visible.filter((t) => {
+    const teamPending = tasks.filter((t) => t.status !== TaskStatus.DONE).length;
+    const teamInProgress = tasks.filter((t) => t.status === TaskStatus.IN_PROGRESS).length;
+    const teamDone = tasks.filter((t) => t.status === TaskStatus.DONE).length;
+
+    const visibleForOverdue = isAdmin ? tasks : mine;
+    const now = today;
+    const overdue = visibleForOverdue.filter((t) => {
       if (!t.dueDate || t.status === TaskStatus.DONE) return false;
-      const due = new Date(t.dueDate);
-      return due < now;
+      return new Date(t.dueDate) < now;
     });
-    const doneThisMonth = visible.filter((t) => {
+
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const doneThisMonth = visibleForOverdue.filter((t) => {
       if (t.status !== TaskStatus.DONE) return false;
       if (!t.completedAt) return false;
       return new Date(t.completedAt) >= firstOfMonth;
     });
-    return { overdue, doneThisMonth, total: visible.length };
+
+    return {
+      mine,
+      myDone,
+      myTotal,
+      productivity,
+      teamPending,
+      teamInProgress,
+      teamDone,
+      overdue,
+      doneThisMonth,
+    };
   }, [tasks, isAdmin, user, today]);
 
-  // Citas/alertas de los bots (siempre vienen de Dairo y Cantina si están configurados)
+  // Clients
+  const clientsKPI = useMemo(() => {
+    const active = clients.filter((c) => c.status === 'active').length;
+    return { active, total: clients.length };
+  }, [clients]);
+
+  // Citas/alertas de los bots
   const botsKPI = useMemo(() => {
     let citas = 0;
     let alertas = 0;
@@ -274,31 +403,33 @@ export default function ExecutiveDashboard() {
       citas += a.stats?.prospectos?.agendados ?? a.stats?.citas?.activas ?? a.stats?.citas?.mes ?? 0;
       alertas += a.stats?.alertas_abiertas ?? a.stats?.pendientes ?? 0;
     }
-    return { citas, alertas, online: agents.filter((a) => a.stats?.estado?.activo || a.stats?.bot_activo).length, total: agents.length };
+    return {
+      citas,
+      alertas,
+      online: agents.filter((a) => a.stats?.estado?.activo || a.stats?.bot_activo).length,
+      total: agents.length,
+    };
   }, [agents]);
 
-  // Top 5 clientes del mes — agrupamos ingresos por terceroNombre
+  // Top 5 clientes del mes (de finance.expense pero ya viene aquí en financeData.ingresos)
   const topClientes = useMemo(() => {
     if (!isAdmin) return [];
-    const now = today;
-    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const ingresosMes = expensesAll.filter((e) => {
-      if (e.tipo !== 'ingreso') return false;
-      const d = new Date(e.fecha);
-      return d >= firstOfMonth;
-    });
+    const prefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    const ingMes = (financeData.ingresos || []).filter(
+      (t) => t.fecha?.startsWith(prefix) && t.categoria !== 'AJUSTE SALDO' && t.terceroNombre
+    );
     const sumByClient = new Map<string, number>();
-    for (const i of ingresosMes) {
+    for (const i of ingMes) {
       const k = i.terceroNombre || 'Sin nombre';
-      sumByClient.set(k, (sumByClient.get(k) || 0) + (Number(i.valor) || 0));
+      sumByClient.set(k, (sumByClient.get(k) || 0) + (Number(i.importe) || 0));
     }
     return Array.from(sumByClient.entries())
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
       .map(([nombre, total]) => ({ nombre, total }));
-  }, [expensesAll, isAdmin, today]);
+  }, [financeData, isAdmin, today]);
 
-  // Tareas overdue ordenadas por más vencidas primero (max 5 visibles)
+  // Tareas overdue ordenadas
   const overdueList = useMemo(() => {
     return [...tasksKPI.overdue]
       .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime())
@@ -306,6 +437,9 @@ export default function ExecutiveDashboard() {
   }, [tasksKPI.overdue]);
 
   const userName = user?.firstName || 'Usuario';
+  const productivityVariant: Variant =
+    tasksKPI.productivity >= 70 ? 'success' : tasksKPI.productivity >= 40 ? 'warning' : 'default';
+  const profitVariant: Variant = monthly.profit >= 0 ? 'success' : 'destructive';
 
   // ============ Render ============
 
@@ -313,19 +447,19 @@ export default function ExecutiveDashboard() {
     return (
       <div className="space-y-6 animate-fade-in">
         <Skeleton className="h-20 w-full max-w-md" />
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+          {[...Array(10)].map((_, i) => (
+            <Skeleton key={i} className="h-28" />
           ))}
         </div>
-        <Skeleton className="h-80" />
+        <Skeleton className="h-32" />
       </div>
     );
   }
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Greeting */}
+      {/* Greeting + toggle ocultar/mostrar */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold text-foreground">
@@ -333,58 +467,201 @@ export default function ExecutiveDashboard() {
           </h1>
           <p className="text-muted-foreground capitalize mt-1">{todayFormatted}</p>
         </div>
-        <Link to="/" className="text-xs text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
-          ← Volver al dashboard clásico
-        </Link>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleHide}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              title={hideFinances ? 'Mostrar valores' : 'Ocultar valores'}
+            >
+              {hideFinances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span className="hidden sm:inline">{hideFinances ? 'Mostrar' : 'Ocultar'}</span>
+            </Button>
+          )}
+          <Link to="/" className="text-xs text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
+            ← Volver al dashboard clásico
+          </Link>
+        </div>
       </div>
 
-      {/* KPI row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {isAdmin ? (
-          <KPICard
-            label="Pipeline activo"
-            value={COPshort(pipeline.value)}
-            hint={`${pipeline.count} deal${pipeline.count !== 1 ? 's' : ''} abiertos`}
-            icon={TrendingUp}
-            accent="blue"
-            to="/crm"
-          />
-        ) : null}
-        {isAdmin ? (
-          <KPICard
-            label="Ingresos del mes"
-            value={COPshort(finance.totalIncome)}
-            hint={`Gastos: ${COPshort(finance.totalExpenses)}`}
+      {/* ============ ADMIN: Grid de 10 KPIs (igual al clásico) ============ */}
+      {isAdmin && (
+        <div className="grid gap-3 grid-cols-2 lg:grid-cols-5">
+          <StatCard
+            title={`Ingresos ${currentMonthName}`}
+            value={formatMoney(monthly.income, hideFinances)}
             icon={DollarSign}
-            accent="emerald"
+            variant="success"
             to="/finanzas"
           />
-        ) : null}
-        <KPICard
-          label={isAdmin ? 'Tareas overdue' : 'Mis tareas overdue'}
-          value={String(tasksKPI.overdue.length)}
-          hint={`${tasksKPI.doneThisMonth.length} completadas este mes`}
-          icon={CheckCircle2}
-          accent={tasksKPI.overdue.length > 0 ? 'amber' : 'emerald'}
-          to="/tareas"
-        />
-        <KPICard
-          label="Bots WhatsApp"
-          value={`${botsKPI.online}/${botsKPI.total}`}
-          hint={
-            botsKPI.alertas > 0
-              ? `${botsKPI.citas} citas · ⚠ ${botsKPI.alertas} alertas`
-              : `${botsKPI.citas} citas activas`
-          }
-          icon={Bot}
-          accent={botsKPI.alertas > 0 ? 'amber' : 'violet'}
-          to="/agentes"
-        />
-      </div>
+          <StatCard
+            title={`Gastos ${currentMonthName}`}
+            value={formatMoney(monthly.expenses, hideFinances)}
+            icon={TrendingUp}
+            variant="warning"
+            to="/finanzas"
+          />
+          <StatCard
+            title={`Beneficio ${currentMonthName}`}
+            value={formatMoney(monthly.profit, hideFinances)}
+            icon={BarChart3}
+            variant={profitVariant}
+            to="/finanzas"
+          />
+          <StatCard
+            title="MRR Servicios"
+            value={formatMoney(services.totalMRR, hideFinances)}
+            subtitle={hideFinances ? '•• clientes' : `${services.clientsWithServices} clientes`}
+            icon={TrendingUp}
+            variant="primary"
+            to="/servicios"
+          />
+          <StatCard
+            title="Clientes Activos"
+            value={String(clientsKPI.active)}
+            subtitle={`de ${clientsKPI.total} totales`}
+            icon={Users}
+            variant="primary"
+            to="/clientes"
+          />
+          <StatCard
+            title="Pipeline de Ventas"
+            value={String(pipeline.total || pipeline.count)}
+            subtitle="oportunidades activas"
+            icon={Target}
+            variant="primary"
+            to="/crm"
+          />
+          <StatCard
+            title="Tareas Equipo"
+            value={String(tasksKPI.teamPending)}
+            subtitle="pendientes"
+            icon={CheckSquare}
+            variant="warning"
+            to="/tareas"
+          />
+          <StatCard
+            title="En Progreso"
+            value={String(tasksKPI.teamInProgress)}
+            subtitle="trabajando ahora"
+            icon={Clock}
+            variant="primary"
+            to="/tareas"
+          />
+          <StatCard
+            title="Completadas"
+            value={String(tasksKPI.teamDone)}
+            subtitle="tareas totales"
+            icon={Briefcase}
+            variant="success"
+            to="/tareas"
+          />
+          <StatCard
+            title="Mi Productividad"
+            value={`${tasksKPI.productivity}%`}
+            subtitle={`${tasksKPI.myDone} de ${tasksKPI.myTotal} tareas`}
+            icon={TrendingUp}
+            variant={productivityVariant}
+            to="/tareas"
+          />
+        </div>
+      )}
 
-      {/* Row 2: Top clientes + Estado bots */}
+      {/* ============ USER (no admin): KPI personalizado simple ============ */}
+      {!isAdmin && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Mis tareas overdue"
+            value={String(tasksKPI.overdue.length)}
+            subtitle={`${tasksKPI.doneThisMonth.length} completadas este mes`}
+            icon={CheckCircle2}
+            variant={tasksKPI.overdue.length > 0 ? 'warning' : 'success'}
+            to="/tareas"
+          />
+          <StatCard
+            title="Mis tareas totales"
+            value={String(tasksKPI.myTotal)}
+            subtitle={`${tasksKPI.myDone} completadas`}
+            icon={CheckSquare}
+            variant="primary"
+            to="/tareas"
+          />
+          <StatCard
+            title="Mi productividad"
+            value={`${tasksKPI.productivity}%`}
+            subtitle={`${tasksKPI.myDone} de ${tasksKPI.myTotal} tareas`}
+            icon={TrendingUp}
+            variant={productivityVariant}
+            to="/tareas"
+          />
+          <StatCard
+            title="Bots WhatsApp"
+            value={`${botsKPI.online}/${botsKPI.total}`}
+            subtitle={
+              botsKPI.alertas > 0
+                ? `${botsKPI.citas} citas · ⚠ ${botsKPI.alertas}`
+                : `${botsKPI.citas} citas activas`
+            }
+            icon={Bot}
+            variant={botsKPI.alertas > 0 ? 'warning' : 'primary'}
+            to="/agentes"
+          />
+        </div>
+      )}
+
+      {/* ============ Dinero Disponible (admin) ============ */}
+      {isAdmin && disponible.length > 0 && (
+        <section>
+          <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 overflow-hidden">
+            <button
+              onClick={() => setShowAccounts((p) => !p)}
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-primary/5 transition-colors text-left"
+            >
+              <div className="flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-primary" />
+                <span className="font-semibold text-foreground">Dinero Disponible</span>
+                <ChevronRight
+                  className={cn(
+                    'h-4 w-4 text-muted-foreground transition-transform',
+                    showAccounts && 'rotate-90'
+                  )}
+                />
+              </div>
+              <span className="text-xl font-bold text-primary tabular-nums">
+                {formatMoney(totalDisponible, hideFinances)}
+              </span>
+            </button>
+            {showAccounts && (
+              <div className="px-5 pb-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                {disponible
+                  .filter((c) => c.saldo > 0)
+                  .map((cuenta) => (
+                    <div
+                      key={cuenta.cuenta}
+                      className="p-3 rounded-lg bg-card border border-border hover:shadow-md transition-all"
+                    >
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <Building2 className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-[11px] font-medium text-muted-foreground truncate">
+                          {cuenta.cuenta}
+                        </span>
+                      </div>
+                      <p className="text-sm font-bold text-foreground tabular-nums">
+                        {formatMoney(cuenta.saldo, hideFinances)}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ============ Row: Top clientes + Estado bots ============ */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Top clientes del mes */}
+        {/* Top 5 clientes del mes */}
         {isAdmin && (
           <section>
             <SectionHeader
@@ -412,7 +689,9 @@ export default function ExecutiveDashboard() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-foreground truncate">{c.nombre}</div>
                     </div>
-                    <div className="text-sm font-bold tabular-nums">{COPshort(c.total)}</div>
+                    <div className="text-sm font-bold tabular-nums">
+                      {hideFinances ? '••••••' : COPshort(c.total)}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -422,11 +701,7 @@ export default function ExecutiveDashboard() {
 
         {/* Estado de bots WhatsApp */}
         <section>
-          <SectionHeader
-            title="Bots WhatsApp"
-            subtitle="Estado y actividad de hoy"
-            to="/agentes"
-          />
+          <SectionHeader title="Bots WhatsApp" subtitle="Estado y actividad de hoy" to="/agentes" />
           {agents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
               No hay bots configurados.
@@ -436,8 +711,7 @@ export default function ExecutiveDashboard() {
               {agents.map((a) => {
                 const activo =
                   a.stats?.estado?.activo === true || a.stats?.bot_activo === true;
-                const alertCount =
-                  Number(a.stats?.alertas_abiertas ?? a.stats?.pendientes ?? 0);
+                const alertCount = Number(a.stats?.alertas_abiertas ?? a.stats?.pendientes ?? 0);
                 const summary = (() => {
                   if (a.stats?.conversaciones) {
                     return `${a.stats.conversaciones.inbound_hoy ?? 0} in / ${a.stats.conversaciones.outbound_hoy ?? 0} out hoy`;
@@ -505,7 +779,7 @@ export default function ExecutiveDashboard() {
         </section>
       </div>
 
-      {/* Row 3: Tareas overdue */}
+      {/* ============ Tareas overdue ============ */}
       <section>
         <SectionHeader
           title={isAdmin ? 'Tareas overdue del equipo' : 'Mis tareas overdue'}
@@ -553,32 +827,44 @@ export default function ExecutiveDashboard() {
         )}
       </section>
 
-      {/* Accesos rápidos */}
+      {/* ============ Accesos rápidos ============ */}
       <section>
         <SectionHeader title="Accesos rápidos" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link to="/tareas" className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all">
+          <Link
+            to="/tareas"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+          >
             <Sparkles className="h-5 w-5 text-violet-500" />
             <div>
               <div className="text-sm font-medium">Crear tarea con IA</div>
               <div className="text-[11px] text-muted-foreground">Describe en lenguaje natural</div>
             </div>
           </Link>
-          <Link to="/crm" className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all">
+          <Link
+            to="/crm"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+          >
             <Building2 className="h-5 w-5 text-blue-500" />
             <div>
               <div className="text-sm font-medium">Ventas</div>
               <div className="text-[11px] text-muted-foreground">Pipeline y oportunidades</div>
             </div>
           </Link>
-          <Link to="/procesos" className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all">
+          <Link
+            to="/procesos"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+          >
             <Activity className="h-5 w-5 text-violet-500" />
             <div>
               <div className="text-sm font-medium">Procesos</div>
               <div className="text-[11px] text-muted-foreground">PM2 admin del VPS</div>
             </div>
           </Link>
-          <Link to="/finanzas" className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all">
+          <Link
+            to="/finanzas"
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+          >
             <DollarSign className="h-5 w-5 text-emerald-500" />
             <div>
               <div className="text-sm font-medium">Finanzas</div>
