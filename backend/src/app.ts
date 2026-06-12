@@ -23,6 +23,7 @@ import adsRoutes from './routes/ads.routes';
 import agentsRoutes from './routes/agents.routes';
 import cronsRoutes from './routes/crons.routes';
 import tasksAIRoutes from './routes/tasksAI.routes';
+import processesRoutes from './routes/processes.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -67,6 +68,7 @@ app.use('/api/ads', adsRoutes);
 app.use('/api/agents', agentsRoutes);
 app.use('/api/crons', cronsRoutes);
 app.use('/api/tasks-ai', tasksAIRoutes);
+app.use('/api/processes', processesRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
