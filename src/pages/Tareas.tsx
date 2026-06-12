@@ -3305,6 +3305,15 @@ export default function Tareas() {
                         <CheckSquare className="h-4 w-4" />
                       </Button>
                       <Button
+                        variant="outline"
+                        onClick={() => { resetForm(); setIsAIDialogOpen(true); }}
+                        className="h-9 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700"
+                        title="Pega un párrafo y la IA llena los campos"
+                      >
+                        <Sparkles className="h-4 w-4 mr-1.5" />
+                        Crear con IA
+                      </Button>
+                      <Button
                         onClick={() => { resetForm(); setIsDialogOpen(true); }}
                         className="h-9"
                       >
@@ -3708,6 +3717,18 @@ export default function Tareas() {
                     className="flex-shrink-0"
                   >
                     <CheckSquare className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      resetForm();
+                      setIsAIDialogOpen(true);
+                    }}
+                    className="flex-shrink-0 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700"
+                    title="Pega un párrafo y la IA llena los campos"
+                  >
+                    <Sparkles className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">Crear con IA</span>
                   </Button>
                   <Button
                     onClick={() => {
