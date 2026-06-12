@@ -333,8 +333,8 @@ export default function ExecutiveDashboard() {
           </h1>
           <p className="text-muted-foreground capitalize mt-1">{todayFormatted}</p>
         </div>
-        <Link to="/dashboard-classic" className="text-xs text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
-          Ver dashboard clásico
+        <Link to="/" className="text-xs text-muted-foreground hover:text-primary underline-offset-4 hover:underline">
+          ← Volver al dashboard clásico
         </Link>
       </div>
 

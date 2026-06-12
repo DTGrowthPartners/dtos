@@ -67,9 +67,9 @@ const App = () => (
 
             {/* Main App Routes */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              <Route path="/" element={<ExecutiveDashboard />} />
-              <Route path="/dashboard" element={<ExecutiveDashboard />} />
-              <Route path="/dashboard-classic" element={<Dashboard />} />
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/dashboard-executive" element={<ExecutiveDashboard />} />
               <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
