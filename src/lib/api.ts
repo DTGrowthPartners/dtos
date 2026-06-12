@@ -63,8 +63,17 @@ class ApiClient {
       }
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Request failed');
+        // El backend usa varios formatos: { error: "..." }, { message: "..." } o { success: false, error: "..." }
+        // Intentamos extraer el mejor mensaje disponible para mostrar al usuario.
+        let message = `Request failed (${response.status})`;
+        try {
+          const body = await response.json();
+          message = body.error || body.message || body.details || message;
+        } catch {
+          // Si el body no es JSON, usamos el statusText
+          message = response.statusText || message;
+        }
+        throw new Error(message);
       }
 
       // Handle 204 No Content responses

@@ -14,6 +14,18 @@ const aiClient = new OpenAI({
 });
 
 const MODEL = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2';
+/**
+ * Cadena de modelos gratuitos para intentar en orden cuando el principal falla
+ * por creditos (402) o rate limit (429). Los models :free de OpenRouter tienen
+ * cuotas estrictas que se rotan por minuto y por dia, asi que tener varios
+ * candidatos da resilencia.
+ */
+const MODEL_FALLBACK_CHAIN: string[] = (process.env.OPENROUTER_MODEL_FALLBACK_CHAIN || [
+  'openai/gpt-oss-120b:free',
+  'qwen/qwen3-next-80b-a3b-instruct:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'google/gemma-4-31b-it:free',
+].join(',')).split(',').map((s) => s.trim()).filter(Boolean);
 
 const TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Mariana', 'Jose', 'Anderson', 'Edgardo', 'Jhonathan'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'] as const;
@@ -38,57 +50,21 @@ export interface ParsedTask {
   type: string | null;
 }
 
-/** Construye el system prompt incluyendo la fecha actual de Bogotá. */
+/** System prompt compacto — minimiza tokens de entrada (OpenRouter cobra por max_tokens upfront). */
 const buildSystemPrompt = (): string => {
+  // Solo necesitamos YYYY-MM-DD y dia de la semana para que la AI calcule fechas relativas.
   const nowBogota = new Date().toLocaleString('en-CA', {
     timeZone: 'America/Bogota',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    weekday: 'long',
-    hour12: false,
+    weekday: 'short',
   });
-
-  return `Eres un asistente que extrae información estructurada de descripciones de tareas en español.
-
-CONTEXTO TEMPORAL:
-- Ahora mismo es: ${nowBogota} (zona horaria America/Bogota, UTC-5)
-- Cuando el usuario diga fechas relativas ("mañana", "el lunes", "en 2 días", "hoy", "pasado mañana"), calcula la fecha exacta basándote en esta fecha.
-
-EQUIPO DISPONIBLE (debes asignar SOLO con el nombre exacto de esta lista, respetando tildes):
-${TEAM_MEMBERS.map((m) => `- ${m}`).join('\n')}
-Variantes aceptadas: "Lia" → "Lía", "Jhonatan" → "Jhonathan".
-
-PRIORIDADES VÁLIDAS: ${PRIORITIES.join(', ')}.
-Reglas:
-- HIGH si dice: "urgente", "lo antes posible", "ASAP", "crítico", "para hoy", "prioridad".
-- LOW si dice: "cuando puedas", "sin prisa", "low", "no urgente".
-- MEDIUM por defecto.
-
-TIPOS VÁLIDOS: ${TYPES.join(', ')}.
-Reglas:
-- Si menciona "reunión", "cita", "llamada" → Cliente/Reuniones
-- Si menciona "diseño", "logo", "banner" → Diseño
-- Si menciona "video", "edición" → Video/Multimedia
-- Si menciona "copy", "texto", "guión" → Copywriting
-- Si menciona "campaña", "ads", "anuncio" → Publicidad/Ads
-- Si menciona "reporte", "QC", "revisar" → Revisión/QC
-- Si menciona "contenido", "post", "Instagram", "TikTok" → Contenido Orgánico
-- Si no se infiere claramente, null.
-
-INSTRUCCIONES DE SALIDA:
-Responde EXCLUSIVAMENTE con un objeto JSON válido (sin texto antes o después, sin markdown, sin \`\`\`). El JSON debe tener exactamente estos campos:
-{
-  "title": string (máx. 80 caracteres, corto y accionable),
-  "description": string (descripción extendida o vacío "" si no hay contexto extra),
-  "assignee": string del equipo exacto o null,
-  "priority": "LOW" | "MEDIUM" | "HIGH",
-  "dueDate": "YYYY-MM-DD" o null,
-  "dueTime": "HH:mm" (24h) o null,
-  "type": uno de la lista de TIPOS o null
-}`;
+  return `Extrae JSON de la tarea descrita por el usuario. Hoy: ${nowBogota} (America/Bogota).
+Equipo (usa nombre exacto, Lia=Lía, Jhonatan=Jhonathan): ${TEAM_MEMBERS.join(', ')}.
+Prioridad: HIGH si "urgente/ASAP/crítico", LOW si "sin prisa/cuando puedas", sino MEDIUM.
+Tipo: ${TYPES.join(' | ')} o null.
+Responde SOLO JSON: {"title":"max 80c","description":"contexto o \\"\\"","assignee":"nombre o null","priority":"LOW|MEDIUM|HIGH","dueDate":"YYYY-MM-DD o null","dueTime":"HH:mm o null","type":"tipo o null"}`;
 };
 
 const SCHEMA_FALLBACK: ParsedTask = {
@@ -151,15 +127,61 @@ export const parseTaskFromText = async (text: string): Promise<ParsedTask> => {
     return SCHEMA_FALLBACK;
   }
 
-  const completion = await aiClient.chat.completions.create({
-    model: MODEL,
-    messages: [
-      { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: trimmed },
-    ],
-    temperature: 0.2,
-    max_tokens: 400,
-  });
+  const callModel = (model: string) =>
+    aiClient.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: buildSystemPrompt() },
+        { role: 'user', content: trimmed },
+      ],
+      temperature: 0.2,
+      max_tokens: 250,
+    });
+
+  // Orden de modelos a intentar: principal -> cadena de fallbacks (gratis).
+  const modelChain = [MODEL, ...MODEL_FALLBACK_CHAIN.filter((m) => m !== MODEL)];
+  let completion: Awaited<ReturnType<typeof callModel>> | null = null;
+  let lastErr: any = null;
+
+  for (const model of modelChain) {
+    try {
+      completion = await callModel(model);
+      if (model !== MODEL) {
+        console.warn(`[tasks-ai] usado fallback ${model} (principal ${MODEL} no disponible)`);
+      }
+      break;
+    } catch (err: any) {
+      lastErr = err;
+      const status = err?.status || err?.response?.status;
+      // Solo seguimos al siguiente modelo si el problema es transitorio o si
+      // el modelo no existe (404). Si la API key esta mal (401/403) o request
+      // invalido (400), no tiene sentido reintentar.
+      if (status !== 402 && status !== 429 && status !== 503 && status !== 404) {
+        break;
+      }
+      console.warn(`[tasks-ai] ${model} fallo con ${status}, probando siguiente...`);
+    }
+  }
+
+  if (!completion) {
+    const status = lastErr?.status || lastErr?.response?.status;
+    if (status === 402) {
+      throw Object.assign(
+        new Error('Sin créditos en OpenRouter y todos los modelos gratuitos están saturados. Recarga la cuenta o espera unos minutos: https://openrouter.ai/settings/credits'),
+        { status: 402 }
+      );
+    }
+    if (status === 429) {
+      throw Object.assign(new Error('Todos los modelos disponibles están saturados (rate limit). Intenta en unos segundos.'), { status: 429 });
+    }
+    if (status === 401 || status === 403) {
+      throw Object.assign(new Error('OPENROUTER_API_KEY inválida o sin permisos.'), { status: 502 });
+    }
+    if (status === 400) {
+      throw Object.assign(new Error('El modelo rechazó la petición. Probable: contexto demasiado largo.'), { status: 502 });
+    }
+    throw lastErr || new Error('No se pudo conectar con ningún modelo de IA');
+  }
 
   const content = completion.choices?.[0]?.message?.content?.trim();
   if (!content) {
