@@ -31,6 +31,8 @@ const pathNames: Record<string, string> = {
   '/agentes': 'Agentes',
   '/crons': 'Crons',
   '/procesos': 'Procesos',
+  '/vps': 'VPS Health',
+  '/logs': 'Logs',
   '/apps': 'Centro de Apps',
   '/perfil': 'Mi Perfil',
 };

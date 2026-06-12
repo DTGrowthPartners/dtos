@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/contexts/SidebarContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
+import ExecutiveDashboard from "@/pages/ExecutiveDashboard";
 import Clientes from "@/pages/Clientes";
 import Servicios from "@/pages/Servicios";
 import Tareas from "@/pages/Tareas";
@@ -22,6 +23,8 @@ import Apps from "@/pages/Apps";
 import Agentes from "@/pages/Agentes";
 import Crons from "@/pages/Crons";
 import Procesos from "@/pages/Procesos";
+import Vps from "@/pages/Vps";
+import Logs from "@/pages/Logs";
 // import Brief from "@/pages/Brief"; // Moved to Tareas
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
@@ -64,8 +67,9 @@ const App = () => (
 
             {/* Main App Routes */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<ExecutiveDashboard />} />
+              <Route path="/dashboard" element={<ExecutiveDashboard />} />
+              <Route path="/dashboard-classic" element={<Dashboard />} />
               <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
@@ -82,6 +86,8 @@ const App = () => (
               <Route path="/agentes" element={<ProtectedRoute requiredPermission="agentes"><Agentes /></ProtectedRoute>} />
               <Route path="/crons" element={<ProtectedRoute requiredPermission="crons"><Crons /></ProtectedRoute>} />
               <Route path="/procesos" element={<ProtectedRoute requiredPermission="procesos"><Procesos /></ProtectedRoute>} />
+              <Route path="/vps" element={<ProtectedRoute requiredPermission="vps"><Vps /></ProtectedRoute>} />
+              <Route path="/logs" element={<ProtectedRoute requiredPermission="logs"><Logs /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

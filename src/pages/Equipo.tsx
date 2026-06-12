@@ -52,6 +52,8 @@ const MODULE_PERMISSIONS = [
   { value: 'agentes', label: 'Agentes (WhatsApp bots)' },
   { value: 'crons', label: 'Crons (tareas programadas)' },
   { value: 'procesos', label: 'Procesos (PM2 admin)' },
+  { value: 'vps', label: 'VPS Health (recursos del servidor)' },
+  { value: 'logs', label: 'Logs (tail de archivos)' },
 ] as const;
 
 // Permisos por defecto para nuevos usuarios (todos excepto finanzas y equipo)
