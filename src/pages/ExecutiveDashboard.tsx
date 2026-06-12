@@ -22,7 +22,17 @@ import {
   Wallet,
   Eye,
   EyeOff,
+  UserCheck,
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -179,7 +189,7 @@ function SectionHeader({
   subtitle,
   to,
 }: {
-  title: string;
+  title: React.ReactNode;
   subtitle?: string;
   to?: string;
 }) {
@@ -429,6 +439,63 @@ export default function ExecutiveDashboard() {
       .map(([nombre, total]) => ({ nombre, total }));
   }, [financeData, isAdmin, today]);
 
+  // Carga de trabajo por miembro del equipo (top 6, agrupado por status)
+  const teamWorkload = useMemo(() => {
+    const map = new Map<string, { pending: number; inProgress: number; completed: number }>();
+    tasks.forEach((t) => {
+      if (!t.assignee) return;
+      const cur = map.get(t.assignee) || { pending: 0, inProgress: 0, completed: 0 };
+      if (t.status === TaskStatus.DONE) cur.completed++;
+      else if (t.status === TaskStatus.IN_PROGRESS) cur.inProgress++;
+      else cur.pending++;
+      map.set(t.assignee, cur);
+    });
+    return Array.from(map.entries())
+      .map(([name, d]) => ({
+        name,
+        pending: d.pending,
+        inProgress: d.inProgress,
+        completed: d.completed,
+        total: d.pending + d.inProgress + d.completed,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+  }, [tasks]);
+
+  // Tendencia de ingresos/gastos de los ultimos 6 meses
+  const incomeByMonth = useMemo(() => {
+    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    const monthMap = new Map<string, { income: number; expenses: number }>();
+    const addAll = (arr: FinanceTransactionFull[] | undefined, kind: 'income' | 'expenses') => {
+      for (const t of arr || []) {
+        if (!t.fecha) continue;
+        if (t.categoria === 'AJUSTE SALDO') continue;
+        const date = new Date(t.fecha);
+        if (Number.isNaN(date.getTime())) continue;
+        const key = `${months[date.getMonth()]} ${date.getFullYear()}`;
+        const cur = monthMap.get(key) || { income: 0, expenses: 0 };
+        cur[kind] += t.importe || 0;
+        monthMap.set(key, cur);
+      }
+    };
+    addAll(financeData.ingresos, 'income');
+    addAll(financeData.gastos, 'expenses');
+
+    const now = today;
+    const result = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
+      const data = monthMap.get(key) || { income: 0, expenses: 0 };
+      result.push({
+        month: months[d.getMonth()],
+        income: data.income,
+        expenses: data.expenses,
+      });
+    }
+    return result;
+  }, [financeData, today]);
+
   // Tareas overdue ordenadas
   const overdueList = useMemo(() => {
     return [...tasksKPI.overdue]
@@ -657,6 +724,77 @@ export default function ExecutiveDashboard() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ============ Charts: Tendencia ingresos + Carga equipo ============ */}
+      {isAdmin && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Tendencia de Ingresos (6 meses) */}
+          <section>
+            <SectionHeader title="Tendencia de Ingresos (6 meses)" />
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="h-[260px]">
+                {hideFinances ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground">
+                    <div className="text-center">
+                      <EyeOff className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm">Valores ocultos</p>
+                    </div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={incomeByMonth}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} />
+                      <RechartsTooltip
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      />
+                      <Bar dataKey="income" name="Ingresos" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="expenses" name="Gastos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Carga de trabajo del equipo */}
+          <section>
+            <SectionHeader
+              title={
+                <span className="flex items-center gap-2">
+                  <UserCheck className="h-4 w-4" />
+                  Carga de Trabajo del Equipo
+                </span>
+              }
+            />
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="h-[260px]">
+                {teamWorkload.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                    Sin tareas asignadas todavía.
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={teamWorkload} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                      <XAxis type="number" tick={{ fontSize: 11 }} allowDecimals={false} />
+                      <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={80} />
+                      <RechartsTooltip
+                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                      />
+                      <Bar dataKey="pending" name="Pendientes" stackId="a" fill="#f59e0b" />
+                      <Bar dataKey="inProgress" name="En Curso" stackId="a" fill="#3b82f6" />
+                      <Bar dataKey="completed" name="Completadas" stackId="a" fill="#22c55e" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
       )}
 
       {/* ============ Row: Top clientes + Estado bots ============ */}
