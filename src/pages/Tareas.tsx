@@ -148,6 +148,8 @@ import {
 import NoteColumn from '@/components/notes/NoteColumn';
 import NoteColumnModal from '@/components/notes/NoteColumnModal';
 import NoteItemModal from '@/components/notes/NoteItemModal';
+import AITaskDialog, { type ParsedTask as AIParsedTask } from '@/components/tasks/AITaskDialog';
+import { Sparkles } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import {
@@ -280,6 +282,7 @@ export default function Tareas() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1898,6 +1901,36 @@ export default function Tareas() {
     setDuplicatingTask(null);
   };
 
+  // Aplica los campos parseados por IA al formData y abre el TaskDialog
+  // para que el usuario revise/edite antes de guardar.
+  const handleAIParsed = (parsed: AIParsedTask, originalText: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      title: parsed.title || prev.title,
+      description: parsed.description || originalText,
+      priority:
+        parsed.priority === 'HIGH'
+          ? Priority.HIGH
+          : parsed.priority === 'LOW'
+            ? Priority.LOW
+            : Priority.MEDIUM,
+      assignee: (parsed.assignee as TeamMemberName) || prev.assignee,
+      type: (parsed.type as TaskType | '') || '',
+      dueDate: parsed.dueDate || '',
+      dueTime: parsed.dueTime || '',
+      // El proyecto sigue siendo el filtrado actual (o vacio)
+      projectId: filterProject !== 'all' ? filterProject : prev.projectId,
+    }));
+    setEditingTask(null);
+    setDuplicatingTask(null);
+    // Abrir el dialog normal para revisar
+    setIsDialogOpen(true);
+    toast({
+      title: '✨ Tarea interpretada',
+      description: 'Revisa los campos y guarda cuando esté listo.',
+    });
+  };
+
   // Drag and Drop handlers
   // ============= DRAG & DROP CON REORDENAMIENTO MANUAL =============
   // Implementacion HTML5 nativa con los 4 trucos:
@@ -3129,6 +3162,38 @@ export default function Tareas() {
               >
                 <Plus className="h-3 w-3 mr-1" />
                 Nueva Tarea
+              </Button>
+            )}
+
+            {/* Boton IA — pega un parrafo y la IA llena los campos */}
+            {sidebarCollapsed ? (
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700"
+                    size="icon"
+                    onClick={() => {
+                      resetForm();
+                      setIsAIDialogOpen(true);
+                    }}
+                  >
+                    <Sparkles className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">Crear con IA</TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full h-8 text-xs border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700"
+                onClick={() => {
+                  resetForm();
+                  setIsAIDialogOpen(true);
+                }}
+              >
+                <Sparkles className="h-3 w-3 mr-1" />
+                Crear con IA
               </Button>
             )}
           </div>
@@ -5695,6 +5760,13 @@ export default function Tareas() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de creacion de tareas con IA */}
+      <AITaskDialog
+        open={isAIDialogOpen}
+        onOpenChange={setIsAIDialogOpen}
+        onParsed={handleAIParsed}
+      />
     </div>
   );
 }
