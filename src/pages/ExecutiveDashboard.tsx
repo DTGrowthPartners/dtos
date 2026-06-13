@@ -57,11 +57,17 @@ interface FinanceTransactionFull {
   categoria?: string;
   terceroNombre?: string;
 }
+interface MonthPoint {
+  month: string;
+  income: number;
+  expenses: number;
+}
 interface FinanceData {
   totalIncome: number;
   totalExpenses: number;
   ingresos?: FinanceTransactionFull[];
   gastos?: FinanceTransactionFull[];
+  financeByMonth?: MonthPoint[];
 }
 interface CuentaDisponible {
   cuenta: string;
@@ -464,39 +470,11 @@ export default function ExecutiveDashboard() {
       .slice(0, 6);
   }, [tasks]);
 
-  // Tendencia de ingresos/gastos de los ultimos 6 meses
-  const incomeByMonth = useMemo(() => {
-    const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    const monthMap = new Map<string, { income: number; expenses: number }>();
-    const addAll = (arr: FinanceTransactionFull[] | undefined, kind: 'income' | 'expenses') => {
-      for (const t of arr || []) {
-        if (!t.fecha) continue;
-        if (t.categoria === 'AJUSTE SALDO') continue;
-        const date = new Date(t.fecha);
-        if (Number.isNaN(date.getTime())) continue;
-        const key = `${months[date.getMonth()]} ${date.getFullYear()}`;
-        const cur = monthMap.get(key) || { income: 0, expenses: 0 };
-        cur[kind] += t.importe || 0;
-        monthMap.set(key, cur);
-      }
-    };
-    addAll(financeData.ingresos, 'income');
-    addAll(financeData.gastos, 'expenses');
-
-    const now = today;
-    const result = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
-      const data = monthMap.get(key) || { income: 0, expenses: 0 };
-      result.push({
-        month: months[d.getMonth()],
-        income: data.income,
-        expenses: data.expenses,
-      });
-    }
-    return result;
-  }, [financeData, today]);
+  // Tendencia de ingresos/gastos: el backend ya devuelve financeByMonth
+  // pre-agregado y correcto (ultimos 6 meses, en orden cronologico).
+  const incomeByMonth = useMemo<MonthPoint[]>(() => {
+    return financeData.financeByMonth || [];
+  }, [financeData]);
 
   // Tareas overdue ordenadas
   const overdueList = useMemo(() => {
