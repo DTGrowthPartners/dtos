@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Loader2, Lightbulb, ListChecks, Check, ChevronLeft, Calendar } from 'lucide-react';
+import { Sparkles, Loader2, Lightbulb, ListChecks, Check, ChevronLeft, Calendar, Mic } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import MicButton from '@/components/MicButton';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth';
@@ -240,19 +241,33 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
             </DialogHeader>
 
             <div className="space-y-3 py-2">
-              <Textarea
-                placeholder={'Una tarea: "Mañana 3 PM revisar reporte con Dairo, urgente, asignar a Stiven."\n\nO pega una lista:\n- enviar cuenta cobro Fabio\n- propuesta agentes equilibrio\n- reunión Jhonatan'}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="min-h-[160px] resize-y"
-                maxLength={4000}
-                autoFocus
-                disabled={loading}
-              />
+              <div className="relative">
+                <Textarea
+                  placeholder={'Una tarea: "Mañana 3 PM revisar reporte con Dairo, urgente, asignar a Stiven."\n\nO pega/dicta una lista:\n- enviar cuenta cobro Fabio\n- propuesta agentes equilibrio\n- reunión Jhonatan'}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  className="min-h-[160px] resize-y pr-12"
+                  maxLength={4000}
+                  autoFocus
+                  disabled={loading}
+                />
+                {/* Mic: dicta y se agrega al texto */}
+                <div className="absolute top-2 right-2">
+                  <MicButton
+                    disabled={loading}
+                    title="Dictar (voz a texto)"
+                    onTranscribed={(t) =>
+                      setText((prev) => (prev.trim() ? prev.replace(/\s*$/, '') + '\n' + t : t))
+                    }
+                  />
+                </div>
+              </div>
               <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                 <span>
                   <kbd className="px-1.5 py-0.5 bg-muted rounded border border-border font-mono text-[10px]">Ctrl+Enter</kbd> para interpretar
+                  <span className="mx-1.5">·</span>
+                  <Mic className="h-3 w-3 inline -mt-0.5" /> dicta con el micrófono
                   {countListLines(text) >= 2 && (
                     <span className="ml-2 text-violet-500">· {countListLines(text)} tareas detectadas</span>
                   )}

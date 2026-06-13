@@ -27,6 +27,7 @@ import processesRoutes from './routes/processes.routes';
 import vpsRoutes from './routes/vps.routes';
 import logsRoutes from './routes/logs.routes';
 import cobrosRoutes from './routes/cobros.routes';
+import transcribeRoutes from './routes/transcribe.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -75,6 +76,7 @@ app.use('/api/processes', processesRoutes);
 app.use('/api/vps', vpsRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/cobros', cobrosRoutes);
+app.use('/api/transcribe', transcribeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -151,6 +151,7 @@ import NoteItemModal from '@/components/notes/NoteItemModal';
 import AITaskDialog, { type ParsedTask as AIParsedTask } from '@/components/tasks/AITaskDialog';
 import { Sparkles } from 'lucide-react';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
+import MicButton from '@/components/MicButton';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import {
@@ -5047,22 +5048,48 @@ export default function Tareas() {
               {/* Title */}
               <div className="space-y-2">
                 <Label htmlFor="title">Título *</Label>
-                <Input
-                  id="title"
-                  placeholder="Título de la tarea"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                  disabled={isSaving}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    id="title"
+                    placeholder="Título de la tarea"
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    required
+                    disabled={isSaving}
+                    className="flex-1"
+                  />
+                  <MicButton
+                    disabled={isSaving}
+                    title="Dictar título"
+                    onTranscribed={(t) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        title: prev.title.trim() ? prev.title.replace(/\s*$/, '') + ' ' + t : t,
+                      }))
+                    }
+                  />
+                </div>
               </div>
 
               {/* Description */}
               <div className="space-y-2">
-                <Label htmlFor="description">Descripción</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="description">Descripción</Label>
+                  <MicButton
+                    size="sm"
+                    disabled={isSaving}
+                    title="Dictar descripción"
+                    onTranscribed={(t) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        description: prev.description.trim() ? prev.description.replace(/\s*$/, '') + ' ' + t : t,
+                      }))
+                    }
+                  />
+                </div>
                 <Textarea
                   id="description"
-                  placeholder="Descripción de la tarea (puedes pegar imágenes con Ctrl+V)"
+                  placeholder="Descripción de la tarea (puedes pegar imágenes con Ctrl+V o dictar con el micrófono)"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   onPaste={handlePaste}
