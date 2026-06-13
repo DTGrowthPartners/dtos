@@ -479,6 +479,16 @@ export default function Tareas() {
     fetchData();
   }, []);
 
+  // Recargar tareas cuando se crean en bulk desde el dialog de IA (modo lista),
+  // que puede vivir fuera de esta vista (global / dashboard / cmd+k).
+  useEffect(() => {
+    const handler = () => {
+      loadTasks().then(setTasks).catch(() => {});
+    };
+    window.addEventListener('dtos:tasks-changed', handler);
+    return () => window.removeEventListener('dtos:tasks-changed', handler);
+  }, []);
+
   // Handle URL parameters (taskId to edit, action=new to create)
   useEffect(() => {
     const taskId = searchParams.get('taskId');

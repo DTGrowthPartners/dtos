@@ -118,27 +118,25 @@ const sanitize = (raw: any): ParsedTask => ({
   type: normalizeType(raw?.type),
 });
 
-export const parseTaskFromText = async (text: string): Promise<ParsedTask> => {
+/**
+ * Llama al modelo con la cadena de fallback (principal -> modelos gratis) y
+ * devuelve el contenido de texto. Centraliza el manejo de errores de OpenRouter.
+ */
+const chatComplete = async (systemPrompt: string, userContent: string, maxTokens: number): Promise<string> => {
   if (!process.env.OPENROUTER_API_KEY) {
     throw Object.assign(new Error('OpenRouter API key no configurada'), { status: 500 });
   }
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return SCHEMA_FALLBACK;
-  }
-
   const callModel = (model: string) =>
     aiClient.chat.completions.create({
       model,
       messages: [
-        { role: 'system', content: buildSystemPrompt() },
-        { role: 'user', content: trimmed },
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userContent },
       ],
       temperature: 0.2,
-      max_tokens: 250,
+      max_tokens: maxTokens,
     });
 
-  // Orden de modelos a intentar: principal -> cadena de fallbacks (gratis).
   const modelChain = [MODEL, ...MODEL_FALLBACK_CHAIN.filter((m) => m !== MODEL)];
   let completion: Awaited<ReturnType<typeof callModel>> | null = null;
   let lastErr: any = null;
@@ -146,19 +144,12 @@ export const parseTaskFromText = async (text: string): Promise<ParsedTask> => {
   for (const model of modelChain) {
     try {
       completion = await callModel(model);
-      if (model !== MODEL) {
-        console.warn(`[tasks-ai] usado fallback ${model} (principal ${MODEL} no disponible)`);
-      }
+      if (model !== MODEL) console.warn(`[tasks-ai] usado fallback ${model} (principal ${MODEL} no disponible)`);
       break;
     } catch (err: any) {
       lastErr = err;
       const status = err?.status || err?.response?.status;
-      // Solo seguimos al siguiente modelo si el problema es transitorio o si
-      // el modelo no existe (404). Si la API key esta mal (401/403) o request
-      // invalido (400), no tiene sentido reintentar.
-      if (status !== 402 && status !== 429 && status !== 503 && status !== 404) {
-        break;
-      }
+      if (status !== 402 && status !== 429 && status !== 503 && status !== 404) break;
       console.warn(`[tasks-ai] ${model} fallo con ${status}, probando siguiente...`);
     }
   }
@@ -171,34 +162,74 @@ export const parseTaskFromText = async (text: string): Promise<ParsedTask> => {
         { status: 402 }
       );
     }
-    if (status === 429) {
-      throw Object.assign(new Error('Todos los modelos disponibles están saturados (rate limit). Intenta en unos segundos.'), { status: 429 });
-    }
-    if (status === 401 || status === 403) {
-      throw Object.assign(new Error('OPENROUTER_API_KEY inválida o sin permisos.'), { status: 502 });
-    }
-    if (status === 400) {
-      throw Object.assign(new Error('El modelo rechazó la petición. Probable: contexto demasiado largo.'), { status: 502 });
-    }
+    if (status === 429) throw Object.assign(new Error('Todos los modelos disponibles están saturados (rate limit). Intenta en unos segundos.'), { status: 429 });
+    if (status === 401 || status === 403) throw Object.assign(new Error('OPENROUTER_API_KEY inválida o sin permisos.'), { status: 502 });
+    if (status === 400) throw Object.assign(new Error('El modelo rechazó la petición. Probable: contexto demasiado largo.'), { status: 502 });
     throw lastErr || new Error('No se pudo conectar con ningún modelo de IA');
   }
 
   const content = completion.choices?.[0]?.message?.content?.trim();
-  if (!content) {
-    throw Object.assign(new Error('La IA no devolvió contenido'), { status: 502 });
-  }
+  if (!content) throw Object.assign(new Error('La IA no devolvió contenido'), { status: 502 });
+  return content;
+};
 
-  // Intento de parse — algunos modelos a veces envuelven en ```json
+export const parseTaskFromText = async (text: string): Promise<ParsedTask> => {
+  const trimmed = text.trim();
+  if (!trimmed) return SCHEMA_FALLBACK;
+
+  const content = await chatComplete(buildSystemPrompt(), trimmed, 250);
+
   let parsed: any;
   try {
     parsed = JSON.parse(content);
   } catch {
     const match = content.match(/\{[\s\S]*\}/);
-    if (!match) {
-      throw Object.assign(new Error(`Respuesta no es JSON: ${content.slice(0, 200)}`), { status: 502 });
-    }
+    if (!match) throw Object.assign(new Error(`Respuesta no es JSON: ${content.slice(0, 200)}`), { status: 502 });
+    parsed = JSON.parse(match[0]);
+  }
+  return sanitize(parsed);
+};
+
+/** System prompt para interpretar una LISTA de tareas (bullets pegados). */
+const buildListSystemPrompt = (): string => {
+  const nowBogota = new Date().toLocaleString('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+  });
+  return `Recibes una LISTA de tareas (vienen como bullets/lineas, a veces cortas o informales). Para CADA item genera una tarea limpia y accionable.
+Hoy: ${nowBogota} (America/Bogota).
+Reglas:
+- Reescribe el titulo para que sea claro y accionable (empieza con verbo), max 80 chars. Ej: "audios bot dairo" -> "Grabar audios para el bot de Dairo".
+- Equipo (usa nombre exacto, Lia=Lía, Jhonatan=Jhonathan): ${TEAM_MEMBERS.join(', ')}. Si el item menciona a alguien, asignalo; sino assignee=null.
+- Prioridad: HIGH si "urgente/ASAP/hoy/ya", LOW si "sin prisa/cuando puedas", sino MEDIUM.
+- Tipo: ${TYPES.join(' | ')} o null.
+- dueDate "YYYY-MM-DD" o null; dueTime "HH:mm" o null.
+- NO inventes items que no esten en la lista. Un item = una tarea.
+Responde SOLO un JSON: {"tasks":[{"title","description","assignee","priority","dueDate","dueTime","type"}, ...]} sin texto extra ni markdown.`;
+};
+
+export const parseTaskListFromText = async (text: string): Promise<ParsedTask[]> => {
+  const trimmed = text.trim();
+  if (!trimmed) return [];
+
+  // max_tokens generoso porque son varias tareas; cap por seguridad.
+  const content = await chatComplete(buildListSystemPrompt(), trimmed, 1500);
+
+  let parsed: any;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    const match = content.match(/\{[\s\S]*\}/);
+    if (!match) throw Object.assign(new Error(`Respuesta no es JSON: ${content.slice(0, 200)}`), { status: 502 });
     parsed = JSON.parse(match[0]);
   }
 
-  return sanitize(parsed);
+  const arr = Array.isArray(parsed?.tasks) ? parsed.tasks : Array.isArray(parsed) ? parsed : [];
+  return arr
+    .map((t: any) => sanitize(t))
+    .filter((t: ParsedTask) => t.title.trim().length > 0)
+    .slice(0, 40); // cap defensivo
 };

@@ -104,12 +104,6 @@ export function AppSidebar() {
   const location = useLocation();
   const { user } = useAuthStore();
 
-  const getInitials = () => {
-    const first = user?.firstName?.charAt(0) || '';
-    const last = user?.lastName?.charAt(0) || '';
-    return (first + last).toUpperCase() || 'U';
-  };
-
   // Filtrar items segun permisos y descartar grupos vacios
   const canSee = (item: NavItem) => {
     if (user?.role === 'admin') return true;
@@ -161,34 +155,25 @@ export function AppSidebar() {
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        {/* Logo + User Photo */}
-        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-          <div className={cn('flex items-center gap-3', collapsed && 'justify-center w-full lg:w-auto')}>
-            {/* User Photo / Avatar */}
-            <NavLink to="/perfil" className="flex-shrink-0">
-              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden border-2 border-primary/30 hover:border-primary transition-colors">
-                {user?.photoUrl ? (
-                  <img
-                    src={user.photoUrl}
-                    alt="Foto de perfil"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span className="text-sm font-bold text-primary">{getInitials()}</span>
-                )}
-              </div>
-            </NavLink>
+        {/* Logo DTGP (la foto del usuario ya aparece arriba a la derecha en el header) */}
+        <div className="flex h-20 items-center justify-center border-b border-sidebar-border px-3">
+          <NavLink to="/" className="flex flex-col items-center gap-1 w-full">
+            <img
+              src="/img/logo.png"
+              alt="DT Growth Partners"
+              className={cn(
+                'object-contain',
+                collapsed ? 'h-7 w-auto max-w-[44px]' : 'h-9 w-auto max-w-[180px]'
+              )}
+            />
             {!collapsed && (
-              <div className="flex flex-col">
-                <span className="text-base font-bold text-sidebar-foreground">DT-OS</span>
-                <span className="text-xs text-sidebar-muted">v1.0.0</span>
-              </div>
+              <span className="text-[10px] text-sidebar-muted tracking-wide">DT-OS · v1.0.0</span>
             )}
-          </div>
+          </NavLink>
         </div>
 
         {/* Navigation */}
-        <nav className="flex flex-col gap-0.5 p-3 overflow-y-auto h-[calc(100vh-8rem)]">
+        <nav className="flex flex-col gap-0.5 p-3 overflow-y-auto h-[calc(100vh-9rem)]">
           {filteredGroups.map((group, gi) => (
             <div key={group.label || `group-${gi}`} className={cn(gi > 0 && 'mt-3')}>
               {/* Encabezado de grupo (oculto cuando colapsado o sin label) */}
