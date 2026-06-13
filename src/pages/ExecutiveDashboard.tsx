@@ -140,6 +140,36 @@ const greeting = (): string => {
 const monthName = (m: number): string =>
   ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'][m] || '';
 
+// Banco de frases motivacionales. Rota cada 6 horas de forma deterministica
+// (misma frase para todos dentro de la misma ventana de 6h).
+const MOTIVATIONAL_PHRASES = [
+  'El primer paso para recibir ayuda es pedirla.',
+  'Hecho es mejor que perfecto.',
+  'Lo que no se mide, no se mejora.',
+  'La disciplina vence al talento cuando el talento no tiene disciplina.',
+  'Cada cliente feliz es el mejor vendedor que tienes.',
+  'No cuentes los días, haz que los días cuenten.',
+  'La constancia construye lo que la motivación empieza.',
+  'Vender es ayudar a alguien a tomar una buena decisión.',
+  'Un equipo alineado mueve montañas; uno disperso, ni una piedra.',
+  'El dinero llega cuando resuelves problemas reales.',
+  'Hoy es un buen día para cerrar lo que quedó pendiente ayer.',
+  'La calidad no es un acto, es un hábito.',
+  'Pequeñas mejoras diarias generan resultados extraordinarios.',
+  'El mejor momento para hacer seguimiento fue ayer; el segundo mejor es ahora.',
+  'Enfócate en lo importante antes de que se vuelva urgente.',
+  'Tu marca es lo que dicen de ti cuando no estás en la sala.',
+  'No hay clientes pequeños, hay relaciones que apenas empiezan.',
+  'La claridad atrae; la confusión repele.',
+  'Si quieres ir rápido ve solo, si quieres llegar lejos ve acompañado.',
+  'El seguimiento es donde se gana la venta.',
+];
+
+const motivationalPhrase = (): string => {
+  const bucket = Math.floor(Date.now() / (6 * 60 * 60 * 1000));
+  return MOTIVATIONAL_PHRASES[bucket % MOTIVATIONAL_PHRASES.length];
+};
+
 // ========== Componentes auxiliares ==========
 
 type Variant = 'success' | 'warning' | 'primary' | 'destructive' | 'default';
@@ -513,6 +543,10 @@ export default function ExecutiveDashboard() {
             {greeting()}, {userName} 👋
           </h1>
           <p className="text-muted-foreground capitalize mt-1">{todayFormatted}</p>
+          <p className="text-sm text-primary/90 italic mt-2 flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 flex-shrink-0" />
+            “{motivationalPhrase()}”
+          </p>
         </div>
         <div className="flex items-center gap-3">
           {isAdmin && (

@@ -2029,7 +2029,12 @@ export default function Tareas() {
     }
 
     const gap = dragOverGap?.status === newStatus ? dragOverGap.index : 0;
-    const sourceStatus = task.status;
+    // Normalizar al status de la COLUMNA donde realmente se muestra la tarea.
+    // Las tareas con status legacy (ej. 'pending') se bucketean en TODO en
+    // tasksByColumn; si usaramos task.status crudo, tasksByColumn[sourceStatus]
+    // saldria vacio y moveTaskToPosition lanzaria "not found in source column".
+    const KNOWN_COLUMNS: string[] = [TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.DONE];
+    const sourceStatus = KNOWN_COLUMNS.includes(task.status) ? task.status : TaskStatus.TODO;
     const sameColumn = sourceStatus === newStatus;
 
     // Truco 4: si es mismo status y el destino visual esta debajo del origen,

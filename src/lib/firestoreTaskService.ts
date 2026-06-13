@@ -101,10 +101,13 @@ export const moveTaskToPosition = async (
   } else {
     finalSource = sourceColSorted.filter((t) => t.id !== taskId);
     finalTarget = [...targetColSorted];
+    // No mutamos el status aqui; dejamos taskRef con su status real para que
+    // writeColumn detecte la diferencia y lo persista (esto ademas auto-corrige
+    // tareas con status legacy que no coincide con su columna).
     finalTarget.splice(
       Math.min(Math.max(targetPosition, 0), targetColSorted.length),
       0,
-      { ...taskRef, status: targetStatus }
+      taskRef
     );
   }
 
@@ -113,8 +116,9 @@ export const moveTaskToPosition = async (
 
   const writeColumn = (col: Task[], status: string) => {
     col.forEach((t, idx) => {
-      const needsStatusUpdate = t.id === taskId && t.status !== status;
-      // Solo escribir si position cambio o si la tarea movida cambia de status (evita writes innecesarios)
+      // El status real de la tarea difiere del de su columna -> hay que escribirlo.
+      // Cubre tanto la tarea movida (cross-column) como tareas legacy mal etiquetadas.
+      const needsStatusUpdate = t.status !== status;
       if (t.position !== idx || needsStatusUpdate) {
         const payload: Record<string, unknown> = { position: idx };
         if (needsStatusUpdate) payload.status = status;
