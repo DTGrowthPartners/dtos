@@ -160,9 +160,36 @@ class AuthService {
 
   async getToken(): Promise<string | null> {
     // Return the JWT token from backend, not the Firebase ID token
-    const token = useAuthStore.getState().token;
-    console.log('AuthService.getToken():', token ? 'token present' : 'no token');
-    return token;
+    return useAuthStore.getState().token;
+  }
+
+  /**
+   * Renueva el JWT del backend usando la sesion de Firebase (que persiste mucho
+   * mas tiempo que el JWT de 8h). Pide un ID token fresco a Firebase y lo
+   * intercambia por un nuevo JWT del backend.
+   *
+   * Devuelve el nuevo token, o null si Firebase tampoco tiene sesion (en cuyo
+   * caso el usuario debe re-loguearse de verdad).
+   */
+  async refreshToken(): Promise<string | null> {
+    const fbUser = auth.currentUser || useAuthStore.getState().firebaseUser;
+    if (!fbUser) return null;
+    try {
+      const idToken = await fbUser.getIdToken(true); // force refresh del ID token de Firebase
+      const response = await fetch(`${API_URL}/api/auth/firebase-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken }),
+      });
+      if (!response.ok) return null;
+      const data = await response.json();
+      useAuthStore.getState().setUser(data.user);
+      useAuthStore.getState().setToken(data.token);
+      return data.token as string;
+    } catch (error) {
+      console.error('Error renovando token:', error);
+      return null;
+    }
   }
 
   isAuthenticated(): boolean {

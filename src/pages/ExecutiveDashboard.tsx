@@ -40,6 +40,7 @@ import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { TaskStatus, type Task } from '@/types/taskTypes';
+import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { cn } from '@/lib/utils';
 
 // ========== Types ==========
@@ -213,6 +214,7 @@ function SectionHeader({
 export default function ExecutiveDashboard() {
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'admin';
+  const openAiTask = useAiTaskStore((s) => s.openPrompt);
 
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState<CRMDeal[]>([]);
@@ -969,16 +971,17 @@ export default function ExecutiveDashboard() {
       <section>
         <SectionHeader title="Accesos rápidos" />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            to="/tareas"
-            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"
+          <button
+            type="button"
+            onClick={() => openAiTask()}
+            className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all text-left"
           >
             <Sparkles className="h-5 w-5 text-violet-500" />
             <div>
               <div className="text-sm font-medium">Crear tarea con IA</div>
               <div className="text-[11px] text-muted-foreground">Describe en lenguaje natural</div>
             </div>
-          </Link>
+          </button>
           <Link
             to="/crm"
             className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 hover:border-primary/40 hover:shadow-md transition-all"

@@ -5,6 +5,7 @@ import { AppHeader } from './AppHeader';
 import { AppFooter } from './AppFooter';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { CommandPalette } from '@/components/CommandPalette';
+import GlobalAiTaskDialog from '@/components/tasks/GlobalAiTaskDialog';
 import LiveChat from '@/components/chat/LiveChat';
 
 export function MainLayout() {
@@ -14,6 +15,9 @@ export function MainLayout() {
     <div className="min-h-screen bg-background">
       {/* Global Command Palette - Ctrl+K */}
       <CommandPalette />
+
+      {/* Dialog global "Crear tarea con IA" (disparado desde Dashboard y Cmd+K) */}
+      <GlobalAiTaskDialog />
 
       <AppSidebar />
       <div

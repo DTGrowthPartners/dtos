@@ -18,9 +18,11 @@ import {
   EyeOff,
   Wallet,
   Building2,
+  Sparkles,
 } from 'lucide-react';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
+import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { apiClient } from '@/lib/api';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { TEAM_MEMBERS, type Task, type TeamMemberName } from '@/types/taskTypes';
@@ -102,6 +104,7 @@ export default function Dashboard() {
   const user = authService.getUser();
   const { user: authUser } = useAuthStore();
   const navigate = useNavigate();
+  const openAiTask = useAiTaskStore((s) => s.openPrompt);
 
   // State for all data
   const [activeClients, setActiveClients] = useState(0);
@@ -515,16 +518,28 @@ export default function Dashboard() {
             </h1>
             <p className="text-muted-foreground">Resumen general del negocio</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={toggleHideFinances}
-            className="gap-2 text-muted-foreground hover:text-foreground"
-            title={hideFinances ? 'Mostrar valores' : 'Ocultar valores'}
-          >
-            {hideFinances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            <span className="hidden sm:inline">{hideFinances ? 'Mostrar' : 'Ocultar'}</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openAiTask()}
+              className="gap-2 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700"
+              title="Crear tarea con IA"
+            >
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">Crear con IA</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleHideFinances}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+              title={hideFinances ? 'Mostrar valores' : 'Ocultar valores'}
+            >
+              {hideFinances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span className="hidden sm:inline">{hideFinances ? 'Mostrar' : 'Ocultar'}</span>
+            </Button>
+          </div>
         </div>
 
         {/* Admin Stats Grid - 10 cards */}
@@ -890,11 +905,23 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">
-          Bienvenido, {user ? user.firstName : 'Usuario'}
-        </h1>
-        <p className="text-muted-foreground">Tu resumen personal de actividades</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Bienvenido, {user ? user.firstName : 'Usuario'}
+          </h1>
+          <p className="text-muted-foreground">Tu resumen personal de actividades</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openAiTask()}
+          className="gap-2 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 hover:text-violet-700 flex-shrink-0"
+          title="Crear tarea con IA"
+        >
+          <Sparkles className="h-4 w-4" />
+          <span className="hidden sm:inline">Crear con IA</span>
+        </Button>
       </div>
 
       {/* User Stats Grid - 4 cards */}

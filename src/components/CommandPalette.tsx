@@ -15,8 +15,10 @@ import {
   Moon,
   Sun,
   Command,
+  Sparkles,
 } from 'lucide-react';
 import { authService } from '@/lib/auth';
+import { useAiTaskStore } from '@/lib/aiTaskStore';
 
 interface CommandItem {
   id: string;
@@ -36,6 +38,7 @@ export function CommandPalette() {
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
   const inputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const openAiTask = useAiTaskStore((s) => s.openPrompt);
 
   const toggleTheme = useCallback(() => {
     const newIsDark = !isDark;
@@ -45,6 +48,15 @@ export function CommandPalette() {
 
   const commands: CommandItem[] = useMemo(() => [
     // Actions first
+    {
+      id: 'action-ai-task',
+      label: 'Crear tarea con IA',
+      description: 'Describe la tarea y la IA llena los campos',
+      icon: <Sparkles className="h-4 w-4" />,
+      action: () => openAiTask(),
+      category: 'actions',
+      keywords: ['ia', 'ai', 'inteligencia', 'crear', 'tarea', 'automatico', 'parrafo'],
+    },
     {
       id: 'action-new-task',
       label: 'Nueva Tarea',
@@ -160,7 +172,7 @@ export function CommandPalette() {
       category: 'settings',
       keywords: ['salir', 'logout', 'exit'],
     },
-  ], [navigate, isDark, toggleTheme]);
+  ], [navigate, isDark, toggleTheme, openAiTask]);
 
   const filteredCommands = useMemo(() => {
     if (!search) return commands;

@@ -23,11 +23,8 @@ class ApiClient {
 
     if (requiresAuth) {
       const token = await authService.getToken();
-      console.log('API Request:', endpoint, 'Token:', token ? 'present' : 'missing');
       if (token) {
         (config.headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
-      } else {
-        console.error('No token available for authenticated request to:', endpoint);
       }
     }
 
@@ -35,31 +32,22 @@ class ApiClient {
       const response = await fetch(`${API_URL}${endpoint}`, config);
 
       if (response.status === 401 && requiresAuth) {
-        try {
-          // Try to get a fresh token
-          const newToken = await authService.getToken();
-          if (!newToken) {
-            throw new Error('No token available');
-          }
-
+        // El JWT del backend probablemente expiro (dura 8h). En vez de desloguear
+        // de una, intentamos renovarlo desde Firebase, que mantiene la sesion
+        // mucho mas tiempo. Solo deslogueamos si Firebase tampoco tiene sesion.
+        const newToken = await authService.refreshToken();
+        if (newToken) {
           (config.headers as Record<string, string>)['Authorization'] = `Bearer ${newToken}`;
           const retryResponse = await fetch(`${API_URL}${endpoint}`, config);
-
-          if (!retryResponse.ok) {
-            throw new Error('Request failed after token refresh');
+          if (retryResponse.ok) {
+            if (retryResponse.status === 204) return undefined as T;
+            return await retryResponse.json();
           }
-
-          // Handle 204 No Content responses
-          if (retryResponse.status === 204) {
-            return undefined as T;
-          }
-
-          return await retryResponse.json();
-        } catch {
-          await authService.logout();
-          window.location.href = '/login';
-          throw new Error('Session expired');
         }
+        // No se pudo renovar -> sesion realmente expirada.
+        await authService.logout();
+        window.location.href = '/login';
+        throw new Error('Session expired');
       }
 
       if (!response.ok) {

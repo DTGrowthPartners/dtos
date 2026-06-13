@@ -150,6 +150,7 @@ import NoteColumnModal from '@/components/notes/NoteColumnModal';
 import NoteItemModal from '@/components/notes/NoteItemModal';
 import AITaskDialog, { type ParsedTask as AIParsedTask } from '@/components/tasks/AITaskDialog';
 import { Sparkles } from 'lucide-react';
+import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import {
@@ -283,6 +284,8 @@ export default function Tareas() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
+  const aiPending = useAiTaskStore((s) => s.pending);
+  const consumeAiPending = useAiTaskStore((s) => s.consumePending);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1931,6 +1934,17 @@ export default function Tareas() {
     });
   };
 
+  // Si se disparo "Crear tarea con IA" desde el Dashboard o el Command Palette,
+  // el resultado parseado llega via el store global. Lo consumimos al montar
+  // (o cuando cambia) y pre-llenamos el formulario.
+  useEffect(() => {
+    if (aiPending) {
+      handleAIParsed(aiPending, '');
+      consumeAiPending();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiPending]);
+
   // Drag and Drop handlers
   // ============= DRAG & DROP CON REORDENAMIENTO MANUAL =============
   // Implementacion HTML5 nativa con los 4 trucos:
@@ -2501,7 +2515,12 @@ export default function Tareas() {
 
     const grouped: Record<string, Task[]> = { TODO: [], IN_PROGRESS: [], DONE: [] };
     for (const task of filteredTasks) {
-      if (grouped[task.status]) grouped[task.status].push(task);
+      // Si el status es uno conocido, va a su columna. Si es legacy/malformado
+      // (ej. tareas viejas de Firestore con 'pending', 'review', minusculas, etc.)
+      // lo metemos en TODO en vez de descartarlo silenciosamente — asi nunca
+      // desaparece una tarea del tablero y el conteo coincide con lo mostrado.
+      const col = grouped[task.status] ? task.status : TaskStatus.TODO;
+      grouped[col].push(task);
     }
     for (const status of Object.keys(grouped)) {
       grouped[status].sort(compare);
@@ -2523,17 +2542,20 @@ export default function Tareas() {
   // Helper to count tasks by project (excludes completed tasks)
   // Admins see counts for ALL tasks, regular users only their own
   const getTaskCountByProject = (projectId: string) => {
+    const normalizedLoggedUser = loggedUserName ? normalizeString(loggedUserName) : '';
     return tasks.filter(t => {
+      // Mismo criterio de visibilidad que filteredTasks (normalizado) para que el
+      // conteo coincida con lo que el usuario ve realmente en el tablero.
       let isUserTask = isAdmin;
-      if (!isUserTask && loggedUserName) {
-        isUserTask = (t.assignee === loggedUserName || t.creator === loggedUserName);
+      if (!isUserTask && normalizedLoggedUser) {
+        const normalizedAssignee = t.assignee ? normalizeString(t.assignee) : '';
+        const normalizedCreator = t.creator ? normalizeString(t.creator) : '';
+        isUserTask = normalizedAssignee === normalizedLoggedUser || normalizedCreator === normalizedLoggedUser;
       }
-
       if (!isUserTask) return false;
 
-      // Don't count completed tasks
-      const isNotDone = t.status !== TaskStatus.DONE;
-      return isUserTask && t.projectId === projectId && isNotDone;
+      // No contar tareas completadas (el contador es de trabajo pendiente)
+      return t.projectId === projectId && t.status !== TaskStatus.DONE;
     }).length;
   };
 
