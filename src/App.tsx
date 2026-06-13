@@ -25,6 +25,10 @@ import Crons from "@/pages/Crons";
 import Procesos from "@/pages/Procesos";
 import Vps from "@/pages/Vps";
 import Logs from "@/pages/Logs";
+import CobrosMRR from "@/pages/CobrosMRR";
+import Propuestas from "@/pages/Propuestas";
+import Dominios from "@/pages/Dominios";
+import Webs from "@/pages/Webs";
 // import Brief from "@/pages/Brief"; // Moved to Tareas
 // import Proveedores from "@/pages/Proveedores"; // Temporalmente oculto
 import Profile from "@/pages/Profile";
@@ -88,6 +92,10 @@ const App = () => (
               <Route path="/procesos" element={<ProtectedRoute requiredPermission="procesos"><Procesos /></ProtectedRoute>} />
               <Route path="/vps" element={<ProtectedRoute requiredPermission="vps"><Vps /></ProtectedRoute>} />
               <Route path="/logs" element={<ProtectedRoute requiredPermission="logs"><Logs /></ProtectedRoute>} />
+              <Route path="/cobros" element={<ProtectedRoute requiredPermission="cobros"><CobrosMRR /></ProtectedRoute>} />
+              <Route path="/propuestas" element={<ProtectedRoute requiredPermission="propuestas"><Propuestas /></ProtectedRoute>} />
+              <Route path="/dominios" element={<ProtectedRoute requiredPermission="dominios"><Dominios /></ProtectedRoute>} />
+              <Route path="/webs" element={<ProtectedRoute requiredPermission="webs"><Webs /></ProtectedRoute>} />
               <Route path="/perfil" element={<Profile />} />
             </Route>
             <Route path="*" element={<NotFound />} />

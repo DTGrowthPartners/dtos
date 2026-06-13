@@ -54,6 +54,10 @@ const MODULE_PERMISSIONS = [
   { value: 'procesos', label: 'Procesos (PM2 admin)' },
   { value: 'vps', label: 'VPS Health (recursos del servidor)' },
   { value: 'logs', label: 'Logs (tail de archivos)' },
+  { value: 'cobros', label: 'Cobros & MRR' },
+  { value: 'propuestas', label: 'Propuestas' },
+  { value: 'dominios', label: 'Dominios' },
+  { value: 'webs', label: 'Webs' },
 ] as const;
 
 // Permisos por defecto para nuevos usuarios (todos excepto finanzas y equipo)

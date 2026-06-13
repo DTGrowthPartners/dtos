@@ -78,6 +78,7 @@ model Client {
   sharedWith  ClientShare[]  @relation("ClientShares")
   terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
   accounts    Account[]      @relation("AccountClient")  // Cuentas por cobrar/pagar
+  cobros      Cobro[]        @relation("ClientCobros")    // Cobros mensuales (Cobros & MRR)
   calendarEvents CalendarEvent[]
   // Portal de Clientes
   portalUsers      User[]              @relation("PortalClientUsers")
@@ -152,6 +153,31 @@ model ClientService {
   updatedAt         DateTime  @updatedAt
 
   @@unique([clientId, serviceId])
+}
+
+// ==================== Cobros & MRR ====================
+// Cobro mensual de retainer por cliente. Se genera a partir de los ClientService
+// activos del cliente (suma del valor mensual) y se trackea el estado de pago
+// manualmente (registro de Jhonatan, sin integracion bancaria).
+model Cobro {
+  id            String    @id @default(cuid())
+  clientId      String
+  client        Client    @relation("ClientCobros", fields: [clientId], references: [id], onDelete: Cascade)
+  clienteNombre String    // snapshot del nombre del cliente
+  periodo       String    // "YYYY-MM"
+  monto         Float
+  moneda        String    @default("COP")
+  fechaCobro    DateTime  // fecha esperada de cobro dentro del periodo
+  estado        String    @default("pendiente") // pendiente, pagado, vencido
+  paidAt        DateTime?
+  metodoPago    String?
+  referencia    String?
+  nota          String?
+  registradoPor String?   // email del usuario que registro el pago
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([clientId, periodo])
 }
 
 model Task {
