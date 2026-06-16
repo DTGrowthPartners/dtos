@@ -428,7 +428,7 @@ const inferTaskType = (title: string, description: string): string | undefined =
     return 'Contenido Orgánico';
   }
   if (text.includes('ads') || text.includes('publicidad') || text.includes('campaign')) {
-    return 'Publicidad / Ads';
+    return 'Ads';
   }
   if (text.includes('estrategia') || text.includes('strategy')) {
     return 'Estrategia';

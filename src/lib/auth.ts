@@ -60,7 +60,7 @@ onAuthStateChanged(auth, async (firebaseUser) => {
   setLoading(false);
 
   if (firebaseUser) {
-    // Get ID token and sync with backend
+    // Get ID token and sync with backend (renueva el JWT del backend al abrir)
     try {
       const idToken = await firebaseUser.getIdToken();
       const response = await fetch(`${API_URL}/api/auth/firebase-login`, {
@@ -79,10 +79,12 @@ onAuthStateChanged(auth, async (firebaseUser) => {
     } catch (error) {
       console.error('Error syncing with backend:', error);
     }
-  } else {
-    setUser(null);
-    setToken(null);
   }
+  // IMPORTANTE: si firebaseUser es null NO borramos la sesion. El JWT del backend
+  // (persistido en localStorage, 30 dias) es la fuente de verdad para la API.
+  // Firebase puede tardar o perder su sesion local al recargar; no debemos
+  // desloguear por eso. La sesion solo se cierra con logout() explicito o cuando
+  // un 401 + refresh fallido confirman que el token ya no sirve (ver api.ts).
 });
 
 class AuthService {

@@ -14,7 +14,7 @@ export enum Priority {
 
 export type TaskType =
   | 'Estrategia'
-  | 'Publicidad / Ads'
+  | 'Ads'
   | 'Contenido Orgánico'
   | 'Diseño'
   | 'Video / Multimedia'
@@ -24,7 +24,7 @@ export type TaskType =
 
 export const TASK_TYPES: TaskType[] = [
   'Estrategia',
-  'Publicidad / Ads',
+  'Ads',
   'Contenido Orgánico',
   'Diseño',
   'Video / Multimedia',

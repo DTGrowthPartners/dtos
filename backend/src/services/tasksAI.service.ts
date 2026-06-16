@@ -13,6 +13,16 @@ const aiClient = new OpenAI({
   },
 });
 
+/**
+ * Cliente OpenAI DIRECTO (gpt-4o-mini) como primario confiable: barato, rapido y
+ * estable. Evita depender de los modelos gratis de OpenRouter (que se saturan) y
+ * de los creditos de Kimi (402). Solo se usa si hay OPENAI_API_KEY.
+ */
+const openaiDirect = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+const OPENAI_MODEL = process.env.OPENAI_TASKS_MODEL || 'gpt-4o-mini';
+
 const MODEL = process.env.OPENROUTER_MODEL || 'moonshotai/kimi-k2';
 /**
  * Cadena de modelos gratuitos para intentar en orden cuando el principal falla
@@ -29,15 +39,17 @@ const MODEL_FALLBACK_CHAIN: string[] = (process.env.OPENROUTER_MODEL_FALLBACK_CH
 
 const TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Mariana', 'Jose', 'Anderson', 'Edgardo', 'Jhonathan'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'] as const;
+// Deben coincidir EXACTAMENTE con TaskType del frontend (src/types/taskTypes.ts)
+// para que el tipo inferido por la IA matchee la opcion del formulario.
 const TYPES = [
   'Estrategia',
-  'Publicidad/Ads',
+  'Ads',
   'Contenido Orgánico',
   'Diseño',
-  'Video/Multimedia',
+  'Video / Multimedia',
   'Copywriting',
-  'Revisión/QC',
-  'Cliente/Reuniones',
+  'Revisión / Control de Calidad',
+  'Cliente / Reuniones',
 ] as const;
 
 export interface ParsedTask {
@@ -123,16 +135,35 @@ const sanitize = (raw: any): ParsedTask => ({
  * devuelve el contenido de texto. Centraliza el manejo de errores de OpenRouter.
  */
 const chatComplete = async (systemPrompt: string, userContent: string, maxTokens: number): Promise<string> => {
+  const messages = [
+    { role: 'system' as const, content: systemPrompt },
+    { role: 'user' as const, content: userContent },
+  ];
+
+  // 1) Primario confiable: OpenAI gpt-4o-mini directo (si hay key).
+  if (openaiDirect) {
+    try {
+      const r = await openaiDirect.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages,
+        temperature: 0.2,
+        max_tokens: maxTokens,
+      });
+      const c = r.choices?.[0]?.message?.content?.trim();
+      if (c) return c;
+    } catch (e: any) {
+      console.warn(`[tasks-ai] OpenAI ${OPENAI_MODEL} fallo (${e?.status || '?'}), cayendo a OpenRouter...`);
+    }
+  }
+
+  // 2) Fallback: OpenRouter (Kimi -> modelos gratis).
   if (!process.env.OPENROUTER_API_KEY) {
-    throw Object.assign(new Error('OpenRouter API key no configurada'), { status: 500 });
+    throw Object.assign(new Error('No hay proveedor de IA configurado (OPENAI_API_KEY ni OPENROUTER_API_KEY).'), { status: 500 });
   }
   const callModel = (model: string) =>
     aiClient.chat.completions.create({
       model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userContent },
-      ],
+      messages,
       temperature: 0.2,
       max_tokens: maxTokens,
     });

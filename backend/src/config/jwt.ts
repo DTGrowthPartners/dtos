@@ -1,8 +1,11 @@
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
+// Token de larga duracion: la sesion no debe caerse a las pocas horas. Se
+// mantiene mientras el token sea valido (30 dias); solo el logout explicito o
+// un token invalido la cierran.
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d';
+const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '90d';
 
 export const generateToken = (payload: object, expiresIn: string = JWT_EXPIRES_IN): string => {
   return jwt.sign(payload, JWT_SECRET, { expiresIn } as jwt.SignOptions);
