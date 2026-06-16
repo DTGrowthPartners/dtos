@@ -294,6 +294,8 @@ export default function Tareas() {
   const [duplicatingTask, setDuplicatingTask] = useState<Task | null>(null);
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const [draggedProject, setDraggedProject] = useState<string | null>(null);
+  // Proyecto resaltado cuando se arrastra una TAREA encima (para reasignar proyecto)
+  const [taskOverProjectId, setTaskOverProjectId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -2005,6 +2007,7 @@ export default function Tareas() {
     setDraggedTask(null);
     setDragOverGap(null);
     setDraggedCardHeight(0);
+    setTaskOverProjectId(null);
     cardMidpointsRef.current.clear();
   };
 
@@ -2192,13 +2195,50 @@ export default function Tareas() {
     setDraggedProject(null);
   };
 
-  const handleProjectDragOver = (e: React.DragEvent) => {
+  const handleProjectDragOver = (e: React.DragEvent, projectId?: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
+    // Si lo que se arrastra es una TAREA, resaltar el proyecto destino.
+    if (draggedTask && projectId) {
+      setTaskOverProjectId((prev) => (prev === projectId ? prev : projectId));
+    }
   };
 
   const handleProjectDrop = async (e: React.DragEvent, targetProjectId: string) => {
     e.preventDefault();
+
+    // CASO 1: se esta arrastrando una TAREA sobre un proyecto -> reasignar proyecto.
+    if (draggedTask) {
+      const taskId = draggedTask;
+      const task = tasks.find((t) => t.id === taskId);
+      setTaskOverProjectId(null);
+      setDraggedTask(null);
+      setDragOverGap(null);
+      if (!task || task.projectId === targetProjectId) return;
+
+      const previousTasks = tasks;
+      // Optimista
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, projectId: targetProjectId } : t)));
+      try {
+        await updateTask(taskId, { projectId: targetProjectId });
+        const proj = projects.find((p) => p.id === targetProjectId);
+        toast({
+          title: 'Tarea movida',
+          description: `Ahora en ${proj?.name || 'el proyecto'}`,
+        });
+      } catch (error) {
+        console.error('Error reasignando proyecto:', error);
+        setTasks(previousTasks);
+        toast({
+          title: 'Error',
+          description: 'No se pudo mover la tarea de proyecto.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
+
+    // CASO 2: reordenar proyectos (drag de un proyecto sobre otro).
     const sourceProjectId = e.dataTransfer.getData('text/plain');
 
     if (!sourceProjectId || sourceProjectId === targetProjectId) {
@@ -2859,12 +2899,13 @@ export default function Tareas() {
                             draggable={true}
                             onDragStart={(e) => handleProjectDragStart(e, project.id)}
                             onDragEnd={handleProjectDragEnd}
-                            onDragOver={handleProjectDragOver}
+                            onDragOver={(e) => handleProjectDragOver(e, project.id)}
+                            onDragLeave={() => setTaskOverProjectId((prev) => (prev === project.id ? null : prev))}
                             onDrop={(e) => handleProjectDrop(e, project.id)}
                             className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
                               ? 'bg-primary text-primary-foreground'
                               : 'hover:bg-muted'
-                              } ${draggedProject === project.id ? 'opacity-50' : ''}`}
+                              } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
                           >
                             <button
                               onClick={() => setFilterProject(project.id)}
@@ -2924,12 +2965,13 @@ export default function Tareas() {
                       draggable={true}
                       onDragStart={(e) => handleProjectDragStart(e, project.id)}
                       onDragEnd={handleProjectDragEnd}
-                      onDragOver={handleProjectDragOver}
+                      onDragOver={(e) => handleProjectDragOver(e, project.id)}
+                      onDragLeave={() => setTaskOverProjectId((prev) => (prev === project.id ? null : prev))}
                       onDrop={(e) => handleProjectDrop(e, project.id)}
                       className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-muted'
-                        } ${draggedProject === project.id ? 'opacity-50' : ''}`}
+                        } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
                     >
                       <button
                         onClick={() => setFilterProject(project.id)}
