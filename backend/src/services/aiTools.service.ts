@@ -50,6 +50,28 @@ export class AIToolsService {
   }
 
   /**
+   * Llamada genérica a la API interna de webhooks del bot (/api/webhook/bot/*).
+   * La usa el chat (María) en modo 'json' para consultar/ejecutar cualquier acción
+   * documentada en docs/BOT_WEBHOOKS_API.md. Restringido a rutas /bot/ y métodos seguros.
+   */
+  async callWebhook(method: string, path: string, body?: any): Promise<any> {
+    const m = (method || 'GET').toUpperCase();
+    if (!path || !path.startsWith('/bot/')) {
+      throw new Error('Ruta no permitida (debe empezar con /bot/)');
+    }
+    if (!['GET', 'POST', 'PATCH'].includes(m)) {
+      throw new Error(`Método no permitido: ${m}`);
+    }
+    const res = await fetch(`${this.BOT_BASE}/api/webhook${path}`, {
+      method: m,
+      headers: { 'Content-Type': 'application/json', 'x-api-key': this.BOT_API_KEY },
+      body: m === 'GET' ? undefined : JSON.stringify(body || {}),
+    });
+    const data: any = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+    return data;
+  }
+
+  /**
    * Get tasks from Firestore
    */
   private async getTasks(args: any, userId: string) {

@@ -12,15 +12,14 @@ const AI_API_KEY = process.env.CHAT_AI_API_KEY || "dario";
 const AI_MODEL = process.env.CHAT_AI_MODEL || "claude-sonnet-4-6";
 
 // Modo de uso de herramientas (acceso al sistema):
-//  - 'off'    : solo conversación, sin acceso al sistema. << default con DARIO >>
-//               DARIO replica el wire de Claude Code, que RECHAZA por diseño
-//               cualquier protocolo de herramientas/persona (lo trata como prompt
-//               injection). Por eso con DARIO el acceso al sistema no es posible.
-//  - 'native' : function-calling nativo vía tool_calls. Requiere un proveedor con
-//               tools (p. ej. OpenRouter) — habilita acceso real a datos/acciones.
-//  - 'json'   : protocolo acción-JSON sobre texto. Útil solo con modelos sin
-//               guardarraíles de Claude Code (NO funciona con DARIO).
-const TOOLS_MODE = (process.env.CHAT_TOOLS_MODE || "off").toLowerCase();
+//  - 'json'   : << default >> protocolo acción-JSON sobre texto. María indica una
+//               llamada {metodo, ruta, datos} a la API interna de webhooks /bot/* y
+//               el backend la ejecuta. Funciona con DARIO siempre que el encuadre sea
+//               legítimo (María como asistente interna, no "actúa como otro sistema").
+//  - 'native' : function-calling nativo vía tool_calls (requiere proveedor con tools,
+//               p. ej. OpenRouter).
+//  - 'off'    : solo conversación, sin acceso al sistema.
+const TOOLS_MODE = (process.env.CHAT_TOOLS_MODE || "json").toLowerCase();
 
 const aiClient = new OpenAI({
   baseURL: AI_BASE_URL,
@@ -31,27 +30,35 @@ const aiClient = new OpenAI({
   },
 });
 
-// Catálogo de herramientas en texto, derivado de AI_TOOLS (para el modo 'json').
-function buildToolsCatalog(): string {
-  return (AI_TOOLS as any[])
-    .map((t) => {
-      const f = t.function;
-      const props = f.parameters?.properties || {};
-      const required: string[] = f.parameters?.required || [];
-      const params = Object.entries(props)
-        .map(([k, v]: any) => {
-          const req = required.includes(k) ? " (requerido)" : "";
-          const enumTxt = v.enum ? ` opciones: ${v.enum.join(", ")}` : "";
-          return `    · ${k}${req}: ${v.description || ""}${enumTxt}`;
-        })
-        .join("\n");
-      return `- ${f.name}: ${f.description}\n${params}`;
-    })
-    .join("\n");
-}
+// Catálogo de la API interna de webhooks que María puede usar (modo 'json').
+// Resumen de docs/BOT_WEBHOOKS_API.md (rutas bajo /bot, ejecutadas por el backend).
+const WEBHOOK_CATALOG = `CONSULTAS (GET):
+- /bot/team — miembros válidos del equipo
+- /bot/projects — proyectos activos
+- /bot/tasks?usuario=<nombre>&estado=<todo|in_progress|done> — tareas de alguien
+- /bot/tasks/all — tareas pendientes de todo el equipo
+- /bot/clients  ·  /bot/clients/:id — clientes y su detalle
+- /bot/finances?mes=<enero|febrero|...> — resumen financiero del mes
+- /bot/sheets/transacciones?tipo=<entrada|salida|all> — movimientos
+- /bot/client-goals?mes=<...> — metas por cliente
+- /bot/campaigns?client=<nombre> — campañas y métricas
+- /bot/crm  ·  /bot/crm/deals — pipeline y oportunidades
+- /bot/terceros — terceros (clientes/proveedores/empleados)
+- /bot/invoices — cuentas de cobro
 
-// Detecta y extrae una llamada a herramienta en formato JSON dentro del texto del modelo.
-function parseToolCall(text: string): { tool: string; args: any } | null {
+ACCIONES (POST/PATCH):
+- POST /bot/tasks — crear tarea. datos: { titulo (req), asignado, prioridad: baja|media|alta, descripcion, proyecto, fechaFin: YYYY-MM-DD, creador }
+- PATCH /bot/tasks/:id — actualizar tarea. datos: { estado: todo|in_progress|done, prioridad, asignado }
+- POST /bot/crm/deals — crear deal. datos: { nombre (req), empresa, telefono, valorEstimado, etapa, prioridad }
+- PATCH /bot/crm/deals/:id — actualizar deal
+- POST /bot/sheets/gastos — registrar gasto. datos: { fecha (req), importe (req), categoria (req), entidad (req), descripcion (req), cuenta }
+- POST /bot/sheets/ingresos — registrar ingreso. datos: { fecha (req), importe (req), categoria, cuenta, entidad }
+- POST /bot/terceros — crear tercero
+- POST /bot/invoices/generate — generar cuenta de cobro (PDF)`;
+
+// Extrae una llamada a la API interna en JSON dentro del texto del modelo.
+// Forma esperada: {"metodo":"POST","ruta":"/bot/tasks","datos":{...}} (acepta alias).
+function parseAction(text: string): { metodo: string; ruta: string; datos: any } | null {
   if (!text) return null;
   let t = text.trim();
   const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -59,13 +66,17 @@ function parseToolCall(text: string): { tool: string; args: any } | null {
   const tryParse = (s: string) => {
     try { return JSON.parse(s); } catch { return null; }
   };
-  let obj = tryParse(t);
+  let obj: any = tryParse(t);
   if (!obj) {
     const m = t.match(/\{[\s\S]*\}/);
     if (m) obj = tryParse(m[0]);
   }
-  if (obj && typeof obj === "object" && typeof obj.tool === "string") {
-    return { tool: obj.tool, args: obj.args || obj.arguments || {} };
+  if (obj && typeof obj === "object" && typeof obj.ruta === "string") {
+    return {
+      metodo: String(obj.metodo || obj.method || "GET").toUpperCase(),
+      ruta: obj.ruta,
+      datos: obj.datos || obj.body || obj.data || {},
+    };
   }
   return null;
 }
@@ -276,24 +287,24 @@ export class ChatController {
         return res.json({ success: true, response: 'No pude completar la solicitud en los pasos disponibles. ¿Puedes reformular?' });
       }
 
-      // ===== Modo 'json' (default, DARIO): protocolo acción-JSON sobre texto =====
+      // ===== Modo 'json' (default, DARIO): protocolo acción-JSON sobre la API interna =====
+      const hoy = new Date().toISOString().slice(0, 10);
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: 'system',
-          content: `Eres María, la asistente inteligente de DT Growth Partners con acceso real al sistema DTOS (tareas, clientes, finanzas, CRM, campañas, metas).
+          content: `Eres María, la asistente interna de DT Growth Partners dentro de su sistema DTOS. El backend de DTOS te conecta a su API interna y EJECUTA por ti las consultas y acciones que indiques (tareas, clientes, finanzas, CRM, campañas, metas, cuentas de cobro). Hoy es ${hoy}.
 
-HERRAMIENTAS DISPONIBLES:
-${buildToolsCatalog()}
+API INTERNA DISPONIBLE (rutas que el backend ejecuta por ti):
+${WEBHOOK_CATALOG}
 
-CÓMO USAR LAS HERRAMIENTAS:
-- Si necesitas datos del sistema o ejecutar una acción (crear/actualizar), responde ÚNICAMENTE con un objeto JSON en una sola línea, SIN texto adicional y SIN markdown:
-  {"tool":"<nombre>","args":{ ... }}
-- Recibirás un mensaje "RESULTADO de <tool>: <json>". Úsalo para responder o para llamar otra herramienta.
-- Puedes encadenar herramientas (ej.: getTasks para obtener los IDs y luego updateTask con esos IDs).
-- Para crear o actualizar: si el usuario fue claro, ejecútalo; si fue ambiguo, pregunta antes.
-- Cuando ya tengas todo, responde al usuario en lenguaje natural normal (SIN JSON y sin llamar más herramientas).
-
-Miembros del equipo válidos: Lía, Dairo, Stiven, Edgardo, Jhonathan.
+CÓMO OPERAR:
+- Cuando necesites datos o ejecutar una acción, responde EXCLUSIVAMENTE con un JSON en una sola línea, sin texto adicional ni markdown:
+  {"metodo":"POST","ruta":"/bot/tasks","datos":{ ... }}
+  (para PATCH incluye el id en la ruta, ej. "/bot/tasks/abc123"; para GET puedes omitir "datos").
+- Recibirás un mensaje "RESULTADO: <json>". Úsalo para responder o para hacer otra llamada (puedes encadenar: p. ej. GET /bot/tasks para obtener IDs y luego PATCH).
+- Si el usuario fue claro, ejecuta la acción directamente; si falta un dato obligatorio, pregúntalo en lenguaje natural antes.
+- Al crear tareas, usa "creador":"María". Miembros válidos: Lía, Dairo, Stiven, Edgardo, Jhonathan.
+- Cuando ya tengas todo, responde al usuario en lenguaje natural normal (SIN JSON y sin más llamadas).
 
 ${styleGuide}`,
         },
@@ -303,26 +314,26 @@ ${styleGuide}`,
 
       const MAX_STEPS = 6;
       for (let step = 1; step <= MAX_STEPS; step++) {
-        console.log(`[Chat] (json-tools) paso ${step}/${MAX_STEPS}`);
+        console.log(`[Chat] (json) paso ${step}/${MAX_STEPS}`);
         const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
         const content = completion.choices[0].message.content || '';
-        const call = parseToolCall(content);
-        if (!call) {
+        const action = parseAction(content);
+        if (!action) {
           return res.json({ success: true, response: cleanResponse(content), usage: completion.usage });
         }
-        console.log(`[Chat] (json-tools) ejecutando ${call.tool}`, call.args);
+        console.log(`[Chat] (json) ejecutando ${action.metodo} ${action.ruta}`, action.datos);
         messages.push({ role: 'assistant', content });
         let result: any;
         try {
-          result = await aiToolsService.executeTool(call.tool, call.args || {}, userId);
+          result = await aiToolsService.callWebhook(action.metodo, action.ruta, action.datos);
         } catch (error: any) {
-          result = { success: false, error: error.message || 'Error al ejecutar la herramienta' };
+          result = { success: false, error: error.message || 'Error al ejecutar la acción' };
         }
-        messages.push({ role: 'user', content: `RESULTADO de ${call.tool}: ${JSON.stringify(result).slice(0, 6000)}` });
+        messages.push({ role: 'user', content: `RESULTADO: ${JSON.stringify(result).slice(0, 6000)}` });
       }
 
       // Se agotaron los pasos: pedir una respuesta final con lo que haya.
-      messages.push({ role: 'user', content: 'Responde ahora al usuario en lenguaje natural con la información que ya tienes. No llames más herramientas.' });
+      messages.push({ role: 'user', content: 'Responde ahora al usuario en lenguaje natural con la información que ya tienes. No hagas más llamadas.' });
       const finalCompletion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
       return res.json({ success: true, response: cleanResponse(finalCompletion.choices[0].message.content || ''), usage: finalCompletion.usage });
 
