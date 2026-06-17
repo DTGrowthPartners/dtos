@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
 import { invoiceService } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
+import { agentSendMessage } from '../services/agents.service';
+import { resolveDestino } from '../config/notifyPhones';
 import path from 'path';
 import fs from 'fs';
 
@@ -79,7 +81,7 @@ router.get('/whatsapp/tasks/peek', (req: Request, res: Response) => {
 /**
  * POST /api/webhook/whatsapp/tasks
  */
-router.post('/whatsapp/tasks', authMiddleware, (req: Request, res: Response) => {
+router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Response) => {
   const { id, titulo, descripcion, prioridad, asignado, creador, proyecto, fechaLimite } = req.body;
 
   if (!titulo || !prioridad || !asignado || !creador) {
@@ -109,13 +111,38 @@ router.post('/whatsapp/tasks', authMiddleware, (req: Request, res: Response) => 
     creadoEn: new Date().toISOString(),
   };
 
+  // Se mantiene la cola en memoria por compatibilidad (peek/historial), pero el
+  // envio ahora es DIRECTO via el bot Dairo (Whapi), ya no por polling de openclaw.
   pendingHighPriorityTasks.push(task);
-  console.log('[Webhook] Nueva tarea de alta prioridad agregada a la cola:', task.titulo);
+  if (pendingHighPriorityTasks.length > 100) pendingHighPriorityTasks.shift();
+
+  // Envio directo por WhatsApp (Whapi) al asignado o al numero de operaciones.
+  const destino = resolveDestino(asignado);
+  let sent = false;
+  if (destino) {
+    const fechaTxt = task.fechaLimite ? ` · vence ${task.fechaLimite}` : '';
+    const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` [${task.proyecto}]` : '';
+    const mensaje =
+      `🔴 *Tarea urgente*${proyectoTxt}\n` +
+      `*${task.titulo}*\n` +
+      (task.descripcion ? `${task.descripcion}\n` : '') +
+      `\n👤 Asignada a: ${task.asignado}${fechaTxt}\n` +
+      `Creada por ${task.creador}`;
+    try {
+      await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_tareas' });
+      sent = true;
+      console.log(`[Webhook] Tarea urgente enviada por WhatsApp a ${destino}: ${task.titulo}`);
+    } catch (e) {
+      console.error('[Webhook] No se pudo enviar la tarea urgente por WhatsApp:', (e as Error).message);
+    }
+  } else {
+    console.warn('[Webhook] Sin destino WhatsApp para', asignado, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
+  }
 
   res.status(201).json({
     success: true,
-    message: 'Tarea agregada a la cola de WhatsApp',
-    sent: true,
+    message: sent ? 'Tarea enviada por WhatsApp' : 'Tarea encolada (sin destino WhatsApp configurado)',
+    sent,
     task,
   });
 });

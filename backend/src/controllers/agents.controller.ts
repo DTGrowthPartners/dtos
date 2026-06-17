@@ -65,14 +65,14 @@ export const agentsController = {
 
   sendMessage: async (req: Request, res: Response) => {
     try {
-      const { numero, grupo, mensaje } = req.body;
+      const { destino, mensaje, origen } = req.body;
       if (!mensaje) {
         return res.status(400).json({ success: false, error: 'Campo requerido: mensaje' });
       }
-      if (!numero && !grupo) {
-        return res.status(400).json({ success: false, error: 'Se requiere numero o grupo' });
+      if (!destino) {
+        return res.status(400).json({ success: false, error: 'Campo requerido: destino (grupo, número o whapi)' });
       }
-      const data = await agentsService.agentSendMessage(req.params.id, { numero, grupo, mensaje });
+      const data = await agentsService.agentSendMessage(req.params.id, { destino, mensaje, origen });
       res.json(data);
     } catch (e) {
       handleErr(res, e);

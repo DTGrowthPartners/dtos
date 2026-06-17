@@ -154,10 +154,18 @@ export const agentSetEstado = (id: string, body: SetEstadoBody) => {
 export const agentGetStats = (id: string) =>
   callAgent<Record<string, unknown>>(id, 'GET', '/stats');
 
+/**
+ * Contrato real del bot Dairo en POST /api/externo/enviar:
+ *   { destino, mensaje, origen }
+ * destino acepta:
+ *   - Grupo:   120363422490459440@g.us
+ *   - Numero:  +573001234567
+ *   - Whapi:   573001234567@s.whatsapp.net
+ */
 export interface SendMessageBody {
-  numero?: string;
-  grupo?: string;
+  destino: string;
   mensaje: string;
+  origen?: string;
 }
 export const agentSendMessage = (id: string, body: SendMessageBody) => {
   const agent = getAgent(id);
@@ -166,5 +174,9 @@ export const agentSendMessage = (id: string, body: SendMessageBody) => {
     err.status = 400;
     throw err;
   }
-  return callAgent(id, 'POST', '/enviar', body);
+  return callAgent(id, 'POST', '/enviar', {
+    destino: body.destino,
+    mensaje: body.mensaje,
+    origen: body.origen || 'dtos',
+  });
 };
