@@ -7,6 +7,7 @@ import { invoiceService } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
 import { resolveDestino } from '../config/notifyPhones';
+import { generateDueRecurringInvoices } from '../services/recurringInvoices.service';
 import path from 'path';
 import fs from 'fs';
 
@@ -162,6 +163,23 @@ router.delete('/whatsapp/tasks', authMiddleware, (req: Request, res: Response) =
 });
 
 // ==================== Bot API (para crear tareas en FIRESTORE) ====================
+
+/**
+ * POST /api/webhook/bot/invoices/run-recurring
+ *
+ * Genera las cuentas de cobro (borrador) de servicios recurrentes vencidos.
+ * Pensado para un cron diario del VPS (curl con x-api-key). Crea las cuentas,
+ * abre una tarea de alta prioridad para Dairo y le avisa por WhatsApp.
+ */
+router.post('/bot/invoices/run-recurring', verifyBotApiKey, async (_req: Request, res: Response) => {
+  try {
+    const result = await generateDueRecurringInvoices();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Bot API] Error generando cuentas recurrentes:', error);
+    res.status(500).json({ success: false, error: 'Error generando cuentas recurrentes' });
+  }
+});
 
 /**
  * GET /api/webhook/bot/team

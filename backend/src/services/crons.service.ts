@@ -21,6 +21,7 @@ const ALLOWED_USER_CRON_PATTERNS = [
   'beds24-price-sync/sync.py',
   'monitor_bloqueos.py',
   'cartera-daily-report/cartera_report.py',
+  'invoices/run-recurring', // cuentas de cobro recurrentes (DTOS)
 ];
 
 const matchesAllowed = (command: string): boolean =>
