@@ -506,10 +506,15 @@ export interface WhatsAppTaskPayload {
   creador: string;
   proyecto: string;
   fechaLimite: string | null;
+  // 'creada' (default) = solo notifica si es alta prioridad.
+  // 'actualizada' = aviso de edición, notifica sin importar la prioridad.
+  evento?: 'creada' | 'actualizada';
 }
 
 /**
- * Envía una tarea de alta prioridad al webhook para notificar via WhatsApp
+ * Envía una tarea al webhook para notificar via WhatsApp.
+ * Por defecto (evento 'creada') solo se envía si es de alta prioridad;
+ * con evento 'actualizada' se envía como aviso de edición en cualquier prioridad.
  */
 export const sendHighPriorityTaskToWhatsApp = async (params: WhatsAppTaskPayload): Promise<boolean> => {
   try {

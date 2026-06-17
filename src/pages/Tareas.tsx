@@ -798,6 +798,31 @@ export default function Tareas() {
           });
         }
 
+        // Avisar al responsable por WhatsApp cuando se actualiza algo relevante
+        // (título, descripción, prioridad, estado, fecha límite o reasignación).
+        // No se notifica si el editor es el propio responsable.
+        const meaningfulChange =
+          editingTask.title !== taskData.title ||
+          (editingTask.description || '') !== (taskData.description || '') ||
+          editingTask.priority !== taskData.priority ||
+          editingTask.status !== taskData.status ||
+          (editingTask.dueDate || null) !== (taskData.dueDate || null) ||
+          assigneeChanged;
+        if (meaningfulChange && taskData.assignee && taskData.assignee !== user?.firstName) {
+          const project = projects.find(p => p.id === taskData.projectId);
+          sendHighPriorityTaskToWhatsApp({
+            id: editingTask.id,
+            titulo: taskData.title,
+            descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
+            prioridad: taskData.priority === Priority.HIGH ? 'Alta' : taskData.priority === Priority.LOW ? 'Baja' : 'Media',
+            asignado: taskData.assignee,
+            creador: taskData.creator,
+            proyecto: project?.name || 'Sin proyecto',
+            fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
+            evento: 'actualizada',
+          });
+        }
+
         toast({
           title: 'Tarea actualizada',
           description: 'La tarea se actualizó correctamente',

@@ -83,7 +83,7 @@ router.get('/whatsapp/tasks/peek', (req: Request, res: Response) => {
  * POST /api/webhook/whatsapp/tasks
  */
 router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Response) => {
-  const { id, titulo, descripcion, prioridad, asignado, creador, proyecto, fechaLimite } = req.body;
+  const { id, titulo, descripcion, prioridad, asignado, creador, proyecto, fechaLimite, evento } = req.body;
 
   if (!titulo || !prioridad || !asignado || !creador) {
     return res.status(400).json({
@@ -92,7 +92,12 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     });
   }
 
-  if (prioridad !== 'Alta' && prioridad !== 'HIGH') {
+  // 'actualizada' = aviso de edición (se envía sin importar la prioridad).
+  // 'creada' (o sin evento) = comportamiento original: solo tareas de alta prioridad.
+  const isUpdate = evento === 'actualizada';
+  const isHigh = prioridad === 'Alta' || prioridad === 'HIGH';
+
+  if (!isUpdate && !isHigh) {
     return res.json({
       success: true,
       message: 'Tarea no es de alta prioridad, no se envía a WhatsApp',
@@ -100,11 +105,13 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     });
   }
 
+  const prioridadTxt = isHigh ? 'Alta' : prioridad === 'Baja' || prioridad === 'LOW' ? 'Baja' : 'Media';
+
   const task: WhatsAppTask = {
     id: id || `task-${Date.now()}`,
     titulo,
     descripcion: descripcion || '',
-    prioridad: 'Alta',
+    prioridad: prioridadTxt,
     asignado,
     creador,
     proyecto: proyecto || 'Sin proyecto',
@@ -114,8 +121,11 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
 
   // Se mantiene la cola en memoria por compatibilidad (peek/historial), pero el
   // envio ahora es DIRECTO via el bot Dairo (Whapi), ya no por polling de openclaw.
-  pendingHighPriorityTasks.push(task);
-  if (pendingHighPriorityTasks.length > 100) pendingHighPriorityTasks.shift();
+  // Solo encolamos las de alta prioridad (la cola es para urgentes).
+  if (isHigh) {
+    pendingHighPriorityTasks.push(task);
+    if (pendingHighPriorityTasks.length > 100) pendingHighPriorityTasks.shift();
+  }
 
   // Envio directo por WhatsApp (Whapi) al asignado o al numero de operaciones.
   const destino = resolveDestino(asignado);
@@ -123,18 +133,22 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
   if (destino) {
     const fechaTxt = task.fechaLimite ? ` · vence ${task.fechaLimite}` : '';
     const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` [${task.proyecto}]` : '';
+    const encabezado = isUpdate
+      ? `✏️ *Tarea actualizada*${proyectoTxt}`
+      : `🔴 *Tarea urgente*${proyectoTxt}`;
+    const prioridadLinea = isUpdate ? `\n⚡ Prioridad: ${task.prioridad}` : '';
     const mensaje =
-      `🔴 *Tarea urgente*${proyectoTxt}\n` +
+      `${encabezado}\n` +
       `*${task.titulo}*\n` +
       (task.descripcion ? `${task.descripcion}\n` : '') +
-      `\n👤 Asignada a: ${task.asignado}${fechaTxt}\n` +
-      `Creada por ${task.creador}`;
+      `\n👤 Asignada a: ${task.asignado}${fechaTxt}${prioridadLinea}\n` +
+      `${isUpdate ? 'Actualizada' : 'Creada'} por ${task.creador}`;
     try {
       await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_tareas' });
       sent = true;
-      console.log(`[Webhook] Tarea urgente enviada por WhatsApp a ${destino}: ${task.titulo}`);
+      console.log(`[Webhook] Tarea ${isUpdate ? 'actualizada' : 'urgente'} enviada por WhatsApp a ${destino}: ${task.titulo}`);
     } catch (e) {
-      console.error('[Webhook] No se pudo enviar la tarea urgente por WhatsApp:', (e as Error).message);
+      console.error('[Webhook] No se pudo enviar la tarea por WhatsApp:', (e as Error).message);
     }
   } else {
     console.warn('[Webhook] Sin destino WhatsApp para', asignado, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
