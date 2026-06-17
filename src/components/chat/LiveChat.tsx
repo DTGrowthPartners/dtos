@@ -54,6 +54,60 @@ const showNotification = (title: string, body: string, icon?: string) => {
   }
 };
 
+// Renderiza **negrita** dentro de una línea de texto.
+const renderInline = (text: string): React.ReactNode => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((p, i) =>
+    /^\*\*[^*]+\*\*$/.test(p) ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>
+  );
+};
+
+// Formatea el texto del asistente (María): respeta saltos de línea, negritas y
+// listas con viñetas, en vez de mostrar un párrafo plano con asteriscos.
+function FormattedMessage({ text }: { text: string }) {
+  const lines = (text || '').split('\n');
+  const blocks: React.ReactNode[] = [];
+  let bullets: string[] = [];
+
+  const flushBullets = (key: string) => {
+    if (!bullets.length) return;
+    const items = bullets;
+    bullets = [];
+    blocks.push(
+      <ul key={key} className="my-1 space-y-1">
+        {items.map((b, i) => (
+          <li key={i} className="flex gap-1.5">
+            <span className="mt-[3px] h-1 w-1 rounded-full bg-current opacity-60 flex-shrink-0" />
+            <span className="flex-1 leading-snug">{renderInline(b)}</span>
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
+  lines.forEach((raw, idx) => {
+    const line = raw.trimEnd();
+    const bulletMatch = line.match(/^\s*[-*•]\s+(.*)$/);
+    if (bulletMatch) {
+      bullets.push(bulletMatch[1]);
+      return;
+    }
+    flushBullets(`ul-${idx}`);
+    if (line.trim() === '') {
+      blocks.push(<div key={`sp-${idx}`} className="h-2" />);
+    } else {
+      blocks.push(
+        <p key={`p-${idx}`} className="leading-snug break-words">
+          {renderInline(line)}
+        </p>
+      );
+    }
+  });
+  flushBullets('ul-end');
+
+  return <div className="space-y-0.5">{blocks}</div>;
+}
+
 export default function LiveChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -759,7 +813,11 @@ export default function LiveChat() {
                                     : 'bg-muted rounded-tl-md'
                                 }`}
                               >
-                                {message.text}
+                                {message.senderId === 'ai_assistant' ? (
+                                  <FormattedMessage text={message.text} />
+                                ) : (
+                                  <span className="whitespace-pre-wrap break-words">{message.text}</span>
+                                )}
                               </div>
                               {!showAvatar && (
                                 <span className="text-[10px] text-muted-foreground/70 mt-0.5">

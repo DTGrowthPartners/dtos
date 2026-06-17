@@ -226,11 +226,13 @@ export class ChatController {
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
 
       const aiToolsService = new AIToolsService();
-      const styleGuide = `IMPORTANTE - Estilo de la respuesta final al usuario:
-- CONCISA y DIRECTA, máximo 3-4 líneas
-- NO uses tablas markdown ni emojis excesivos
-- Si hay muchos datos, resume con números clave y ofrece detallar después
-- Conversacional y natural, como un compañero de equipo`;
+      const styleGuide = `FORMATO de la respuesta final al usuario:
+- Sé concisa y directa; ve al grano.
+- Usa SALTOS DE LÍNEA reales para separar ideas; NO escribas todo en un solo párrafo.
+- Para enumerar, pon cada punto en su PROPIA LÍNEA empezando con "- " (una idea por línea). No numeres con "1." pegado al texto en un párrafo.
+- Puedes usar **negrita** para resaltar un título corto o un dato clave. NO uses tablas, NI encabezados markdown (#), NI emojis excesivos.
+- Si hay muchos datos, resume con los números clave y ofrece detallar después.
+- Tono natural, como una compañera de equipo.`;
 
       // ===== Modo 'off': solo conversación, sin acceso al sistema =====
       if (TOOLS_MODE === 'off') {
