@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Plus,
   Search,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Edit,
   Trash2,
   Calendar,
@@ -421,7 +423,16 @@ export default function Tareas() {
   const [editingFolder, setEditingFolder] = useState<ProjectFolder | null>(null);
   // Carpeta padre al crear una subcarpeta (null = carpeta raíz)
   const [newFolderParentId, setNewFolderParentId] = useState<string | null>(null);
-  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(() => {
+    // Persistir carpetas expandidas/colapsadas entre recargas
+    try {
+      const saved = localStorage.getItem('tareas:expandedFolders');
+      if (saved) return new Set(JSON.parse(saved));
+    } catch { /* noop */ }
+    return new Set();
+  });
+  // Buscador del panel de proyectos
+  const [projectSearch, setProjectSearch] = useState('');
 
   // Edit project description
   const [editingProjectDescription, setEditingProjectDescription] = useState(false);
@@ -1091,6 +1102,13 @@ export default function Tareas() {
 
   // ============= FOLDER HANDLERS =============
 
+  // Persistir el estado de expandido/colapsado de carpetas
+  useEffect(() => {
+    try {
+      localStorage.setItem('tareas:expandedFolders', JSON.stringify(Array.from(expandedFolders)));
+    } catch { /* noop */ }
+  }, [expandedFolders]);
+
   const toggleFolderExpanded = (folderId: string) => {
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
@@ -1102,6 +1120,9 @@ export default function Tareas() {
       return newSet;
     });
   };
+
+  const expandAllFolders = () => setExpandedFolders(new Set(folders.map((f) => f.id)));
+  const collapseAllFolders = () => setExpandedFolders(new Set());
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
@@ -1240,6 +1261,17 @@ export default function Tareas() {
   const isRootFolder = (f: ProjectFolder) =>
     !f.parentFolderId || !folders.some((x) => x.id === f.parentFolderId);
 
+  // Búsqueda en el panel de proyectos
+  const matchesProjectSearch = (name: string) =>
+    !projectSearch.trim() || name.toLowerCase().includes(projectSearch.trim().toLowerCase());
+  // Una carpeta coincide si su nombre, algún proyecto suyo o alguna subcarpeta coincide
+  const folderMatchesSearch = (folder: ProjectFolder): boolean => {
+    if (!projectSearch.trim()) return true;
+    if (matchesProjectSearch(folder.name)) return true;
+    if (getProjectsInFolder(folder.id).some((p) => matchesProjectSearch(p.name))) return true;
+    return getChildFolders(folder.id).some((cf) => folderMatchesSearch(cf));
+  };
+
   // ¿candidateId es descendiente de ancestorId? (para evitar ciclos al mover)
   const isDescendantFolder = (candidateId: string, ancestorId: string): boolean => {
     let cur = folders.find((f) => f.id === candidateId);
@@ -1301,7 +1333,8 @@ export default function Tareas() {
   };
 
   // Fila de proyecto (reutilizable a cualquier profundidad). Indenta sin ensanchar la barra.
-  const renderProjectRow = (project: Project, depth: number) => {
+  const renderProjectRow = (project: Project, depth: number): JSX.Element | null => {
+    if (!matchesProjectSearch(project.name)) return null;
     const count = getTaskCountByProject(project.id);
     return (
       <div
@@ -1371,10 +1404,12 @@ export default function Tareas() {
   };
 
   // Nodo de carpeta recursivo: header + (si expandida) subcarpetas + proyectos.
-  const renderFolderNode = (folder: ProjectFolder, depth: number): JSX.Element => {
+  const renderFolderNode = (folder: ProjectFolder, depth: number): JSX.Element | null => {
+    if (!folderMatchesSearch(folder)) return null;
     const childFolders = getChildFolders(folder.id);
     const folderProjects = getProjectsInFolder(folder.id);
-    const isExpanded = expandedFolders.has(folder.id);
+    // Al buscar, forzar expandido para que se vean las coincidencias.
+    const isExpanded = expandedFolders.has(folder.id) || !!projectSearch.trim();
     const folderTaskCount = folderProjects.reduce((s, p) => s + getTaskCountByProject(p.id), 0);
     return (
       <div key={folder.id} className="space-y-0.5">
@@ -3097,6 +3132,27 @@ export default function Tareas() {
                   OPERACIONES
                 </h3>
                 <div className="flex items-center gap-1">
+                  {folders.length > 0 && (
+                    <Tooltip delayDuration={0}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => {
+                            const allExpanded = folders.every((f) => expandedFolders.has(f.id));
+                            if (allExpanded) collapseAllFolders();
+                            else expandAllFolders();
+                          }}
+                        >
+                          {folders.every((f) => expandedFolders.has(f.id))
+                            ? <ChevronsDownUp className="h-3 w-3" />
+                            : <ChevronsUpDown className="h-3 w-3" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{folders.every((f) => expandedFolders.has(f.id)) ? 'Colapsar todo' : 'Expandir todo'}</TooltipContent>
+                    </Tooltip>
+                  )}
                   <Tooltip delayDuration={0}>
                     <TooltipTrigger asChild>
                       <Button
@@ -3125,6 +3181,24 @@ export default function Tareas() {
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
+              </div>
+              {/* Buscador de proyectos/carpetas */}
+              <div className="relative mb-2">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar proyecto o carpeta..."
+                  value={projectSearch}
+                  onChange={(e) => setProjectSearch(e.target.value)}
+                  className="h-8 pl-8 pr-7 text-xs"
+                />
+                {projectSearch && (
+                  <button
+                    onClick={() => setProjectSearch('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
               <div className="space-y-1 overflow-y-auto flex-1">
                 <button

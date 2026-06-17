@@ -102,6 +102,7 @@ interface AgentStats {
   mensajes_hoy?: { recibidos?: number; enviados?: number };
   pendientes?: number;
   alertas_abiertas?: number;
+  claude_hoy?: { tokens_input?: number; tokens_output?: number; cache_read?: number; cache_write?: number };
 }
 interface AgentInfo {
   id: string;
@@ -111,6 +112,14 @@ interface AgentInfo {
 }
 
 // ========== Formatters ==========
+
+// Formatea cantidades de tokens: 56695 -> "56.7k", 1.2M, etc.
+const tk = (n: number): string => {
+  if (!n) return '0';
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+};
 
 const COP = (n: number): string =>
   new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(n || 0);
@@ -445,19 +454,29 @@ export default function ExecutiveDashboard() {
     return { active, total: clients.length };
   }, [clients]);
 
-  // Citas/alertas de los bots
+  // Citas/alertas + uso de Claude (tokens) de los bots
   const botsKPI = useMemo(() => {
     let citas = 0;
     let alertas = 0;
+    let tokensIn = 0;
+    let tokensOut = 0;
+    let cacheRead = 0;
     for (const a of agents) {
       citas += a.stats?.prospectos?.agendados ?? a.stats?.citas?.activas ?? a.stats?.citas?.mes ?? 0;
       alertas += a.stats?.alertas_abiertas ?? a.stats?.pendientes ?? 0;
+      tokensIn += a.stats?.claude_hoy?.tokens_input ?? 0;
+      tokensOut += a.stats?.claude_hoy?.tokens_output ?? 0;
+      cacheRead += a.stats?.claude_hoy?.cache_read ?? 0;
     }
     return {
       citas,
       alertas,
       online: agents.filter((a) => a.stats?.estado?.activo || a.stats?.bot_activo).length,
       total: agents.length,
+      tokensIn,
+      tokensOut,
+      cacheRead,
+      tokensTotal: tokensIn + tokensOut,
     };
   }, [agents]);
 
@@ -866,6 +885,22 @@ export default function ExecutiveDashboard() {
         {/* Estado de bots WhatsApp */}
         <section>
           <SectionHeader title="Bots WhatsApp" subtitle="Estado y actividad de hoy" to="/agentes" />
+          {/* Uso de Claude (tokens) de los bots hoy */}
+          {botsKPI.tokensTotal > 0 && (
+            <div className="mb-2 rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[11px] font-medium text-violet-600 uppercase tracking-wider">
+                  <Sparkles className="h-3.5 w-3.5" /> Uso de Claude (hoy)
+                </span>
+                <span className="text-sm font-bold tabular-nums">{tk(botsKPI.tokensTotal)} tokens</span>
+              </div>
+              <div className="text-[11px] text-muted-foreground mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+                <span>In: <strong className="text-foreground">{tk(botsKPI.tokensIn)}</strong></span>
+                <span>Out: <strong className="text-foreground">{tk(botsKPI.tokensOut)}</strong></span>
+                <span>Cache: <strong className="text-foreground">{tk(botsKPI.cacheRead)}</strong></span>
+              </div>
+            </div>
+          )}
           {agents.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center text-sm text-muted-foreground">
               No hay bots configurados.
