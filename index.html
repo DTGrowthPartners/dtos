@@ -19,6 +19,21 @@
 
     <!-- Vanilla Tilt JS for 3D effects -->
     <script src="https://unpkg.com/vanilla-tilt@1.8.1/dist/vanilla-tilt.min.js" defer></script>
+
+    <!-- Tema: aplica antes del primer paint para evitar flash de tema incorrecto -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('theme');
+          if (!t) {
+            t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+          }
+          var el = document.documentElement;
+          if (t === 'dark' || t === 'aurora') el.classList.add('dark');
+          if (t === 'aurora') el.classList.add('aurora');
+        } catch (e) {}
+      })();
+    </script>
   </head>
 
   <body>

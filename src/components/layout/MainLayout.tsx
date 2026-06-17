@@ -12,7 +12,7 @@ export function MainLayout() {
   const { collapsed } = useSidebar();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-shell min-h-screen bg-background">
       {/* Global Command Palette - Ctrl+K */}
       <CommandPalette />
 

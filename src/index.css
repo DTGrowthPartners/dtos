@@ -499,3 +499,107 @@
     @apply h-32 w-full skeleton;
   }
 }
+
+/* ==========================================================================
+   TEMA AURORA — "vidrio sobre auroras" (dark-only)
+   Manchas de gradiente saturadas detrás + superficies semi-transparentes con
+   backdrop blur. Reusa los mismos tokens HSL de la app (asi todos los
+   componentes adoptan la paleta) y agrega la capa de vidrio.
+   ========================================================================== */
+html.aurora {
+  /* Paleta morada/magenta vibrante sobre fondos muy oscuros */
+  --background: 270 45% 6%;
+  --foreground: 280 20% 97%;
+
+  --card: 270 35% 13%;
+  --card-foreground: 280 20% 97%;
+
+  --popover: 270 38% 11%;
+  --popover-foreground: 280 20% 97%;
+
+  --primary: 282 90% 68%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 270 30% 18%;
+  --secondary-foreground: 280 20% 97%;
+
+  --muted: 270 26% 16%;
+  --muted-foreground: 280 16% 74%;
+
+  --accent: 285 45% 24%;
+  --accent-foreground: 280 22% 98%;
+
+  --destructive: 350 80% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --success: 155 65% 50%;
+  --warning: 35 90% 60%;
+
+  --border: 282 40% 32%;
+  --input: 280 35% 24%;
+  --ring: 282 90% 68%;
+
+  --sidebar-background: 270 45% 8%;
+  --sidebar-foreground: 280 18% 88%;
+  --sidebar-primary: 282 90% 66%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 275 35% 20%;
+  --sidebar-accent-foreground: 280 20% 98%;
+  --sidebar-border: 280 35% 26%;
+  --sidebar-muted: 280 20% 62%;
+}
+
+/* Auroras: 5 radial-gradients fijos al viewport sobre una base oscura. */
+html.aurora body {
+  background:
+    radial-gradient(ellipse 60% 45% at 10% -5%, oklch(0.60 0.30 295 / 0.55), transparent 65%),
+    radial-gradient(ellipse 50% 55% at 95% 35%, oklch(0.75 0.25 155 / 0.35), transparent 65%),
+    radial-gradient(ellipse 55% 45% at 5% 90%, oklch(0.62 0.28 350 / 0.40), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 90% 100%, oklch(0.55 0.27 260 / 0.45), transparent 60%),
+    radial-gradient(ellipse 40% 30% at 50% 50%, oklch(0.65 0.22 35 / 0.16), transparent 70%),
+    oklch(0.07 0.03 285);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* El shell de la app debe ser transparente para dejar ver las auroras del body. */
+html.aurora .app-shell {
+  background-color: transparent !important;
+}
+
+/* Superficies de vidrio: cards semi-transparentes + blur. */
+html.aurora .bg-card {
+  background-color: hsl(var(--card) / 0.55) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+/* Popovers / dropdowns / selects: mas opacos para legibilidad. */
+html.aurora .bg-popover {
+  background-color: hsl(var(--popover) / 0.9) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Dialogos (Radix usa bg-background en el content): vidrio + blur. */
+html.aurora [role="dialog"] {
+  background-color: hsl(var(--popover) / 0.88) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Sidebar: vidrio + un mini-gradiente brand sutil arriba. */
+html.aurora aside {
+  background:
+    radial-gradient(ellipse 100% 55% at 50% 0%, oklch(0.45 0.20 295 / 0.20), transparent 70%),
+    hsl(var(--sidebar-background) / 0.6) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Header sticky: vidrio para que combine. */
+html.aurora header {
+  background-color: hsl(var(--background) / 0.5) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}

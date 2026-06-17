@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, ChevronRight, Moon, Sun, LogOut, Command } from 'lucide-react';
+import { Search, User, ChevronRight, Moon, Sun, LogOut, Command, Sparkles, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { TEAM_MEMBERS } from '@/types/taskTypes';
+import { applyTheme, getStoredTheme, type Theme } from '@/lib/theme';
 
 const pathNames: Record<string, string> = {
   '/': 'Dashboard',
@@ -45,10 +46,7 @@ export function AppHeader() {
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('theme');
-    return saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  });
+  const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
   const currentPath = pathNames[location.pathname] || 'Dashboard';
   const user = authService.getUser();
   const isMisTareasView = location.pathname === '/mis-tareas';
@@ -57,20 +55,12 @@ export function AppHeader() {
   const teamMember = TEAM_MEMBERS.find(m => m.name.toLowerCase() === user?.firstName?.toLowerCase());
   const userRole = teamMember?.role || user?.role || 'Usuario';
 
-  // Sincronizar clase dark en el documento al montar
+  // Aplica el tema al montar / cuando cambia.
   useEffect(() => {
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [isDark]);
+    applyTheme(theme);
+  }, [theme]);
 
-  const toggleTheme = () => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    localStorage.setItem('theme', newIsDark ? 'dark' : 'light');
-  };
+  const isDark = theme === 'dark' || theme === 'aurora';
 
   const handleLogout = async () => {
     try {
@@ -137,15 +127,44 @@ export function AppHeader() {
           </kbd>
         </button>
 
-        {/* Theme Toggle */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleTheme}
-          className={isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground"}
-        >
-          {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-        </Button>
+        {/* Theme Selector: Claro / Oscuro / Aurora */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground"}
+              title="Tema"
+            >
+              {theme === 'aurora' ? (
+                <Sparkles className="h-5 w-5 text-violet-400" />
+              ) : isDark ? (
+                <Moon className="h-5 w-5" />
+              ) : (
+                <Sun className="h-5 w-5" />
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>Tema</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {([
+              { id: 'light' as Theme, label: 'Claro', icon: <Sun className="mr-2 h-4 w-4" /> },
+              { id: 'dark' as Theme, label: 'Oscuro', icon: <Moon className="mr-2 h-4 w-4" /> },
+              { id: 'aurora' as Theme, label: 'Aurora', icon: <Sparkles className="mr-2 h-4 w-4 text-violet-500" /> },
+            ]).map((opt) => (
+              <DropdownMenuItem
+                key={opt.id}
+                className="cursor-pointer"
+                onClick={() => setTheme(opt.id)}
+              >
+                {opt.icon}
+                <span className="flex-1">{opt.label}</span>
+                {theme === opt.id && <Check className="h-4 w-4 text-primary" />}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         {/* Notifications */}
         <NotificationsDropdown isMisTareasView={isMisTareasView} />

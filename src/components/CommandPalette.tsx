@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { authService } from '@/lib/auth';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
+import { applyTheme, getStoredTheme, type Theme } from '@/lib/theme';
 
 interface CommandItem {
   id: string;
@@ -40,11 +41,18 @@ export function CommandPalette() {
   const navigate = useNavigate();
   const openAiTask = useAiTaskStore((s) => s.openPrompt);
 
+  // Cicla los 3 temas: claro -> oscuro -> aurora -> claro
   const toggleTheme = useCallback(() => {
-    const newIsDark = !isDark;
-    setIsDark(newIsDark);
-    document.documentElement.classList.toggle('dark', newIsDark);
-  }, [isDark]);
+    const current = getStoredTheme();
+    const next: Theme = current === 'light' ? 'dark' : current === 'dark' ? 'aurora' : 'light';
+    applyTheme(next);
+    setIsDark(next !== 'light');
+  }, []);
+
+  const pickTheme = useCallback((t: Theme) => {
+    applyTheme(t);
+    setIsDark(t !== 'light');
+  }, []);
 
   const commands: CommandItem[] = useMemo(() => [
     // Actions first
@@ -152,13 +160,22 @@ export function CommandPalette() {
     // Settings
     {
       id: 'settings-theme-toggle',
-      label: isDark ? 'Tema Claro' : 'Tema Oscuro',
-      description: 'Cambiar apariencia',
+      label: 'Cambiar tema',
+      description: 'Cicla claro / oscuro / aurora',
       icon: isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />,
       action: toggleTheme,
       category: 'settings',
-      keywords: ['dark', 'light', 'modo', 'apariencia', 'oscuro', 'claro'],
+      keywords: ['dark', 'light', 'modo', 'apariencia', 'oscuro', 'claro', 'tema'],
       shortcut: 'Ctrl+Shift+L',
+    },
+    {
+      id: 'settings-theme-aurora',
+      label: 'Tema Aurora',
+      description: 'Vidrio sobre auroras (oscuro)',
+      icon: <Sparkles className="h-4 w-4 text-violet-500" />,
+      action: () => pickTheme('aurora'),
+      category: 'settings',
+      keywords: ['aurora', 'glass', 'vidrio', 'premium', 'morado'],
     },
     {
       id: 'settings-logout',
@@ -172,7 +189,7 @@ export function CommandPalette() {
       category: 'settings',
       keywords: ['salir', 'logout', 'exit'],
     },
-  ], [navigate, isDark, toggleTheme, openAiTask]);
+  ], [navigate, isDark, toggleTheme, pickTheme, openAiTask]);
 
   const filteredCommands = useMemo(() => {
     if (!search) return commands;
