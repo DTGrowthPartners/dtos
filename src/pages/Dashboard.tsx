@@ -384,7 +384,10 @@ export default function Dashboard() {
         // Admin-only data
         const adminPromises = isAdmin ? [
           apiClient.get<FinanceData>('/api/finance/data').catch(() => ({ totalIncome: 0, totalExpenses: 0 })),
-          apiClient.get<FinanceTransaction[]>('/api/finance/expense').catch(() => []),
+          // NOTA: /api/finance/expense es POST (crear gasto); hacerle GET daba 404
+          // en consola. Las transacciones ya vienen en /api/finance/data
+          // (ingresos/gastos), asi que no llamamos nada aqui.
+          Promise.resolve([] as FinanceTransaction[]),
           apiClient.get<CRMDeal[]>('/api/crm/deals').catch(() => []),
           apiClient.get<CRMStage[]>('/api/crm/stages').catch(() => []),
           apiClient.get<DisponibleResponse>('/api/finance/disponible').catch(() => ({ cuentas: [], totalDisponible: 0 })),
@@ -411,7 +414,17 @@ export default function Dashboard() {
         // Admin-only data processing
         if (isAdmin && results.length > 3) {
           const financeData = results[3] as FinanceData;
-          const expenses = results[4] as FinanceTransaction[];
+          // Transacciones derivadas de /api/finance/data (ya no de un GET roto).
+          // El nombre del cliente viene en `entidad`; lo exponemos como terceroNombre.
+          const mapTx = (t: FinanceTransaction & { entidad?: string }, tipo: string): FinanceTransaction => ({
+            ...t,
+            tipo,
+            terceroNombre: t.terceroNombre || t.entidad,
+          });
+          const expenses: FinanceTransaction[] = [
+            ...((financeData.ingresos || []) as (FinanceTransaction & { entidad?: string })[]).map((t) => mapTx(t, 'ingreso')),
+            ...((financeData.gastos || []) as (FinanceTransaction & { entidad?: string })[]).map((t) => mapTx(t, 'egreso')),
+          ];
           const deals = results[5] as CRMDeal[];
           const stages = results[6] as CRMStage[];
           const disponibleData = results[7] as DisponibleResponse;
