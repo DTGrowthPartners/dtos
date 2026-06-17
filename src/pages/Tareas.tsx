@@ -1284,6 +1284,27 @@ export default function Tareas() {
     return false;
   };
 
+  // Mueve una carpeta a otra carpeta padre (o a raíz si parentId = null).
+  const handleMoveFolderToParent = async (folderId: string, parentId: string | null) => {
+    if (folderId === parentId) return;
+    if (parentId && isDescendantFolder(parentId, folderId)) {
+      toast({ title: 'No permitido', description: 'No puedes mover una carpeta dentro de sí misma.', variant: 'destructive' });
+      return;
+    }
+    // order al final de su nuevo grupo
+    const siblings = folders.filter((f) => (f.parentFolderId || null) === parentId && f.id !== folderId);
+    const newOrder = siblings.length;
+    setFolders((prev) => prev.map((f) => (f.id === folderId ? { ...f, parentFolderId: parentId || undefined, order: newOrder } : f)));
+    if (parentId) setExpandedFolders((prev) => new Set([...prev, parentId]));
+    try {
+      await updateProjectFolder(folderId, { parentFolderId: parentId || null, order: newOrder });
+      toast({ title: parentId ? 'Carpeta movida' : 'Carpeta sacada de la carpeta' });
+    } catch (error) {
+      console.error('Error moviendo carpeta:', error);
+      toast({ title: 'Error', description: 'No se pudo mover la carpeta', variant: 'destructive' });
+    }
+  };
+
   // Reordena/mueve una carpeta soltandola sobre otra: la fuente adopta el padre
   // del destino y se reinserta en su posicion (reordenar entre hermanas o mover
   // a otro grupo). Persiste order de todas + parentFolderId de la movida.
@@ -1416,15 +1437,17 @@ export default function Tareas() {
         <div
           draggable
           onDragStart={(e) => {
+            e.stopPropagation();
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', folder.id);
             setDraggedFolderId(folder.id);
           }}
-          onDragEnd={() => { setDraggedFolderId(null); setDragOverFolderId(null); }}
+          onDragEnd={(e) => { e.stopPropagation(); setDraggedFolderId(null); setDragOverFolderId(null); }}
           onDragOver={(e) => {
             // Acepta soltar un PROYECTO (mover a la carpeta) o una CARPETA (reordenar/mover).
             if (draggedProject || (draggedFolderId && draggedFolderId !== folder.id)) {
               e.preventDefault();
+              e.stopPropagation();
               e.dataTransfer.dropEffect = 'move';
               setDragOverFolderId((prev) => (prev === folder.id ? prev : folder.id));
             }
@@ -1432,6 +1455,7 @@ export default function Tareas() {
           onDragLeave={() => setDragOverFolderId((prev) => (prev === folder.id ? null : prev))}
           onDrop={(e) => {
             e.preventDefault();
+            e.stopPropagation();
             setDragOverFolderId(null);
             // Caso 1: soltar una carpeta sobre otra -> reordenar / mover.
             if (draggedFolderId) {
@@ -1503,6 +1527,26 @@ export default function Tareas() {
                   <FolderPlus className="h-3 w-3 mr-2" />
                   Nueva subcarpeta
                 </DropdownMenuItem>
+                {/* Mover carpeta: sacar a raíz o meter en otra carpeta */}
+                {folder.parentFolderId && (
+                  <DropdownMenuItem onClick={() => handleMoveFolderToParent(folder.id, null)}>
+                    <ArrowRight className="h-3 w-3 mr-2" />
+                    Sacar de carpeta
+                  </DropdownMenuItem>
+                )}
+                {folders.filter((f) => f.id !== folder.id && f.id !== folder.parentFolderId && !isDescendantFolder(f.id, folder.id)).length > 0 && (
+                  <>
+                    <DropdownMenuSeparator />
+                    {folders
+                      .filter((f) => f.id !== folder.id && f.id !== folder.parentFolderId && !isDescendantFolder(f.id, folder.id))
+                      .map((f) => (
+                        <DropdownMenuItem key={f.id} onClick={() => handleMoveFolderToParent(folder.id, f.id)}>
+                          <Folder className={`h-3 w-3 mr-2 ${f.color.replace('bg-', 'text-')}`} />
+                          Mover a {f.name}
+                        </DropdownMenuItem>
+                      ))}
+                  </>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => handleDeleteFolder(folder.id)} className="text-destructive">
                   <Trash2 className="h-3 w-3 mr-2" />
