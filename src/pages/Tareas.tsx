@@ -57,6 +57,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { DatePicker, TimePicker } from '@/components/ui/date-time-picker';
 import { Card } from '@/components/ui/card';
 import {
   Select,
@@ -5715,40 +5716,34 @@ export default function Tareas() {
                 <div className="space-y-2">
                   <Label>Fecha de inicio</Label>
                   <div className="flex gap-2">
-                    <Input
-                      type="date"
+                    <DatePicker
                       value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      onChange={(v) => setFormData({ ...formData, startDate: v, ...(v ? {} : { startTime: '' }) })}
                       disabled={isSaving}
                       className="flex-1"
                     />
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={formData.startTime}
-                      onChange={(e) => setFormData({ ...formData, startTime: e.target.value })}
+                      onChange={(v) => setFormData({ ...formData, startTime: v })}
                       disabled={isSaving || !formData.startDate}
                       className="w-28"
-                      placeholder="--:--"
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha límite</Label>
                   <div className="flex gap-2">
-                    <Input
-                      type="date"
+                    <DatePicker
                       value={formData.dueDate}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                      onChange={(v) => setFormData({ ...formData, dueDate: v, ...(v ? {} : { dueTime: '' }) })}
                       disabled={isSaving}
                       className="flex-1"
                     />
-                    <Input
-                      type="time"
+                    <TimePicker
                       value={formData.dueTime}
-                      onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                      onChange={(v) => setFormData({ ...formData, dueTime: v })}
                       disabled={isSaving || !formData.dueDate}
                       className="w-28"
-                      placeholder="--:--"
                     />
                   </div>
                 </div>
