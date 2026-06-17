@@ -152,6 +152,7 @@ import AITaskDialog, { type ParsedTask as AIParsedTask } from '@/components/task
 import { Sparkles } from 'lucide-react';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
 import MicButton from '@/components/MicButton';
+import TaskTimer from '@/components/tasks/TaskTimer';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import {
@@ -1833,6 +1834,20 @@ export default function Tareas() {
   }, [briefTemplates, toast]);
 
   // ============= TASK HANDLERS =============
+
+  // Cronómetro: persiste el tiempo dedicado de una tarea (optimista + Firestore).
+  const handleUpdateTaskTracking = async (
+    taskId: string,
+    updates: { trackedMs: number; trackingStartedAt: number | null }
+  ) => {
+    setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updates } : t)));
+    try {
+      await updateTask(taskId, updates);
+    } catch (error) {
+      console.error('Error guardando cronómetro:', error);
+      toast({ title: 'Error', description: 'No se pudo guardar el tiempo', variant: 'destructive' });
+    }
+  };
 
   const handleEdit = (task: Task) => {
     setEditingTask(task);
@@ -4371,6 +4386,12 @@ export default function Tareas() {
                                     )}
                                   </div>
                                   <div className="flex gap-1 items-center">
+                                    {/* Cronómetro de la tarea */}
+                                    <TaskTimer
+                                      trackedMs={task.trackedMs}
+                                      trackingStartedAt={task.trackingStartedAt}
+                                      onChange={(updates) => handleUpdateTaskTracking(task.id, updates)}
+                                    />
                                     {task.images && task.images.length > 0 && (
                                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                         <ImageIcon className="h-3 w-3" />

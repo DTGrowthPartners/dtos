@@ -179,6 +179,9 @@ export interface Task {
   totalPomodoros?: number;
   currentPomodoroTime?: number;
   pomodoroStatus?: 'idle' | 'running' | 'paused' | 'break';
+  // Cronómetro de tarea (tiempo dedicado)
+  trackedMs?: number;                 // tiempo acumulado en milisegundos
+  trackingStartedAt?: number | null;  // timestamp si está corriendo; null/undefined si pausado
   deletedAt?: number;
   // Recurrence fields
   recurrence?: RecurrenceConfig;
