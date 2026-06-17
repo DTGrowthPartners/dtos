@@ -298,8 +298,10 @@ export default function Tareas() {
   const [taskOverProjectId, setTaskOverProjectId] = useState<string | null>(null);
   // Filtro por carpeta: muestra las tareas de TODOS los proyectos de la carpeta.
   const [filterFolder, setFilterFolder] = useState<string | null>(null);
-  // Carpeta resaltada cuando se arrastra un PROYECTO encima (para moverlo a ella).
+  // Carpeta resaltada cuando se arrastra un PROYECTO o CARPETA encima.
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
+  // Carpeta que se esta arrastrando (para reordenar / mover entre carpetas).
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -1237,6 +1239,66 @@ export default function Tareas() {
   const isRootFolder = (f: ProjectFolder) =>
     !f.parentFolderId || !folders.some((x) => x.id === f.parentFolderId);
 
+  // ¿candidateId es descendiente de ancestorId? (para evitar ciclos al mover)
+  const isDescendantFolder = (candidateId: string, ancestorId: string): boolean => {
+    let cur = folders.find((f) => f.id === candidateId);
+    const seen = new Set<string>();
+    while (cur?.parentFolderId && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (cur.parentFolderId === ancestorId) return true;
+      cur = folders.find((f) => f.id === cur!.parentFolderId);
+    }
+    return false;
+  };
+
+  // Reordena/mueve una carpeta soltandola sobre otra: la fuente adopta el padre
+  // del destino y se reinserta en su posicion (reordenar entre hermanas o mover
+  // a otro grupo). Persiste order de todas + parentFolderId de la movida.
+  const handleFolderReorder = async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    // No permitir soltar una carpeta dentro de su propia descendencia (ciclo).
+    if (isDescendantFolder(targetId, sourceId)) {
+      toast({ title: 'No permitido', description: 'No puedes mover una carpeta dentro de sí misma.', variant: 'destructive' });
+      return;
+    }
+    const source = folders.find((f) => f.id === sourceId);
+    const target = folders.find((f) => f.id === targetId);
+    if (!source || !target) return;
+
+    const newParent = target.parentFolderId || null;
+    const changedParent = (source.parentFolderId || null) !== newParent;
+
+    // Lista de hermanas del destino (mismo padre), en orden, con la fuente reinsertada.
+    const siblings = folders
+      .filter((f) => (f.parentFolderId || null) === newParent && f.id !== sourceId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const targetIdx = siblings.findIndex((f) => f.id === targetId);
+    const reordered = [...siblings];
+    reordered.splice(targetIdx < 0 ? reordered.length : targetIdx, 0, { ...source, parentFolderId: newParent || undefined });
+
+    // Optimista en memoria
+    setFolders((prev) =>
+      prev.map((f) => {
+        const idx = reordered.findIndex((r) => r.id === f.id);
+        if (idx >= 0) return { ...f, order: idx, parentFolderId: f.id === sourceId ? (newParent || undefined) : f.parentFolderId };
+        return f;
+      })
+    );
+
+    try {
+      for (let i = 0; i < reordered.length; i++) {
+        await updateProjectFolder(reordered[i].id, { order: i });
+      }
+      if (changedParent) {
+        await updateProjectFolder(sourceId, { parentFolderId: newParent || null });
+      }
+      toast({ title: changedParent ? 'Carpeta movida' : 'Carpetas reordenadas' });
+    } catch (error) {
+      console.error('Error reordenando carpetas:', error);
+      toast({ title: 'Error', description: 'No se pudo reordenar', variant: 'destructive' });
+    }
+  };
+
   // Fila de proyecto (reutilizable a cualquier profundidad). Indenta sin ensanchar la barra.
   const renderProjectRow = (project: Project, depth: number) => {
     const count = getTaskCountByProject(project.id);
@@ -1316,8 +1378,16 @@ export default function Tareas() {
     return (
       <div key={folder.id} className="space-y-0.5">
         <div
+          draggable
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', folder.id);
+            setDraggedFolderId(folder.id);
+          }}
+          onDragEnd={() => { setDraggedFolderId(null); setDragOverFolderId(null); }}
           onDragOver={(e) => {
-            if (draggedProject) {
+            // Acepta soltar un PROYECTO (mover a la carpeta) o una CARPETA (reordenar/mover).
+            if (draggedProject || (draggedFolderId && draggedFolderId !== folder.id)) {
               e.preventDefault();
               e.dataTransfer.dropEffect = 'move';
               setDragOverFolderId((prev) => (prev === folder.id ? prev : folder.id));
@@ -1326,8 +1396,16 @@ export default function Tareas() {
           onDragLeave={() => setDragOverFolderId((prev) => (prev === folder.id ? null : prev))}
           onDrop={(e) => {
             e.preventDefault();
-            const pid = draggedProject;
             setDragOverFolderId(null);
+            // Caso 1: soltar una carpeta sobre otra -> reordenar / mover.
+            if (draggedFolderId) {
+              const fid = draggedFolderId;
+              setDraggedFolderId(null);
+              if (fid !== folder.id) handleFolderReorder(fid, folder.id);
+              return;
+            }
+            // Caso 2: soltar un proyecto -> moverlo a esta carpeta.
+            const pid = draggedProject;
             setDraggedProject(null);
             if (pid) {
               const proj = projects.find((p) => p.id === pid);
@@ -1335,10 +1413,11 @@ export default function Tareas() {
             }
           }}
           style={{ paddingLeft: 8 + depth * 14 }}
-          className={`group w-full flex items-center justify-between pr-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${dragOverFolderId === folder.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
+          className={`group w-full flex items-center justify-between pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${draggedFolderId === folder.id ? 'opacity-50' : ''} ${dragOverFolderId === folder.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
         >
           <div className="flex items-center gap-1 flex-1 min-w-0">
             <button
+              draggable={false}
               onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
               className="flex-shrink-0 p-0.5 -ml-0.5 rounded hover:bg-black/10"
               title={isExpanded ? 'Colapsar' : 'Expandir'}
@@ -1346,6 +1425,7 @@ export default function Tareas() {
               <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
             </button>
             <button
+              draggable={false}
               onClick={() => {
                 setFilterFolder(folder.id);
                 setFilterProject('all');
@@ -1357,11 +1437,11 @@ export default function Tareas() {
               <span className="truncate font-medium">{folder.name}</span>
             </button>
           </div>
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
             <span className="text-xs opacity-70">{folderTaskCount}</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity">
+                <button draggable={false} onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity">
                   <MoreVertical className="h-3 w-3" />
                 </button>
               </DropdownMenuTrigger>
