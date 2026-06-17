@@ -2814,7 +2814,7 @@ export default function Tareas() {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold flex items-center gap-2 text-sm">
                   <FolderOpen className="h-4 w-4" />
-                  Proyectos
+                  OPERACIONES
                 </h3>
                 <div className="flex items-center gap-1">
                   <Tooltip delayDuration={0}>
