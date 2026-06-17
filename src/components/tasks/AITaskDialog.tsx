@@ -93,6 +93,8 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
   const [listItems, setListItems] = useState<ListItem[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<string>('');
+  // Responsable global para el modo lista. 'AUTO' = respeta lo que infirió la IA por tarea.
+  const [bulkAssignee, setBulkAssignee] = useState<string>('AUTO');
   const [creating, setCreating] = useState(false);
 
   const resetAll = () => {
@@ -100,6 +102,7 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
     setMode('input');
     setListItems([]);
     setProjectId('');
+    setBulkAssignee('AUTO');
   };
 
   const defaultAssignee = (): TeamMemberName => {
@@ -180,7 +183,10 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
           description: t.description || '',
           status: TaskStatus.TODO,
           priority: mapPriority(t.priority),
-          assignee: (t.assignee as TeamMemberName) || defaultAssignee(),
+          assignee:
+            bulkAssignee !== 'AUTO'
+              ? (bulkAssignee as TeamMemberName)
+              : (t.assignee as TeamMemberName) || defaultAssignee(),
           creator,
           projectId: projectId || '',
           type: (t.type as TaskType) || undefined,
@@ -332,24 +338,42 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
             </DialogHeader>
 
             <div className="space-y-3 py-2">
-              {/* Proyecto */}
-              <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Proyecto</label>
-                <Select value={projectId} onValueChange={setProjectId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un proyecto…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                    {projects.length === 0 && (
-                      <div className="px-2 py-1.5 text-xs text-muted-foreground">No hay proyectos. Créalas sin proyecto.</div>
-                    )}
-                  </SelectContent>
-                </Select>
+              {/* Proyecto + Responsable */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Proyecto</label>
+                  <Select value={projectId} onValueChange={setProjectId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un proyecto…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                      {projects.length === 0 && (
+                        <div className="px-2 py-1.5 text-xs text-muted-foreground">No hay proyectos. Créalas sin proyecto.</div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">Responsable</label>
+                  <Select value={bulkAssignee} onValueChange={setBulkAssignee}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AUTO">Auto (según IA)</SelectItem>
+                      {TEAM_MEMBERS.map((m) => (
+                        <SelectItem key={m.name} value={m.name}>
+                          {m.name} · {m.role}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
               {/* Lista */}
@@ -380,9 +404,9 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
                         <Badge variant="outline" className={cn('text-[9px]', PRIORITY_BADGE[t.priority])}>
                           {t.priority === 'HIGH' ? 'Alta' : t.priority === 'LOW' ? 'Baja' : 'Media'}
                         </Badge>
-                        {t.assignee && (
+                        {(bulkAssignee !== 'AUTO' ? bulkAssignee : t.assignee) && (
                           <Badge variant="outline" className="text-[9px] border-blue-500/40 bg-blue-500/10 text-blue-600">
-                            {t.assignee}
+                            {bulkAssignee !== 'AUTO' ? bulkAssignee : t.assignee}
                           </Badge>
                         )}
                         {t.dueDate && (
