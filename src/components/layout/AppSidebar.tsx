@@ -156,7 +156,7 @@ export function AppSidebar() {
         )}
       >
         {/* Logo DTGP (la foto del usuario ya aparece arriba a la derecha en el header) */}
-        <div className="flex h-20 items-center justify-center border-b border-sidebar-border px-3">
+        <div className="flex h-20 items-center justify-center border-b border-sidebar-border px-3 pt-3">
           <NavLink to="/" className="flex flex-col items-center gap-1 w-full">
             <img
               src="/img/logo.png"
@@ -173,7 +173,7 @@ export function AppSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex flex-col gap-0.5 p-3 overflow-y-auto h-[calc(100vh-9rem)]">
+        <nav className="sidebar-scroll flex flex-col gap-0.5 p-3 overflow-y-auto h-[calc(100vh-9rem)]">
           {filteredGroups.map((group, gi) => (
             <div key={group.label || `group-${gi}`} className={cn(gi > 0 && 'mt-3')}>
               {/* Encabezado de grupo (oculto cuando colapsado o sin label) */}
