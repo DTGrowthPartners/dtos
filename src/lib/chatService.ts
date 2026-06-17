@@ -194,6 +194,14 @@ export const deleteMessage = async (messageId: string) => {
   await deleteDoc(doc(db, MESSAGES_COLLECTION, messageId));
 };
 
+// Borra TODOS los mensajes de una sala (p. ej. reiniciar el chat con la IA).
+export const clearRoomMessages = async (roomId: string): Promise<number> => {
+  const q = query(collection(db, MESSAGES_COLLECTION), where('roomId', '==', roomId));
+  const snapshot = await getDocs(q);
+  await Promise.all(snapshot.docs.map((d) => deleteDoc(doc(db, MESSAGES_COLLECTION, d.id))));
+  return snapshot.size;
+};
+
 // Create or get a direct message room
 export const getOrCreateDirectRoom = async (
   currentUserId: string,

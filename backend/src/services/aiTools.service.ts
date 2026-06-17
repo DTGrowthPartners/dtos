@@ -172,7 +172,7 @@ export class AIToolsService {
         title: args.title,
         description: args.description || '',
         assignee: args.assignee,
-        creator: 'Dario',
+        creator: 'María',
         priority: args.priority || 'MEDIUM',
         project: args.project || null,
         projectId: args.projectId || null,

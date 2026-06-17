@@ -226,7 +226,7 @@ export class ChatController {
         const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
           {
             role: 'system',
-            content: `Eres DARIO, el asistente de DT Growth Partners. Responde de forma conversacional. No tienes acceso directo a los datos del sistema; si piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.\n\n${styleGuide}`,
+            content: `Eres María, la asistente de DT Growth Partners. Responde de forma conversacional. No tienes acceso directo a los datos del sistema; si piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.\n\n${styleGuide}`,
           },
         ];
         if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
@@ -240,7 +240,7 @@ export class ChatController {
         const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
           {
             role: 'system',
-            content: `Eres DARIO, el asistente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.\n\n${styleGuide}`,
+            content: `Eres María, la asistente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.\n\n${styleGuide}`,
           },
         ];
         if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
@@ -280,7 +280,7 @@ export class ChatController {
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: 'system',
-          content: `Eres DARIO, el asistente inteligente de DT Growth Partners con acceso real al sistema DTOS (tareas, clientes, finanzas, CRM, campañas, metas).
+          content: `Eres María, la asistente inteligente de DT Growth Partners con acceso real al sistema DTOS (tareas, clientes, finanzas, CRM, campañas, metas).
 
 HERRAMIENTAS DISPONIBLES:
 ${buildToolsCatalog()}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -24,6 +24,7 @@ import {
   getOrCreateDirectRoom,
   subscribeToUserRooms,
   getOrCreateAIRoom,
+  clearRoomMessages,
 } from '@/lib/chatService';
 import type { ChatMessage, UserPresence, ChatRoom } from '@/types/chatTypes';
 
@@ -256,7 +257,7 @@ export default function LiveChat() {
           activeRoomId,
           data.response,
           'ai_assistant',
-          'Kimi AI',
+          'María',
           undefined
         );
       } else {
@@ -296,9 +297,24 @@ export default function LiveChat() {
   const openAIChat = () => {
     if (!aiRoomId) return;
     setActiveRoomId(aiRoomId);
-    setActiveRoomName('Chat con IA');
+    setActiveRoomName('María');
     setView('chat');
     // Mark messages as read will be handled by the useEffect when messages load
+  };
+
+  // Borra la conversación con la IA y la deja lista para empezar de nuevo.
+  const handleClearAIChat = async () => {
+    if (!aiRoomId) return;
+    if (!confirm('¿Borrar toda la conversación con María y empezar de nuevo?')) return;
+    try {
+      await clearRoomMessages(aiRoomId);
+      setMessages([]);
+      lastMessageIdRef.current = null;
+      toast({ title: 'Conversación reiniciada', description: 'Empieza una nueva charla con María.' });
+    } catch (error) {
+      console.error('Error clearing AI chat:', error);
+      toast({ title: 'Error', description: 'No se pudo reiniciar la conversación', variant: 'destructive' });
+    }
   };
 
   const startDirectChat = async (targetUser: TeamUser) => {
@@ -503,6 +519,17 @@ export default function LiveChat() {
                   <Plus className="h-4 w-4" />
                 </Button>
               )}
+              {view === 'chat' && activeRoomId === aiRoomId && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                  onClick={handleClearAIChat}
+                  title="Reiniciar conversación"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -568,7 +595,7 @@ export default function LiveChat() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <span className="font-medium">Chat con IA</span>
+                        <span className="font-medium">María</span>
                         {unreadCounts[aiRoomId] > 0 && (
                           <Badge variant="destructive" className="text-xs h-5 min-w-[20px]">
                             {unreadCounts[aiRoomId]}
@@ -576,7 +603,7 @@ export default function LiveChat() {
                         )}
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
-                        Asistente con acceso a tus datos
+                        Asistente IA
                       </p>
                     </div>
                   </button>
