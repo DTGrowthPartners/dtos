@@ -55,6 +55,7 @@ interface FinanceData {
   totalExpenses: number;
   ingresos: FinanceTransaction[];
   gastos: FinanceTransaction[];
+  financeByMonth?: { month: string; income: number; expenses: number }[];
 }
 
 interface ServiceRevenueMetrics {
@@ -115,6 +116,8 @@ export default function Dashboard() {
   const [servicesMRR, setServicesMRR] = useState(0);
   const [clientsWithServices, setClientsWithServices] = useState(0);
   const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
+  // Tendencia mensual ya agregada por el backend (getFinanceData.financeByMonth)
+  const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; income: number; expenses: number }[]>([]);
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
@@ -434,6 +437,7 @@ export default function Dashboard() {
           setMonthlyIncome(currentMonthIncome);
           setMonthlyExpenses(currentMonthExpenses);
           setFinanceTransactions(expenses);
+          setMonthlyTrend(financeData.financeByMonth || []);
           setCrmDeals(deals);
           setCrmStages(stages);
           setDisponible(disponibleData.cuentas || []);
@@ -671,7 +675,7 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={incomeByMonth}>
+                    <BarChart data={monthlyTrend.length ? monthlyTrend : incomeByMonth}>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
