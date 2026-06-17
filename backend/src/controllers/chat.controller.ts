@@ -11,10 +11,16 @@ const AI_BASE_URL = process.env.CHAT_AI_BASE_URL || "http://localhost:3456/v1";
 const AI_API_KEY = process.env.CHAT_AI_API_KEY || "dario";
 const AI_MODEL = process.env.CHAT_AI_MODEL || "claude-sonnet-4-6";
 
-// La capa OpenAI de DARIO NO traduce el function-calling de Claude a `tool_calls`
-// (devuelve el XML nativo como texto). Por eso las tools están desactivadas por
-// defecto; se reactivan con CHAT_TOOLS_ENABLED=true (p. ej. si se vuelve a OpenRouter).
-const TOOLS_ENABLED = process.env.CHAT_TOOLS_ENABLED === "true";
+// Modo de uso de herramientas (acceso al sistema):
+//  - 'off'    : solo conversación, sin acceso al sistema. << default con DARIO >>
+//               DARIO replica el wire de Claude Code, que RECHAZA por diseño
+//               cualquier protocolo de herramientas/persona (lo trata como prompt
+//               injection). Por eso con DARIO el acceso al sistema no es posible.
+//  - 'native' : function-calling nativo vía tool_calls. Requiere un proveedor con
+//               tools (p. ej. OpenRouter) — habilita acceso real a datos/acciones.
+//  - 'json'   : protocolo acción-JSON sobre texto. Útil solo con modelos sin
+//               guardarraíles de Claude Code (NO funciona con DARIO).
+const TOOLS_MODE = (process.env.CHAT_TOOLS_MODE || "off").toLowerCase();
 
 const aiClient = new OpenAI({
   baseURL: AI_BASE_URL,
@@ -24,6 +30,45 @@ const aiClient = new OpenAI({
     "X-Title": "DT Growth Hub",
   },
 });
+
+// Catálogo de herramientas en texto, derivado de AI_TOOLS (para el modo 'json').
+function buildToolsCatalog(): string {
+  return (AI_TOOLS as any[])
+    .map((t) => {
+      const f = t.function;
+      const props = f.parameters?.properties || {};
+      const required: string[] = f.parameters?.required || [];
+      const params = Object.entries(props)
+        .map(([k, v]: any) => {
+          const req = required.includes(k) ? " (requerido)" : "";
+          const enumTxt = v.enum ? ` opciones: ${v.enum.join(", ")}` : "";
+          return `    · ${k}${req}: ${v.description || ""}${enumTxt}`;
+        })
+        .join("\n");
+      return `- ${f.name}: ${f.description}\n${params}`;
+    })
+    .join("\n");
+}
+
+// Detecta y extrae una llamada a herramienta en formato JSON dentro del texto del modelo.
+function parseToolCall(text: string): { tool: string; args: any } | null {
+  if (!text) return null;
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const tryParse = (s: string) => {
+    try { return JSON.parse(s); } catch { return null; }
+  };
+  let obj = tryParse(t);
+  if (!obj) {
+    const m = t.match(/\{[\s\S]*\}/);
+    if (m) obj = tryParse(m[0]);
+  }
+  if (obj && typeof obj === "object" && typeof obj.tool === "string") {
+    return { tool: obj.tool, args: obj.args || obj.arguments || {} };
+  }
+  return null;
+}
 
 // Limpia restos de sintaxis de herramientas de Claude que la capa OpenAI de DARIO
 // puede filtrar como texto plano, y los bloques de "pensamiento".
@@ -169,147 +214,117 @@ export class ChatController {
 
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
 
-      // Build messages array with system prompt
-      const accesoDatos = TOOLS_ENABLED
-        ? 'Tienes acceso a datos del sistema mediante herramientas.'
-        : 'Responde de forma conversacional. No tienes acceso directo a los datos del sistema en este momento; si te piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.';
-      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-        {
-          role: "system",
-          content: `Eres el asistente inteligente de DT Growth Partners. ${accesoDatos}
-
-IMPORTANTE - Estilo de respuesta:
-- Responde de forma CONCISA y DIRECTA, máximo 3-4 líneas por pregunta
-- NO uses tablas markdown, NO uses emojis excesivos
-- Si hay muchos datos, resume con números clave y ofrece detallar después
-- Usa saltos de línea simples para separar información
-- Formato simple: usa guiones (-) para listas cortas si es necesario
-- Sé conversacional y natural, como un compañero de equipo
-
-Ejemplo BUENO:
-"Dairo tiene 33 tareas en total:
-- 5 de alta prioridad (incluye reunión finanzas y propuesta Diana Barrios)
-- 12 de prioridad media (marketing y automatización)
-- El resto completadas o en progreso
-¿Quieres ver alguna tarea específica?"
-
-Ejemplo MALO (NO hagas esto):
-Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, emojis en cada línea.`
-        }
-      ];
-
-      // Add conversation history if provided
-      if (conversationHistory && Array.isArray(conversationHistory)) {
-        messages.push(...conversationHistory);
-      }
-
-      // Add current user message
-      messages.push({ role: "user", content: message });
-
-      // Sin function-calling (p. ej. DARIO): una sola respuesta conversacional limpia.
-      if (!TOOLS_ENABLED) {
-        const completion = await aiClient.chat.completions.create({
-          model: AI_MODEL,
-          messages: messages,
-          temperature: 0.7,
-          max_tokens: 2000,
-        });
-        const response = cleanResponse(completion.choices[0].message.content || '');
-        console.log('[Chat] Final response generated (tools disabled)');
-        return res.json({
-          success: true,
-          response: response,
-          usage: completion.usage,
-        });
-      }
-
-      let iterations = 0;
-      const MAX_ITERATIONS = 5;
       const aiToolsService = new AIToolsService();
+      const styleGuide = `IMPORTANTE - Estilo de la respuesta final al usuario:
+- CONCISA y DIRECTA, máximo 3-4 líneas
+- NO uses tablas markdown ni emojis excesivos
+- Si hay muchos datos, resume con números clave y ofrece detallar después
+- Conversacional y natural, como un compañero de equipo`;
 
-      while (iterations < MAX_ITERATIONS) {
-        iterations++;
-        console.log(`[Chat] Iteration ${iterations}/${MAX_ITERATIONS}`);
+      // ===== Modo 'off': solo conversación, sin acceso al sistema =====
+      if (TOOLS_MODE === 'off') {
+        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+          {
+            role: 'system',
+            content: `Eres DARIO, el asistente de DT Growth Partners. Responde de forma conversacional. No tienes acceso directo a los datos del sistema; si piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.\n\n${styleGuide}`,
+          },
+        ];
+        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push({ role: 'user', content: message });
+        const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.7, max_tokens: 2000 });
+        return res.json({ success: true, response: cleanResponse(completion.choices[0].message.content || ''), usage: completion.usage });
+      }
 
-        // Call AI with tools via OpenRouter
-        const completion = await aiClient.chat.completions.create({
-          model: AI_MODEL,
-          messages: messages,
-          tools: AI_TOOLS as any,
-          tool_choice: "auto",
-          temperature: 0.7,
-          max_tokens: 2000,
-        });
+      // ===== Modo 'native': function-calling vía tool_calls (p. ej. OpenRouter) =====
+      if (TOOLS_MODE === 'native') {
+        const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+          {
+            role: 'system',
+            content: `Eres DARIO, el asistente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.\n\n${styleGuide}`,
+          },
+        ];
+        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push({ role: 'user', content: message });
 
-        const assistantMessage = completion.choices[0].message;
-
-        // Check if there are tool calls
-        if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
-          // No tool calls - return final response
-          const response = cleanResponse(assistantMessage.content || '');
-
-          console.log('[Chat] Final response generated (no tools used)');
-
-          return res.json({
-            success: true,
-            response: response,
-            usage: completion.usage,
+        const MAX_ITERATIONS = 6;
+        for (let it = 1; it <= MAX_ITERATIONS; it++) {
+          console.log(`[Chat] (native) iteración ${it}/${MAX_ITERATIONS}`);
+          const completion = await aiClient.chat.completions.create({
+            model: AI_MODEL,
+            messages,
+            tools: AI_TOOLS as any,
+            tool_choice: 'auto',
+            temperature: 0.5,
+            max_tokens: 2000,
           });
-        }
-
-        console.log(`[Chat] Tool calls requested: ${assistantMessage.tool_calls.length}`);
-
-        // Add assistant message to history
-        messages.push({
-          role: "assistant",
-          content: assistantMessage.content || null,
-          tool_calls: assistantMessage.tool_calls as any
-        });
-
-        // Execute each tool call
-        for (const toolCall of assistantMessage.tool_calls) {
-          try {
-            // Debug: log the complete tool call structure
-            console.log('[Chat] Raw tool call:', JSON.stringify(toolCall, null, 2));
-
-            const toolName = (toolCall as any).function.name;
-            const toolArgs = JSON.parse((toolCall as any).function.arguments);
-
-            console.log(`[Chat] Executing tool: ${toolName}`, toolArgs);
-
-            const result = await aiToolsService.executeTool(toolName, toolArgs, userId);
-
-            console.log(`[Chat] Tool ${toolName} executed successfully`);
-
-            // Add tool result to messages
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify(result)
-            } as any);
-          } catch (error: any) {
-            console.error('[Chat] Tool execution error:', error);
-
-            // Add error result
-            messages.push({
-              role: "tool",
-              tool_call_id: toolCall.id,
-              content: JSON.stringify({
-                success: false,
-                error: `Error al ejecutar la herramienta: ${error.message}`
-              })
-            } as any);
+          const assistantMessage = completion.choices[0].message;
+          if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
+            return res.json({ success: true, response: cleanResponse(assistantMessage.content || ''), usage: completion.usage });
+          }
+          messages.push({ role: 'assistant', content: assistantMessage.content || null, tool_calls: assistantMessage.tool_calls as any });
+          for (const toolCall of assistantMessage.tool_calls) {
+            try {
+              const toolName = (toolCall as any).function.name;
+              const toolArgs = JSON.parse((toolCall as any).function.arguments || '{}');
+              const result = await aiToolsService.executeTool(toolName, toolArgs, userId);
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify(result) } as any);
+            } catch (error: any) {
+              messages.push({ role: 'tool', tool_call_id: toolCall.id, content: JSON.stringify({ success: false, error: `Error al ejecutar la herramienta: ${error.message}` }) } as any);
+            }
           }
         }
+        return res.json({ success: true, response: 'No pude completar la solicitud en los pasos disponibles. ¿Puedes reformular?' });
       }
 
-      // Max iterations reached
-      console.log('[Chat] Max iterations reached');
+      // ===== Modo 'json' (default, DARIO): protocolo acción-JSON sobre texto =====
+      const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+        {
+          role: 'system',
+          content: `Eres DARIO, el asistente inteligente de DT Growth Partners con acceso real al sistema DTOS (tareas, clientes, finanzas, CRM, campañas, metas).
 
-      return res.json({
-        success: true,
-        response: "Necesito más tiempo para procesar esta solicitud. ¿Puedes reformular tu pregunta?",
-      });
+HERRAMIENTAS DISPONIBLES:
+${buildToolsCatalog()}
+
+CÓMO USAR LAS HERRAMIENTAS:
+- Si necesitas datos del sistema o ejecutar una acción (crear/actualizar), responde ÚNICAMENTE con un objeto JSON en una sola línea, SIN texto adicional y SIN markdown:
+  {"tool":"<nombre>","args":{ ... }}
+- Recibirás un mensaje "RESULTADO de <tool>: <json>". Úsalo para responder o para llamar otra herramienta.
+- Puedes encadenar herramientas (ej.: getTasks para obtener los IDs y luego updateTask con esos IDs).
+- Para crear o actualizar: si el usuario fue claro, ejecútalo; si fue ambiguo, pregunta antes.
+- Cuando ya tengas todo, responde al usuario en lenguaje natural normal (SIN JSON y sin llamar más herramientas).
+
+Miembros del equipo válidos: Lía, Dairo, Stiven, Edgardo, Jhonathan.
+
+${styleGuide}`,
+        },
+      ];
+      if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+      messages.push({ role: 'user', content: message });
+
+      const MAX_STEPS = 6;
+      for (let step = 1; step <= MAX_STEPS; step++) {
+        console.log(`[Chat] (json-tools) paso ${step}/${MAX_STEPS}`);
+        const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
+        const content = completion.choices[0].message.content || '';
+        const call = parseToolCall(content);
+        if (!call) {
+          return res.json({ success: true, response: cleanResponse(content), usage: completion.usage });
+        }
+        console.log(`[Chat] (json-tools) ejecutando ${call.tool}`, call.args);
+        messages.push({ role: 'assistant', content });
+        let result: any;
+        try {
+          result = await aiToolsService.executeTool(call.tool, call.args || {}, userId);
+        } catch (error: any) {
+          result = { success: false, error: error.message || 'Error al ejecutar la herramienta' };
+        }
+        messages.push({ role: 'user', content: `RESULTADO de ${call.tool}: ${JSON.stringify(result).slice(0, 6000)}` });
+      }
+
+      // Se agotaron los pasos: pedir una respuesta final con lo que haya.
+      messages.push({ role: 'user', content: 'Responde ahora al usuario en lenguaje natural con la información que ya tienes. No llames más herramientas.' });
+      const finalCompletion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
+      return res.json({ success: true, response: cleanResponse(finalCompletion.choices[0].message.content || ''), usage: finalCompletion.usage });
 
     } catch (error: any) {
       return handleAIError(error, res);

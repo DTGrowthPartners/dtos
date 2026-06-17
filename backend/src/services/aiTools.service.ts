@@ -12,6 +12,9 @@ import fetch from 'node-fetch';
 export class AIToolsService {
   private db = admin.firestore();
   private BOT_API_KEY = process.env.BOT_API_KEY || 'dt-bot-secret-key-2024';
+  // Base de las rutas internas del bot. El backend escucha en process.env.PORT
+  // (3004 en el VPS); antes estaba fijo en 3001, que apunta a otro servicio.
+  private BOT_BASE = `http://localhost:${process.env.PORT || 3001}`;
 
   /**
    * Main dispatcher - routes tool calls to specific implementations
@@ -110,7 +113,7 @@ export class AIToolsService {
    * Get clients from PostgreSQL via bot endpoint
    */
   private async getClients(args: any, userId: string) {
-    const url = new URL('http://localhost:3001/api/webhook/bot/clients');
+    const url = new URL(`${this.BOT_BASE}/api/webhook/bot/clients`);
 
     if (args.search) url.searchParams.append('search', args.search);
     if (args.status) url.searchParams.append('status', args.status);
@@ -133,7 +136,7 @@ export class AIToolsService {
    * Get financial data from Google Sheets via bot endpoint
    */
   private async getFinances(args: any, userId: string) {
-    const url = new URL('http://localhost:3001/api/webhook/bot/finances');
+    const url = new URL(`${this.BOT_BASE}/api/webhook/bot/finances`);
 
     if (args.month) {
       url.searchParams.append('mes', args.month);
@@ -159,7 +162,7 @@ export class AIToolsService {
   private async createTask(args: any, userId: string) {
     console.log('[AITools] Creating task:', { title: args.title, assignee: args.assignee, userId });
 
-    const response = await fetch('http://localhost:3001/api/webhook/bot/tasks', {
+    const response = await fetch(`${this.BOT_BASE}/api/webhook/bot/tasks`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -169,7 +172,7 @@ export class AIToolsService {
         title: args.title,
         description: args.description || '',
         assignee: args.assignee,
-        creator: 'Kimi AI',
+        creator: 'Dario',
         priority: args.priority || 'MEDIUM',
         project: args.project || null,
         projectId: args.projectId || null,
@@ -191,7 +194,7 @@ export class AIToolsService {
    * Get CRM deals from PostgreSQL via bot endpoint
    */
   private async getDeals(args: any, userId: string) {
-    const url = new URL('http://localhost:3001/api/webhook/bot/crm/deals');
+    const url = new URL(`${this.BOT_BASE}/api/webhook/bot/crm/deals`);
 
     if (args.stage) url.searchParams.append('etapa', args.stage);
     if (args.search) url.searchParams.append('buscar', args.search);
@@ -231,7 +234,7 @@ export class AIToolsService {
         if (status) body.status = status;
         if (priority) body.priority = priority;
 
-        const response = await fetch(`http://localhost:3001/api/webhook/bot/tasks/${taskId}`, {
+        const response = await fetch(`${this.BOT_BASE}/api/webhook/bot/tasks/${taskId}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
@@ -274,7 +277,7 @@ export class AIToolsService {
    * Get client goals (metas) with traffic light indicators via bot endpoint
    */
   private async getClientGoals(args: any, userId: string) {
-    const url = new URL('http://localhost:3001/api/webhook/bot/client-goals');
+    const url = new URL(`${this.BOT_BASE}/api/webhook/bot/client-goals`);
 
     if (args.month) {
       url.searchParams.append('mes', args.month);
@@ -298,7 +301,7 @@ export class AIToolsService {
    * Get campaigns from PostgreSQL via bot endpoint
    */
   private async getCampaigns(args: any, userId: string) {
-    const url = new URL('http://localhost:3001/api/webhook/bot/campaigns');
+    const url = new URL(`${this.BOT_BASE}/api/webhook/bot/campaigns`);
 
     if (args.client) url.searchParams.append('client', args.client);
     if (args.status) url.searchParams.append('status', args.status);
