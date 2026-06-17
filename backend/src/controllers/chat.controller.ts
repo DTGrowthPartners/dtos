@@ -3,17 +3,41 @@ import OpenAI from 'openai';
 import { AI_TOOLS } from '../config/aiTools';
 import { AIToolsService } from '../services/aiTools.service';
 
-// Configure AI client via OpenRouter
+// Cliente de IA del chat.
+// Por defecto apunta a DARIO (proxy local que usa la suscripción de Claude, sin costo
+// por token). DARIO escucha en localhost:3456 y expone endpoints compatibles con OpenAI.
+// Se puede sobreescribir por env para volver a OpenRouter u otro proveedor.
+const AI_BASE_URL = process.env.CHAT_AI_BASE_URL || "http://localhost:3456/v1";
+const AI_API_KEY = process.env.CHAT_AI_API_KEY || "dario";
+const AI_MODEL = process.env.CHAT_AI_MODEL || "claude-sonnet-4-6";
+
+// La capa OpenAI de DARIO NO traduce el function-calling de Claude a `tool_calls`
+// (devuelve el XML nativo como texto). Por eso las tools están desactivadas por
+// defecto; se reactivan con CHAT_TOOLS_ENABLED=true (p. ej. si se vuelve a OpenRouter).
+const TOOLS_ENABLED = process.env.CHAT_TOOLS_ENABLED === "true";
+
 const aiClient = new OpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
-  apiKey: process.env.OPENROUTER_API_KEY,
+  baseURL: AI_BASE_URL,
+  apiKey: AI_API_KEY,
   defaultHeaders: {
     "HTTP-Referer": "https://os.dtgrowthpartners.com",
     "X-Title": "DT Growth Hub",
   },
 });
 
-const AI_MODEL = process.env.OPENROUTER_MODEL || "moonshotai/kimi-k2";
+// Limpia restos de sintaxis de herramientas de Claude que la capa OpenAI de DARIO
+// puede filtrar como texto plano, y los bloques de "pensamiento".
+function cleanResponse(text: string): string {
+  let out = text || "";
+  if (out.includes("</think>")) {
+    out = out.split("</think>").pop()?.trim() || out;
+  }
+  out = out
+    .replace(/<function_calls>[\s\S]*?<\/function_calls>/g, "")
+    .replace(/<\/?(invoke|parameter|function_calls|antml:[a-z_]+)[^>]*>/g, "")
+    .trim();
+  return out;
+}
 
 // Handle AI API errors with friendly messages
 function handleAIError(error: any, res: Response) {
@@ -73,12 +97,7 @@ export class ChatController {
         max_tokens: 2000,
       });
 
-      let response = completion.choices[0].message.content || '';
-
-      // Filter out thinking tags and content if present
-      if (response.includes('</think>')) {
-        response = response.split('</think>').pop()?.trim() || response;
-      }
+      const response = cleanResponse(completion.choices[0].message.content || '');
 
       console.log('[Chat] Response generated successfully');
 
@@ -120,12 +139,7 @@ export class ChatController {
         ],
       });
 
-      let response = completion.choices[0].message.content || '';
-
-      // Filter out thinking tags and content if present
-      if (response.includes('</think>')) {
-        response = response.split('</think>').pop()?.trim() || response;
-      }
+      const response = cleanResponse(completion.choices[0].message.content || '');
 
       console.log('[Chat] Image analysis completed');
 
@@ -156,10 +170,13 @@ export class ChatController {
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
 
       // Build messages array with system prompt
+      const accesoDatos = TOOLS_ENABLED
+        ? 'Tienes acceso a datos del sistema mediante herramientas.'
+        : 'Responde de forma conversacional. No tienes acceso directo a los datos del sistema en este momento; si te piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.';
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
         {
           role: "system",
-          content: `Eres el asistente inteligente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.
+          content: `Eres el asistente inteligente de DT Growth Partners. ${accesoDatos}
 
 IMPORTANTE - Estilo de respuesta:
 - Responde de forma CONCISA y DIRECTA, máximo 3-4 líneas por pregunta
@@ -189,6 +206,23 @@ Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, 
       // Add current user message
       messages.push({ role: "user", content: message });
 
+      // Sin function-calling (p. ej. DARIO): una sola respuesta conversacional limpia.
+      if (!TOOLS_ENABLED) {
+        const completion = await aiClient.chat.completions.create({
+          model: AI_MODEL,
+          messages: messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+        });
+        const response = cleanResponse(completion.choices[0].message.content || '');
+        console.log('[Chat] Final response generated (tools disabled)');
+        return res.json({
+          success: true,
+          response: response,
+          usage: completion.usage,
+        });
+      }
+
       let iterations = 0;
       const MAX_ITERATIONS = 5;
       const aiToolsService = new AIToolsService();
@@ -212,12 +246,7 @@ Tablas largas con formato markdown, resúmenes ejecutivos con muchas secciones, 
         // Check if there are tool calls
         if (!assistantMessage.tool_calls || assistantMessage.tool_calls.length === 0) {
           // No tool calls - return final response
-          let response = assistantMessage.content || '';
-
-          // Filter out thinking tags
-          if (response.includes('</think>')) {
-            response = response.split('</think>').pop()?.trim() || response;
-          }
+          const response = cleanResponse(assistantMessage.content || '');
 
           console.log('[Chat] Final response generated (no tools used)');
 
