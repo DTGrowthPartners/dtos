@@ -36,6 +36,8 @@ import {
   GripVertical,
   Flag,
   ArrowRight,
+  ArrowUp,
+  ArrowDown,
   ArrowLeft,
   MoreVertical,
   Pencil,
@@ -1353,6 +1355,37 @@ export default function Tareas() {
     }
   };
 
+  // Reordenamiento determinista: sube/baja una carpeta intercambiando posición
+  // con su hermana adyacente (mismo padre). No depende del drag (que es frágil).
+  const handleMoveFolderOrder = async (folderId: string, dir: 'up' | 'down') => {
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return;
+    const parent = folder.parentFolderId || null;
+    const siblings = folders
+      .filter((f) => (f.parentFolderId || null) === parent)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const idx = siblings.findIndex((f) => f.id === folderId);
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (idx < 0 || swapIdx < 0 || swapIdx >= siblings.length) return;
+    const reordered = [...siblings];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+    // Optimista: reasigna order secuencial al grupo de hermanas.
+    setFolders((prev) =>
+      prev.map((f) => {
+        const i = reordered.findIndex((r) => r.id === f.id);
+        return i >= 0 ? { ...f, order: i } : f;
+      })
+    );
+    try {
+      for (let i = 0; i < reordered.length; i++) {
+        await updateProjectFolder(reordered[i].id, { order: i });
+      }
+    } catch (error) {
+      console.error('Error reordenando carpetas:', error);
+      toast({ title: 'Error', description: 'No se pudo reordenar', variant: 'destructive' });
+    }
+  };
+
   // Fila de proyecto (reutilizable a cualquier profundidad). Indenta sin ensanchar la barra.
   const renderProjectRow = (project: Project, depth: number): JSX.Element | null => {
     if (!matchesProjectSearch(project.name)) return null;
@@ -1429,6 +1462,13 @@ export default function Tareas() {
     if (!folderMatchesSearch(folder)) return null;
     const childFolders = getChildFolders(folder.id);
     const folderProjects = getProjectsInFolder(folder.id);
+    // Posición entre hermanas (mismo padre) para habilitar Subir/Bajar.
+    const folderSiblings = folders
+      .filter((f) => (f.parentFolderId || null) === (folder.parentFolderId || null))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sibIdx = folderSiblings.findIndex((f) => f.id === folder.id);
+    const canMoveUp = sibIdx > 0;
+    const canMoveDown = sibIdx >= 0 && sibIdx < folderSiblings.length - 1;
     // Al buscar, forzar expandido para que se vean las coincidencias.
     const isExpanded = expandedFolders.has(folder.id) || !!projectSearch.trim();
     const folderTaskCount = folderProjects.reduce((s, p) => s + getTaskCountByProject(p.id), 0);
@@ -1527,6 +1567,20 @@ export default function Tareas() {
                   <FolderPlus className="h-3 w-3 mr-2" />
                   Nueva subcarpeta
                 </DropdownMenuItem>
+                {/* Reordenar entre hermanas (determinista, no depende del drag) */}
+                {(canMoveUp || canMoveDown) && <DropdownMenuSeparator />}
+                {canMoveUp && (
+                  <DropdownMenuItem onClick={() => handleMoveFolderOrder(folder.id, 'up')}>
+                    <ArrowUp className="h-3 w-3 mr-2" />
+                    Subir
+                  </DropdownMenuItem>
+                )}
+                {canMoveDown && (
+                  <DropdownMenuItem onClick={() => handleMoveFolderOrder(folder.id, 'down')}>
+                    <ArrowDown className="h-3 w-3 mr-2" />
+                    Bajar
+                  </DropdownMenuItem>
+                )}
                 {/* Mover carpeta: sacar a raíz o meter en otra carpeta */}
                 {folder.parentFolderId && (
                   <DropdownMenuItem onClick={() => handleMoveFolderToParent(folder.id, null)}>
@@ -4388,44 +4442,7 @@ export default function Tareas() {
                                       {task.title}
                                     </h3>
                                   </div>
-                                  <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" draggable={false} onDragStart={(e) => e.preventDefault()}>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6"
-                                      draggable={false}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleEdit(task);
-                                      }}
-                                    >
-                                      <Edit className="h-3 w-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6"
-                                      draggable={false}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDuplicate(task);
-                                      }}
-                                    >
-                                      <Copy className="h-3 w-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-6 w-6"
-                                      draggable={false}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDelete(task);
-                                      }}
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                  </div>
+                                  {/* Acciones (editar/duplicar/eliminar) viven en el menú contextual (clic derecho) */}
                                 </div>
 
                                 {/* Description */}
