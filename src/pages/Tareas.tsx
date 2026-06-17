@@ -416,6 +416,8 @@ export default function Tareas() {
   const [newFolderName, setNewFolderName] = useState('');
   const [newFolderColor, setNewFolderColor] = useState('bg-gray-500');
   const [editingFolder, setEditingFolder] = useState<ProjectFolder | null>(null);
+  // Carpeta padre al crear una subcarpeta (null = carpeta raíz)
+  const [newFolderParentId, setNewFolderParentId] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Edit project description
@@ -1114,12 +1116,14 @@ export default function Tareas() {
         color: newFolderColor,
         order: folders.length,
         expanded: true,
+        parentFolderId: newFolderParentId || undefined,
       });
-      setFolders([...folders, { id: folderId, name: newFolderName.trim(), color: newFolderColor, order: folders.length, expanded: true }]);
-      setExpandedFolders(prev => new Set([...prev, folderId]));
+      setFolders([...folders, { id: folderId, name: newFolderName.trim(), color: newFolderColor, order: folders.length, expanded: true, parentFolderId: newFolderParentId || undefined }]);
+      setExpandedFolders(prev => new Set([...prev, folderId, ...(newFolderParentId ? [newFolderParentId] : [])]));
       setIsFolderDialogOpen(false);
       setNewFolderName('');
       setNewFolderColor('bg-gray-500');
+      setNewFolderParentId(null);
       toast({
         title: 'Carpeta creada',
         description: 'La carpeta se creó correctamente',
@@ -1219,6 +1223,185 @@ export default function Tareas() {
   // Get projects without folder
   const getProjectsWithoutFolder = () => {
     return projects.filter(p => !p.folderId);
+  };
+
+  // Subcarpetas hijas directas de una carpeta
+  const getChildFolders = (parentId: string) =>
+    folders
+      .filter((f) => (f.parentFolderId || null) === parentId)
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+  // Carpeta raíz: sin padre, o cuyo padre ya no existe (evita huérfanas invisibles)
+  const isRootFolder = (f: ProjectFolder) =>
+    !f.parentFolderId || !folders.some((x) => x.id === f.parentFolderId);
+
+  // Fila de proyecto (reutilizable a cualquier profundidad). Indenta sin ensanchar la barra.
+  const renderProjectRow = (project: Project, depth: number) => {
+    const count = getTaskCountByProject(project.id);
+    return (
+      <div
+        key={project.id}
+        draggable
+        onDragStart={(e) => handleProjectDragStart(e, project.id)}
+        onDragEnd={handleProjectDragEnd}
+        onDragOver={(e) => handleProjectDragOver(e, project.id)}
+        onDragLeave={() => setTaskOverProjectId((prev) => (prev === project.id ? null : prev))}
+        onDrop={(e) => handleProjectDrop(e, project.id)}
+        style={{ paddingLeft: 8 + depth * 14 }}
+        className={`group w-full flex items-center justify-between pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
+      >
+        <button
+          onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
+          className="flex items-center gap-2 flex-1 min-w-0"
+          draggable={false}
+        >
+          <GripVertical className={`h-3 w-3 flex-shrink-0 ${filterProject === project.id ? 'text-primary-foreground/50' : 'text-muted-foreground/50'}`} />
+          <div className={`w-2.5 h-2.5 rounded-full ${project.color} flex-shrink-0`}></div>
+          <span className="truncate">{project.name}</span>
+        </button>
+        <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
+          <span className="text-xs opacity-70">{count}</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id ? 'hover:bg-primary-foreground/20 text-primary-foreground' : 'hover:bg-muted'}`}
+                draggable={false}
+              >
+                <MoreVertical className="h-3 w-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => handleEditProject(project)}>
+                <Pencil className="h-3 w-3 mr-2" />
+                Editar
+              </DropdownMenuItem>
+              {project.folderId && (
+                <DropdownMenuItem onClick={() => handleMoveProjectToFolder(project.id, null)}>
+                  <ArrowRight className="h-3 w-3 mr-2" />
+                  Sacar de carpeta
+                </DropdownMenuItem>
+              )}
+              {folders.filter((f) => f.id !== project.folderId).length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  {folders.filter((f) => f.id !== project.folderId).map((folder) => (
+                    <DropdownMenuItem key={folder.id} onClick={() => handleMoveProjectToFolder(project.id, folder.id)}>
+                      <Folder className={`h-3 w-3 mr-2 ${folder.color.replace('bg-', 'text-')}`} />
+                      Mover a {folder.name}
+                    </DropdownMenuItem>
+                  ))}
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
+                <FolderArchive className="h-3 w-3 mr-2" />
+                Archivar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    );
+  };
+
+  // Nodo de carpeta recursivo: header + (si expandida) subcarpetas + proyectos.
+  const renderFolderNode = (folder: ProjectFolder, depth: number): JSX.Element => {
+    const childFolders = getChildFolders(folder.id);
+    const folderProjects = getProjectsInFolder(folder.id);
+    const isExpanded = expandedFolders.has(folder.id);
+    const folderTaskCount = folderProjects.reduce((s, p) => s + getTaskCountByProject(p.id), 0);
+    return (
+      <div key={folder.id} className="space-y-0.5">
+        <div
+          onDragOver={(e) => {
+            if (draggedProject) {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = 'move';
+              setDragOverFolderId((prev) => (prev === folder.id ? prev : folder.id));
+            }
+          }}
+          onDragLeave={() => setDragOverFolderId((prev) => (prev === folder.id ? null : prev))}
+          onDrop={(e) => {
+            e.preventDefault();
+            const pid = draggedProject;
+            setDragOverFolderId(null);
+            setDraggedProject(null);
+            if (pid) {
+              const proj = projects.find((p) => p.id === pid);
+              if (proj && proj.folderId !== folder.id) handleMoveProjectToFolder(pid, folder.id);
+            }
+          }}
+          style={{ paddingLeft: 8 + depth * 14 }}
+          className={`group w-full flex items-center justify-between pr-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${dragOverFolderId === folder.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
+        >
+          <div className="flex items-center gap-1 flex-1 min-w-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
+              className="flex-shrink-0 p-0.5 -ml-0.5 rounded hover:bg-black/10"
+              title={isExpanded ? 'Colapsar' : 'Expandir'}
+            >
+              <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+            </button>
+            <button
+              onClick={() => {
+                setFilterFolder(folder.id);
+                setFilterProject('all');
+                if (!expandedFolders.has(folder.id)) toggleFolderExpanded(folder.id);
+              }}
+              className="flex items-center gap-2 flex-1 min-w-0"
+            >
+              <Folder className={`h-3 w-3 flex-shrink-0 ${filterFolder === folder.id ? 'text-primary-foreground' : folder.color.replace('bg-', 'text-')}`} />
+              <span className="truncate font-medium">{folder.name}</span>
+            </button>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="text-xs opacity-70">{folderTaskCount}</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button onClick={(e) => e.stopPropagation()} className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity">
+                  <MoreVertical className="h-3 w-3" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => {
+                  setEditingFolder(folder);
+                  setNewFolderName(folder.name);
+                  setNewFolderColor(folder.color);
+                  setNewFolderParentId(folder.parentFolderId || null);
+                  setIsFolderDialogOpen(true);
+                }}>
+                  <Pencil className="h-3 w-3 mr-2" />
+                  Editar
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => {
+                  setEditingFolder(null);
+                  setNewFolderName('');
+                  setNewFolderColor('bg-gray-500');
+                  setNewFolderParentId(folder.id);
+                  setIsFolderDialogOpen(true);
+                  if (!expandedFolders.has(folder.id)) toggleFolderExpanded(folder.id);
+                }}>
+                  <FolderPlus className="h-3 w-3 mr-2" />
+                  Nueva subcarpeta
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleDeleteFolder(folder.id)} className="text-destructive">
+                  <Trash2 className="h-3 w-3 mr-2" />
+                  Eliminar
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+        {isExpanded && (
+          <>
+            {childFolders.map((cf) => renderFolderNode(cf, depth + 1))}
+            {folderProjects.map((p) => renderProjectRow(p, depth + 1))}
+          </>
+        )}
+      </div>
+    );
   };
 
   // ============= NOTE COLUMN HANDLERS =============
@@ -2827,6 +3010,7 @@ export default function Tareas() {
                           setEditingFolder(null);
                           setNewFolderName('');
                           setNewFolderColor('bg-gray-500');
+                          setNewFolderParentId(null);
                           setIsFolderDialogOpen(true);
                         }}
                       >
@@ -2861,228 +3045,10 @@ export default function Tareas() {
                 </button>
 
                 {/* Folders with nested projects */}
-                {folders.map((folder) => {
-                  const folderProjects = getProjectsInFolder(folder.id);
-                  const isExpanded = expandedFolders.has(folder.id);
-                  const folderTaskCount = folderProjects.reduce((sum, p) => sum + getTaskCountByProject(p.id), 0);
-
-                  return (
-                    <div key={folder.id} className="space-y-0.5">
-                      {/* Folder header — acepta soltar un proyecto para moverlo a esta carpeta */}
-                      <div
-                        onDragOver={(e) => {
-                          if (draggedProject) {
-                            e.preventDefault();
-                            e.dataTransfer.dropEffect = 'move';
-                            setDragOverFolderId((prev) => (prev === folder.id ? prev : folder.id));
-                          }
-                        }}
-                        onDragLeave={() => setDragOverFolderId((prev) => (prev === folder.id ? null : prev))}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          const pid = draggedProject;
-                          setDragOverFolderId(null);
-                          setDraggedProject(null);
-                          if (pid) {
-                            const proj = projects.find((p) => p.id === pid);
-                            if (proj && proj.folderId !== folder.id) handleMoveProjectToFolder(pid, folder.id);
-                          }
-                        }}
-                        className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${dragOverFolderId === folder.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
-                      >
-                        <div className="flex items-center gap-1 flex-1 min-w-0">
-                          {/* Chevron: solo expande/colapsa */}
-                          <button
-                            onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
-                            className="flex-shrink-0 p-0.5 -ml-0.5 rounded hover:bg-black/10"
-                            title={isExpanded ? 'Colapsar' : 'Expandir'}
-                          >
-                            <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                          </button>
-                          {/* Nombre: filtra por carpeta (muestra todas las tareas de sus proyectos) */}
-                          <button
-                            onClick={() => {
-                              setFilterFolder(folder.id);
-                              setFilterProject('all');
-                              if (!expandedFolders.has(folder.id)) toggleFolderExpanded(folder.id);
-                            }}
-                            className="flex items-center gap-2 flex-1 min-w-0"
-                          >
-                            <Folder className={`h-3 w-3 flex-shrink-0 ${filterFolder === folder.id ? 'text-primary-foreground' : folder.color.replace('bg-', 'text-')}`} />
-                            <span className="truncate font-medium">{folder.name}</span>
-                          </button>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs opacity-70">{folderTaskCount}</span>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button
-                                onClick={(e) => e.stopPropagation()}
-                                className="opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center hover:bg-muted transition-opacity"
-                              >
-                                <MoreVertical className="h-3 w-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-40">
-                              <DropdownMenuItem onClick={() => {
-                                setEditingFolder(folder);
-                                setNewFolderName(folder.name);
-                                setNewFolderColor(folder.color);
-                                setIsFolderDialogOpen(true);
-                              }}>
-                                <Pencil className="h-3 w-3 mr-2" />
-                                Editar
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                onClick={() => handleDeleteFolder(folder.id)}
-                                className="text-destructive"
-                              >
-                                <Trash2 className="h-3 w-3 mr-2" />
-                                Eliminar
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-
-                      {/* Projects inside folder */}
-                      {isExpanded && folderProjects.map((project) => {
-                        const count = getTaskCountByProject(project.id);
-                        return (
-                          <div
-                            key={project.id}
-                            draggable={true}
-                            onDragStart={(e) => handleProjectDragStart(e, project.id)}
-                            onDragEnd={handleProjectDragEnd}
-                            onDragOver={(e) => handleProjectDragOver(e, project.id)}
-                            onDragLeave={() => setTaskOverProjectId((prev) => (prev === project.id ? null : prev))}
-                            onDrop={(e) => handleProjectDrop(e, project.id)}
-                            className={`group w-full flex items-center justify-between pl-6 pr-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
-                              ? 'bg-primary text-primary-foreground'
-                              : 'hover:bg-muted'
-                              } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
-                          >
-                            <button
-                              onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
-                              className="flex items-center gap-2 flex-1 min-w-0"
-                              draggable={false}
-                            >
-                              <GripVertical className={`h-3 w-3 flex-shrink-0 ${filterProject === project.id ? 'text-primary-foreground/50' : 'text-muted-foreground/50'}`} />
-                              <div className={`w-3 h-3 rounded-full ${project.color} flex-shrink-0`}></div>
-                              <span className="truncate">{project.name}</span>
-                            </button>
-                            <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
-                              <span className="text-xs opacity-70">{count}</span>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    onClick={(e) => e.stopPropagation()}
-                                    className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
-                                      ? 'hover:bg-primary-foreground/20 text-primary-foreground'
-                                      : 'hover:bg-muted'
-                                      }`}
-                                    draggable={false}
-                                  >
-                                    <MoreVertical className="h-3 w-3" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-48">
-                                  <DropdownMenuItem onClick={() => handleEditProject(project)}>
-                                    <Pencil className="h-3 w-3 mr-2" />
-                                    Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => handleMoveProjectToFolder(project.id, null)}>
-                                    <ArrowRight className="h-3 w-3 mr-2" />
-                                    Sacar de carpeta
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator />
-                                  <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
-                                    <FolderArchive className="h-3 w-3 mr-2" />
-                                    Archivar
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                {folders.filter(isRootFolder).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map((f) => renderFolderNode(f, 0))}
 
                 {/* Projects without folder */}
-                {getProjectsWithoutFolder().map((project) => {
-                  const count = getTaskCountByProject(project.id);
-                  return (
-                    <div
-                      key={project.id}
-                      draggable={true}
-                      onDragStart={(e) => handleProjectDragStart(e, project.id)}
-                      onDragEnd={handleProjectDragEnd}
-                      onDragOver={(e) => handleProjectDragOver(e, project.id)}
-                      onDragLeave={() => setTaskOverProjectId((prev) => (prev === project.id ? null : prev))}
-                      onDrop={(e) => handleProjectDrop(e, project.id)}
-                      className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors cursor-grab active:cursor-grabbing ${filterProject === project.id
-                        ? 'bg-primary text-primary-foreground'
-                        : 'hover:bg-muted'
-                        } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
-                    >
-                      <button
-                        onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
-                        className="flex items-center gap-2 flex-1 min-w-0"
-                        draggable={false}
-                      >
-                        <GripVertical className={`h-3 w-3 flex-shrink-0 ${filterProject === project.id ? 'text-primary-foreground/50' : 'text-muted-foreground/50'}`} />
-                        <div className={`w-3 h-3 rounded-full ${project.color} flex-shrink-0`}></div>
-                        <span className="truncate">{project.name}</span>
-                      </button>
-                      <div className="flex items-center gap-1" draggable={false} onDragStart={(e) => e.preventDefault()}>
-                        <span className="text-xs opacity-70">{count}</span>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              onClick={(e) => e.stopPropagation()}
-                              className={`opacity-0 group-hover:opacity-100 h-5 w-5 rounded flex items-center justify-center transition-opacity ${filterProject === project.id
-                                ? 'hover:bg-primary-foreground/20 text-primary-foreground'
-                                : 'hover:bg-muted'
-                                }`}
-                              draggable={false}
-                            >
-                              <MoreVertical className="h-3 w-3" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem onClick={() => handleEditProject(project)}>
-                              <Pencil className="h-3 w-3 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            {folders.length > 0 && (
-                              <>
-                                <DropdownMenuSeparator />
-                                {folders.map(folder => (
-                                  <DropdownMenuItem
-                                    key={folder.id}
-                                    onClick={() => handleMoveProjectToFolder(project.id, folder.id)}
-                                  >
-                                    <Folder className={`h-3 w-3 mr-2 ${folder.color.replace('bg-', 'text-')}`} />
-                                    Mover a {folder.name}
-                                  </DropdownMenuItem>
-                                ))}
-                              </>
-                            )}
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleArchiveProject(project.id)}>
-                              <FolderArchive className="h-3 w-3 mr-2" />
-                              Archivar
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  );
-                })}
+                {getProjectsWithoutFolder().map((p) => renderProjectRow(p, 0))}
 
                 {/* Archived Projects Section */}
                 {archivedProjects.length > 0 && (
@@ -5737,9 +5703,13 @@ export default function Tareas() {
       <Dialog open={isFolderDialogOpen} onOpenChange={setIsFolderDialogOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>{editingFolder ? 'Editar Carpeta' : 'Nueva Carpeta'}</DialogTitle>
+            <DialogTitle>{editingFolder ? 'Editar Carpeta' : newFolderParentId ? 'Nueva Subcarpeta' : 'Nueva Carpeta'}</DialogTitle>
             <DialogDescription>
-              {editingFolder ? 'Modifica el nombre y color de la carpeta' : 'Crea una carpeta para agrupar proyectos relacionados (ej: proyectos del mismo cliente)'}
+              {editingFolder
+                ? 'Modifica el nombre y color de la carpeta'
+                : newFolderParentId
+                  ? `Subcarpeta dentro de "${folders.find((f) => f.id === newFolderParentId)?.name || 'carpeta'}"`
+                  : 'Crea una carpeta para agrupar proyectos relacionados (ej: proyectos del mismo cliente)'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">

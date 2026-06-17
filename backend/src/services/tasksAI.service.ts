@@ -37,7 +37,7 @@ const MODEL_FALLBACK_CHAIN: string[] = (process.env.OPENROUTER_MODEL_FALLBACK_CH
   'google/gemma-4-31b-it:free',
 ].join(',')).split(',').map((s) => s.trim()).filter(Boolean);
 
-const TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Mariana', 'Jose', 'Anderson', 'Edgardo', 'Jhonathan'];
+const TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Edgardo', 'Jhonathan'];
 const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH'] as const;
 // Deben coincidir EXACTAMENTE con TaskType del frontend (src/types/taskTypes.ts)
 // para que el tipo inferido por la IA matchee la opcion del formulario.

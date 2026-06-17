@@ -56,9 +56,6 @@ export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Lía', role: 'CEO', initials: 'LI', color: 'bg-purple-500' },
   { name: 'Dairo', role: 'CEO', initials: 'DA', color: 'bg-indigo-500' },
   { name: 'Stiven', role: 'Dev', initials: 'ST', color: 'bg-blue-500' },
-  { name: 'Mariana', role: 'Designer', initials: 'MA', color: 'bg-pink-500' },
-  { name: 'Jose', role: 'Freelancer', initials: 'JO', color: 'bg-orange-500' },
-  { name: 'Anderson', role: 'Freelancer', initials: 'AN', color: 'bg-teal-500' },
   { name: 'Edgardo', role: 'Dev', initials: 'EM', color: 'bg-blue-500' },
   { name: 'Jhonathan', role: 'Usuario', initials: 'JH', color: 'bg-amber-500' },
 ];
@@ -69,6 +66,7 @@ export interface ProjectFolder {
   color: string;
   order?: number;
   expanded?: boolean; // Whether folder is expanded in UI
+  parentFolderId?: string | null; // Carpeta padre (para subcarpetas). null/undefined = raíz
 }
 
 export interface ProjectKPI {
