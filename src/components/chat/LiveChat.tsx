@@ -481,9 +481,9 @@ export default function LiveChat() {
         </button>
       )}
 
-      {/* Chat Window */}
+      {/* Chat Sidebar (panel lateral derecho de altura completa) */}
       {isOpen && !isMinimized && (
-        <div className="fixed bottom-4 right-4 z-50 w-80 sm:w-96 h-[520px] bg-background border border-border rounded-xl shadow-2xl overflow-hidden flex flex-col">
+        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] bg-background border-l border-border shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200">
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
