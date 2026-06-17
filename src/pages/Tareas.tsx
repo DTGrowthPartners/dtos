@@ -496,6 +496,9 @@ export default function Tareas() {
     recurrenceFrequency: 'weekly' as RecurrenceFrequency,
     recurrenceDayOfWeek: 1, // Monday by default
     recurrenceDayOfMonth: 1,
+    // Solo aplica a tareas de alta prioridad: avisar por WhatsApp al responsable
+    // en el momento de crear/guardar. Si se desactiva, se puede avisar después editando.
+    notifyWhatsApp: true,
   });
 
   const [uploading, setUploading] = useState(false);
@@ -553,6 +556,7 @@ export default function Tareas() {
           recurrenceFrequency: task.recurrence?.frequency || 'weekly',
           recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
           recurrenceDayOfMonth: task.recurrence?.dayOfMonth ?? 1,
+          notifyWhatsApp: true,
         });
         setIsDialogOpen(true);
         // Clear the URL parameter after opening
@@ -809,7 +813,7 @@ export default function Tareas() {
           editingTask.status !== taskData.status ||
           (editingTask.dueDate || null) !== (taskData.dueDate || null) ||
           assigneeChanged;
-        if (meaningfulChange && taskData.assignee && taskData.assignee !== user?.firstName) {
+        if (meaningfulChange && formData.notifyWhatsApp && taskData.assignee && taskData.assignee !== user?.firstName) {
           const project = projects.find(p => p.id === taskData.projectId);
           sendHighPriorityTaskToWhatsApp({
             id: editingTask.id,
@@ -845,8 +849,8 @@ export default function Tareas() {
           });
         }
 
-        // Send to WhatsApp webhook if high priority
-        if (taskData.priority === Priority.HIGH) {
+        // Send to WhatsApp webhook if high priority y el usuario dejó activado el aviso
+        if (taskData.priority === Priority.HIGH && formData.notifyWhatsApp) {
           const project = projects.find(p => p.id === taskData.projectId);
           sendHighPriorityTaskToWhatsApp({
             id: newTaskId,
@@ -2030,6 +2034,7 @@ export default function Tareas() {
       recurrenceFrequency: task.recurrence?.frequency || 'weekly',
       recurrenceDayOfWeek: task.recurrence?.dayOfWeek ?? 1,
       recurrenceDayOfMonth: task.recurrence?.dayOfMonth ?? 1,
+      notifyWhatsApp: true,
     });
     setIsDialogOpen(true);
   };
@@ -2056,6 +2061,7 @@ export default function Tareas() {
       recurrenceFrequency: 'weekly',
       recurrenceDayOfWeek: 1,
       recurrenceDayOfMonth: 1,
+      notifyWhatsApp: true,
     });
     setIsDialogOpen(true);
   };
@@ -2355,6 +2361,7 @@ export default function Tareas() {
       recurrenceFrequency: 'weekly',
       recurrenceDayOfWeek: 1,
       recurrenceDayOfMonth: 1,
+      notifyWhatsApp: true,
     });
     setEditingTask(null);
     setDuplicatingTask(null);
@@ -5748,6 +5755,29 @@ export default function Tareas() {
                   </div>
                 </div>
               </div>
+
+              {/* Aviso por WhatsApp (solo alta prioridad) */}
+              {formData.priority === Priority.HIGH && (
+                <div className="p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-green-500" />
+                      <Label htmlFor="notify-wa-toggle" className="font-medium">Avisar por WhatsApp al responsable</Label>
+                    </div>
+                    <Switch
+                      id="notify-wa-toggle"
+                      checked={formData.notifyWhatsApp}
+                      onCheckedChange={(checked) => setFormData({ ...formData, notifyWhatsApp: checked })}
+                      disabled={isSaving}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {formData.notifyWhatsApp
+                      ? 'Se enviará el aviso por WhatsApp al guardar.'
+                      : 'No se enviará ahora. Podrás avisar después activándolo al editar la tarea.'}
+                  </p>
+                </div>
+              )}
 
               {/* Recurrence Section */}
               <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
