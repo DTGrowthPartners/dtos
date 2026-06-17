@@ -298,6 +298,8 @@ export default function Tareas() {
   const [taskOverProjectId, setTaskOverProjectId] = useState<string | null>(null);
   // Filtro por carpeta: muestra las tareas de TODOS los proyectos de la carpeta.
   const [filterFolder, setFilterFolder] = useState<string | null>(null);
+  // Carpeta resaltada cuando se arrastra un PROYECTO encima (para moverlo a ella).
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -2195,6 +2197,7 @@ export default function Tareas() {
     const element = e.target as HTMLElement;
     element.style.opacity = '1';
     setDraggedProject(null);
+    setDragOverFolderId(null);
   };
 
   const handleProjectDragOver = (e: React.DragEvent, projectId?: string) => {
@@ -2256,22 +2259,34 @@ export default function Tareas() {
       return;
     }
 
+    // Si el proyecto destino esta en otra carpeta, el proyecto arrastrado adopta
+    // esa carpeta (mover entre carpetas soltandolo sobre un proyecto de la otra).
+    const sourceProj = projects[sourceIndex];
+    const targetProj = projects[targetIndex];
+    const targetFolderId = targetProj.folderId;
+    const movedFolder = (sourceProj.folderId || null) !== (targetFolderId || null);
+
     // Reorder projects
     const newProjects = [...projects];
     const [removed] = newProjects.splice(sourceIndex, 1);
+    removed.folderId = targetFolderId; // adopta la carpeta del destino (o ninguna)
     newProjects.splice(targetIndex, 0, removed);
 
     // Update order for each project
     const updatedProjects = newProjects.map((p, index) => ({ ...p, order: index }));
     setProjects(updatedProjects);
 
-    // Save new order to Firebase
+    // Save new order (+ folderId del movido) a Firebase
     try {
       for (const project of updatedProjects) {
         await updateProject(project.id, { order: project.order });
       }
+      if (movedFolder) {
+        await updateProject(sourceProjectId, { folderId: targetFolderId || undefined });
+      }
+      setDraggedProject(null);
       toast({
-        title: 'Proyectos reordenados',
+        title: movedFolder ? 'Proyecto movido de carpeta' : 'Proyectos reordenados',
       });
     } catch (error) {
       console.error('Error saving project order:', error);
@@ -2853,8 +2868,28 @@ export default function Tareas() {
 
                   return (
                     <div key={folder.id} className="space-y-0.5">
-                      {/* Folder header */}
-                      <div className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
+                      {/* Folder header — acepta soltar un proyecto para moverlo a esta carpeta */}
+                      <div
+                        onDragOver={(e) => {
+                          if (draggedProject) {
+                            e.preventDefault();
+                            e.dataTransfer.dropEffect = 'move';
+                            setDragOverFolderId((prev) => (prev === folder.id ? prev : folder.id));
+                          }
+                        }}
+                        onDragLeave={() => setDragOverFolderId((prev) => (prev === folder.id ? null : prev))}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const pid = draggedProject;
+                          setDragOverFolderId(null);
+                          setDraggedProject(null);
+                          if (pid) {
+                            const proj = projects.find((p) => p.id === pid);
+                            if (proj && proj.folderId !== folder.id) handleMoveProjectToFolder(pid, folder.id);
+                          }
+                        }}
+                        className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${dragOverFolderId === folder.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
+                      >
                         <div className="flex items-center gap-1 flex-1 min-w-0">
                           {/* Chevron: solo expande/colapsa */}
                           <button
@@ -4129,7 +4164,7 @@ export default function Tareas() {
                                 onDragStart={(e) => !selectionMode && handleDragStart(e, task.id)}
                                 onDragEnd={handleDragEnd}
                                 onClick={() => selectionMode ? handleToggleSelectTask(task.id) : handleEdit(task)}
-                                className={`p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${isBeingDragged ? 'hidden' : ''
+                                className={`group p-3 md:p-4 cursor-pointer hover:shadow-lg transition-all border-l-4 ${isBeingDragged ? 'hidden' : ''
                                   } ${selectedTaskIds.has(task.id) ? 'ring-2 ring-primary' : ''
                                   } ${project?.color ? project.color.replace('bg-', 'border-l-') : 'border-l-blue-500'}`}
                               >
@@ -4172,7 +4207,7 @@ export default function Tareas() {
                                       {task.title}
                                     </h3>
                                   </div>
-                                  <div className="flex gap-1 flex-shrink-0" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                                  <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity" draggable={false} onDragStart={(e) => e.preventDefault()}>
                                     <Button
                                       variant="ghost"
                                       size="icon"
