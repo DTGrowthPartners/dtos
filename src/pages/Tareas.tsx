@@ -296,6 +296,8 @@ export default function Tareas() {
   const [draggedProject, setDraggedProject] = useState<string | null>(null);
   // Proyecto resaltado cuando se arrastra una TAREA encima (para reasignar proyecto)
   const [taskOverProjectId, setTaskOverProjectId] = useState<string | null>(null);
+  // Filtro por carpeta: muestra las tareas de TODOS los proyectos de la carpeta.
+  const [filterFolder, setFilterFolder] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
@@ -2525,6 +2527,11 @@ export default function Tareas() {
       }
 
       if (filterProject !== 'all' && task.projectId !== filterProject) return false;
+      // Filtro por carpeta: la tarea debe pertenecer a un proyecto de esa carpeta.
+      if (filterFolder) {
+        const folderProjectIds = projects.filter((p) => p.folderId === filterFolder).map((p) => p.id);
+        if (!folderProjectIds.includes(task.projectId)) return false;
+      }
       if (filterAssignee !== 'all' && task.assignee !== filterAssignee) return false;
       if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
 
@@ -2536,7 +2543,7 @@ export default function Tareas() {
 
       return true;
     });
-  }, [tasks, isAdmin, loggedUserName, searchQuery, filterProject, filterAssignee, filterPriority, dateFilter]);
+  }, [tasks, isAdmin, loggedUserName, searchQuery, filterProject, filterFolder, projects, filterAssignee, filterPriority, dateFilter]);
 
   // Pre-agrupa filteredTasks por columna y las ordena.
   // PRIORIDAD DE ORDEN:
@@ -2764,7 +2771,7 @@ export default function Tareas() {
                   <Tooltip key={project.id} delayDuration={0}>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={() => setFilterProject(project.id)}
+                        onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
                         className={`w-8 h-8 rounded-md flex items-center justify-center transition-colors ${filterProject === project.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'
                           }`}
                       >
@@ -2825,8 +2832,8 @@ export default function Tareas() {
               </div>
               <div className="space-y-1 overflow-y-auto flex-1">
                 <button
-                  onClick={() => setFilterProject('all')}
-                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterProject === 'all'
+                  onClick={() => { setFilterProject('all'); setFilterFolder(null); }}
+                  className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterProject === 'all' && !filterFolder
                     ? 'bg-primary text-primary-foreground'
                     : 'hover:bg-muted'
                     }`}
@@ -2847,15 +2854,29 @@ export default function Tareas() {
                   return (
                     <div key={folder.id} className="space-y-0.5">
                       {/* Folder header */}
-                      <div className="group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm hover:bg-muted transition-colors">
-                        <button
-                          onClick={() => toggleFolderExpanded(folder.id)}
-                          className="flex items-center gap-2 flex-1 min-w-0"
-                        >
-                          <ChevronDown className={`h-3 w-3 flex-shrink-0 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
-                          <Folder className={`h-3 w-3 flex-shrink-0 ${folder.color.replace('bg-', 'text-')}`} />
-                          <span className="truncate font-medium">{folder.name}</span>
-                        </button>
+                      <div className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors ${filterFolder === folder.id ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
+                        <div className="flex items-center gap-1 flex-1 min-w-0">
+                          {/* Chevron: solo expande/colapsa */}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleFolderExpanded(folder.id); }}
+                            className="flex-shrink-0 p-0.5 -ml-0.5 rounded hover:bg-black/10"
+                            title={isExpanded ? 'Colapsar' : 'Expandir'}
+                          >
+                            <ChevronDown className={`h-3 w-3 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                          </button>
+                          {/* Nombre: filtra por carpeta (muestra todas las tareas de sus proyectos) */}
+                          <button
+                            onClick={() => {
+                              setFilterFolder(folder.id);
+                              setFilterProject('all');
+                              if (!expandedFolders.has(folder.id)) toggleFolderExpanded(folder.id);
+                            }}
+                            className="flex items-center gap-2 flex-1 min-w-0"
+                          >
+                            <Folder className={`h-3 w-3 flex-shrink-0 ${filterFolder === folder.id ? 'text-primary-foreground' : folder.color.replace('bg-', 'text-')}`} />
+                            <span className="truncate font-medium">{folder.name}</span>
+                          </button>
+                        </div>
                         <div className="flex items-center gap-1">
                           <span className="text-xs opacity-70">{folderTaskCount}</span>
                           <DropdownMenu>
@@ -2908,7 +2929,7 @@ export default function Tareas() {
                               } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
                           >
                             <button
-                              onClick={() => setFilterProject(project.id)}
+                              onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
                               className="flex items-center gap-2 flex-1 min-w-0"
                               draggable={false}
                             >
@@ -2974,7 +2995,7 @@ export default function Tareas() {
                         } ${draggedProject === project.id ? 'opacity-50' : ''} ${taskOverProjectId === project.id ? 'ring-2 ring-violet-500 ring-inset bg-violet-500/10' : ''}`}
                     >
                       <button
-                        onClick={() => setFilterProject(project.id)}
+                        onClick={() => { setFilterProject(project.id); setFilterFolder(null); }}
                         className="flex items-center gap-2 flex-1 min-w-0"
                         draggable={false}
                       >

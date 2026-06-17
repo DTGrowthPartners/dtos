@@ -76,7 +76,8 @@ const buildSystemPrompt = (): string => {
 Equipo (usa nombre exacto, Lia=Lía, Jhonatan=Jhonathan): ${TEAM_MEMBERS.join(', ')}.
 Prioridad: HIGH si "urgente/ASAP/crítico", LOW si "sin prisa/cuando puedas", sino MEDIUM.
 Tipo: ${TYPES.join(' | ')} o null.
-Responde SOLO JSON: {"title":"max 80c","description":"contexto o \\"\\"","assignee":"nombre o null","priority":"LOW|MEDIUM|HIGH","dueDate":"YYYY-MM-DD o null","dueTime":"HH:mm o null","type":"tipo o null"}`;
+description: SIEMPRE escribe 1 frase corta (10-20 palabras) que aclare el objetivo o contexto de la tarea, distinta del titulo (no la repitas). Nunca la dejes vacia.
+Responde SOLO JSON: {"title":"max 80c","description":"1 frase de contexto","assignee":"nombre o null","priority":"LOW|MEDIUM|HIGH","dueDate":"YYYY-MM-DD o null","dueTime":"HH:mm o null","type":"tipo o null"}`;
 };
 
 const SCHEMA_FALLBACK: ParsedTask = {
@@ -234,6 +235,7 @@ const buildListSystemPrompt = (): string => {
 Hoy: ${nowBogota} (America/Bogota).
 Reglas:
 - Reescribe el titulo para que sea claro y accionable (empieza con verbo), max 80 chars. Ej: "audios bot dairo" -> "Grabar audios para el bot de Dairo".
+- description: SIEMPRE escribe 1 frase corta (10-20 palabras) que aclare el objetivo o contexto, distinta del titulo (no la repitas). Nunca vacia.
 - Equipo (usa nombre exacto, Lia=Lía, Jhonatan=Jhonathan): ${TEAM_MEMBERS.join(', ')}. Si el item menciona a alguien, asignalo; sino assignee=null.
 - Prioridad: HIGH si "urgente/ASAP/hoy/ya", LOW si "sin prisa/cuando puedas", sino MEDIUM.
 - Tipo: ${TYPES.join(' | ')} o null.
