@@ -183,7 +183,7 @@ export const loadProjectFolders = async (): Promise<ProjectFolder[]> => {
 };
 
 export const createProjectFolder = async (folder: Omit<ProjectFolder, 'id'>): Promise<string> => {
-  const docRef = await addDoc(collection(db, PROJECT_FOLDERS_COLLECTION), folder);
+  const docRef = await addDoc(collection(db, PROJECT_FOLDERS_COLLECTION), sanitizePayload({ ...folder }));
   return docRef.id;
 };
 

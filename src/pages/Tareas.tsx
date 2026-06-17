@@ -1111,14 +1111,16 @@ export default function Tareas() {
     }
 
     try {
-      const folderId = await createProjectFolder({
+      // Firestore no acepta campos undefined: solo incluir parentFolderId si hay padre.
+      const folderPayload: Omit<ProjectFolder, 'id'> = {
         name: newFolderName.trim(),
         color: newFolderColor,
         order: folders.length,
         expanded: true,
-        parentFolderId: newFolderParentId || undefined,
-      });
-      setFolders([...folders, { id: folderId, name: newFolderName.trim(), color: newFolderColor, order: folders.length, expanded: true, parentFolderId: newFolderParentId || undefined }]);
+        ...(newFolderParentId ? { parentFolderId: newFolderParentId } : {}),
+      };
+      const folderId = await createProjectFolder(folderPayload);
+      setFolders([...folders, { id: folderId, ...folderPayload }]);
       setExpandedFolders(prev => new Set([...prev, folderId, ...(newFolderParentId ? [newFolderParentId] : [])]));
       setIsFolderDialogOpen(false);
       setNewFolderName('');
