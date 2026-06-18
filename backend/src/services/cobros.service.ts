@@ -216,7 +216,87 @@ export const getCobrosForPeriod = async (periodInput?: string) => {
     proyectosPuntualesCount: proyectosPuntuales.length,
     proyectosPuntualesValor,
     proyectosPuntuales,
+    // MRR estimado a partir de las cuentas de cobro reales (últimos 3 meses)
+    invoiceMRR: await getInvoiceMRR(periodo),
     cobros: rows,
+  };
+};
+
+// Normaliza el nombre de un cliente para agrupar variantes (mayúsculas, acentos,
+// sufijos societarios y puntuación). Ej: "ACB Fit", "ACBFIT SAS", "ACBFIT" -> "ACBFIT".
+const normalizeClientName = (name: string): string =>
+  (name || '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\b(SAS|LTDA|SA)\b/g, '')
+    .replace(/[^A-Z0-9]/g, '');
+
+export interface InvoiceMRRClient {
+  nombre: string;
+  mesesFacturados: number;
+  promedioMensual: number;
+  total: number;
+}
+
+/**
+ * MRR estimado a partir de las CUENTAS DE COBRO reales emitidas.
+ * Ventana: los 3 meses COMPLETOS anteriores al periodo de referencia (el mes en
+ * curso suele estar parcial). Por cada cliente (agrupado por nombre normalizado):
+ *   - promedio mensual = total facturado en la ventana / 3
+ *   - recurrente si facturó en >= 2 de esos meses; puntual si solo en 1.
+ * MRR = suma de promedios mensuales de los recurrentes.
+ * Indicador del contador: MRR = N° clientes recurrentes × ingreso promedio (ARPU).
+ */
+export const getInvoiceMRR = async (refPeriod?: string) => {
+  const ref = refPeriod && isValidPeriod(refPeriod) ? refPeriod : currentPeriod();
+  const [ry, rm] = ref.split('-').map(Number);
+  const windowMonths: string[] = [];
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(ry, rm - 1 - i, 1);
+    windowMonths.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}`);
+  }
+  const start = new Date(`${windowMonths[0]}-01T00:00:00.000Z`);
+  const endExcl = new Date(`${ref}-01T00:00:00.000Z`); // hasta el inicio del mes de referencia (excluido)
+
+  const invoices = await prisma.invoice.findMany({ where: { fecha: { gte: start, lt: endExcl } } });
+
+  const byClient = new Map<string, { nombre: string; months: Set<string>; total: number }>();
+  for (const inv of invoices) {
+    const key = normalizeClientName(inv.clientName) || inv.clientName;
+    const ym = inv.fecha.toISOString().slice(0, 7);
+    const cur = byClient.get(key) || { nombre: inv.clientName, months: new Set<string>(), total: 0 };
+    cur.months.add(ym);
+    cur.total += inv.totalAmount;
+    if (inv.clientName.length > cur.nombre.length) cur.nombre = inv.clientName; // nombre más completo
+    byClient.set(key, cur);
+  }
+
+  const recurrentes: InvoiceMRRClient[] = [];
+  const puntuales: { nombre: string; valor: number }[] = [];
+  for (const c of byClient.values()) {
+    const promedioMensual = Math.round(c.total / windowMonths.length);
+    if (c.months.size >= 2) {
+      recurrentes.push({ nombre: c.nombre, mesesFacturados: c.months.size, promedioMensual, total: Math.round(c.total) });
+    } else {
+      puntuales.push({ nombre: c.nombre, valor: Math.round(c.total) });
+    }
+  }
+  recurrentes.sort((a, b) => b.promedioMensual - a.promedioMensual);
+  puntuales.sort((a, b) => b.valor - a.valor);
+
+  const mrr = recurrentes.reduce((s, r) => s + r.promedioMensual, 0);
+  const clientesRecurrentes = recurrentes.length;
+  const ingresoPromedio = clientesRecurrentes > 0 ? Math.round(mrr / clientesRecurrentes) : 0;
+
+  return {
+    ventana: windowMonths,
+    mrr,
+    clientesRecurrentes,
+    ingresoPromedio,
+    recurrentes,
+    puntuales,
+    puntualesValor: puntuales.reduce((s, p) => s + p.valor, 0),
   };
 };
 

@@ -53,19 +53,37 @@ interface ProyectoPuntual {
   servicios: string[];
 }
 
+interface InvoiceMRRClient {
+  nombre: string;
+  mesesFacturados: number;
+  promedioMensual: number;
+  total: number;
+}
+
+interface InvoiceMRR {
+  ventana: string[];
+  mrr: number;
+  clientesRecurrentes: number;
+  ingresoPromedio: number;
+  recurrentes: InvoiceMRRClient[];
+  puntuales: { nombre: string; valor: number }[];
+  puntualesValor: number;
+}
+
 interface CobrosResponse {
   periodo: string;
   mrrTotal: number;
   cobradoMes: number;
   pendienteMes: number;
   vencidoMes: number;
-  // Indicador MRR descompuesto: MRR = clientesRecurrentes × ingresoPromedio
+  // Indicador MRR descompuesto (basado en servicios configurados)
   clientesRecurrentes: number;
   ingresoPromedio: number;
-  // Clasificación del portafolio
   proyectosPuntualesCount: number;
   proyectosPuntualesValor: number;
   proyectosPuntuales: ProyectoPuntual[];
+  // MRR estimado a partir de las cuentas de cobro reales (últimos 3 meses)
+  invoiceMRR: InvoiceMRR;
   cobros: Cobro[];
 }
 
@@ -213,11 +231,14 @@ export default function CobrosMRR() {
       {/* MRR grande + stats del mes */}
       <div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-1 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-5">
-          <div className="text-xs uppercase tracking-wider text-amber-600 font-medium">MRR del mes</div>
-          <div className="text-3xl font-bold text-foreground tabular-nums mt-1">{COPbig(data?.mrrTotal || 0)}</div>
-          {/* Indicador: MRR = N° clientes recurrentes × ingreso promedio (ARPU) */}
+          <div className="text-xs uppercase tracking-wider text-amber-600 font-medium">MRR estimado</div>
+          <div className="text-3xl font-bold text-foreground tabular-nums mt-1">{COPbig(data?.invoiceMRR?.mrr || 0)}</div>
+          {/* Indicador del contador: MRR = N° clientes recurrentes × ingreso promedio (ARPU) */}
           <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
-            {data?.clientesRecurrentes || 0} clientes × {COP(data?.ingresoPromedio || 0)} prom.
+            {data?.invoiceMRR?.clientesRecurrentes || 0} clientes × {COP(data?.invoiceMRR?.ingresoPromedio || 0)} prom.
+          </div>
+          <div className="text-[10px] text-muted-foreground/70 mt-0.5">
+            según cuentas de cobro (últ. 3 meses)
           </div>
         </div>
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
@@ -247,10 +268,10 @@ export default function CobrosMRR() {
             <RefreshCw className="h-5 w-5 text-amber-500" />
           </div>
           <div className="min-w-0">
-            <div className="text-xs text-muted-foreground">Clientes recurrentes (MRR)</div>
-            <div className="text-xl font-bold tabular-nums">{data?.clientesRecurrentes || 0}</div>
+            <div className="text-xs text-muted-foreground">Clientes recurrentes</div>
+            <div className="text-xl font-bold tabular-nums">{data?.invoiceMRR?.clientesRecurrentes || 0}</div>
             <div className="text-[11px] text-muted-foreground">
-              Ingreso promedio: {COP(data?.ingresoPromedio || 0)}/mes
+              Ingreso promedio: {COP(data?.invoiceMRR?.ingresoPromedio || 0)}/mes
             </div>
           </div>
         </div>
@@ -260,31 +281,54 @@ export default function CobrosMRR() {
           </div>
           <div className="min-w-0">
             <div className="text-xs text-muted-foreground">Proyectos puntuales (pago único)</div>
-            <div className="text-xl font-bold tabular-nums">{data?.proyectosPuntualesCount || 0}</div>
+            <div className="text-xl font-bold tabular-nums">{data?.invoiceMRR?.puntuales.length || 0}</div>
             <div className="text-[11px] text-muted-foreground">
-              Valor total: {COP(data?.proyectosPuntualesValor || 0)}
+              Valor total: {COP(data?.invoiceMRR?.puntualesValor || 0)}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Lista de proyectos puntuales (si hay) */}
-      {data && data.proyectosPuntuales.length > 0 && (
+      {/* Clientes recurrentes (estimado por cuentas de cobro) */}
+      {data && data.invoiceMRR.recurrentes.length > 0 && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
+            <span>Clientes recurrentes · promedio mensual</span>
+            <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">
+              ventana: {data.invoiceMRR.ventana.join(' · ')}
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {data.invoiceMRR.recurrentes
+                .filter((r) => !search.trim() || r.nombre.toLowerCase().includes(search.toLowerCase()))
+                .map((r) => (
+                  <tr key={r.nombre} className="border-t border-border hover:bg-muted/30">
+                    <td className="px-4 py-2.5">
+                      <div className="font-semibold">{r.nombre}</div>
+                      <div className="text-[11px] text-muted-foreground">{r.mesesFacturados} de 3 meses facturados</div>
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <div className="font-bold tabular-nums">{COP(r.promedioMensual)}</div>
+                      <div className="text-[11px] text-muted-foreground">/mes prom.</div>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Proyectos puntuales (por cuentas de cobro) */}
+      {data && data.invoiceMRR.puntuales.length > 0 && (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
             Proyectos puntuales
           </div>
           <ul className="divide-y divide-border">
-            {data.proyectosPuntuales.map((p) => (
-              <li key={p.clientId} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{p.clienteNombre}</div>
-                  {p.servicios.length > 0 && (
-                    <div className="text-[11px] text-muted-foreground truncate" title={p.servicios.join(', ')}>
-                      {p.servicios.join(' · ')}
-                    </div>
-                  )}
-                </div>
+            {data.invoiceMRR.puntuales.map((p) => (
+              <li key={p.nombre} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="font-medium truncate">{p.nombre}</div>
                 <div className="font-bold tabular-nums text-sm flex-shrink-0">{COP(p.valor)}</div>
               </li>
             ))}
@@ -292,26 +336,25 @@ export default function CobrosMRR() {
         </div>
       )}
 
-      {/* Buscador */}
+      {/* Seguimiento de pagos (retainers configurados en Servicios) — solo si hay */}
+      {data && data.cobros.length > 0 && (
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-          Clientes recurrentes · retainers
+          Seguimiento de pagos · retainers
         </h2>
         <div className="relative max-w-md w-full sm:w-auto">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
         </div>
       </div>
+      )}
 
-      {/* Tabla */}
+      {/* Tabla de seguimiento de pagos (solo si hay retainers configurados) */}
       {loading && !data ? (
         <div className="text-center py-12 text-muted-foreground">Cargando…</div>
-      ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card/50 p-12 text-center">
-          <Receipt className="h-12 w-12 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">
-            {search ? 'Ningún cliente coincide.' : 'No hay cobros para este periodo. Se generan de los servicios activos de cada cliente.'}
-          </p>
+      ) : !data || data.cobros.length === 0 ? null : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center">
+          <p className="text-sm text-muted-foreground">Ningún cliente coincide.</p>
         </div>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
