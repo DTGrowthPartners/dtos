@@ -45,12 +45,27 @@ interface Cobro {
   servicios: string[];
 }
 
+interface ProyectoPuntual {
+  clientId: string;
+  clienteNombre: string;
+  valor: number;
+  moneda: string;
+  servicios: string[];
+}
+
 interface CobrosResponse {
   periodo: string;
   mrrTotal: number;
   cobradoMes: number;
   pendienteMes: number;
   vencidoMes: number;
+  // Indicador MRR descompuesto: MRR = clientesRecurrentes × ingresoPromedio
+  clientesRecurrentes: number;
+  ingresoPromedio: number;
+  // Clasificación del portafolio
+  proyectosPuntualesCount: number;
+  proyectosPuntualesValor: number;
+  proyectosPuntuales: ProyectoPuntual[];
   cobros: Cobro[];
 }
 
@@ -200,7 +215,10 @@ export default function CobrosMRR() {
         <div className="md:col-span-1 rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 to-amber-500/5 p-5">
           <div className="text-xs uppercase tracking-wider text-amber-600 font-medium">MRR del mes</div>
           <div className="text-3xl font-bold text-foreground tabular-nums mt-1">{COPbig(data?.mrrTotal || 0)}</div>
-          <div className="text-[11px] text-muted-foreground mt-1">{COP(data?.mrrTotal || 0)} COP</div>
+          {/* Indicador: MRR = N° clientes recurrentes × ingreso promedio (ARPU) */}
+          <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+            {data?.clientesRecurrentes || 0} clientes × {COP(data?.ingresoPromedio || 0)} prom.
+          </div>
         </div>
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-emerald-600 font-medium">
@@ -222,10 +240,67 @@ export default function CobrosMRR() {
         </div>
       </div>
 
+      {/* Clasificación de clientes: recurrentes (MRR) vs proyectos puntuales */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+            <RefreshCw className="h-5 w-5 text-amber-500" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Clientes recurrentes (MRR)</div>
+            <div className="text-xl font-bold tabular-nums">{data?.clientesRecurrentes || 0}</div>
+            <div className="text-[11px] text-muted-foreground">
+              Ingreso promedio: {COP(data?.ingresoPromedio || 0)}/mes
+            </div>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-lg bg-sky-500/10 flex items-center justify-center flex-shrink-0">
+            <Circle className="h-5 w-5 text-sky-500" />
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs text-muted-foreground">Proyectos puntuales (pago único)</div>
+            <div className="text-xl font-bold tabular-nums">{data?.proyectosPuntualesCount || 0}</div>
+            <div className="text-[11px] text-muted-foreground">
+              Valor total: {COP(data?.proyectosPuntualesValor || 0)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de proyectos puntuales (si hay) */}
+      {data && data.proyectosPuntuales.length > 0 && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2 text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
+            Proyectos puntuales
+          </div>
+          <ul className="divide-y divide-border">
+            {data.proyectosPuntuales.map((p) => (
+              <li key={p.clientId} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{p.clienteNombre}</div>
+                  {p.servicios.length > 0 && (
+                    <div className="text-[11px] text-muted-foreground truncate" title={p.servicios.join(', ')}>
+                      {p.servicios.join(' · ')}
+                    </div>
+                  )}
+                </div>
+                <div className="font-bold tabular-nums text-sm flex-shrink-0">{COP(p.valor)}</div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Buscador */}
-      <div className="relative max-w-md">
-        <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+          Clientes recurrentes · retainers
+        </h2>
+        <div className="relative max-w-md w-full sm:w-auto">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Buscar cliente..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
       </div>
 
       {/* Tabla */}

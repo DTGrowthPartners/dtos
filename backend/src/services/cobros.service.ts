@@ -85,9 +85,29 @@ export const getCobrosForPeriod = async (periodInput?: string) => {
     { clienteNombre: string; monto: number; moneda: string; billingDay: number; servicios: string[] }
   >();
 
+  // Proyectos puntuales: clientes con servicios de frecuencia 'unico' (no recurrente,
+  // no entran al MRR). Se agrupan aparte para clasificar el portafolio.
+  const puntualesByClient = new Map<
+    string,
+    { clienteNombre: string; valor: number; moneda: string; servicios: string[] }
+  >();
+
   for (const cs of clientServices) {
-    if (cs.frecuencia === 'unico') continue; // no recurrente, no entra al MRR mensual
     const price = cs.precioCliente ?? cs.service.price;
+
+    if (cs.frecuencia === 'unico') {
+      const cur = puntualesByClient.get(cs.client.id) || {
+        clienteNombre: cs.client.name,
+        valor: 0,
+        moneda: cs.moneda || 'COP',
+        servicios: [],
+      };
+      cur.valor += price || 0;
+      cur.servicios.push(cs.service.name);
+      puntualesByClient.set(cs.client.id, cur);
+      continue; // no entra al MRR mensual
+    }
+
     const monthly = normalizeToMonthly(price, cs.frecuencia);
     if (monthly <= 0) continue;
 
@@ -169,12 +189,33 @@ export const getCobrosForPeriod = async (periodInput?: string) => {
   const pendienteMes = rows.filter((r) => r.estado === 'pendiente').reduce((a, r) => a + r.monto, 0);
   const vencidoMes = rows.filter((r) => r.estado === 'vencido').reduce((a, r) => a + r.monto, 0);
 
+  // 6. Indicador MRR = N° de clientes recurrentes × ingreso promedio por cliente (ARPU)
+  const clientesRecurrentes = byClient.size;
+  const ingresoPromedio = clientesRecurrentes > 0 ? mrrTotal / clientesRecurrentes : 0;
+
+  // 7. Clasificación: proyectos puntuales (servicios de pago único, fuera del MRR)
+  const proyectosPuntuales = Array.from(puntualesByClient.entries()).map(([clientId, p]) => ({
+    clientId,
+    clienteNombre: p.clienteNombre,
+    valor: Math.round(p.valor),
+    moneda: p.moneda,
+    servicios: p.servicios,
+  }));
+  const proyectosPuntualesValor = proyectosPuntuales.reduce((a, p) => a + p.valor, 0);
+
   return {
     periodo,
     mrrTotal: Math.round(mrrTotal),
     cobradoMes: Math.round(cobradoMes),
     pendienteMes: Math.round(pendienteMes),
     vencidoMes: Math.round(vencidoMes),
+    // Indicador MRR descompuesto
+    clientesRecurrentes,
+    ingresoPromedio: Math.round(ingresoPromedio),
+    // Clasificación del portafolio
+    proyectosPuntualesCount: proyectosPuntuales.length,
+    proyectosPuntualesValor,
+    proyectosPuntuales,
     cobros: rows,
   };
 };
