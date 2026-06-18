@@ -17,6 +17,33 @@ const MONTHS_BY_FREQ: Record<string, number> = {
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+/**
+ * Si las notas del servicio incluyen una etiqueta "PERIODO=Ds-De" (días de inicio y
+ * fin del periodo de cobro), arma el texto del periodo terminando en la fecha de
+ * cobro. Si Ds > De, el inicio cae en el mes anterior. Ej: PERIODO=5-20 con cobro
+ * el 20 de junio -> "del 5 al 20 de junio de 2026".
+ */
+const buildPeriodo = (notas: string | null | undefined, dueDate: Date): string | null => {
+  const m = (notas || '').match(/PERIODO=(\d{1,2})-(\d{1,2})/i);
+  if (!m) return null;
+  const startDay = parseInt(m[1], 10);
+  const endDay = parseInt(m[2], 10);
+  const endMonth = dueDate.getMonth();
+  const endYear = dueDate.getFullYear();
+  let startMonth = endMonth;
+  let startYear = endYear;
+  if (startDay > endDay) {
+    startMonth = endMonth - 1;
+    if (startMonth < 0) { startMonth = 11; startYear = endYear - 1; }
+  }
+  if (startMonth === endMonth) {
+    return `del ${startDay} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
+  }
+  return `del ${startDay} de ${MESES[startMonth]} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
+};
+
 /** Avanza una fecha N meses preservando el dia (clamp a fin de mes). */
 const addMonths = (date: Date, months: number): Date => {
   const d = new Date(date);
@@ -65,8 +92,8 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
     const clienteNombre = cs.client?.name || 'Cliente';
     try {
       const nit = cs.client?.nit?.trim();
-      if (!nit) {
-        result.skipped.push({ cliente: clienteNombre, motivo: 'Cliente sin NIT/identificación' });
+      if (!nit || nit === '0') {
+        result.skipped.push({ cliente: clienteNombre, motivo: 'Cliente sin NIT/identificación válida' });
         continue;
       }
       const precio = cs.precioCliente ?? cs.service?.price ?? 0;
@@ -75,16 +102,20 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
         continue;
       }
 
-      const servicioNombre = cs.service?.name || cs.notas || 'Servicio mensual';
+      const servicioNombre = cs.service?.name || 'Servicio mensual';
       const fechaStr = toYMD(now);
+      // Periodo en el concepto (si el servicio tiene etiqueta PERIODO=Ds-De en notas).
+      const periodo = buildPeriodo(cs.notas, (cs.fechaProximoCobro as Date) || now);
+      const descripcion = periodo ? `${servicioNombre} ${periodo}` : servicioNombre;
+      const concepto = periodo ? `${servicioNombre} ${periodo}` : `Servicio ${cs.frecuencia} — ${servicioNombre}`;
 
       // 1. Generar PDF + registrar Invoice como borrador (status 'pendiente').
       const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
         nombre_cliente: clienteNombre,
         identificacion: nit,
-        servicios: [{ descripcion: servicioNombre, cantidad: 1, precio_unitario: precio }],
+        servicios: [{ descripcion, cantidad: 1, precio_unitario: precio }],
         observaciones: 'Generada automáticamente (servicio recurrente). Borrador para revisión.',
-        concepto: `Servicio ${cs.frecuencia} — ${servicioNombre}`,
+        concepto,
         fecha: fechaStr,
         servicio_proyecto: servicioNombre,
         cliente_id: cs.client?.id,
@@ -98,7 +129,7 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
           clientNit: nit,
           totalAmount: precio,
           fecha: new Date(fechaStr),
-          concepto: `Servicio ${cs.frecuencia} — ${servicioNombre}`,
+          concepto,
           servicio: servicioNombre,
           observaciones: 'Generada automáticamente (servicio recurrente).',
           filePath: generatedPath,
