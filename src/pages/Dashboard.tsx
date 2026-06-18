@@ -452,7 +452,19 @@ export default function Dashboard() {
           setMonthlyIncome(currentMonthIncome);
           setMonthlyExpenses(currentMonthExpenses);
           setFinanceTransactions(expenses);
-          setMonthlyTrend(financeData.financeByMonth || []);
+
+          // El último punto de la tendencia es el mes EN CURSO: usar el acumulado
+          // real del mes (lo que llevamos hasta hoy, igual que las tarjetas) en vez
+          // del valor del backend, para que se vea el mes parcial y la baja real.
+          const trend = [...(financeData.financeByMonth || [])];
+          if (trend.length > 0) {
+            trend[trend.length - 1] = {
+              ...trend[trend.length - 1],
+              income: currentMonthIncome,
+              expenses: currentMonthExpenses,
+            };
+          }
+          setMonthlyTrend(trend);
           setCrmDeals(deals);
           setCrmStages(stages);
           setDisponible(disponibleData.cuentas || []);

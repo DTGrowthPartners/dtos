@@ -521,11 +521,20 @@ export default function ExecutiveDashboard() {
       .slice(0, 6);
   }, [tasks]);
 
-  // Tendencia de ingresos/gastos: el backend ya devuelve financeByMonth
-  // pre-agregado y correcto (ultimos 6 meses, en orden cronologico).
+  // Tendencia de ingresos/gastos: el backend devuelve financeByMonth (últimos 6
+  // meses). El último punto es el mes EN CURSO: lo sustituimos por el acumulado
+  // real del mes (igual que las tarjetas) para ver el mes parcial y la baja real.
   const incomeByMonth = useMemo<MonthPoint[]>(() => {
-    return financeData.financeByMonth || [];
-  }, [financeData]);
+    const trend = [...(financeData.financeByMonth || [])];
+    if (trend.length > 0) {
+      trend[trend.length - 1] = {
+        ...trend[trend.length - 1],
+        income: monthly.income,
+        expenses: monthly.expenses,
+      };
+    }
+    return trend;
+  }, [financeData, monthly]);
 
   // Tareas overdue ordenadas
   const overdueList = useMemo(() => {
