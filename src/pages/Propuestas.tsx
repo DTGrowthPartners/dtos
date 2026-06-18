@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  FileText, Sparkles, Loader2, Plus, Download, Eye, Trash2, RefreshCw, Mic,
+  FileText, Sparkles, Loader2, Plus, Download, Eye, Trash2, RefreshCw, Mic, Upload,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { useAuthStore } from '@/lib/auth';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -39,6 +40,7 @@ const openPdf = (data: ProposalData) => {
 
 export default function Propuestas() {
   const { toast } = useToast();
+  const { token } = useAuthStore();
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -50,6 +52,9 @@ export default function Propuestas() {
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState<ProposalData | null>(null);
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [fileName, setFileName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Preview de una propuesta existente
   const [preview, setPreview] = useState<ProposalData | null>(null);
@@ -67,7 +72,34 @@ export default function Propuestas() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
 
   const resetDialog = () => {
-    setTranscript(''); setCliente(''); setNotas(''); setDraft(null);
+    setTranscript(''); setCliente(''); setNotas(''); setDraft(null); setFileName('');
+  };
+
+  // Sube un archivo (.txt/.md/.pdf/.docx) y vuelca su texto en la transcripción.
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    setExtracting(true);
+    setFileName(file.name);
+    try {
+      const API_URL = import.meta.env.VITE_API_URL || '';
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_URL}/api/propuestas/extract`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'No se pudo leer el archivo');
+      setTranscript((prev) => (prev.trim() ? prev.trim() + '\n\n' : '') + data.text);
+      toast({ title: 'Archivo cargado', description: `${file.name} · ${data.text.length.toLocaleString('es-CO')} caracteres` });
+    } catch (e) {
+      setFileName('');
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo leer el archivo', variant: 'destructive' });
+    } finally {
+      setExtracting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleGenerate = async () => {
@@ -213,16 +245,41 @@ export default function Propuestas() {
                 <Input placeholder="Cliente / prospecto (opcional)" value={cliente} onChange={(e) => setCliente(e.target.value)} disabled={generating} />
                 <Input placeholder="Notas adicionales (opcional)" value={notas} onChange={(e) => setNotas(e.target.value)} disabled={generating} />
               </div>
+
+              {/* Adjuntar archivo en lugar de pegar */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".txt,.md,.pdf,.docx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={(e) => handleFile(e.target.files?.[0])}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={generating || extracting}
+                >
+                  {extracting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                  Adjuntar archivo
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  {fileName ? `📎 ${fileName}` : 'TXT · MD · PDF · Word (.docx)'}
+                </span>
+              </div>
+
               <Textarea
-                placeholder="Pega aquí la transcripción de la reunión…"
+                placeholder="Pega aquí la transcripción de la reunión… o adjunta un archivo arriba."
                 value={transcript}
                 onChange={(e) => setTranscript(e.target.value)}
-                className="min-h-[280px] resize-y"
-                disabled={generating}
+                className="min-h-[240px] resize-y"
+                disabled={generating || extracting}
                 autoFocus
               />
               <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Mic className="h-3 w-3" /> Tip: graba la reunión, transcríbela (texto) y pégala aquí.
+                <Mic className="h-3 w-3" /> Tip: graba la reunión, transcríbela (texto) y pégala o adjunta el archivo.
               </p>
             </div>
           ) : (
@@ -236,8 +293,8 @@ export default function Propuestas() {
           <DialogFooter className="gap-2">
             {!draft ? (
               <>
-                <Button variant="outline" onClick={() => setOpen(false)} disabled={generating}>Cancelar</Button>
-                <Button onClick={handleGenerate} disabled={generating || transcript.trim().length < 30} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Button variant="outline" onClick={() => setOpen(false)} disabled={generating || extracting}>Cancelar</Button>
+                <Button onClick={handleGenerate} disabled={generating || extracting || transcript.trim().length < 30} className="bg-emerald-600 hover:bg-emerald-700 text-white">
                   {generating ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Generando…</> : <><Sparkles className="h-4 w-4 mr-2" />Generar propuesta</>}
                 </Button>
               </>
