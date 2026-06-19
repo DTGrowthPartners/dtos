@@ -7,7 +7,11 @@ import { useAuthStore } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { loadTodos, createTodo, updateTodo, deleteTodo, type Todo } from '@/lib/firestoreTodoService';
 
-export default function Todos() {
+/**
+ * Lista To-Do rápida y personal (por usuario). Pensada para usarse embebida
+ * (p. ej. dentro de un popup en Operaciones) para pendientes muy pequeños.
+ */
+export default function TodoList() {
   const { toast } = useToast();
   const { user } = useAuthStore();
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -29,12 +33,13 @@ export default function Todos() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
 
   const pendientes = useMemo(() => todos.filter((t) => !t.done).length, [todos]);
+  const sortTodos = (arr: Todo[]) =>
+    [...arr].sort((a, b) => (a.done === b.done ? b.createdAt - a.createdAt : a.done ? 1 : -1));
 
   const add = async () => {
     const t = text.trim();
     if (!t || !user || adding) return;
     setAdding(true);
-    // optimista
     const tempId = `temp-${Date.now()}`;
     setTodos((prev) => [{ id: tempId, text: t, done: false, userId: user.id, createdAt: Date.now() }, ...prev]);
     setText('');
@@ -51,13 +56,8 @@ export default function Todos() {
 
   const toggle = async (todo: Todo) => {
     const done = !todo.done;
-    setTodos((prev) =>
-      [...prev.map((x) => (x.id === todo.id ? { ...x, done, completedAt: done ? Date.now() : null } : x))]
-        .sort((a, b) => (a.done === b.done ? b.createdAt - a.createdAt : a.done ? 1 : -1))
-    );
-    try {
-      await updateTodo(todo.id, { done, completedAt: done ? Date.now() : null });
-    } catch { load(); }
+    setTodos((prev) => sortTodos(prev.map((x) => (x.id === todo.id ? { ...x, done, completedAt: done ? Date.now() : null } : x))));
+    try { await updateTodo(todo.id, { done, completedAt: done ? Date.now() : null }); } catch { load(); }
   };
 
   const remove = async (todo: Todo) => {
@@ -73,30 +73,19 @@ export default function Todos() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-5">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="h-11 w-11 rounded-xl bg-violet-500/10 text-violet-500 flex items-center justify-center">
-          <ListTodo className="h-6 w-6" />
-        </div>
-        <div className="flex-1">
-          <h1 className="text-xl md:text-2xl font-bold">To-Do</h1>
-          <p className="text-sm text-muted-foreground">
-            Lista rápida para pendientes pequeños. {pendientes > 0 && `${pendientes} sin terminar.`}
-          </p>
-        </div>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          {pendientes > 0 ? `${pendientes} sin terminar` : 'Sin pendientes'}
+        </p>
         {todos.some((t) => t.done) && (
-          <Button variant="ghost" size="sm" onClick={clearDone} className="text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={clearDone} className="h-7 text-xs text-muted-foreground">
             Limpiar completadas
           </Button>
         )}
       </div>
 
-      {/* Agregar */}
-      <form
-        onSubmit={(e) => { e.preventDefault(); add(); }}
-        className="flex gap-2"
-      >
+      <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex gap-2">
         <Input
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -104,21 +93,20 @@ export default function Todos() {
           autoFocus
           disabled={adding}
         />
-        <Button type="submit" disabled={!text.trim() || adding}>
+        <Button type="submit" size="icon" disabled={!text.trim() || adding}>
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </form>
 
-      {/* Lista */}
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">Cargando…</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">Cargando…</div>
       ) : todos.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card/50 p-10 text-center">
-          <ListTodo className="h-10 w-10 text-muted-foreground/40 mx-auto mb-2" />
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center">
+          <ListTodo className="h-9 w-9 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Sin pendientes. Agrega el primero arriba 👆</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card divide-y divide-border">
+        <div className="rounded-xl border border-border bg-card divide-y divide-border max-h-[55vh] overflow-y-auto">
           {todos.map((todo) => (
             <div key={todo.id} className="group flex items-center gap-3 px-3 py-2.5">
               <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>

@@ -31,6 +31,7 @@ import {
   CalendarDays,
   CalendarRange,
   CheckSquare,
+  ListTodo,
   ExternalLink,
   Link,
   GripVertical,
@@ -59,6 +60,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { DatePicker, TimePicker } from '@/components/ui/date-time-picker';
 import { Card } from '@/components/ui/card';
+import TodoList from '@/components/todos/TodoList';
 import {
   Select,
   SelectContent,
@@ -291,6 +293,7 @@ export default function Tareas() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isAIDialogOpen, setIsAIDialogOpen] = useState(false);
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
   const aiPending = useAiTaskStore((s) => s.pending);
   const consumeAiPending = useAiTaskStore((s) => s.consumePending);
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false);
@@ -4124,6 +4127,15 @@ export default function Tareas() {
                   </Button>
                   <Button
                     variant="outline"
+                    onClick={() => setIsTodoOpen(true)}
+                    className="flex-shrink-0"
+                    title="To-Do rápido para pendientes pequeños"
+                  >
+                    <ListTodo className="h-4 w-4 md:mr-2" />
+                    <span className="hidden md:inline">To-Do</span>
+                  </Button>
+                  <Button
+                    variant="outline"
                     onClick={() => {
                       resetForm();
                       setIsAIDialogOpen(true);
@@ -6208,6 +6220,19 @@ export default function Tareas() {
         onOpenChange={setIsAIDialogOpen}
         onParsed={handleAIParsed}
       />
+
+      {/* Popup To-Do rápido (pendientes pequeños) */}
+      <Dialog open={isTodoOpen} onOpenChange={setIsTodoOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListTodo className="h-5 w-5 text-violet-500" />
+              To-Do rápido
+            </DialogTitle>
+          </DialogHeader>
+          <TodoList />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

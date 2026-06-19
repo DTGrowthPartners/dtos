@@ -12,7 +12,6 @@ import Clientes from "@/pages/Clientes";
 import Servicios from "@/pages/Servicios";
 import Tareas from "@/pages/Tareas";
 import MisTareas from "@/pages/MisTareas";
-import Todos from "@/pages/Todos";
 import Reportes from "@/pages/Reportes";
 import Equipo from "@/pages/Equipo";
 import Productos from "@/pages/Productos";
@@ -79,7 +78,6 @@ const App = () => (
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
               <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
               <Route path="/mis-tareas" element={<MisTareas />} />
-              <Route path="/todos" element={<Todos />} />
               <Route path="/reportes" element={<ProtectedRoute requiredPermission="reportes"><Reportes /></ProtectedRoute>} />
               <Route path="/equipo" element={<ProtectedRoute requiredPermission="equipo"><Equipo /></ProtectedRoute>} />
               <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
