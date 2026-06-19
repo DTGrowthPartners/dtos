@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import OpenAI from 'openai';
+import axios from 'axios';
 import { AI_TOOLS } from '../config/aiTools';
 import { AIToolsService } from '../services/aiTools.service';
 
@@ -93,6 +94,43 @@ function cleanResponse(text: string): string {
     .replace(/<\/?(invoke|parameter|function_calls|antml:[a-z_]+)[^>]*>/g, "")
     .trim();
   return out;
+}
+
+// DARIO no acepta imágenes por la capa OpenAI (image_url); sí por la API nativa
+// Anthropic (/v1/messages con bloques 'image'). Esta función hace una pasada de
+// visión: extrae a TEXTO los datos útiles de las imágenes para que luego el bucle
+// de acciones (texto) pueda crear registros (clientes, prospectos, cuentas, etc.).
+async function extractFromImages(images: string[], userMsg: string): Promise<string> {
+  const blocks: any[] = [
+    {
+      type: 'text',
+      text:
+        `Analiza la(s) imagen(es) y extrae TODA la información útil para registrar datos en DTOS ` +
+        `(p. ej. datos de cliente/prospecto: nombre/empresa, NIT o cédula, teléfono, email, dirección, ciudad; ` +
+        `o datos de una cuenta de cobro/factura: cliente, concepto, montos, fechas, NIT; o cualquier dato relevante). ` +
+        `Transcribe el texto visible y resume los datos de forma clara y estructurada. ` +
+        (userMsg ? `Contexto del usuario: "${userMsg}". ` : '') +
+        `Responde solo con la información extraída, sin preámbulos.`,
+    },
+  ];
+  for (const img of images.slice(0, 5)) {
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(img || '');
+    if (!m) continue;
+    if (m[2].length > 9_000_000) continue; // ~6.7MB por imagen, salta las enormes
+    blocks.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
+  }
+  if (blocks.length === 1) return ''; // no había imágenes válidas
+
+  const resp = await axios.post(
+    `${AI_BASE_URL}/messages`,
+    { model: AI_MODEL, max_tokens: 1500, messages: [{ role: 'user', content: blocks }] },
+    {
+      headers: { 'x-api-key': AI_API_KEY, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json' },
+      timeout: 120000,
+    }
+  );
+  const content = resp.data?.content || [];
+  return content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
 }
 
 // Handle AI API errors with friendly messages
@@ -213,14 +251,31 @@ export class ChatController {
   // Send a message to AI with Function Calling (tools) support
   async sendMessageWithTools(req: Request, res: Response) {
     try {
-      const { message, conversationHistory } = req.body;
+      const { message, conversationHistory, images } = req.body;
       const userId = (req as any).user.userId;
 
-      if (!message || typeof message !== 'string') {
+      const hasImages = Array.isArray(images) && images.length > 0;
+      if ((!message || typeof message !== 'string') && !hasImages) {
         return res.status(400).json({
           success: false,
           error: 'Message is required and must be a string'
         });
+      }
+
+      // Si hay imágenes adjuntas, primero se extrae su contenido a texto (visión)
+      // y se antepone al mensaje para que el bucle de acciones pueda usarlo.
+      let effectiveMessage = typeof message === 'string' ? message : '';
+      if (hasImages) {
+        try {
+          const extracted = await extractFromImages(images, effectiveMessage);
+          if (extracted) {
+            effectiveMessage =
+              `[Contenido extraído de imagen(es) adjuntas]:\n${extracted}\n\n` +
+              (effectiveMessage ? `Mensaje del usuario: ${effectiveMessage}` : 'El usuario adjuntó la(s) imagen(es) anterior(es). Actúa según corresponda (crear registro, responder, etc.).');
+          }
+        } catch (e: any) {
+          console.error('[Chat] Error procesando imágenes:', e?.message || e);
+        }
       }
 
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
@@ -243,7 +298,7 @@ export class ChatController {
           },
         ];
         if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
-        messages.push({ role: 'user', content: message });
+        messages.push({ role: 'user', content: effectiveMessage });
         const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.7, max_tokens: 2000 });
         return res.json({ success: true, response: cleanResponse(completion.choices[0].message.content || ''), usage: completion.usage });
       }
@@ -257,7 +312,7 @@ export class ChatController {
           },
         ];
         if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
-        messages.push({ role: 'user', content: message });
+        messages.push({ role: 'user', content: effectiveMessage });
 
         const MAX_ITERATIONS = 6;
         for (let it = 1; it <= MAX_ITERATIONS; it++) {
@@ -312,7 +367,7 @@ ${styleGuide}`,
         },
       ];
       if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
-      messages.push({ role: 'user', content: message });
+      messages.push({ role: 'user', content: effectiveMessage });
 
       const MAX_STEPS = 6;
       for (let step = 1; step <= MAX_STEPS; step++) {

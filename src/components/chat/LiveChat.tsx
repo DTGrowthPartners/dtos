@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2 } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -126,9 +126,73 @@ export default function LiveChat() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const { user, token } = useAuthStore();
   const { toast } = useToast();
   const [aiRoomId, setAiRoomId] = useState<string | null>(null);
+  // Imágenes adjuntas (data URLs) para enviar a María (visión)
+  const [attachedImages, setAttachedImages] = useState<string[]>([]);
+
+  // Reduce una imagen (máx 1600px, JPEG 0.85) para enviar un payload liviano y
+  // acelerar la visión, manteniendo el texto legible para OCR.
+  const downscaleToDataURL = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new window.Image();
+        img.onload = () => {
+          const MAX = 1600;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            const s = Math.min(MAX / width, MAX / height);
+            width = Math.round(width * s);
+            height = Math.round(height * s);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return resolve(reader.result as string);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = reject;
+        img.src = reader.result as string;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  // Lee archivos de imagen y los agrega a los adjuntos (reducidos).
+  const addImageFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (!arr.length) return;
+    for (const file of arr.slice(0, 5)) {
+      try {
+        const url = await downscaleToDataURL(file);
+        setAttachedImages((prev) => (prev.length >= 5 ? prev : [...prev, url]));
+      } catch {
+        toast({ title: 'Error', description: `No se pudo procesar ${file.name}`, variant: 'destructive' });
+      }
+    }
+  };
+
+  // Pegar imágenes desde el portapapeles (pantallazos, fotos copiadas).
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const it of Array.from(items)) {
+      if (it.kind === 'file' && it.type.startsWith('image/')) {
+        const f = it.getAsFile();
+        if (f) files.push(f);
+      }
+    }
+    if (files.length) {
+      e.preventDefault();
+      addImageFiles(files);
+    }
+  };
 
   // Scroll to bottom on new messages
   const scrollToBottom = () => {
@@ -257,7 +321,7 @@ export default function LiveChat() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || isLoading) return;
+    if ((!newMessage.trim() && attachedImages.length === 0) || !user || isLoading) return;
 
     setIsLoading(true);
     try {
@@ -268,17 +332,15 @@ export default function LiveChat() {
       const isAIRoom = activeRoomId === aiRoomId;
 
       if (isAIRoom) {
-        // Save user message first
-        await sendMessage(
-          activeRoomId,
-          newMessage.trim(),
-          user.id,
-          userName,
-          currentUser?.photoUrl
-        );
-
+        const imgs = attachedImages;
         const messageText = newMessage.trim();
+        // En el chat se guarda el texto + indicador de imagen (no la imagen completa).
+        const savedText = messageText || (imgs.length ? '📷 (imagen adjunta)' : '');
+        const savedWithMark = imgs.length && messageText ? `${messageText}\n📷 (${imgs.length} imagen${imgs.length > 1 ? 'es' : ''})` : savedText;
+
+        await sendMessage(activeRoomId, savedWithMark, user.id, userName, currentUser?.photoUrl);
         setNewMessage('');
+        setAttachedImages([]);
 
         // Build conversation history (last 20 messages for context)
         const conversationHistory = messages.slice(-20).map((m) => ({
@@ -286,7 +348,7 @@ export default function LiveChat() {
           content: m.text,
         }));
 
-        // Call AI endpoint with tools
+        // Call AI endpoint with tools (incluye imágenes si las hay)
         const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
         const response = await fetch(`${API_URL}/api/chat/ai`, {
           method: 'POST',
@@ -297,6 +359,7 @@ export default function LiveChat() {
           body: JSON.stringify({
             message: messageText,
             conversationHistory,
+            images: imgs,
           }),
         });
 
@@ -834,18 +897,60 @@ export default function LiveChat() {
                 </div>
               </ScrollArea>
 
+              {/* Miniaturas de imágenes adjuntas (solo chat de María) */}
+              {activeRoomId === aiRoomId && attachedImages.length > 0 && (
+                <div className="px-3 pt-2 flex gap-2 flex-wrap border-t">
+                  {attachedImages.map((src, i) => (
+                    <div key={i} className="relative">
+                      <img src={src} alt="adjunto" className="h-14 w-14 object-cover rounded-md border border-border" />
+                      <button
+                        type="button"
+                        onClick={() => setAttachedImages((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center hover:bg-muted"
+                        title="Quitar"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {/* Input */}
-              <form onSubmit={handleSendMessage} className="p-3 border-t flex gap-2 flex-shrink-0 bg-background">
+              <form onSubmit={handleSendMessage} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId === aiRoomId && attachedImages.length > 0 ? '' : 'border-t'}`}>
+                {activeRoomId === aiRoomId && (
+                  <>
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { if (e.target.files) addImageFiles(e.target.files); e.target.value = ''; }}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => imageInputRef.current?.click()}
+                      disabled={isLoading || attachedImages.length >= 5}
+                      title="Adjuntar imagen (o pega con Ctrl+V)"
+                    >
+                      <ImagePlus className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
                 <Input
                   ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Escribe un mensaje..."
+                  onPaste={activeRoomId === aiRoomId ? handlePaste : undefined}
+                  placeholder={activeRoomId === aiRoomId ? 'Escribe o pega una imagen…' : 'Escribe un mensaje...'}
                   className="flex-1"
                   disabled={isLoading}
                   autoFocus
                 />
-                <Button type="submit" size="icon" disabled={!newMessage.trim() || isLoading}>
+                <Button type="submit" size="icon" disabled={(!newMessage.trim() && attachedImages.length === 0) || isLoading}>
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
