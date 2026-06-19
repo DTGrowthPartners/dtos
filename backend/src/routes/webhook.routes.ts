@@ -8,6 +8,7 @@ import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
 import { resolveDestino } from '../config/notifyPhones';
 import { generateDueRecurringInvoices } from '../services/recurringInvoices.service';
+import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
 
@@ -775,6 +776,63 @@ router.get('/bot/clients/:id', verifyBotApiKey, async (req: Request, res: Respon
       success: false,
       error: 'Error al obtener cliente',
     });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/domains/check-expiring
+ *
+ * Revisa los dominios del portafolio y, en marcas de 30/15/7/3/1 días antes de
+ * vencer, crea una tarea de alta prioridad para Dairo y avisa por WhatsApp.
+ * Pensado para un cron diario. Query/body: ?dias=30 fuerza un chequeo simple.
+ */
+router.post('/bot/domains/check-expiring', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const force = req.query.dias ? parseInt(req.query.dias as string, 10) : null;
+    const avisos: { domain: string; dias: number }[] = [];
+
+    for (const d of DOMAINS) {
+      if (!d.active) continue;
+      const dias = daysUntil(d.expiration);
+      const hit = force != null ? dias <= force && dias >= 0 : ALERT_THRESHOLDS.includes(dias);
+      if (!hit) continue;
+
+      const panel = REGISTRAR_PANEL[d.registrar];
+      const titulo = `Renovar dominio ${d.domain} (vence en ${dias} día${dias === 1 ? '' : 's'})`;
+      const desc =
+        `El dominio ${d.domain} vence el ${d.expiration} (en ${dias} día${dias === 1 ? '' : 's'}). ` +
+        `Renovar en ${d.registrar}: ${panel}. La renovación la paga el cliente.`;
+      try {
+        await getFirestore().collection('tasks').add({
+          title: titulo,
+          description: desc,
+          status: 'TODO',
+          priority: 'HIGH',
+          assignee: 'Dairo',
+          creator: 'Sistema',
+          projectId: '',
+          type: 'Cliente / Reuniones',
+          position: 0,
+          createdAt: Date.now(),
+        });
+      } catch (e) {
+        console.error('[domains] no se pudo crear la tarea:', (e as Error).message);
+      }
+      const destino = resolveDestino('Dairo');
+      if (destino) {
+        const mensaje =
+          `🌐 *Dominio por vencer*\n*${d.domain}* vence el ${d.expiration} (en ${dias} día${dias === 1 ? '' : 's'}).\n` +
+          `Renovar en ${d.registrar}: ${panel}`;
+        try { await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_dominios' }); } catch {}
+      }
+      avisos.push({ domain: d.domain, dias });
+    }
+
+    console.log(`[domains] alertas enviadas: ${avisos.length}`);
+    res.json({ success: true, alertados: avisos.length, avisos });
+  } catch (error) {
+    console.error('[Bot API] Error revisando dominios:', error);
+    res.status(500).json({ success: false, error: 'Error revisando dominios' });
   }
 });
 

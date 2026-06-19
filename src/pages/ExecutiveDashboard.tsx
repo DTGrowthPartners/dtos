@@ -269,6 +269,8 @@ export default function ExecutiveDashboard() {
   const [disponible, setDisponible] = useState<CuentaDisponible[]>([]);
   const [totalDisponible, setTotalDisponible] = useState(0);
   const [services, setServices] = useState<ServiceRevenueMetrics>({ totalMRR: 0, clientsWithServices: 0 });
+  // MRR estimado por cuentas de cobro reales (módulo Cobros & MRR)
+  const [mrrInfo, setMrrInfo] = useState<{ mrr: number; clientesRecurrentes: number; ingresoPromedio: number; puntualesValor: number; puntuales: { nombre: string }[] } | null>(null);
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
@@ -355,6 +357,14 @@ export default function ExecutiveDashboard() {
         setServices(servicesRes);
         setClients(clientsRes);
         setTasks(tasksRes);
+
+        // MRR estimado por cuentas de cobro (solo admin)
+        if (isAdmin) {
+          apiClient
+            .get<{ invoiceMRR?: typeof mrrInfo }>('/api/cobros')
+            .then((r) => setMrrInfo(r.invoiceMRR || null))
+            .catch(() => {});
+        }
 
         // Por cada agente configurado, cargamos stats en paralelo
         if (agentsList.length > 0) {
@@ -622,12 +632,18 @@ export default function ExecutiveDashboard() {
             to="/finanzas"
           />
           <StatCard
-            title="MRR Servicios"
-            value={formatMoney(services.totalMRR, hideFinances)}
-            subtitle={hideFinances ? '•• clientes' : `${services.clientsWithServices} clientes`}
+            title="MRR estimado"
+            value={formatMoney(mrrInfo ? mrrInfo.mrr : services.totalMRR, hideFinances)}
+            subtitle={
+              hideFinances
+                ? '••'
+                : mrrInfo
+                  ? `${mrrInfo.clientesRecurrentes} clientes × ${formatMoney(mrrInfo.ingresoPromedio, false)}`
+                  : `${services.clientsWithServices} clientes`
+            }
             icon={TrendingUp}
             variant="primary"
-            to="/servicios"
+            to="/cobros"
           />
           <StatCard
             title="Clientes Activos"
