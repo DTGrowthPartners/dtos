@@ -316,6 +316,8 @@ export default function Tareas() {
   const [filterAssignee, setFilterAssignee] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  // En móvil el sidebar de proyectos se muestra como drawer (overlay).
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [taskView, setTaskView] = useState<TaskView>('active');
   const [archivedTasks, setArchivedTasks] = useState<Task[]>([]);
   const [deletedTasks, setDeletedTasks] = useState<Task[]>([]);
@@ -1850,6 +1852,11 @@ export default function Tareas() {
     }
   }, [taskView, filterProject]);
 
+  // Cerrar el drawer de proyectos (móvil) al elegir proyecto/carpeta o cambiar de vista.
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [filterProject, filterFolder, taskView]);
+
   const handleBriefCreate = useCallback(async (projectId: string) => {
     if (!user) return;
     try {
@@ -3130,8 +3137,23 @@ export default function Tareas() {
 
   return (
     <div className="animate-fade-in h-full flex gap-2 md:gap-4">
-      {/* Left Sidebar - Projects (Collapsable) - Hidden on mobile */}
-      <div className={`hidden md:flex flex-shrink-0 flex-col gap-3 transition-all duration-300 ${sidebarCollapsed ? 'w-14' : 'w-64'}`}>
+      {/* Backdrop del drawer en móvil */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-40 bg-black/50 md:hidden" onClick={() => setMobileSidebarOpen(false)} />
+      )}
+      {/* Left Sidebar - Projects (Collapsable). En móvil: drawer overlay. */}
+      <div
+        className={cn(
+          'flex-shrink-0 flex-col gap-3 transition-all duration-300',
+          // Escritorio: panel estático
+          'md:flex md:static md:z-auto md:inset-auto md:w-auto md:max-w-none md:bg-transparent md:border-0 md:p-0 md:shadow-none md:overflow-visible',
+          sidebarCollapsed ? 'md:w-14' : 'md:w-64',
+          // Móvil: oculto, o drawer cuando está abierto
+          mobileSidebarOpen
+            ? 'flex fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-background border-r border-border p-3 overflow-y-auto shadow-2xl'
+            : 'hidden'
+        )}
+      >
         {/* Collapse Toggle - At the top */}
         <Tooltip delayDuration={0}>
           <TooltipTrigger asChild>
@@ -3609,6 +3631,17 @@ export default function Tareas() {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 gap-3 md:gap-4">
+        {/* Botón de proyectos/filtro — solo móvil (abre el drawer del sidebar) */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setMobileSidebarOpen(true)}
+          className="md:hidden self-start"
+        >
+          <Folder className="h-4 w-4 mr-2" />
+          {selectedProject ? selectedProject.name : filterFolder ? 'Carpeta' : 'Todos los proyectos'}
+        </Button>
+
         {/* Header */}
         {taskView === 'active' && selectedProject ? (
           /* ==================== PROJECT LANDING HEADER ==================== */
