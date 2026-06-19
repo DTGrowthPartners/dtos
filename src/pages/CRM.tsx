@@ -381,7 +381,11 @@ export default function CRM() {
     priority: 'media',
     nextFollowUp: '',
     tags: '',
+    ownerId: '', // responsable del seguimiento (usuario)
   });
+
+  // Usuarios del equipo para asignar el responsable del seguimiento
+  const [teamUsers, setTeamUsers] = useState<{ id: string; firstName: string; lastName?: string; email: string }[]>([]);
 
   const [lostFormData, setLostFormData] = useState({
     reason: '',
@@ -407,18 +411,20 @@ export default function CRM() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [stagesData, dealsData, servicesData, metricsData, fProjects] = await Promise.all([
+      const [stagesData, dealsData, servicesData, metricsData, fProjects, usersData] = await Promise.all([
         apiClient.get<DealStage[]>('/api/crm/stages'),
         apiClient.get<Deal[]>('/api/crm/deals'),
         apiClient.get<Service[]>('/api/services'),
         apiClient.get<PipelineMetrics>('/api/crm/metrics/pipeline'),
         loadProjects(),
+        apiClient.get<{ id: string; firstName: string; lastName?: string; email: string }[]>('/api/users/team').catch(() => []),
       ]);
       setStages(stagesData);
       setDeals(dealsData);
       setServices(servicesData);
       setMetrics(metricsData);
       setFirestoreProjects(fProjects);
+      setTeamUsers(usersData || []);
       if (stagesData.length > 0 && !formData.stageId) {
         setFormData(prev => ({ ...prev, stageId: stagesData[0].id }));
       }
@@ -468,6 +474,7 @@ export default function CRM() {
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         probability: formData.probability,
         nextFollowUp: formData.nextFollowUp || undefined,
+        ownerId: formData.ownerId || undefined, // no sobreescribir si quedó vacío
       };
 
       if (editingDeal) {
@@ -782,6 +789,7 @@ export default function CRM() {
       priority: deal.priority || 'media',
       nextFollowUp: deal.nextFollowUp?.split('T')[0] || '',
       tags: deal.tags?.join(', ') || '',
+      ownerId: deal.ownerId || '',
     });
     setIsDialogOpen(true);
   };
@@ -808,6 +816,7 @@ export default function CRM() {
       priority: 'media',
       nextFollowUp: '',
       tags: '',
+      ownerId: '',
     });
     setEditingDeal(null);
   };
@@ -1073,6 +1082,14 @@ export default function CRM() {
                                             {deal.probability}%
                                           </span>
                                         )}
+                                      </div>
+
+                                      {/* Responsable del seguimiento */}
+                                      <div className="flex items-center gap-1 mb-2 text-xs">
+                                        <UserCheck className="h-3 w-3 text-muted-foreground" />
+                                        <span className={deal.owner ? 'text-foreground' : 'text-muted-foreground italic'}>
+                                          {deal.owner ? `${deal.owner.firstName}${deal.owner.lastName ? ` ${deal.owner.lastName}` : ''}` : 'Sin responsable'}
+                                        </span>
                                       </div>
 
                                       <div className="flex items-center flex-wrap gap-1 mb-3">
@@ -1827,6 +1844,24 @@ export default function CRM() {
                     onChange={(e) => setFormData({ ...formData, nextFollowUp: e.target.value })}
                   />
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Responsable del seguimiento</Label>
+                <Select
+                  value={formData.ownerId || 'none'}
+                  onValueChange={(v) => setFormData({ ...formData, ownerId: v === 'none' ? '' : v })}
+                >
+                  <SelectTrigger><SelectValue placeholder="Sin asignar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin asignar</SelectItem>
+                    {teamUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.firstName}{u.lastName ? ` ${u.lastName}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
