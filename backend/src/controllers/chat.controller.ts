@@ -48,6 +48,7 @@ const WEBHOOK_CATALOG = `CONSULTAS (GET):
 - /bot/invoices — cuentas de cobro
 
 ACCIONES (POST/PATCH):
+- POST /bot/clients — crear cliente. datos: { nombre (req), email, nit, telefono, direccion }
 - POST /bot/tasks — crear tarea. datos: { titulo (req), asignado, prioridad: baja|media|alta, descripcion, proyecto, fechaFin: YYYY-MM-DD, creador }
 - PATCH /bot/tasks/:id — actualizar tarea. datos: { estado: todo|in_progress|done, prioridad, asignado }
 - POST /bot/crm/deals — crear deal. datos: { nombre (req), empresa, telefono, valorEstimado, etapa, prioridad }

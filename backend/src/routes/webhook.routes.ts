@@ -779,6 +779,57 @@ router.get('/bot/clients/:id', verifyBotApiKey, async (req: Request, res: Respon
 });
 
 /**
+ * POST /api/webhook/bot/clients
+ *
+ * Crea un cliente nuevo (tabla Client / Prisma). Usado por María para registrar
+ * clientes desde una foto/pantallazo o por texto.
+ * Body: { nombre|name (req), email, nit, telefono|phone, direccion|address }
+ * - Si no se da email, se genera uno placeholder (el campo es único y requerido).
+ * - Si el email ya existe, devuelve el cliente existente (no duplica).
+ */
+router.post('/bot/clients', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const b = req.body || {};
+    const name = (b.nombre || b.name || '').trim();
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Campo requerido: nombre' });
+    }
+    const phone = (b.telefono || b.phone || '').trim() || null;
+    const nit = (b.nit || b.identificacion || '').trim() || null;
+    const address = (b.direccion || b.address || '').trim() || null;
+    let email = (b.email || '').trim().toLowerCase();
+
+    // Si viene email y ya existe, devolver el cliente existente (no duplicar).
+    if (email) {
+      const existing = await prisma.client.findUnique({ where: { email } });
+      if (existing) {
+        return res.json({ success: true, created: false, message: 'Ya existe un cliente con ese email', client: existing });
+      }
+    } else {
+      // email es único y requerido: generar placeholder estable.
+      const slug = name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '').slice(0, 24) || 'cliente';
+      email = `${slug}-${Date.now()}@sinemail.dtgp`;
+    }
+
+    // createdBy: usuario por defecto (el más antiguo = dueño/admin).
+    const creator = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    if (!creator) {
+      return res.status(500).json({ success: false, error: 'No hay usuarios para asignar como creador' });
+    }
+
+    const client = await prisma.client.create({
+      data: { name, email, nit, phone, address, status: 'active', createdBy: creator.id },
+    });
+
+    console.log(`[Bot API] Cliente creado: ${name} (${client.id})`);
+    res.status(201).json({ success: true, created: true, message: `Cliente "${name}" creado`, client });
+  } catch (error) {
+    console.error('[Bot API] Error creando cliente:', error);
+    res.status(500).json({ success: false, error: 'Error al crear el cliente', details: error instanceof Error ? error.message : 'Unknown' });
+  }
+});
+
+/**
  * GET /api/webhook/bot/services
  *
  * Lista todos los servicios disponibles.
