@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck } from 'lucide-react';
+import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -285,6 +285,13 @@ const getWhatsAppUrl = (phone: string, countryCode: string, stageName: string, d
   const message = messages[stageName] || `Hola ${dealName}!`;
   const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, '');
   return `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
+};
+
+// Link al chat del contacto dentro del bot de WhatsApp (Dairo). Usa el número con
+// prefijo, solo dígitos. Ej: https://david.dtgrowthpartners.com/admin/chats/19294680885
+const getBotChatUrl = (phone: string, countryCode: string) => {
+  const digits = `${countryCode}${phone}`.replace(/[^0-9]/g, '');
+  return `https://david.dtgrowthpartners.com/admin/chats/${digits}`;
 };
 
 export default function CRM() {
@@ -1104,6 +1111,19 @@ export default function CRM() {
                                         )}
                                         {deal.phone && (
                                           <a
+                                            href={getBotChatUrl(deal.phone, deal.phoneCountryCode)}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            onClick={() => handleLogActivity(deal.id, 'whatsapp', 'Abrió chat en el bot')}
+                                            className="flex items-center gap-1 px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white text-xs rounded transition-colors"
+                                            title="Abrir chat en el bot de WhatsApp"
+                                          >
+                                            <Bot className="h-3 w-3" />
+                                            Bot
+                                          </a>
+                                        )}
+                                        {deal.phone && (
+                                          <a
                                             href={`tel:${deal.phoneCountryCode}${deal.phone}`}
                                             onClick={() => handleLogActivity(deal.id, 'call', 'Llamada')}
                                             className="p-1.5 text-muted-foreground hover:text-primary hover:bg-muted rounded transition-colors"
@@ -1314,6 +1334,17 @@ export default function CRM() {
                         >
                           <Button size="sm" className="bg-green-500 hover:bg-green-600">
                             <MessageCircle className="h-4 w-4" />
+                          </Button>
+                        </a>
+                        <a
+                          href={getBotChatUrl(selectedDeal.phone, selectedDeal.phoneCountryCode)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => handleLogActivity(selectedDeal.id, 'whatsapp', 'Abrió chat en el bot')}
+                          title="Abrir chat en el bot de WhatsApp"
+                        >
+                          <Button size="sm" className="bg-indigo-500 hover:bg-indigo-600">
+                            <Bot className="h-4 w-4" />
                           </Button>
                         </a>
                         <a href={`tel:${selectedDeal.phoneCountryCode}${selectedDeal.phone}`}>
