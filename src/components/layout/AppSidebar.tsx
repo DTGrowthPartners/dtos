@@ -23,6 +23,7 @@ import {
   Receipt,
   Globe,
   MonitorSmartphone,
+  ListTodo,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -64,6 +65,7 @@ const navGroups: NavGroup[] = [
     dotColor: 'bg-violet-500',
     items: [
       { title: 'Operaciones', path: '/tareas', icon: Cog, permission: 'tareas' },
+      { title: 'To-Do', path: '/todos', icon: ListTodo },
       { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
       { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },
       { title: 'Reportes', path: '/reportes', icon: FileBarChart, permission: 'reportes' },
