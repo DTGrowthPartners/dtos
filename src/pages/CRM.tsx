@@ -283,15 +283,22 @@ const getWhatsAppUrl = (phone: string, countryCode: string, stageName: string, d
     'negociacion': `Hola ${dealName}! Has podido revisar la propuesta? Estoy pendiente de cualquier duda.`,
   };
   const message = messages[stageName] || `Hola ${dealName}!`;
-  const fullPhone = `${countryCode}${phone}`.replace(/[^0-9+]/g, '');
-  return `https://wa.me/${fullPhone}?text=${encodeURIComponent(message)}`;
+  return `https://wa.me/${normalizePhone(phone, countryCode)}?text=${encodeURIComponent(message)}`;
+};
+
+// Normaliza un teléfono a "código de país + número" en solo dígitos, SIN duplicar
+// el prefijo si el número ya lo incluye (ej: cc '+57' + phone '573007071626' -> '573007071626').
+const normalizePhone = (phone: string, countryCode: string): string => {
+  const cc = (countryCode || '').replace(/\D/g, '');
+  const p = (phone || '').replace(/\D/g, '');
+  if (cc && p.startsWith(cc)) return p;
+  return cc + p;
 };
 
 // Link al chat del contacto dentro del bot de WhatsApp (Dairo). Usa el número con
 // prefijo, solo dígitos. Ej: https://david.dtgrowthpartners.com/admin/chats/19294680885
 const getBotChatUrl = (phone: string, countryCode: string) => {
-  const digits = `${countryCode}${phone}`.replace(/[^0-9]/g, '');
-  return `https://david.dtgrowthpartners.com/admin/chats/${digits}`;
+  return `https://david.dtgrowthpartners.com/admin/chats/${normalizePhone(phone, countryCode)}`;
 };
 
 export default function CRM() {
