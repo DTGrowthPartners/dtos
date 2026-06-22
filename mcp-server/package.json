@@ -1,0 +1,17 @@
+{
+  "name": "dtos-mcp",
+  "version": "1.0.0",
+  "description": "Servidor MCP remoto que conecta Claude (claude.ai) con DT-OS vía su API de bot.",
+  "type": "module",
+  "main": "index.mjs",
+  "scripts": {
+    "start": "node index.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.0.0",
+    "express": "^5.0.0",
+    "zod": "^4.0.0"
+  }
+}
