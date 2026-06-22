@@ -33,7 +33,8 @@ export interface CreateDealDto {
   // CRM v2 fields
   probability?: number;
   priority?: string;
-  nextFollowUp?: string;
+  nextFollowUp?: string | null; // null = limpiar el seguimiento
+  lastInteractionAt?: string;
   tags?: string[];
 }
 
@@ -59,7 +60,8 @@ export interface UpdateDealDto {
   // CRM v2 fields
   probability?: number;
   priority?: string;
-  nextFollowUp?: string;
+  nextFollowUp?: string | null; // null = limpiar el seguimiento
+  lastInteractionAt?: string;
   tags?: string[];
 }
 

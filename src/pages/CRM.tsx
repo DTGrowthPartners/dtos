@@ -308,6 +308,8 @@ export default function CRM() {
   const [metrics, setMetrics] = useState<PipelineMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [stageFilter, setStageFilter] = useState<string>('all'); // 'all' o stageId
+  const [dateFilter, setDateFilter] = useState<string>('all'); // all | today | week | month
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLostDialogOpen, setIsLostDialogOpen] = useState(false);
@@ -863,11 +865,27 @@ export default function CRM() {
 
   const filteredDeals = deals.filter((deal) => {
     const searchLower = searchQuery.toLowerCase();
-    return (
+    const matchSearch =
+      !searchLower ||
       deal.name.toLowerCase().includes(searchLower) ||
       deal.company?.toLowerCase().includes(searchLower) ||
-      deal.email?.toLowerCase().includes(searchLower)
-    );
+      deal.email?.toLowerCase().includes(searchLower);
+
+    const matchStage = stageFilter === 'all' || deal.stageId === stageFilter;
+
+    let matchDate = true;
+    if (dateFilter !== 'all' && deal.createdAt) {
+      const created = new Date(deal.createdAt);
+      const now = new Date();
+      if (dateFilter === 'today') {
+        matchDate = created.toDateString() === now.toDateString();
+      } else {
+        const dias = dateFilter === 'week' ? 7 : 30;
+        matchDate = now.getTime() - created.getTime() <= dias * 86400000;
+      }
+    }
+
+    return matchSearch && matchStage && matchDate;
   });
 
   const getDealsByStage = (stageId: string) => {
@@ -962,15 +980,48 @@ export default function CRM() {
         </div>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Buscar prospectos..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
+      {/* Search + filtros */}
+      <div className="flex flex-col sm:flex-row gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar prospectos..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {/* Filtro por estado (etapa) */}
+        <Select value={stageFilter} onValueChange={setStageFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas las etapas</SelectItem>
+            {stages.map((s) => (
+              <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* Filtro por fecha (creación) */}
+        <Select value={dateFilter} onValueChange={setDateFilter}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Fecha" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Cualquier fecha</SelectItem>
+            <SelectItem value="today">Hoy</SelectItem>
+            <SelectItem value="week">Últimos 7 días</SelectItem>
+            <SelectItem value="month">Últimos 30 días</SelectItem>
+          </SelectContent>
+        </Select>
+        {(stageFilter !== 'all' || dateFilter !== 'all' || searchQuery) && (
+          <Button variant="ghost" size="sm" onClick={() => { setStageFilter('all'); setDateFilter('all'); setSearchQuery(''); }}>
+            Limpiar
+          </Button>
+        )}
       </div>
 
       {/* Kanban Board */}
@@ -1506,35 +1557,60 @@ export default function CRM() {
                       <Calendar className="h-4 w-4" />
                       {selectedDeal.nextFollowUp ? 'Reprogramar' : 'Programar'}
                     </Button>
-                    {selectedDeal.nextFollowUp && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={async () => {
-                          try {
-                            // Clear follow-up and log activity
-                            await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
-                              nextFollowUp: null,
-                              lastInteractionAt: new Date().toISOString()
-                            });
-                            await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
-                              type: 'note',
-                              title: 'Seguimiento completado',
-                              description: 'Se marco el seguimiento como completado'
-                            });
-                            loadDealDetail(selectedDeal.id);
-                            refreshDeals();
-                            toast({ title: 'Seguimiento completado', description: 'Se ha registrado el contacto' });
-                          } catch {
-                            toast({ title: 'Error', description: 'No se pudo completar', variant: 'destructive' });
-                          }
-                        }}
-                        className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                      >
-                        <CheckSquare className="h-4 w-4" />
-                        Marcar Contactado
-                      </Button>
-                    )}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={async () => {
+                        const nota = prompt('Nota del contacto (opcional):', '');
+                        if (nota === null) return; // cancelado
+                        try {
+                          // Registra el contacto: limpia el seguimiento y actualiza última interacción
+                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                            nextFollowUp: null,
+                            lastInteractionAt: new Date().toISOString(),
+                          });
+                          await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+                            type: 'note',
+                            title: 'Contactado',
+                            description: nota || 'Contacto registrado',
+                          });
+                          loadDealDetail(selectedDeal.id);
+                          refreshDeals();
+                          toast({ title: 'Marcado como contactado' });
+                        } catch {
+                          toast({ title: 'Error', description: 'No se pudo registrar el contacto', variant: 'destructive' });
+                        }
+                      }}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
+                    >
+                      <CheckSquare className="h-4 w-4" />
+                      Marcar contactado
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const nota = prompt('Nota:', '');
+                        if (!nota) return;
+                        try {
+                          await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+                            type: 'note',
+                            title: 'Nota',
+                            description: nota,
+                          });
+                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, { lastInteractionAt: new Date().toISOString() });
+                          loadDealDetail(selectedDeal.id);
+                          refreshDeals();
+                          toast({ title: 'Nota agregada' });
+                        } catch {
+                          toast({ title: 'Error', description: 'No se pudo agregar la nota', variant: 'destructive' });
+                        }
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Nota
+                    </Button>
                   </div>
                 </div>
 

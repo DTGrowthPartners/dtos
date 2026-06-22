@@ -394,7 +394,10 @@ export const updateDeal = async (id: string, data: UpdateDealDto, userId: string
       // CRM v2 fields
       probability: data.probability,
       priority: data.priority,
-      nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : undefined,
+      // null = limpiar el seguimiento; undefined = no tocar; valor = fecha
+      nextFollowUp:
+        data.nextFollowUp === null ? null : data.nextFollowUp ? new Date(data.nextFollowUp) : undefined,
+      lastInteractionAt: data.lastInteractionAt ? new Date(data.lastInteractionAt) : undefined,
       tags: data.tags,
     },
     include: {
