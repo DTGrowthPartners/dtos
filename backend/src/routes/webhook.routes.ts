@@ -408,7 +408,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
 
     console.log(`[Bot API] Tarea creada en Firestore: "${taskTitle}" asignada a ${normalizedAssignee}${resolvedProjectId ? ` en proyecto ${projectNameResolved}` : ' (sin proyecto)'}`);
 
-    // Si es alta prioridad, también agregar a la cola de WhatsApp
+    // Si es alta prioridad: encolar (compat) y AVISAR por WhatsApp al asignado.
     if (mappedPriority === 'HIGH') {
       pendingHighPriorityTasks.push({
         id: docRef.id,
@@ -421,6 +421,28 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
         fechaLimite: taskDueDate || null,
         creadoEn: new Date().toISOString(),
       });
+
+      // Envío directo por WhatsApp (igual que el flujo del frontend). Antes esta
+      // ruta (usada por María/MCP/bot) solo encolaba y nunca enviaba.
+      const destino = resolveDestino(normalizedAssignee);
+      if (destino) {
+        const fechaTxt = taskDueDate ? ` · vence ${taskDueDate}` : '';
+        const proyectoTxt = projectNameResolved && projectNameResolved !== 'Sin proyecto' ? ` [${projectNameResolved}]` : '';
+        const mensaje =
+          `🔴 *Tarea urgente*${proyectoTxt}\n` +
+          `*${taskTitle}*\n` +
+          (taskDescription ? `${taskDescription}\n` : '') +
+          `\n👤 Asignada a: ${normalizedAssignee}${fechaTxt}\n` +
+          `Creada por ${normalizedCreator}`;
+        try {
+          await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_bot_tasks' });
+          console.log(`[Bot API] Tarea urgente enviada por WhatsApp a ${destino}: ${taskTitle}`);
+        } catch (e) {
+          console.error('[Bot API] No se pudo enviar la tarea urgente por WhatsApp:', (e as Error).message);
+        }
+      } else {
+        console.warn('[Bot API] Sin destino WhatsApp para', normalizedAssignee, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
+      }
     }
 
     res.status(201).json({
