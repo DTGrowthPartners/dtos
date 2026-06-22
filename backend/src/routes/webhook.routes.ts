@@ -629,6 +629,40 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
     const totalTareas = resumen.reduce((sum, r) => sum + r.total, 0);
     const totalAlta = resumen.reduce((sum, r) => sum + r.tareasAlta, 0);
 
+    // ── Mensaje formateado para WhatsApp (el bot lo reenvía tal cual) ──
+    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const fmtFecha = (ymd: string | null) => {
+      if (!ymd) return '';
+      const [, m, d] = ymd.split('-');
+      return `${parseInt(d, 10)} ${MESES[parseInt(m, 10) - 1]}`;
+    };
+    const emoji = (p: string) => (p === 'HIGH' ? '🔴' : p === 'LOW' ? '⚪' : '🟡');
+    const hoyYmd = new Date().toISOString().split('T')[0];
+    const flat: any[] = [];
+    Object.entries(tasksByUser).forEach(([usuario, arr]) => (arr as any[]).forEach((t) => flat.push({ ...t, usuario })));
+    const isVencida = (t: any) => t.fechaLimite && t.fechaLimite < hoyYmd;
+    const ordenar = (arr: any[]) =>
+      arr.sort((a, b) => {
+        const p = (priorityOrder[a.prioridad] ?? 1) - (priorityOrder[b.prioridad] ?? 1);
+        if (p !== 0) return p;
+        return (a.fechaLimite || '9999').localeCompare(b.fechaLimite || '9999');
+      });
+    const vencidas = ordenar(flat.filter((t) => isVencida(t)));
+    const enCurso = ordenar(flat.filter((t) => t.estado === 'IN_PROGRESS' && !isVencida(t)));
+    const pendientes = ordenar(flat.filter((t) => t.estado === 'TODO' && !isVencida(t)));
+    const linea = (t: any, venc = false) =>
+      `${emoji(t.prioridad)} ${t.titulo} — ${t.usuario}${t.fechaLimite ? ` · ${venc ? 'venció' : 'vence'} ${fmtFecha(t.fechaLimite)}` : ''}`;
+    const fechaLarga = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+    const partes: string[] = [
+      `📋 *Tareas del equipo* — ${fechaLarga}`,
+      `${totalTareas} pendientes · ${totalAlta} de alta${vencidas.length ? ` · ${vencidas.length} vencida${vencidas.length > 1 ? 's' : ''}` : ''}`,
+    ];
+    if (vencidas.length) partes.push('', `*🔴 VENCIDAS (${vencidas.length})*`, ...vencidas.map((t) => linea(t, true)));
+    if (enCurso.length) partes.push('', `*⏳ EN CURSO (${enCurso.length})*`, ...enCurso.map((t) => linea(t)));
+    if (pendientes.length) partes.push('', `*📌 PENDIENTES (${pendientes.length})*`, ...pendientes.map((t) => linea(t)));
+    if (!flat.length) partes.push('', 'Sin tareas pendientes 🎉');
+    const mensaje = partes.join('\n');
+
     res.json({
       success: true,
       fecha: new Date().toISOString().split('T')[0],
@@ -637,6 +671,7 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
         tareasAltaPrioridad: totalAlta,
         miembrosConTareas: resumen.length,
       },
+      mensaje,
       resumenPorUsuario: resumen,
       tareasPorUsuario: tasksByUser,
     });
