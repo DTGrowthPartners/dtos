@@ -1479,7 +1479,7 @@ export default function CRM() {
                       value={selectedDeal.ownerId || 'none'}
                       onValueChange={async (v) => {
                         try {
-                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                          await apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
                             ownerId: v === 'none' ? null : v,
                           });
                           await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
@@ -1521,7 +1521,7 @@ export default function CRM() {
                             : new Date().toISOString().split('T')[0]
                         );
                         if (newDate) {
-                          apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                          apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
                             expectedCloseDate: newDate
                           }).then(() => {
                             loadDealDetail(selectedDeal.id);
@@ -1597,7 +1597,7 @@ export default function CRM() {
                             : new Date().toISOString().split('T')[0]
                         );
                         if (newDate) {
-                          apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                          apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
                             nextFollowUp: newDate
                           }).then(() => {
                             loadDealDetail(selectedDeal.id);
@@ -1621,7 +1621,7 @@ export default function CRM() {
                         if (nota === null) return; // cancelado
                         try {
                           // Registra el contacto: limpia el seguimiento y actualiza última interacción
-                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                          await apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
                             nextFollowUp: null,
                             lastInteractionAt: new Date().toISOString(),
                           });
@@ -1654,7 +1654,7 @@ export default function CRM() {
                             title: 'Nota',
                             description: nota,
                           });
-                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, { lastInteractionAt: new Date().toISOString() });
+                          await apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, { lastInteractionAt: new Date().toISOString() });
                           loadDealDetail(selectedDeal.id);
                           refreshDeals();
                           toast({ title: 'Nota agregada' });
