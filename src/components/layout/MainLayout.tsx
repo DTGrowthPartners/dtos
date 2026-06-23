@@ -7,6 +7,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import { CommandPalette } from '@/components/CommandPalette';
 import GlobalAiTaskDialog from '@/components/tasks/GlobalAiTaskDialog';
 import LiveChat from '@/components/chat/LiveChat';
+import GlobalTodo from '@/components/todos/GlobalTodo';
 
 export function MainLayout() {
   const { collapsed } = useSidebar();
@@ -35,6 +36,9 @@ export function MainLayout() {
         </main>
         <AppFooter />
       </div>
+
+      {/* Pendientes (To-Do) global */}
+      <GlobalTodo />
 
       {/* Live Chat */}
       <LiveChat />

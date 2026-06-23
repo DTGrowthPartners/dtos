@@ -1471,6 +1471,46 @@ export default function CRM() {
                       <span>Servicio: {selectedDeal.service.name}</span>
                     </div>
                   )}
+                  {/* Responsable / asignación del prospecto */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <UserCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <span className="text-muted-foreground">Responsable:</span>
+                    <Select
+                      value={selectedDeal.ownerId || 'none'}
+                      onValueChange={async (v) => {
+                        try {
+                          await apiClient.put(`/api/crm/deals/${selectedDeal.id}`, {
+                            ownerId: v === 'none' ? null : v,
+                          });
+                          await apiClient.post(`/api/crm/deals/${selectedDeal.id}/activities`, {
+                            type: 'note',
+                            title: 'Asignación',
+                            description:
+                              v === 'none'
+                                ? 'Prospecto sin responsable'
+                                : `Asignado a ${teamUsers.find((u) => u.id === v)?.firstName || ''}`.trim(),
+                          });
+                          loadDealDetail(selectedDeal.id);
+                          refreshDeals();
+                          toast({ title: 'Responsable actualizado' });
+                        } catch {
+                          toast({ title: 'Error', description: 'No se pudo asignar', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-auto min-w-[130px] flex-1">
+                        <SelectValue placeholder="Sin asignar" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin asignar</SelectItem>
+                        {teamUsers.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.firstName} {u.lastName || ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center gap-2 text-sm group">
                     <button
                       onClick={() => {
