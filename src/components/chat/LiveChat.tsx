@@ -141,7 +141,7 @@ export default function LiveChat() {
       reader.onload = () => {
         const img = new window.Image();
         img.onload = () => {
-          const MAX = 1600;
+          const MAX = 1000;
           let { width, height } = img;
           if (width > MAX || height > MAX) {
             const s = Math.min(MAX / width, MAX / height);
@@ -334,11 +334,8 @@ export default function LiveChat() {
       if (isAIRoom) {
         const imgs = attachedImages;
         const messageText = newMessage.trim();
-        // En el chat se guarda el texto + indicador de imagen (no la imagen completa).
-        const savedText = messageText || (imgs.length ? '📷 (imagen adjunta)' : '');
-        const savedWithMark = imgs.length && messageText ? `${messageText}\n📷 (${imgs.length} imagen${imgs.length > 1 ? 'es' : ''})` : savedText;
-
-        await sendMessage(activeRoomId, savedWithMark, user.id, userName, currentUser?.photoUrl);
+        // Se guardan el texto y las imágenes (se ven en el historial del chat).
+        await sendMessage(activeRoomId, messageText || '', user.id, userName, currentUser?.photoUrl, imgs);
         setNewMessage('');
         setAttachedImages([]);
 
@@ -876,10 +873,25 @@ export default function LiveChat() {
                                     : 'bg-muted rounded-tl-md'
                                 }`}
                               >
-                                {message.senderId === 'ai_assistant' ? (
-                                  <FormattedMessage text={message.text} />
-                                ) : (
-                                  <span className="whitespace-pre-wrap break-words">{message.text}</span>
+                                {message.images && message.images.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                    {message.images.map((src, i) => (
+                                      <a key={i} href={src} target="_blank" rel="noopener noreferrer">
+                                        <img
+                                          src={src}
+                                          alt="adjunto"
+                                          className="h-24 w-24 object-cover rounded-md border border-border/50"
+                                        />
+                                      </a>
+                                    ))}
+                                  </div>
+                                )}
+                                {message.text && (
+                                  message.senderId === 'ai_assistant' ? (
+                                    <FormattedMessage text={message.text} />
+                                  ) : (
+                                    <span className="whitespace-pre-wrap break-words">{message.text}</span>
+                                  )
                                 )}
                               </div>
                               {!showAvatar && (

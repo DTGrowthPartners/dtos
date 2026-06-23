@@ -3177,6 +3177,47 @@ export default function Tareas() {
           {sidebarCollapsed && <TooltipContent side="right">Expandir</TooltipContent>}
         </Tooltip>
 
+        {/* Quick Filters - arriba para que no se pierdan con muchas tareas/proyectos */}
+        {!sidebarCollapsed && (
+          <div className="rounded-lg border bg-card p-3">
+            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
+              <Filter className="h-4 w-4" />
+              Filtros
+            </h3>
+            <div className="space-y-2">
+              <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <User className="h-3 w-3 mr-1" />
+                  <SelectValue placeholder="Asignado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos</SelectItem>
+                  {TEAM_MEMBERS.map((member) => (
+                    <SelectItem key={member.name} value={member.name}>
+                      <div className="flex items-center gap-2">
+                        <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
+                        {member.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-full h-8 text-xs">
+                  <Hash className="h-3 w-3 mr-1" />
+                  <SelectValue placeholder="Prioridad" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas</SelectItem>
+                  <SelectItem value="HIGH">Alta</SelectItem>
+                  <SelectItem value="MEDIUM">Media</SelectItem>
+                  <SelectItem value="LOW">Baja</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+
         {/* User Info */}
         <div className="rounded-lg border bg-card p-3">
           {sidebarCollapsed ? (
@@ -3413,47 +3454,6 @@ export default function Tareas() {
             </>
           )}
         </div>
-
-        {/* Quick Filters - Hidden when collapsed */}
-        {!sidebarCollapsed && (
-          <div className="rounded-lg border bg-card p-3">
-            <h3 className="font-semibold mb-2 flex items-center gap-2 text-sm">
-              <Filter className="h-4 w-4" />
-              Filtros
-            </h3>
-            <div className="space-y-2">
-              <Select value={filterAssignee} onValueChange={setFilterAssignee}>
-                <SelectTrigger className="w-full h-8 text-xs">
-                  <User className="h-3 w-3 mr-1" />
-                  <SelectValue placeholder="Asignado" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {TEAM_MEMBERS.map((member) => (
-                    <SelectItem key={member.name} value={member.name}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
-                        {member.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-full h-8 text-xs">
-                  <Hash className="h-3 w-3 mr-1" />
-                  <SelectValue placeholder="Prioridad" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="HIGH">Alta</SelectItem>
-                  <SelectItem value="MEDIUM">Media</SelectItem>
-                  <SelectItem value="LOW">Baja</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
 
         {/* Task Views (Active, Archived, Deleted) */}
         <div className="rounded-lg border bg-card p-3">

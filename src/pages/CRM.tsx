@@ -877,11 +877,23 @@ export default function CRM() {
     if (dateFilter !== 'all' && deal.createdAt) {
       const created = new Date(deal.createdAt);
       const now = new Date();
+      const y = now.getFullYear();
+      const m = now.getMonth();
       if (dateFilter === 'today') {
         matchDate = created.toDateString() === now.toDateString();
-      } else {
-        const dias = dateFilter === 'week' ? 7 : 30;
-        matchDate = now.getTime() - created.getTime() <= dias * 86400000;
+      } else if (dateFilter === 'week') {
+        matchDate = now.getTime() - created.getTime() <= 7 * 86400000;
+      } else if (dateFilter === 'month30') {
+        matchDate = now.getTime() - created.getTime() <= 30 * 86400000;
+      } else if (dateFilter === 'thisMonth') {
+        matchDate = created.getFullYear() === y && created.getMonth() === m;
+      } else if (dateFilter === 'lastMonth') {
+        const lm = new Date(y, m - 1, 1);
+        matchDate = created.getFullYear() === lm.getFullYear() && created.getMonth() === lm.getMonth();
+      } else if (dateFilter === 'thisYear') {
+        matchDate = created.getFullYear() === y;
+      } else if (dateFilter === 'lastYear') {
+        matchDate = created.getFullYear() === y - 1;
       }
     }
 
@@ -1014,7 +1026,11 @@ export default function CRM() {
             <SelectItem value="all">Cualquier fecha</SelectItem>
             <SelectItem value="today">Hoy</SelectItem>
             <SelectItem value="week">Últimos 7 días</SelectItem>
-            <SelectItem value="month">Últimos 30 días</SelectItem>
+            <SelectItem value="month30">Últimos 30 días</SelectItem>
+            <SelectItem value="thisMonth">Este mes</SelectItem>
+            <SelectItem value="lastMonth">Mes pasado</SelectItem>
+            <SelectItem value="thisYear">Este año</SelectItem>
+            <SelectItem value="lastYear">Año pasado</SelectItem>
           </SelectContent>
         </Select>
         {(stageFilter !== 'all' || dateFilter !== 'all' || searchQuery) && (

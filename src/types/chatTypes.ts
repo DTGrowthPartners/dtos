@@ -4,6 +4,7 @@ export interface ChatMessage {
   senderId: string;
   senderName: string;
   senderPhoto?: string;
+  images?: string[] | null; // imágenes adjuntas (data URLs) — chat con María
   createdAt: number;
   readBy: string[];
 }
