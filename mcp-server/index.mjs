@@ -143,6 +143,16 @@ function createMcpServer() {
   );
 
   server.tool(
+    'registrar_contacto',
+    'Registra un contacto con un prospecto del pipeline (por teléfono o dealId). Reinicia el contador de "días desde el último contacto" y deja la interacción en el historial.',
+    { telefono: z.string().optional().describe('teléfono del prospecto, con o sin indicativo'),
+      dealId: z.string().optional().describe('ID del deal (alternativa al teléfono)'),
+      nota: z.string().optional().describe('resumen del contacto'),
+      canal: z.string().optional().describe('whatsapp | call | email | meeting | note (default whatsapp)') },
+    async (a) => ok(await dtos('POST', '/bot/crm/contacto', a))
+  );
+
+  server.tool(
     'register_expense',
     'Registra un gasto en finanzas (Google Sheets).',
     { fecha: z.string().describe('YYYY-MM-DD'), importe: z.number(), categoria: z.string(),
