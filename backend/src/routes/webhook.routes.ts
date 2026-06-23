@@ -1633,6 +1633,69 @@ router.get('/bot/crm', verifyBotApiKey, async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/webhook/bot/crm/contacto
+ *
+ * El bot registra un contacto con un prospecto del pipeline. Reinicia el
+ * contador de "días desde el último contacto" (lastInteractionAt) y deja la
+ * interacción en el historial del prospecto.
+ *
+ * Body: { telefono?: string, dealId?: string, nota?: string, canal?: 'whatsapp'|'call'|'email'|'meeting'|'note' }
+ * (al menos uno de telefono o dealId)
+ */
+router.post('/bot/crm/contacto', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { telefono, dealId, nota, canal } = req.body || {};
+    if (!telefono && !dealId) {
+      return res.status(400).json({ success: false, error: 'Falta telefono o dealId' });
+    }
+
+    let deal: any = null;
+    if (dealId) {
+      deal = await prisma.deal.findFirst({ where: { id: String(dealId), deletedAt: null } });
+    } else {
+      const digits = String(telefono).replace(/\D/g, '');
+      const last10 = digits.slice(-10);
+      const deals = await prisma.deal.findMany({ where: { deletedAt: null, NOT: { phone: null } } });
+      deal =
+        deals.find((d) => {
+          const full = `${d.phoneCountryCode || ''}${d.phone || ''}`.replace(/\D/g, '');
+          const justPhone = (d.phone || '').replace(/\D/g, '');
+          return full === digits || (last10.length >= 7 && (full.endsWith(last10) || justPhone.endsWith(last10)));
+        }) || null;
+    }
+
+    if (!deal) {
+      return res.status(404).json({ success: false, error: 'No se encontró un prospecto con ese teléfono/ID' });
+    }
+
+    // Reinicia el contador de días
+    await prisma.deal.update({ where: { id: deal.id }, data: { lastInteractionAt: new Date() } });
+
+    // Registra la interacción (usuario sistema = el más antiguo, o el creador del deal)
+    const sysUser = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    await prisma.dealActivity.create({
+      data: {
+        dealId: deal.id,
+        type: (canal as string) || 'whatsapp',
+        title: 'Contacto del bot',
+        description: nota || 'Interacción registrada por el bot (Dairo)',
+        performedBy: sysUser?.id || deal.createdBy,
+      },
+    });
+
+    res.json({
+      success: true,
+      dealId: deal.id,
+      nombre: deal.name,
+      mensaje: 'Contacto registrado, contador de días reiniciado',
+    });
+  } catch (error) {
+    console.error('[Bot API] Error registrando contacto:', error);
+    res.status(500).json({ success: false, error: 'Error al registrar el contacto' });
+  }
+});
+
+/**
  * GET /api/webhook/bot/crm/deals
  *
  * Lista deals con filtros.

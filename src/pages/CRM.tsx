@@ -310,6 +310,7 @@ export default function CRM() {
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('all'); // 'all' o stageId
   const [dateFilter, setDateFilter] = useState<string>('all'); // all | today | week | month
+  const [ownerFilter, setOwnerFilter] = useState<string>('all'); // all | none | userId
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLostDialogOpen, setIsLostDialogOpen] = useState(false);
@@ -897,7 +898,11 @@ export default function CRM() {
       }
     }
 
-    return matchSearch && matchStage && matchDate;
+    const matchOwner =
+      ownerFilter === 'all' ||
+      (ownerFilter === 'none' ? !deal.ownerId : deal.ownerId === ownerFilter);
+
+    return matchSearch && matchStage && matchDate && matchOwner;
   });
 
   const getDealsByStage = (stageId: string) => {
@@ -1033,8 +1038,24 @@ export default function CRM() {
             <SelectItem value="lastYear">Año pasado</SelectItem>
           </SelectContent>
         </Select>
-        {(stageFilter !== 'all' || dateFilter !== 'all' || searchQuery) && (
-          <Button variant="ghost" size="sm" onClick={() => { setStageFilter('all'); setDateFilter('all'); setSearchQuery(''); }}>
+        {/* Filtro por responsable */}
+        <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+          <SelectTrigger className="w-full sm:w-[180px]">
+            <UserCheck className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Responsable" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los responsables</SelectItem>
+            <SelectItem value="none">Sin asignar</SelectItem>
+            {teamUsers.map((u) => (
+              <SelectItem key={u.id} value={u.id}>
+                {u.firstName} {u.lastName || ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(stageFilter !== 'all' || dateFilter !== 'all' || ownerFilter !== 'all' || searchQuery) && (
+          <Button variant="ghost" size="sm" onClick={() => { setStageFilter('all'); setDateFilter('all'); setOwnerFilter('all'); setSearchQuery(''); }}>
             Limpiar
           </Button>
         )}
@@ -1158,6 +1179,34 @@ export default function CRM() {
                                           {deal.owner ? `${deal.owner.firstName}${deal.owner.lastName ? ` ${deal.owner.lastName}` : ''}` : 'Sin responsable'}
                                         </span>
                                       </div>
+
+                                      {/* Días desde el último contacto (incluye los chats del bot) */}
+                                      {(() => {
+                                        const last = deal.lastInteractionAt;
+                                        const days =
+                                          deal.daysSinceInteraction ??
+                                          (last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null);
+                                        const cls =
+                                          days === null
+                                            ? 'text-muted-foreground italic'
+                                            : days <= 2
+                                            ? 'text-green-600'
+                                            : days <= 7
+                                            ? 'text-yellow-600'
+                                            : 'text-red-600';
+                                        const label =
+                                          days === null
+                                            ? 'Sin contacto registrado'
+                                            : days === 0
+                                            ? 'Contactado hoy'
+                                            : `Último contacto: hace ${days}d`;
+                                        return (
+                                          <div className="flex items-center gap-1 mb-2 text-xs">
+                                            <Clock className="h-3 w-3 text-muted-foreground" />
+                                            <span className={cls}>{label}</span>
+                                          </div>
+                                        );
+                                      })()}
 
                                       <div className="flex items-center flex-wrap gap-1 mb-3">
                                         {deal.source && (
