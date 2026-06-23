@@ -477,7 +477,11 @@ export default function CRM() {
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         probability: formData.probability,
         nextFollowUp: formData.nextFollowUp || undefined,
-        ownerId: formData.ownerId || undefined, // no sobreescribir si quedó vacío
+        // FKs/opcionales vacíos → undefined (no enviar '' o rompe la FK en Prisma)
+        ownerId: formData.ownerId || undefined,
+        serviceId: formData.serviceId || undefined,
+        source: formData.source || undefined,
+        expectedCloseDate: formData.expectedCloseDate || undefined,
       };
 
       if (editingDeal) {
