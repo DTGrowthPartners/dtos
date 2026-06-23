@@ -24,7 +24,10 @@ import {
   getOrCreateDirectRoom,
   subscribeToUserRooms,
   getOrCreateAIRoom,
-  clearRoomMessages,
+  createAIConversation,
+  subscribeToAIRooms,
+  renameRoom,
+  deleteRoomCompletely,
 } from '@/lib/chatService';
 import type { ChatMessage, UserPresence, ChatRoom } from '@/types/chatTypes';
 
@@ -130,6 +133,7 @@ export default function LiveChat() {
   const { user, token } = useAuthStore();
   const { toast } = useToast();
   const [aiRoomId, setAiRoomId] = useState<string | null>(null);
+  const [aiRooms, setAiRooms] = useState<ChatRoom[]>([]);
   // Imágenes adjuntas (data URLs) para enviar a María (visión)
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
 
@@ -267,11 +271,22 @@ export default function LiveChat() {
       });
     });
 
+    // Subscribe to AI conversations (múltiples chats con María)
+    const unsubAIRooms = subscribeToAIRooms(user.id, (rooms) => {
+      setAiRooms(rooms);
+      rooms.forEach((room) => {
+        subscribeToUnreadCount(room.id, user.id, (count) => {
+          setUnreadCounts((prev) => ({ ...prev, [room.id]: count }));
+        });
+      });
+    });
+
     return () => {
       cleanupPresence();
       unsubPresence();
       unsubGeneralUnread();
       unsubRooms();
+      unsubAIRooms();
     };
   }, [user]);
 
@@ -328,14 +343,21 @@ export default function LiveChat() {
       const currentUser = teamUsers.find((u) => u.id === user.id);
       const userName = currentUser?.firstName || user.email?.split('@')[0] || 'Usuario';
 
-      // Detect if it's AI room
-      const isAIRoom = activeRoomId === aiRoomId;
+      // Detect if it's AI room (cualquier conversación con María)
+      const isAIRoom = activeRoomId.startsWith('ai_');
 
       if (isAIRoom) {
         const imgs = attachedImages;
         const messageText = newMessage.trim();
         // Se guardan el texto y las imágenes (se ven en el historial del chat).
         await sendMessage(activeRoomId, messageText || '', user.id, userName, currentUser?.photoUrl, imgs);
+        // Auto-título: si la conversación aún no tiene nombre propio, usa el primer mensaje.
+        const room = aiRooms.find((r) => r.id === activeRoomId);
+        if (messageText && room && (room.name === 'Nuevo chat' || room.name === 'Chat con IA' || !room.name)) {
+          const title = messageText.slice(0, 40) + (messageText.length > 40 ? '…' : '');
+          renameRoom(activeRoomId, title).catch(() => {});
+          setActiveRoomName(title);
+        }
         setNewMessage('');
         setAttachedImages([]);
 
@@ -408,26 +430,47 @@ export default function LiveChat() {
     setView('chat');
   };
 
-  const openAIChat = () => {
-    if (!aiRoomId) return;
-    setActiveRoomId(aiRoomId);
-    setActiveRoomName('María');
+  const openAIChat = (roomId?: string, name?: string) => {
+    const target = roomId || aiRoomId;
+    if (!target) return;
+    setActiveRoomId(target);
+    setActiveRoomName(name || aiRooms.find((r) => r.id === target)?.name || 'María');
     setView('chat');
     // Mark messages as read will be handled by the useEffect when messages load
   };
 
-  // Borra la conversación con la IA y la deja lista para empezar de nuevo.
-  const handleClearAIChat = async () => {
-    if (!aiRoomId) return;
-    if (!confirm('¿Borrar toda la conversación con María y empezar de nuevo?')) return;
+  // Crea una NUEVA conversación con María y la abre.
+  const handleNewAIChat = async () => {
+    if (!user) return;
+    const currentUser = teamUsers.find((u) => u.id === user.id);
+    const userName = currentUser?.firstName || 'Usuario';
     try {
-      await clearRoomMessages(aiRoomId);
+      const roomId = await createAIConversation(user.id, userName);
       setMessages([]);
       lastMessageIdRef.current = null;
-      toast({ title: 'Conversación reiniciada', description: 'Empieza una nueva charla con María.' });
+      openAIChat(roomId, 'Nuevo chat');
     } catch (error) {
-      console.error('Error clearing AI chat:', error);
-      toast({ title: 'Error', description: 'No se pudo reiniciar la conversación', variant: 'destructive' });
+      console.error('Error creating AI chat:', error);
+      toast({ title: 'Error', description: 'No se pudo crear la conversación', variant: 'destructive' });
+    }
+  };
+
+  // Borra la conversación de IA actual por completo y vuelve a la lista.
+  const handleDeleteAIChat = async (roomId?: string) => {
+    const target = roomId || activeRoomId;
+    if (!target || !target.startsWith('ai_')) return;
+    if (!confirm('¿Borrar esta conversación con María? No se puede deshacer.')) return;
+    try {
+      await deleteRoomCompletely(target);
+      if (target === activeRoomId) {
+        setMessages([]);
+        lastMessageIdRef.current = null;
+        setView('list');
+      }
+      toast({ title: 'Conversación eliminada' });
+    } catch (error) {
+      console.error('Error deleting AI chat:', error);
+      toast({ title: 'Error', description: 'No se pudo eliminar la conversación', variant: 'destructive' });
     }
   };
 
@@ -633,16 +676,27 @@ export default function LiveChat() {
                   <Plus className="h-4 w-4" />
                 </Button>
               )}
-              {view === 'chat' && activeRoomId === aiRoomId && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
-                  onClick={handleClearAIChat}
-                  title="Reiniciar conversación"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+              {view === 'chat' && activeRoomId.startsWith('ai_') && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                    onClick={handleNewAIChat}
+                    title="Nueva conversación"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                    onClick={() => handleDeleteAIChat()}
+                    title="Borrar esta conversación"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
               )}
               <Button
                 variant="ghost"
@@ -692,36 +746,71 @@ export default function LiveChat() {
                   </div>
                 </button>
 
-                {/* AI Chat */}
-                {aiRoomId && (
-                  <button
-                    onClick={openAIChat}
-                    className={`w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left ${
-                      activeRoomId === aiRoomId && view === 'chat'
-                        ? 'bg-primary/10 border border-primary/20'
-                        : 'hover:bg-muted'
-                    }`}
-                  >
-                    <div className="relative">
+                {/* AI Chats (María) — múltiples conversaciones */}
+                <div className="mt-2">
+                  <div className="flex items-center justify-between px-3 py-1">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-purple-500" /> María (IA)
+                    </span>
+                    <button
+                      onClick={handleNewAIChat}
+                      className="text-xs flex items-center gap-1 text-primary hover:underline"
+                      title="Nueva conversación"
+                    >
+                      <Plus className="h-3 w-3" /> Nuevo
+                    </button>
+                  </div>
+                  {aiRooms.length === 0 && aiRoomId && (
+                    <button
+                      onClick={() => openAIChat()}
+                      className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors text-left"
+                    >
                       <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white">
                         <Sparkles className="h-5 w-5" />
                       </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
                         <span className="font-medium">María</span>
-                        {unreadCounts[aiRoomId] > 0 && (
-                          <Badge variant="destructive" className="text-xs h-5 min-w-[20px]">
-                            {unreadCounts[aiRoomId]}
-                          </Badge>
-                        )}
+                        <p className="text-xs text-muted-foreground truncate">Asistente IA</p>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        Asistente IA
-                      </p>
+                    </button>
+                  )}
+                  {aiRooms.map((room) => (
+                    <div
+                      key={room.id}
+                      className={`group w-full flex items-center gap-3 p-3 rounded-lg transition-colors ${
+                        activeRoomId === room.id && view === 'chat'
+                          ? 'bg-primary/10 border border-primary/20'
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      <button onClick={() => openAIChat(room.id, room.name)} className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white flex-shrink-0">
+                          <Sparkles className="h-5 w-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium truncate">{room.name || 'María'}</span>
+                            {unreadCounts[room.id] > 0 && (
+                              <Badge variant="destructive" className="text-xs h-5 min-w-[20px] flex-shrink-0">
+                                {unreadCounts[room.id]}
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {room.lastMessage?.text || 'Asistente IA'}
+                          </p>
+                        </div>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAIChat(room.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive flex-shrink-0"
+                        title="Borrar conversación"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
-                  </button>
-                )}
+                  ))}
+                </div>
 
                 {/* Direct Rooms */}
                 {directRooms.length > 0 && (
@@ -910,7 +999,7 @@ export default function LiveChat() {
               </ScrollArea>
 
               {/* Miniaturas de imágenes adjuntas (solo chat de María) */}
-              {activeRoomId === aiRoomId && attachedImages.length > 0 && (
+              {activeRoomId.startsWith('ai_') && attachedImages.length > 0 && (
                 <div className="px-3 pt-2 flex gap-2 flex-wrap border-t">
                   {attachedImages.map((src, i) => (
                     <div key={i} className="relative">
@@ -929,8 +1018,8 @@ export default function LiveChat() {
               )}
 
               {/* Input */}
-              <form onSubmit={handleSendMessage} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId === aiRoomId && attachedImages.length > 0 ? '' : 'border-t'}`}>
-                {activeRoomId === aiRoomId && (
+              <form onSubmit={handleSendMessage} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId.startsWith('ai_') && attachedImages.length > 0 ? '' : 'border-t'}`}>
+                {activeRoomId.startsWith('ai_') && (
                   <>
                     <input
                       ref={imageInputRef}
@@ -956,8 +1045,8 @@ export default function LiveChat() {
                   ref={inputRef}
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  onPaste={activeRoomId === aiRoomId ? handlePaste : undefined}
-                  placeholder={activeRoomId === aiRoomId ? 'Escribe o pega una imagen…' : 'Escribe un mensaje...'}
+                  onPaste={activeRoomId.startsWith('ai_') ? handlePaste : undefined}
+                  placeholder={activeRoomId.startsWith('ai_') ? 'Escribe o pega una imagen…' : 'Escribe un mensaje...'}
                   className="flex-1"
                   disabled={isLoading}
                   autoFocus

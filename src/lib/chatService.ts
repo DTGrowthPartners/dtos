@@ -71,6 +71,53 @@ export const getOrCreateAIRoom = async (userId: string, userName: string): Promi
   return roomId;
 };
 
+// Crea una NUEVA conversación con la IA (María) — múltiples chats por usuario
+export const createAIConversation = async (
+  userId: string,
+  userName: string,
+  name = 'Nuevo chat'
+): Promise<string> => {
+  const roomId = `ai_${userId}_${Date.now()}`;
+  await setDoc(doc(db, ROOMS_COLLECTION, roomId), {
+    id: roomId,
+    name,
+    type: 'ai',
+    participants: [userId, 'ai_assistant'],
+    participantNames: { [userId]: userName, 'ai_assistant': 'María' },
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+  return roomId;
+};
+
+// Lista todas las conversaciones de IA del usuario (más reciente primero)
+export const subscribeToAIRooms = (
+  userId: string,
+  callback: (rooms: ChatRoom[]) => void
+) => {
+  const q = query(
+    collection(db, ROOMS_COLLECTION),
+    where('participants', 'array-contains', userId),
+    where('type', '==', 'ai')
+  );
+  return onSnapshot(q, (snapshot) => {
+    const rooms: ChatRoom[] = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as ChatRoom[];
+    rooms.sort((a, b) => (b.lastMessage?.createdAt || b.updatedAt || 0) - (a.lastMessage?.createdAt || a.updatedAt || 0));
+    callback(rooms);
+  });
+};
+
+// Renombra una sala (usado para titular conversaciones de IA)
+export const renameRoom = async (roomId: string, name: string) => {
+  await updateDoc(doc(db, ROOMS_COLLECTION, roomId), { name, updatedAt: Date.now() });
+};
+
+// Borra una conversación completa (mensajes + sala)
+export const deleteRoomCompletely = async (roomId: string) => {
+  await clearRoomMessages(roomId);
+  await deleteDoc(doc(db, ROOMS_COLLECTION, roomId));
+};
+
 // Send a message to a room
 export const sendMessage = async (
   roomId: string,
