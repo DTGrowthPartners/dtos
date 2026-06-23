@@ -18,6 +18,8 @@ export default function TodoList() {
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState('');
   const [adding, setAdding] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const load = async () => {
     if (!user) return;
@@ -72,16 +74,81 @@ export default function TodoList() {
     await Promise.all(done.map((t) => deleteTodo(t.id).catch(() => {})));
   };
 
+  // --- Selección múltiple / eliminación masiva ---
+  const allSelected = todos.length > 0 && selected.size === todos.length;
+  const toggleSelect = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const selectAll = () => setSelected(allSelected ? new Set() : new Set(todos.map((t) => t.id)));
+  const exitSelect = () => { setSelectMode(false); setSelected(new Set()); };
+
+  const deleteSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length) return;
+    if (!confirm(`¿Eliminar ${ids.length} pendiente(s)?`)) return;
+    setTodos((prev) => prev.filter((t) => !selected.has(t.id)));
+    exitSelect();
+    await Promise.all(ids.map((id) => deleteTodo(id).catch(() => {})));
+  };
+
+  const clearAll = async () => {
+    if (!todos.length) return;
+    if (!confirm(`¿Eliminar TODOS los ${todos.length} pendientes? No se puede deshacer.`)) return;
+    const ids = todos.map((t) => t.id);
+    setTodos([]);
+    await Promise.all(ids.map((id) => deleteTodo(id).catch(() => {})));
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground">
-          {pendientes > 0 ? `${pendientes} sin terminar` : 'Sin pendientes'}
-        </p>
-        {todos.some((t) => t.done) && (
-          <Button variant="ghost" size="sm" onClick={clearDone} className="h-7 text-xs text-muted-foreground">
-            Limpiar completadas
-          </Button>
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        {selectMode ? (
+          <>
+            <label className="flex items-center gap-2 text-xs cursor-pointer select-none">
+              <input type="checkbox" checked={allSelected} onChange={selectAll} className="h-4 w-4 accent-amber-500" />
+              Seleccionar todas ({selected.size})
+            </label>
+            <div className="flex items-center gap-1">
+              <Button variant="destructive" size="sm" className="h-7 text-xs" disabled={!selected.size} onClick={deleteSelected}>
+                <Trash2 className="h-3.5 w-3.5 mr-1" /> Eliminar ({selected.size})
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={exitSelect}>
+                Cancelar
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              {pendientes > 0 ? `${pendientes} sin terminar` : 'Sin pendientes'}
+            </p>
+            <div className="flex items-center gap-1">
+              {todos.some((t) => t.done) && (
+                <Button variant="ghost" size="sm" onClick={clearDone} className="h-7 text-xs text-muted-foreground">
+                  Limpiar completadas
+                </Button>
+              )}
+              {todos.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setSelectMode(true)} className="h-7 text-xs text-muted-foreground">
+                  Seleccionar
+                </Button>
+              )}
+              {todos.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearAll}
+                  className="h-7 text-xs text-red-500 hover:text-red-600"
+                  title="Eliminar todas"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -108,24 +175,43 @@ export default function TodoList() {
       ) : (
         <div className="rounded-xl border border-border bg-card divide-y divide-border max-h-[55vh] overflow-y-auto">
           {todos.map((todo) => (
-            <div key={todo.id} className="group flex items-center gap-3 px-3 py-2.5">
-              <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
-                {todo.done ? (
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                ) : (
-                  <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
-                )}
-              </button>
+            <div
+              key={todo.id}
+              onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
+              className={cn(
+                'group flex items-center gap-3 px-3 py-2.5',
+                selectMode && 'cursor-pointer',
+                selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30'
+              )}
+            >
+              {selectMode ? (
+                <input
+                  type="checkbox"
+                  checked={selected.has(todo.id)}
+                  readOnly
+                  className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
+                />
+              ) : (
+                <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
+                  {todo.done ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
+                  )}
+                </button>
+              )}
               <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
                 {todo.text}
               </span>
-              <button
-                onClick={() => remove(todo)}
-                className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
-                title="Eliminar"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              {!selectMode && (
+                <button
+                  onClick={() => remove(todo)}
+                  className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
+                  title="Eliminar"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           ))}
         </div>
