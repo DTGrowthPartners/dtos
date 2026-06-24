@@ -1854,6 +1854,95 @@ router.post('/bot/crm/contacto', verifyBotApiKey, async (req: Request, res: Resp
 });
 
 /**
+ * POST /api/webhook/bot/crm/seguimientos-run
+ *
+ * Cron de seguimiento INTERNO del pipeline (Bloque 5 del brief). NO le escribe al
+ * prospecto: es una alerta para que el equipo no olvide el seguimiento.
+ * Lista deals abiertos con seguimiento vencido o sin contacto > umbral por etapa,
+ * agrupados por responsable y ordenados por valor × probabilidad. Envía al grupo
+ * configurado en PIPELINE_FOLLOWUP_DEST (ej. el grupo "Ventas DTGP" @g.us).
+ */
+router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, res: Response) => {
+  try {
+    const stages = await prisma.dealStage.findMany();
+    const openStageIds = stages.filter((s) => !s.isWon && !s.isLost).map((s) => s.id);
+
+    const deals = await prisma.deal.findMany({
+      where: { deletedAt: null, stageId: { in: openStageIds } },
+      include: { owner: { select: { firstName: true } }, stage: true },
+    });
+
+    // Umbral de días sin contacto por etapa (slug). Default 5.
+    const thresholds: Record<string, number> = { negociacion: 2, propuesta: 3, reunion: 1, contactado: 4 };
+    const now = Date.now();
+
+    type Pend = { name: string; owner: string; valor: number; etapa: string; score: number; motivo: string };
+    const pendientes: Pend[] = [];
+    for (const d of deals) {
+      const last = d.lastInteractionAt || d.createdAt;
+      const diasSinContacto = Math.floor((now - new Date(last).getTime()) / 86400000);
+      const slug = (d.stage?.slug || '').toLowerCase();
+      const umbral = thresholds[slug] ?? 5;
+      const seguimientoVencido = !!d.nextFollowUp && new Date(d.nextFollowUp).getTime() <= now;
+      if (seguimientoVencido || diasSinContacto >= umbral) {
+        const valor = d.estimatedValue || 0;
+        const prob = (d.probability ?? 50) / 100;
+        pendientes.push({
+          name: d.name,
+          owner: d.owner?.firstName || 'Sin responsable',
+          valor,
+          etapa: d.stage?.name || '',
+          score: valor * prob,
+          motivo: seguimientoVencido ? 'seguimiento vencido' : `${diasSinContacto}d sin contacto`,
+        });
+      }
+    }
+
+    pendientes.sort((a, b) => b.score - a.score);
+    const byOwner = new Map<string, Pend[]>();
+    for (const p of pendientes) {
+      if (!byOwner.has(p.owner)) byOwner.set(p.owner, []);
+      byOwner.get(p.owner)!.push(p);
+    }
+
+    const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
+    const hoy = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
+    const partes: string[] = [`📊 *Seguimientos de hoy — Pipeline* (${hoy})`];
+    if (!pendientes.length) {
+      partes.push('', '✅ Nada vencido. Pipeline al día.');
+    } else {
+      const grupos = [...byOwner.entries()].sort(
+        (a, b) => b[1].reduce((s, x) => s + x.score, 0) - a[1].reduce((s, x) => s + x.score, 0)
+      );
+      for (const [owner, items] of grupos) {
+        partes.push('', `*${owner}* (${items.length})`);
+        for (const it of items.slice(0, 12)) {
+          partes.push(`• ${it.name} — ${fmt(it.valor)} · ${it.etapa} · ${it.motivo}`);
+        }
+      }
+      partes.push('', `Total: ${pendientes.length} por contactar. ⚠️ Alerta interna — NO se le escribe al prospecto desde aquí.`);
+    }
+    const mensaje = partes.join('\n');
+
+    const destino = process.env.PIPELINE_FOLLOWUP_DEST;
+    let enviado = false;
+    if (destino && pendientes.length) {
+      try {
+        await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_pipeline_seguimientos' });
+        enviado = true;
+      } catch (e) {
+        console.error('[pipeline-cron] envío falló:', (e as Error).message);
+      }
+    }
+
+    res.json({ success: true, total: pendientes.length, enviado, destinoConfigurado: !!destino, mensaje });
+  } catch (error) {
+    console.error('[Bot API] Error en seguimientos-run:', error);
+    res.status(500).json({ success: false, error: 'Error generando seguimientos' });
+  }
+});
+
+/**
  * GET /api/webhook/bot/crm/deals
  *
  * Lista deals con filtros.
