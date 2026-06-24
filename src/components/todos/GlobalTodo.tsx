@@ -103,7 +103,14 @@ export default function GlobalTodo() {
       setOpen(false); // cerrar el panel lateral para no duplicar
     } catch (e) {
       console.error('No se pudo abrir el To-Do flotante:', e);
+      setOpen(true); // si falla el flotante, abrir el panel lateral
     }
+  };
+
+  // El botón ámbar abre el flotante directo (si el navegador lo soporta); si no, el panel.
+  const launch = () => {
+    if (pipSupported()) openFloating();
+    else setOpen(true);
   };
 
   return (
@@ -111,7 +118,7 @@ export default function GlobalTodo() {
       {/* Botón flotante (se oculta cuando el panel está abierto) */}
       {!open && (
         <button
-          onClick={() => setOpen(true)}
+          onClick={launch}
           title="Mis pendientes"
           className="fixed bottom-24 right-4 z-40 h-14 w-14 rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center"
         >
