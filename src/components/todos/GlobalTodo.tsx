@@ -1,21 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { ListTodo, X, Minus } from 'lucide-react';
+import { ListTodo, X } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth';
 import TodoList from './TodoList';
 
 // ¿El navegador soporta Document Picture-in-Picture? (Chromium 116+)
 const pipSupported = () => typeof window !== 'undefined' && 'documentPictureInPicture' in window;
-
-const COLLAPSED = { w: 210, h: 64 };
-const sizeKey = 'dtos_todo_pip_size';
-const savedExpanded = (): { w: number; h: number } => {
-  try {
-    const s = JSON.parse(localStorage.getItem(sizeKey) || 'null');
-    if (s?.w && s?.h) return s;
-  } catch { /* noop */ }
-  return { w: 320, h: Math.min(520, Math.round((typeof window !== 'undefined' ? window.screen?.availHeight || 800 : 800) * 0.55)) };
-};
 
 // Copia los estilos del documento principal a la ventana PiP (Tailwind + variables CSS).
 const copyStyles = (srcDoc: Document, destDoc: Document) => {
@@ -37,53 +27,13 @@ const copyStyles = (srcDoc: Document, destDoc: Document) => {
   }
 };
 
-// App dentro de la ventana flotante: mini (solo botón ámbar) <-> expandida (lista).
-function PipApp({ pip }: { pip: Window }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const expand = () => {
-    setExpanded(true);
-    const s = savedExpanded();
-    try { pip.resizeTo(s.w, s.h); } catch { /* noop */ }
-  };
-  const collapse = () => {
-    setExpanded(false);
-    try { pip.resizeTo(COLLAPSED.w, COLLAPSED.h); } catch { /* noop */ }
-  };
-
-  // Guardar el tamaño solo cuando está expandida.
-  useEffect(() => {
-    const onResize = () => {
-      if (expanded) {
-        try { localStorage.setItem(sizeKey, JSON.stringify({ w: pip.innerWidth, h: pip.innerHeight })); } catch { /* noop */ }
-      }
-    };
-    pip.addEventListener('resize', onResize);
-    return () => pip.removeEventListener('resize', onResize);
-  }, [expanded, pip]);
-
-  if (!expanded) {
-    return (
-      <button
-        onClick={expand}
-        className="w-screen h-screen flex items-center gap-2 px-4 bg-amber-500 text-white hover:bg-amber-600 transition-colors"
-        title="Abrir mis pendientes"
-      >
-        <ListTodo className="h-6 w-6 flex-shrink-0" />
-        <span className="font-semibold">Pendientes</span>
-      </button>
-    );
-  }
-
+// Contenido de la ventana flotante: la lista completa de pendientes.
+function PipContent() {
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
-      <div className="flex items-center justify-between px-3 py-2 bg-amber-500 text-white flex-shrink-0">
-        <span className="font-semibold text-sm flex items-center gap-2">
-          <ListTodo className="h-4 w-4" /> Mis pendientes
-        </span>
-        <button onClick={collapse} className="h-7 w-7 rounded hover:bg-white/20 flex items-center justify-center" title="Minimizar">
-          <Minus className="h-4 w-4" />
-        </button>
+      <div className="flex items-center gap-2 px-3 py-2 bg-amber-500 text-white flex-shrink-0">
+        <ListTodo className="h-4 w-4" />
+        <span className="font-semibold text-sm">Mis pendientes</span>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <TodoList />
@@ -93,10 +43,9 @@ function PipApp({ pip }: { pip: Window }) {
 }
 
 /**
- * To-Do global. Botón ámbar -> abre un MINI flotante (Document Picture-in-Picture)
- * que queda encima de todo el navegador y otras pestañas. Al hacer clic en el mini
- * se EXPANDE a la barra grande con la lista; se puede minimizar de nuevo.
- * En navegadores sin soporte PiP, cae a un panel lateral.
+ * Panel lateral GLOBAL de pendientes (To-Do) + botón para abrirlo como ventana
+ * FLOTANTE (Document Picture-in-Picture), que queda encima de todo el navegador
+ * y de otras pestañas — al estilo del mini-reproductor de Spotify.
  */
 export default function GlobalTodo() {
   const [open, setOpen] = useState(false);
@@ -112,9 +61,21 @@ export default function GlobalTodo() {
         pipWinRef.current.focus();
         return;
       }
+      // Tamaño inicial: recuerda el último, o uno compacto relativo a la pantalla.
+      let w = 300;
+      let h = Math.min(500, Math.round((window.screen?.availHeight || 800) * 0.55));
+      try {
+        const saved = JSON.parse(localStorage.getItem('dtos_todo_pip_size') || 'null');
+        if (saved?.w && saved?.h) { w = saved.w; h = saved.h; }
+      } catch { /* noop */ }
+
       const pip: Window = await (window as unknown as {
         documentPictureInPicture: { requestWindow: (o: { width: number; height: number }) => Promise<Window> };
-      }).documentPictureInPicture.requestWindow({ width: COLLAPSED.w, height: COLLAPSED.h });
+      }).documentPictureInPicture.requestWindow({ width: w, height: h });
+
+      pip.addEventListener('resize', () => {
+        try { localStorage.setItem('dtos_todo_pip_size', JSON.stringify({ w: pip.innerWidth, h: pip.innerHeight })); } catch { /* noop */ }
+      });
 
       copyStyles(document, pip.document);
       pip.document.documentElement.className = document.documentElement.className;
@@ -124,7 +85,7 @@ export default function GlobalTodo() {
       pip.document.body.appendChild(container);
 
       const root = createRoot(container);
-      root.render(<PipApp pip={pip} />);
+      root.render(<PipContent />);
       rootRef.current = root;
       pipWinRef.current = pip;
 
@@ -148,7 +109,7 @@ export default function GlobalTodo() {
 
   return (
     <>
-      {/* Botón ámbar: abre el mini flotante */}
+      {/* Botón ámbar: abre el To-Do flotante (o el panel si no hay soporte PiP) */}
       {!open && (
         <button
           onClick={launch}
