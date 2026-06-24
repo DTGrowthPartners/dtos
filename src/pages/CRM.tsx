@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -300,6 +302,47 @@ const normalizePhone = (phone: string, countryCode: string): string => {
 const getBotChatUrl = (phone: string, countryCode: string) => {
   return `https://david.dtgrowthpartners.com/admin/chats/${normalizePhone(phone, countryCode)}`;
 };
+
+// Fecha local -> "YYYY-MM-DD" (evita el corrimiento de día de toISOString por UTC).
+const toYMD = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Botón con calendario emergente (Popover + Calendar) para elegir una fecha,
+// en vez del prompt() manual. Reutilizable (reprogramar seguimiento, etc.).
+function DateButton({
+  value,
+  onPick,
+  children,
+}: {
+  value?: string;
+  onPick: (ymd: string) => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="sm" className="flex items-center gap-2">
+          <Calendar className="h-4 w-4" />
+          {children}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <CalendarPicker
+          mode="single"
+          selected={value ? new Date(value + 'T00:00:00') : undefined}
+          onSelect={(d) => {
+            if (d) {
+              onPick(toYMD(d));
+              setOpen(false);
+            }
+          }}
+          initialFocus
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 export default function CRM() {
   const [stages, setStages] = useState<DealStage[]>([]);
@@ -1639,33 +1682,27 @@ export default function CRM() {
                     </div>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const newDate = prompt(
-                          'Nueva fecha de seguimiento (YYYY-MM-DD):',
-                          selectedDeal.nextFollowUp
-                            ? new Date(selectedDeal.nextFollowUp).toISOString().split('T')[0]
-                            : new Date().toISOString().split('T')[0]
-                        );
-                        if (newDate) {
-                          apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
-                            nextFollowUp: newDate
-                          }).then(() => {
+                    <DateButton
+                      value={
+                        selectedDeal.nextFollowUp
+                          ? new Date(selectedDeal.nextFollowUp).toISOString().split('T')[0]
+                          : undefined
+                      }
+                      onPick={(ymd) => {
+                        apiClient
+                          .patch(`/api/crm/deals/${selectedDeal.id}`, { nextFollowUp: ymd })
+                          .then(() => {
                             loadDealDetail(selectedDeal.id);
                             refreshDeals();
                             toast({ title: 'Seguimiento actualizado' });
-                          }).catch(() => {
+                          })
+                          .catch(() => {
                             toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
                           });
-                        }
                       }}
-                      className="flex items-center gap-2"
                     >
-                      <Calendar className="h-4 w-4" />
                       {selectedDeal.nextFollowUp ? 'Reprogramar' : 'Programar'}
-                    </Button>
+                    </DateButton>
                     <Button
                       variant="default"
                       size="sm"

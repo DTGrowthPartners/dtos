@@ -12,6 +12,7 @@ export interface Todo {
   userId: string;
   createdAt: number;
   completedAt?: number | null;
+  order?: number; // orden manual (drag). Si falta, se usa createdAt.
 }
 
 // Carga los to-dos del usuario. Filtra por userId y ordena en cliente (evita índice compuesto):
@@ -19,9 +20,10 @@ export interface Todo {
 export const loadTodos = async (userId: string): Promise<Todo[]> => {
   const q = query(collection(db, COL), where('userId', '==', userId));
   const snap = await getDocs(q);
+  const eo = (t: Todo) => t.order ?? t.createdAt;
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as Todo))
-    .sort((a, b) => (a.done === b.done ? b.createdAt - a.createdAt : a.done ? 1 : -1));
+    .sort((a, b) => (a.done === b.done ? eo(b) - eo(a) : a.done ? 1 : -1));
 };
 
 export const createTodo = async (userId: string, text: string): Promise<string> => {

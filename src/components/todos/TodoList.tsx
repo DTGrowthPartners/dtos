@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, GripVertical } from 'lucide-react';
+import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +21,7 @@ export default function TodoList() {
   const [adding, setAdding] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     if (!user) return;
@@ -35,8 +37,30 @@ export default function TodoList() {
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
 
   const pendientes = useMemo(() => todos.filter((t) => !t.done).length, [todos]);
+  const eo = (t: Todo) => t.order ?? t.createdAt; // orden efectivo
   const sortTodos = (arr: Todo[]) =>
-    [...arr].sort((a, b) => (a.done === b.done ? b.createdAt - a.createdAt : a.done ? 1 : -1));
+    [...arr].sort((a, b) => (a.done === b.done ? eo(b) - eo(a) : a.done ? 1 : -1));
+
+  // Reordenar arrastrando: recalcula el `order` del ítem movido entre sus vecinos.
+  const onDragEnd = (result: DropResult) => {
+    if (!result.destination) return;
+    const from = result.source.index;
+    const to = result.destination.index;
+    if (from === to) return;
+    const list = [...todos];
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    const above = list[to - 1];
+    const below = list[to + 1];
+    let newOrder: number;
+    if (!above) newOrder = (below ? eo(below) : Date.now()) + 1000;
+    else if (!below) newOrder = eo(above) - 1000;
+    else newOrder = (eo(above) + eo(below)) / 2;
+    const updated = { ...moved, order: newOrder };
+    list[to] = updated;
+    setTodos(list);
+    updateTodo(moved.id, { order: newOrder }).catch(() => load());
+  };
 
   const add = async () => {
     const t = text.trim();
@@ -45,6 +69,7 @@ export default function TodoList() {
     const tempId = `temp-${Date.now()}`;
     setTodos((prev) => [{ id: tempId, text: t, done: false, userId: user.id, createdAt: Date.now() }, ...prev]);
     setText('');
+    inputRef.current?.focus(); // dejar el cursor listo para el siguiente pendiente
     try {
       const id = await createTodo(user.id, t);
       setTodos((prev) => prev.map((x) => (x.id === tempId ? { ...x, id } : x)));
@@ -154,11 +179,11 @@ export default function TodoList() {
 
       <form onSubmit={(e) => { e.preventDefault(); add(); }} className="flex gap-2">
         <Input
+          ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Agregar un pendiente y Enter…"
           autoFocus
-          disabled={adding}
         />
         <Button type="submit" size="icon" disabled={!text.trim() || adding}>
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
@@ -173,48 +198,74 @@ export default function TodoList() {
           <p className="text-sm text-muted-foreground">Sin pendientes. Agrega el primero arriba 👆</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card divide-y divide-border max-h-[55vh] overflow-y-auto">
-          {todos.map((todo) => (
-            <div
-              key={todo.id}
-              onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
-              className={cn(
-                'group flex items-center gap-3 px-3 py-2.5',
-                selectMode && 'cursor-pointer',
-                selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30'
-              )}
-            >
-              {selectMode ? (
-                <input
-                  type="checkbox"
-                  checked={selected.has(todo.id)}
-                  readOnly
-                  className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
-                />
-              ) : (
-                <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
-                  {todo.done ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                  ) : (
-                    <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
-                  )}
-                </button>
-              )}
-              <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
-                {todo.text}
-              </span>
-              {!selectMode && (
-                <button
-                  onClick={() => remove(todo)}
-                  className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
-                  title="Eliminar"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="todos-list">
+            {(dropProvided) => (
+              <div
+                ref={dropProvided.innerRef}
+                {...dropProvided.droppableProps}
+                className="rounded-xl border border-border bg-card divide-y divide-border max-h-[55vh] overflow-y-auto"
+              >
+                {todos.map((todo, index) => (
+                  <Draggable key={todo.id} draggableId={todo.id} index={index} isDragDisabled={selectMode}>
+                    {(dragProvided, snapshot) => (
+                      <div
+                        ref={dragProvided.innerRef}
+                        {...dragProvided.draggableProps}
+                        onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
+                        className={cn(
+                          'group flex items-center gap-2 px-3 py-2.5 bg-card',
+                          selectMode && 'cursor-pointer',
+                          selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30',
+                          snapshot.isDragging && 'shadow-lg rounded-md ring-1 ring-amber-400'
+                        )}
+                      >
+                        {selectMode ? (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(todo.id)}
+                            readOnly
+                            className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
+                          />
+                        ) : (
+                          <span
+                            {...dragProvided.dragHandleProps}
+                            className="flex-shrink-0 text-muted-foreground/30 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
+                            title="Arrastrar para ordenar"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
+                        )}
+                        {!selectMode && (
+                          <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
+                            {todo.done ? (
+                              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            ) : (
+                              <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
+                            )}
+                          </button>
+                        )}
+                        <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
+                          {todo.text}
+                        </span>
+                        {!selectMode && (
+                          <button
+                            onClick={() => remove(todo)}
+                            className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
+                            title="Eliminar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {dropProvided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       )}
     </div>
   );
