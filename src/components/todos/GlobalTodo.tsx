@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { ListTodo, X } from 'lucide-react';
+import { ListTodo, X, PictureInPicture2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth';
 import TodoList from './TodoList';
 
@@ -102,17 +102,12 @@ export default function GlobalTodo() {
     }
   };
 
-  const launch = () => {
-    if (pipSupported()) openFloating();
-    else setOpen(true);
-  };
-
   return (
     <>
-      {/* Botón ámbar: abre el To-Do flotante (o el panel si no hay soporte PiP) */}
+      {/* Botón ámbar: abre el panel de pendientes */}
       {!open && (
         <button
-          onClick={launch}
+          onClick={() => setOpen(true)}
           title="Mis pendientes"
           className="fixed bottom-24 right-4 z-40 h-14 w-14 rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center"
         >
@@ -128,13 +123,24 @@ export default function GlobalTodo() {
               <ListTodo className="h-5 w-5" />
               Mis pendientes
             </span>
-            <button
-              onClick={() => setOpen(false)}
-              className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
-              title="Cerrar"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              {pipSupported() && (
+                <button
+                  onClick={openFloating}
+                  className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
+                  title="Abrir como ventana flotante (encima de todo el navegador)"
+                >
+                  <PictureInPicture2 className="h-4 w-4" />
+                </button>
+              )}
+              <button
+                onClick={() => setOpen(false)}
+                className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
+                title="Cerrar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <TodoList />
