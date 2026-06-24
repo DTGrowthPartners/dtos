@@ -674,10 +674,42 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
         creadoEn: new Date(t.creadoEn).toISOString(),
       }));
 
+    // Mensaje formateado (resumen por-usuario) para los avisos del bot.
+    const todos = snapshot.docs.map((d) => {
+      const x = d.data();
+      return { title: x.title as string, status: x.status as string, priority: x.priority as string, dueDate: x.dueDate };
+    });
+    const enCurso = todos.filter((t) => t.status === 'IN_PROGRESS');
+    const pendientes = todos.filter((t) => t.status === 'TODO');
+    const prio = (p: string) =>
+      p === 'HIGH' ? { e: '🔴', l: 'Alta' } : p === 'LOW' ? { e: '⚪', l: 'Baja' } : { e: '🟡', l: 'Media' };
+    const hoy = new Date().toISOString().split('T')[0];
+    const dueHint = (d: any) => {
+      if (!d) return '';
+      const ymd = new Date(d).toISOString().split('T')[0];
+      if (ymd === hoy) return ' (vence hoy)';
+      if (ymd < hoy) return ' (vencida)';
+      return '';
+    };
+    const lineas: string[] = [`${normalizedUser}, te paso el resumen de tus tareas pendientes:`];
+    if (enCurso.length) {
+      lineas.push('', '*EN CURSO*', ...enCurso.map((t) => { const p = prio(t.priority); return `${p.e} [${p.l}] ${t.title}`; }));
+    }
+    if (pendientes.length) {
+      lineas.push('', '*PENDIENTES (TODO)*', ...pendientes.map((t) => `⚪ ${t.title}${dueHint(t.dueDate)}`));
+    }
+    if (!enCurso.length && !pendientes.length) {
+      lineas.push('', '✅ No tienes tareas pendientes.');
+    } else {
+      lineas.push('', `${pendientes.length} por hacer + ${enCurso.length} en curso. Avísame si quieres mover alguna o ajustar prioridades.`);
+    }
+    const mensaje = lineas.join('\n');
+
     res.json({
       success: true,
       user: normalizedUser,
       count: tasks.length,
+      mensaje,
       tasks,
     });
   } catch (error) {
