@@ -16,6 +16,27 @@ const prisma = new PrismaClient();
 
 // ==================== Helper Functions ====================
 
+/**
+ * Normaliza el teléfono de un deal: deja `phone` como número LOCAL (sin indicativo)
+ * y el indicativo aparte en `phoneCountryCode`. Evita el bug de indicativo duplicado
+ * (ej. phone "+573016790293" + cc "+57" -> mostraba "+57+573016790293").
+ */
+export const normalizeDealPhone = (
+  phone?: string | null,
+  countryCode?: string | null
+): { phone?: string; phoneCountryCode: string } => {
+  const code = (countryCode || '+57').trim();
+  if (!phone) return { phone: phone || undefined, phoneCountryCode: code };
+  let p = String(phone).replace(/[\s()\-.]/g, '').trim();
+  if (p.startsWith('+')) p = p.slice(1);
+  const codeDigits = code.replace(/\D/g, ''); // "+57" -> "57"
+  // Si el número trae el indicativo embebido (queda demasiado largo), quitarlo una vez.
+  if (codeDigits && p.length > 10 && p.startsWith(codeDigits)) {
+    p = p.slice(codeDigits.length);
+  }
+  return { phone: p || undefined, phoneCountryCode: code };
+};
+
 const calculateDealAlerts = (deal: any): DealAlert[] => {
   const alerts: DealAlert[] = [];
   const now = new Date();
@@ -175,6 +196,12 @@ export const getDeals = async (filters?: {
         orderBy: { remindAt: 'asc' },
         take: 1,
       },
+      // Último cambio de etapa, para calcular "días en etapa" con precisión
+      activities: {
+        where: { type: 'stage_change' },
+        orderBy: { performedAt: 'desc' },
+        take: 1,
+      },
       _count: {
         select: { activities: true },
       },
@@ -184,7 +211,8 @@ export const getDeals = async (filters?: {
 
   // Calculate days in stage, alerts, and days since interaction for each deal
   const enrichedDeals = deals.map((deal) => {
-    const lastStageChange = deal.updatedAt;
+    // Días en etapa desde el último cambio de etapa real (fallback: creación)
+    const lastStageChange = deal.activities?.[0]?.performedAt || deal.createdAt;
     const daysInStage = Math.floor(
       (Date.now() - new Date(lastStageChange).getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -251,8 +279,11 @@ export const getDeal = async (id: string) => {
 
   if (!deal) return null;
 
+  // Días en etapa desde el último cambio de etapa real (fallback: creación)
+  const lastStageChange =
+    deal.activities.find((a: any) => a.type === 'stage_change')?.performedAt || deal.createdAt;
   const daysInStage = Math.floor(
-    (Date.now() - new Date(deal.updatedAt).getTime()) / (1000 * 60 * 60 * 24)
+    (Date.now() - new Date(lastStageChange).getTime()) / (1000 * 60 * 60 * 24)
   );
   const daysSinceInteraction = calculateDaysSinceInteraction(deal);
   const alerts = calculateDealAlerts(deal);
@@ -297,13 +328,16 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
     }
   }
 
+  // Normalizar teléfono (evitar indicativo duplicado)
+  const norm = normalizeDealPhone(data.phone, data.phoneCountryCode);
+
   // Create Tercero as prospecto linked to Organizacion
   const tercero = await prisma.tercero.create({
     data: {
       nombre: data.name,
       email: data.email,
-      telefono: data.phone,
-      telefonoCodigo: data.phoneCountryCode || '+57',
+      telefono: norm.phone,
+      telefonoCodigo: norm.phoneCountryCode,
       esProspecto: true,
       esCliente: false,
       organizacionId,
@@ -314,8 +348,8 @@ export const createDeal = async (data: CreateDealDto, userId: string) => {
     data: {
       name: data.name,
       company: data.company,
-      phone: data.phone,
-      phoneCountryCode: data.phoneCountryCode || '+57',
+      phone: norm.phone,
+      phoneCountryCode: norm.phoneCountryCode,
       email: data.email,
       stageId,
       estimatedValue: data.estimatedValue,
@@ -370,13 +404,16 @@ export const updateDeal = async (id: string, data: UpdateDealDto, userId: string
   // If stage is changing, track it
   const stageChanged = data.stageId && data.stageId !== existingDeal.stageId;
 
+  // Normalizar teléfono solo si viene en la actualización (evitar indicativo duplicado)
+  const normUpd = data.phone !== undefined ? normalizeDealPhone(data.phone, data.phoneCountryCode || existingDeal.phoneCountryCode) : null;
+
   const deal = await prisma.deal.update({
     where: { id },
     data: {
       name: data.name,
       company: data.company,
-      phone: data.phone,
-      phoneCountryCode: data.phoneCountryCode,
+      phone: normUpd ? normUpd.phone : undefined,
+      phoneCountryCode: normUpd ? normUpd.phoneCountryCode : data.phoneCountryCode,
       email: data.email,
       stageId: data.stageId,
       estimatedValue: data.estimatedValue,
@@ -714,13 +751,16 @@ export const createPublicLead = async (data: PublicLeadDto) => {
     }
   }
 
+  // Normalizar teléfono (evitar indicativo duplicado en leads importados/web)
+  const normLead = normalizeDealPhone(data.phone, '+57');
+
   // Create Tercero as prospecto linked to Organizacion
   const tercero = await prisma.tercero.create({
     data: {
       nombre: dealName,
       email: data.email,
-      telefono: data.phone,
-      telefonoCodigo: '+57',
+      telefono: normLead.phone,
+      telefonoCodigo: normLead.phoneCountryCode,
       esProspecto: true,
       esCliente: false,
       organizacionId,
@@ -731,8 +771,8 @@ export const createPublicLead = async (data: PublicLeadDto) => {
     data: {
       name: dealName,
       company: data.company,
-      phone: data.phone,
-      phoneCountryCode: '+57',
+      phone: normLead.phone,
+      phoneCountryCode: normLead.phoneCountryCode,
       email: data.email,
       stageId: firstStage.id,
       currency: 'COP',
