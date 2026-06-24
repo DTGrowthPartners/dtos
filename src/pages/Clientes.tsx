@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -148,10 +149,24 @@ export default function Clientes() {
     logo: '',
   });
 
+  // Servicio recurrente opcional al crear cliente (alimenta Cobros & MRR)
+  const [services, setServices] = useState<{ id: string; name: string; price: number }[]>([]);
+  const [addRecurring, setAddRecurring] = useState(false);
+  const [recurring, setRecurring] = useState({ serviceId: '', precioCliente: '', frecuencia: 'mensual', diaCobro: '5' });
+
   useEffect(() => {
     fetchClients();
     fetchTerceros();
+    fetchServices();
   }, []);
+
+  const fetchServices = async () => {
+    try {
+      setServices(await apiClient.get<{ id: string; name: string; price: number }[]>('/api/services'));
+    } catch {
+      /* noop */
+    }
+  };
 
   const fetchClients = async () => {
     try {
@@ -282,8 +297,29 @@ export default function Clientes() {
         await apiClient.put(`/api/clients/${editingClient.id}`, formData);
         toast({ title: 'Cliente actualizado', description: 'El cliente se actualizó correctamente' });
       } else {
-        await apiClient.post('/api/clients', formData);
-        toast({ title: 'Cliente creado', description: 'El cliente se creó correctamente' });
+        const created = await apiClient.post<{ id: string }>('/api/clients', formData);
+        // Si se marcó un ingreso recurrente, asignar el servicio recurrente (alimenta Cobros & MRR).
+        if (created?.id && addRecurring && recurring.serviceId && parseFloat(recurring.precioCliente) > 0) {
+          try {
+            const dia = Math.min(28, Math.max(1, parseInt(recurring.diaCobro || '5', 10)));
+            const now = new Date();
+            let y = now.getFullYear();
+            let m = now.getMonth();
+            if (now.getDate() > dia) { m += 1; if (m > 11) { m = 0; y += 1; } }
+            const fechaProximoCobro = new Date(y, m, dia, 12, 0, 0).toISOString();
+            await apiClient.post(`/api/clients/${created.id}/services`, {
+              serviceId: recurring.serviceId,
+              precioCliente: parseFloat(recurring.precioCliente),
+              frecuencia: recurring.frecuencia,
+              fechaProximoCobro,
+            });
+            toast({ title: 'Cliente creado', description: 'Cliente y servicio recurrente (MRR) agregados.' });
+          } catch {
+            toast({ title: 'Cliente creado', description: 'Cliente creado, pero no se pudo agregar el servicio recurrente.', variant: 'destructive' });
+          }
+        } else {
+          toast({ title: 'Cliente creado', description: 'El cliente se creó correctamente' });
+        }
       }
       setIsDialogOpen(false);
       resetForm();
@@ -324,6 +360,8 @@ export default function Clientes() {
 
   const resetForm = () => {
     setFormData({ name: '', email: '', nit: '', phone: '', address: '', logo: '' });
+    setAddRecurring(false);
+    setRecurring({ serviceId: '', precioCliente: '', frecuencia: 'mensual', diaCobro: '5' });
     setEditingClient(null);
   };
 
@@ -990,6 +1028,54 @@ export default function Clientes() {
                 <Label htmlFor="address">Dirección</Label>
                 <Textarea id="address" placeholder="Dirección completa" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} disabled={isLoading} rows={2} />
               </div>
+
+              {/* Ingreso mensual recurrente (MRR) — solo al crear */}
+              {!editingClient && (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input type="checkbox" checked={addRecurring} onChange={(e) => setAddRecurring(e.target.checked)} className="h-4 w-4 accent-primary" disabled={isLoading} />
+                    Ingreso mensual recurrente (MRR)
+                  </label>
+                  {addRecurring && (
+                    <div className="space-y-2 pt-1">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Servicio</Label>
+                        <Select value={recurring.serviceId} onValueChange={(v) => setRecurring({ ...recurring, serviceId: v })}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona un servicio" /></SelectTrigger>
+                          <SelectContent>
+                            {services.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Monto (COP)</Label>
+                          <Input type="number" placeholder="800000" value={recurring.precioCliente} onChange={(e) => setRecurring({ ...recurring, precioCliente: e.target.value })} disabled={isLoading} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Día de cobro</Label>
+                          <Input type="number" min={1} max={28} placeholder="5" value={recurring.diaCobro} onChange={(e) => setRecurring({ ...recurring, diaCobro: e.target.value })} disabled={isLoading} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Frecuencia</Label>
+                        <Select value={recurring.frecuencia} onValueChange={(v) => setRecurring({ ...recurring, frecuencia: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mensual">Mensual</SelectItem>
+                            <SelectItem value="trimestral">Trimestral</SelectItem>
+                            <SelectItem value="semestral">Semestral</SelectItem>
+                            <SelectItem value="anual">Anual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {services.length === 0 && (
+                        <p className="text-xs text-muted-foreground">No hay servicios creados. Crea uno en la sección de Servicios para poder asignarlo.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }} disabled={isLoading}>Cancelar</Button>
