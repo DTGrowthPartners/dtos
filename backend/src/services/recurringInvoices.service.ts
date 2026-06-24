@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import admin from 'firebase-admin';
-import { invoiceService } from './invoice.service';
+import { invoiceService, getPublicInvoiceUrl } from './invoice.service';
 import { agentSendMessage } from './agents.service';
 import { resolveDestino } from '../config/notifyPhones';
 
@@ -121,7 +121,7 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
         cliente_id: cs.client?.id,
       });
 
-      await prisma.invoice.create({
+      const createdInvoice = await prisma.invoice.create({
         data: {
           invoiceNumber,
           clientId: cs.client?.id || '',
@@ -138,11 +138,15 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
         },
       });
 
+      // Link público firmado para descargar/enviar el PDF directamente.
+      const pdfUrl = getPublicInvoiceUrl(createdInvoice.id);
+
       // 2. Crear tarea de ALTA prioridad para Dairo en Firestore.
       const taskTitle = `Revisar y enviar cuenta de cobro — ${clienteNombre}`;
       const taskDesc =
         `Cuenta #${invoiceNumber} generada automáticamente por el servicio recurrente "${servicioNombre}" ` +
-        `(${precio.toLocaleString('es-CO')} COP). Está como borrador: revísala y envíala al cliente.`;
+        `(${precio.toLocaleString('es-CO')} COP). Está como borrador: revísala y envíala al cliente.\n` +
+        `PDF: ${pdfUrl}`;
       try {
         await getFirestore().collection('tasks').add({
           title: taskTitle,
@@ -167,7 +171,9 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
           `🔴 *Cuenta de cobro lista para revisar*\n` +
           `*${clienteNombre}* — ${precio.toLocaleString('es-CO')} COP\n` +
           `Servicio: ${servicioNombre} (${cs.frecuencia})\n` +
-          `Cuenta #${invoiceNumber} generada como borrador. Revísala y envíala al cliente.`;
+          `Cuenta #${invoiceNumber} generada como borrador.\n` +
+          `📄 PDF: ${pdfUrl}\n` +
+          `Revísala y envíala al cliente.`;
         try {
           await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_cuentas_recurrentes' });
         } catch (e) {

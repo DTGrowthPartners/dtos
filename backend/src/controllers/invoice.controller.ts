@@ -1,10 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
-import { invoiceService } from '../services/invoice.service';
+import { invoiceService, signInvoiceId } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 
@@ -164,6 +165,42 @@ class InvoiceController {
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename=${path.basename(absolutePath)}`);
+      res.sendFile(absolutePath);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Descarga PÚBLICA del PDF mediante link firmado (HMAC). No requiere login.
+  // Usada en notificaciones de WhatsApp (cuentas recurrentes) para enviar/abrir el PDF.
+  public downloadPublic = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const sig = String(req.query.sig || '');
+      const expected = signInvoiceId(id);
+      // Comparación en tiempo constante
+      const valid =
+        sig.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+      if (!valid) {
+        res.status(403).send('Link inválido o expirado');
+        return;
+      }
+
+      const invoice = await prisma.invoice.findUnique({ where: { id } });
+      if (!invoice) {
+        res.status(404).send('Cuenta de cobro no encontrada');
+        return;
+      }
+
+      const absolutePath = path.resolve(invoice.filePath);
+      if (!fs.existsSync(absolutePath)) {
+        res.status(404).send('PDF no encontrado');
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename=${path.basename(absolutePath)}`);
       res.sendFile(absolutePath);
     } catch (error) {
       next(error);

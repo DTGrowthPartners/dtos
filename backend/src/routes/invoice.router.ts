@@ -4,6 +4,9 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
 
+// Descarga PÚBLICA del PDF con link firmado (HMAC). Va ANTES del authMiddleware.
+router.get('/:id/pdf', invoiceController.downloadPublic);
+
 router.use(authMiddleware);
 
 // Route to generate a new invoice PDF

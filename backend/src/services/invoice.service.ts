@@ -1,5 +1,6 @@
 import { spawn } from 'child_process';
 import path from 'path';
+import crypto from 'crypto';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 
 class InvoiceService {
@@ -73,3 +74,16 @@ class InvoiceService {
 }
 
 export const invoiceService = new InvoiceService();
+
+// --- Link público firmado para descargar el PDF (sin login, sin exponer API keys) ---
+const linkSecret = () => process.env.INVOICE_LINK_SECRET || process.env.JWT_SECRET || 'dtos-invoice-link';
+
+/** Firma HMAC del id de la factura (para validar links públicos de descarga). */
+export const signInvoiceId = (id: string): string =>
+  crypto.createHmac('sha256', linkSecret()).update(id).digest('hex');
+
+/** URL pública firmada para descargar el PDF de una factura. */
+export const getPublicInvoiceUrl = (id: string): string => {
+  const base = (process.env.PUBLIC_APP_URL || process.env.APP_URL || 'https://os.dtgrowthpartners.com').replace(/\/$/, '');
+  return `${base}/api/invoices/${id}/pdf?sig=${signInvoiceId(id)}`;
+};
