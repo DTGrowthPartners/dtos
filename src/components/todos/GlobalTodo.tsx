@@ -63,9 +63,22 @@ export default function GlobalTodo() {
         pipWinRef.current.focus();
         return;
       }
+      // Tamaño inicial: recuerda el último, o uno compacto relativo a la pantalla.
+      let w = 300;
+      let h = Math.min(500, Math.round((window.screen?.availHeight || 800) * 0.55));
+      try {
+        const saved = JSON.parse(localStorage.getItem('dtos_todo_pip_size') || 'null');
+        if (saved?.w && saved?.h) { w = saved.w; h = saved.h; }
+      } catch { /* noop */ }
+
       const pip: Window = await (window as unknown as {
         documentPictureInPicture: { requestWindow: (o: { width: number; height: number }) => Promise<Window> };
-      }).documentPictureInPicture.requestWindow({ width: 340, height: 540 });
+      }).documentPictureInPicture.requestWindow({ width: w, height: h });
+
+      // Recordar el tamaño cuando el usuario la redimensiona.
+      pip.addEventListener('resize', () => {
+        try { localStorage.setItem('dtos_todo_pip_size', JSON.stringify({ w: pip.innerWidth, h: pip.innerHeight })); } catch { /* noop */ }
+      });
 
       copyStyles(document, pip.document);
       // Heredar tema (clase 'dark' en <html>) y limpiar márgenes.
