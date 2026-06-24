@@ -143,6 +143,23 @@ function createMcpServer() {
   );
 
   server.tool(
+    'leer_brief',
+    'Lee el brief de un proyecto (por nombre o id) en formato Markdown.',
+    { proyecto: z.string().describe('nombre o id del proyecto') },
+    async ({ proyecto }) => ok(await dtos('GET', `/bot/projects/${encodeURIComponent(proyecto)}/brief`))
+  );
+
+  server.tool(
+    'escribir_brief',
+    'Crea o reescribe el brief de un proyecto a partir de Markdown (títulos #, listas, checklists - [ ], citas >, links, imágenes).',
+    { proyecto: z.string().describe('nombre o id del proyecto'),
+      titulo: z.string().optional().describe('título del brief'),
+      markdown: z.string().describe('contenido del brief en Markdown') },
+    async ({ proyecto, titulo, markdown }) =>
+      ok(await dtos('PUT', `/bot/projects/${encodeURIComponent(proyecto)}/brief`, { titulo, markdown }))
+  );
+
+  server.tool(
     'registrar_contacto',
     'Registra un contacto con un prospecto del pipeline (por teléfono o dealId). Reinicia el contador de "días desde el último contacto" y deja la interacción en el historial.',
     { telefono: z.string().optional().describe('teléfono del prospecto, con o sin indicativo'),

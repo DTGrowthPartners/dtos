@@ -11,6 +11,7 @@ import { generateDueRecurringInvoices } from '../services/recurringInvoices.serv
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
+import { randomUUID } from 'crypto';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -237,6 +238,131 @@ router.get('/bot/projects', verifyBotApiKey, async (req: Request, res: Response)
       success: false,
       error: 'Error al obtener proyectos',
     });
+  }
+});
+
+// ==================== Briefs (lectura/escritura por el bot/MCP) ====================
+
+// Resuelve un proyecto por id exacto o por nombre (case-insensitive). Devuelve su id o null.
+const resolveProjectId = async (idOrName: string): Promise<string | null> => {
+  if (!idOrName) return null;
+  const byId = await getFirestore().collection('projects').doc(idOrName).get();
+  if (byId.exists) return byId.id;
+  const all = await getFirestore().collection('projects').get();
+  const match = all.docs.find((d) => (d.data().name || '').toLowerCase() === idOrName.toLowerCase());
+  return match ? match.id : null;
+};
+
+// Bloques del brief -> Markdown (para que el bot/Claude los lea)
+const blocksToMarkdown = (blocks: any[]): string =>
+  [...(blocks || [])]
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((b) => {
+      switch (b.type) {
+        case 'heading1': return `# ${b.content || ''}`;
+        case 'heading2': return `## ${b.content || ''}`;
+        case 'heading3': return `### ${b.content || ''}`;
+        case 'checklist': return (b.items || []).map((it: any) => `- [${it.checked ? 'x' : ' '}] ${it.text || ''}`).join('\n');
+        case 'callout': return `> ${b.content || ''}`;
+        case 'link': return `[${b.metadata?.title || b.content || ''}](${b.content || ''})`;
+        case 'divider': return '---';
+        case 'image': return `![](${b.content || ''})`;
+        default: return b.content || '';
+      }
+    })
+    .join('\n\n');
+
+// Markdown -> bloques del brief (para que el bot/Claude lo escriba)
+const markdownToBlocks = (md: string): any[] => {
+  const lines = (md || '').replace(/\r\n/g, '\n').split('\n');
+  const blocks: any[] = [];
+  let order = 0;
+  let paragraph: string[] = [];
+  let checklist: any[] = [];
+  const flushParagraph = () => {
+    if (paragraph.length) {
+      blocks.push({ id: randomUUID(), type: 'paragraph', content: paragraph.join('\n'), order: order++ });
+      paragraph = [];
+    }
+  };
+  const flushChecklist = () => {
+    if (checklist.length) {
+      blocks.push({ id: randomUUID(), type: 'checklist', content: '', items: checklist, order: order++ });
+      checklist = [];
+    }
+  };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const chk = line.match(/^\s*-\s*\[([ xX])\]\s+(.*)$/);
+    if (chk) { flushParagraph(); checklist.push({ id: randomUUID(), text: chk[2], checked: chk[1].toLowerCase() === 'x' }); continue; }
+    flushChecklist();
+    if (line.trim() === '') { flushParagraph(); continue; }
+    if (/^#\s+/.test(line)) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'heading1', content: line.replace(/^#\s+/, ''), order: order++ }); continue; }
+    if (/^##\s+/.test(line)) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'heading2', content: line.replace(/^##\s+/, ''), order: order++ }); continue; }
+    if (/^###\s+/.test(line)) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'heading3', content: line.replace(/^###\s+/, ''), order: order++ }); continue; }
+    if (/^(-{3,}|\*{3,})$/.test(line.trim())) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'divider', content: '', order: order++ }); continue; }
+    const img = line.match(/^!\[[^\]]*\]\(([^)]+)\)$/);
+    if (img) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'image', content: img[1], order: order++ }); continue; }
+    if (/^>\s?/.test(line)) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'callout', content: line.replace(/^>\s?/, ''), variant: 'info', order: order++ }); continue; }
+    const link = line.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (link) { flushParagraph(); blocks.push({ id: randomUUID(), type: 'link', content: link[2], metadata: { title: link[1] }, order: order++ }); continue; }
+    paragraph.push(line);
+  }
+  flushChecklist();
+  flushParagraph();
+  if (!blocks.length) blocks.push({ id: randomUUID(), type: 'paragraph', content: '', order: 0 });
+  return blocks;
+};
+
+/**
+ * GET /api/webhook/bot/projects/:projectId/brief
+ * Lee el brief de un proyecto (por id o nombre) como Markdown.
+ */
+router.get('/bot/projects/:projectId/brief', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const pid = await resolveProjectId(req.params.projectId);
+    if (!pid) return res.status(404).json({ success: false, error: 'Proyecto no encontrado' });
+    const snap = await getFirestore().collection('briefs').where('projectId', '==', pid).where('isTemplate', '==', false).get();
+    if (snap.empty) return res.json({ success: true, brief: null, mensaje: 'El proyecto no tiene brief todavía' });
+    const briefs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const b = briefs[0];
+    res.json({ success: true, briefId: b.id, titulo: b.title, proyectoId: pid, markdown: blocksToMarkdown(b.blocks || []) });
+  } catch (error) {
+    console.error('[Bot API] Error leyendo brief:', error);
+    res.status(500).json({ success: false, error: 'Error al leer el brief' });
+  }
+});
+
+/**
+ * PUT /api/webhook/bot/projects/:projectId/brief
+ * Crea o actualiza el brief de un proyecto a partir de Markdown.
+ * Body: { titulo?: string, markdown: string }
+ */
+router.put('/bot/projects/:projectId/brief', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const pid = await resolveProjectId(req.params.projectId);
+    if (!pid) return res.status(404).json({ success: false, error: 'Proyecto no encontrado' });
+    const { titulo, markdown } = req.body || {};
+    if (markdown === undefined) return res.status(400).json({ success: false, error: 'Falta el campo markdown' });
+    const blocks = markdownToBlocks(markdown);
+    const snap = await getFirestore().collection('briefs').where('projectId', '==', pid).where('isTemplate', '==', false).get();
+    const now = Date.now();
+    if (!snap.empty) {
+      const docId = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0].id;
+      const upd: any = { blocks, updatedAt: now };
+      if (titulo) upd.title = titulo;
+      await getFirestore().collection('briefs').doc(docId).update(upd);
+      return res.json({ success: true, briefId: docId, mensaje: 'Brief actualizado' });
+    }
+    const sysUser = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
+    const ref = await getFirestore().collection('briefs').add({
+      title: titulo || 'Brief', projectId: pid, blocks, isTemplate: false,
+      createdBy: sysUser?.id || 'bot', createdAt: now, updatedAt: now,
+    });
+    res.json({ success: true, briefId: ref.id, mensaje: 'Brief creado' });
+  } catch (error) {
+    console.error('[Bot API] Error escribiendo brief:', error);
+    res.status(500).json({ success: false, error: 'Error al escribir el brief' });
   }
 });
 
