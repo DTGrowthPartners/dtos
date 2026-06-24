@@ -1,12 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, GripVertical } from 'lucide-react';
+import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, GripVertical, Send } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { loadTodos, createTodo, updateTodo, deleteTodo, type Todo } from '@/lib/firestoreTodoService';
+import { createTask, loadProjects } from '@/lib/firestoreTaskService';
+import { TEAM_MEMBERS, type TeamMemberName, type Task } from '@/types/taskTypes';
 
 /**
  * Lista To-Do rápida y personal (por usuario). Pensada para usarse embebida
@@ -22,6 +34,49 @@ export default function TodoList() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  // Convertir pendiente -> tarea real
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [convertTodo, setConvertTodo] = useState<Todo | null>(null);
+  const [convForm, setConvForm] = useState({ title: '', assignee: 'Stiven' as TeamMemberName, projectId: '', priority: 'MEDIUM', dueDate: '' });
+  const [converting, setConverting] = useState(false);
+
+  useEffect(() => {
+    loadProjects().then((p) => setProjects((p || []) as { id: string; name: string }[])).catch(() => {});
+  }, []);
+
+  const myName = (): TeamMemberName =>
+    (TEAM_MEMBERS.find((m) => m.name === user?.firstName)?.name as TeamMemberName) || 'Stiven';
+
+  const openConvert = (todo: Todo) => {
+    setConvForm({ title: todo.text, assignee: myName(), projectId: '', priority: 'MEDIUM', dueDate: '' });
+    setConvertTodo(todo);
+  };
+
+  const submitConvert = async () => {
+    if (!convertTodo || !convForm.title.trim() || converting) return;
+    setConverting(true);
+    try {
+      await createTask({
+        title: convForm.title.trim(),
+        description: '',
+        status: 'TODO',
+        priority: convForm.priority as Task['priority'],
+        assignee: convForm.assignee,
+        creator: myName(),
+        projectId: convForm.projectId,
+        dueDate: convForm.dueDate ? new Date(convForm.dueDate + 'T12:00:00').getTime() : undefined,
+      } as Omit<Task, 'id' | 'createdAt'>);
+      const id = convertTodo.id;
+      setTodos((prev) => prev.filter((t) => t.id !== id));
+      deleteTodo(id).catch(() => {});
+      setConvertTodo(null);
+      toast({ title: 'Convertido en tarea', description: 'El pendiente ahora es una tarea en Operaciones.' });
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo crear la tarea', variant: 'destructive' });
+    } finally {
+      setConverting(false);
+    }
+  };
 
   const load = async () => {
     if (!user) return;
@@ -250,6 +305,15 @@ export default function TodoList() {
                         </span>
                         {!selectMode && (
                           <button
+                            onClick={() => openConvert(todo)}
+                            className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-primary transition-colors"
+                            title="Convertir en tarea"
+                          >
+                            <Send className="h-4 w-4" />
+                          </button>
+                        )}
+                        {!selectMode && (
+                          <button
                             onClick={() => remove(todo)}
                             className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
                             title="Eliminar"
@@ -267,6 +331,66 @@ export default function TodoList() {
           </Droppable>
         </DragDropContext>
       )}
+
+      {/* Convertir pendiente -> tarea real (Operaciones) */}
+      <Dialog open={!!convertTodo} onOpenChange={(o) => !o && setConvertTodo(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>Convertir en tarea</DialogTitle>
+            <DialogDescription>Crea una tarea en Operaciones a partir de este pendiente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Título</Label>
+              <Input value={convForm.title} onChange={(e) => setConvForm({ ...convForm, title: e.target.value })} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Responsable</Label>
+                <Select value={convForm.assignee} onValueChange={(v) => setConvForm({ ...convForm, assignee: v as TeamMemberName })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TEAM_MEMBERS.map((m) => (<SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Prioridad</Label>
+                <Select value={convForm.priority} onValueChange={(v) => setConvForm({ ...convForm, priority: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="HIGH">Alta</SelectItem>
+                    <SelectItem value="MEDIUM">Media</SelectItem>
+                    <SelectItem value="LOW">Baja</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="text-xs">Proyecto</Label>
+                <Select value={convForm.projectId || 'none'} onValueChange={(v) => setConvForm({ ...convForm, projectId: v === 'none' ? '' : v })}>
+                  <SelectTrigger><SelectValue placeholder="Sin proyecto" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin proyecto</SelectItem>
+                    {projects.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Fecha de entrega</Label>
+                <Input type="date" value={convForm.dueDate} onChange={(e) => setConvForm({ ...convForm, dueDate: e.target.value })} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertTodo(null)} disabled={converting}>Cancelar</Button>
+            <Button onClick={submitConvert} disabled={converting || !convForm.title.trim()}>
+              {converting ? 'Creando…' : 'Crear tarea'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
