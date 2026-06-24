@@ -34,6 +34,9 @@ export default function TodoList() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Ventana activa real (la flotante PiP si aplica) para que confirm() salga ahí.
+  const activeWindow = (): Window => containerRef.current?.ownerDocument?.defaultView ?? window;
   // Convertir pendiente -> tarea real
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [convertTodo, setConvertTodo] = useState<Todo | null>(null);
@@ -168,7 +171,7 @@ export default function TodoList() {
   const deleteSelected = async () => {
     const ids = [...selected];
     if (!ids.length) return;
-    if (!confirm(`¿Eliminar ${ids.length} pendiente(s)?`)) return;
+    if (!activeWindow().confirm(`¿Eliminar ${ids.length} pendiente(s)?`)) return;
     setTodos((prev) => prev.filter((t) => !selected.has(t.id)));
     exitSelect();
     await Promise.all(ids.map((id) => deleteTodo(id).catch(() => {})));
@@ -176,14 +179,14 @@ export default function TodoList() {
 
   const clearAll = async () => {
     if (!todos.length) return;
-    if (!confirm(`¿Eliminar TODOS los ${todos.length} pendientes? No se puede deshacer.`)) return;
+    if (!activeWindow().confirm(`¿Eliminar TODOS los ${todos.length} pendientes? No se puede deshacer.`)) return;
     const ids = todos.map((t) => t.id);
     setTodos([]);
     await Promise.all(ids.map((id) => deleteTodo(id).catch(() => {})));
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={containerRef}>
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {selectMode ? (
           <>
@@ -285,7 +288,7 @@ export default function TodoList() {
                           />
                         )}
                         {!selectMode && (
-                          <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
+                          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
                             {todo.done ? (
                               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                             ) : (
@@ -298,6 +301,7 @@ export default function TodoList() {
                         </span>
                         {!selectMode && (
                           <button
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={() => openConvert(todo)}
                             className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-primary transition-colors"
                             title="Convertir en tarea"
@@ -307,6 +311,7 @@ export default function TodoList() {
                         )}
                         {!selectMode && (
                           <button
+                            onPointerDown={(e) => e.stopPropagation()}
                             onClick={() => remove(todo)}
                             className="flex-shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-red-500 transition-colors"
                             title="Eliminar"
