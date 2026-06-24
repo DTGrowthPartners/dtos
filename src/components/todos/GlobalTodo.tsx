@@ -1,11 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { ListTodo, X, PictureInPicture2 } from 'lucide-react';
+import { ListTodo, X, Minus } from 'lucide-react';
 import { useAuthStore } from '@/lib/auth';
 import TodoList from './TodoList';
 
 // ¿El navegador soporta Document Picture-in-Picture? (Chromium 116+)
 const pipSupported = () => typeof window !== 'undefined' && 'documentPictureInPicture' in window;
+
+const COLLAPSED = { w: 210, h: 64 };
+const sizeKey = 'dtos_todo_pip_size';
+const savedExpanded = (): { w: number; h: number } => {
+  try {
+    const s = JSON.parse(localStorage.getItem(sizeKey) || 'null');
+    if (s?.w && s?.h) return s;
+  } catch { /* noop */ }
+  return { w: 320, h: Math.min(520, Math.round((typeof window !== 'undefined' ? window.screen?.availHeight || 800 : 800) * 0.55)) };
+};
 
 // Copia los estilos del documento principal a la ventana PiP (Tailwind + variables CSS).
 const copyStyles = (srcDoc: Document, destDoc: Document) => {
@@ -16,7 +26,6 @@ const copyStyles = (srcDoc: Document, destDoc: Document) => {
       style.textContent = css;
       destDoc.head.appendChild(style);
     } catch {
-      // Hoja cross-origin: enlazarla por href
       const s = sheet as CSSStyleSheet;
       if (s.href) {
         const link = destDoc.createElement('link');
@@ -28,13 +37,53 @@ const copyStyles = (srcDoc: Document, destDoc: Document) => {
   }
 };
 
-// Contenido que se renderiza dentro de la ventana flotante.
-function PipContent() {
+// App dentro de la ventana flotante: mini (solo botón ámbar) <-> expandida (lista).
+function PipApp({ pip }: { pip: Window }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const expand = () => {
+    setExpanded(true);
+    const s = savedExpanded();
+    try { pip.resizeTo(s.w, s.h); } catch { /* noop */ }
+  };
+  const collapse = () => {
+    setExpanded(false);
+    try { pip.resizeTo(COLLAPSED.w, COLLAPSED.h); } catch { /* noop */ }
+  };
+
+  // Guardar el tamaño solo cuando está expandida.
+  useEffect(() => {
+    const onResize = () => {
+      if (expanded) {
+        try { localStorage.setItem(sizeKey, JSON.stringify({ w: pip.innerWidth, h: pip.innerHeight })); } catch { /* noop */ }
+      }
+    };
+    pip.addEventListener('resize', onResize);
+    return () => pip.removeEventListener('resize', onResize);
+  }, [expanded, pip]);
+
+  if (!expanded) {
+    return (
+      <button
+        onClick={expand}
+        className="w-screen h-screen flex items-center gap-2 px-4 bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+        title="Abrir mis pendientes"
+      >
+        <ListTodo className="h-6 w-6 flex-shrink-0" />
+        <span className="font-semibold">Pendientes</span>
+      </button>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground">
-      <div className="flex items-center gap-2 px-3 py-2 bg-amber-500 text-white flex-shrink-0">
-        <ListTodo className="h-4 w-4" />
-        <span className="font-semibold text-sm">Mis pendientes</span>
+      <div className="flex items-center justify-between px-3 py-2 bg-amber-500 text-white flex-shrink-0">
+        <span className="font-semibold text-sm flex items-center gap-2">
+          <ListTodo className="h-4 w-4" /> Mis pendientes
+        </span>
+        <button onClick={collapse} className="h-7 w-7 rounded hover:bg-white/20 flex items-center justify-center" title="Minimizar">
+          <Minus className="h-4 w-4" />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         <TodoList />
@@ -44,9 +93,10 @@ function PipContent() {
 }
 
 /**
- * Panel lateral GLOBAL de pendientes (To-Do) + botón para abrirlo como ventana
- * FLOTANTE (Document Picture-in-Picture), que queda encima de todo el navegador
- * y de otras pestañas — al estilo del mini-reproductor de Spotify.
+ * To-Do global. Botón ámbar -> abre un MINI flotante (Document Picture-in-Picture)
+ * que queda encima de todo el navegador y otras pestañas. Al hacer clic en el mini
+ * se EXPANDE a la barra grande con la lista; se puede minimizar de nuevo.
+ * En navegadores sin soporte PiP, cae a un panel lateral.
  */
 export default function GlobalTodo() {
   const [open, setOpen] = useState(false);
@@ -58,30 +108,15 @@ export default function GlobalTodo() {
 
   const openFloating = async () => {
     try {
-      // Si ya hay una ventana flotante, enfocarla.
       if (pipWinRef.current && !pipWinRef.current.closed) {
         pipWinRef.current.focus();
         return;
       }
-      // Tamaño inicial: recuerda el último, o uno compacto relativo a la pantalla.
-      let w = 300;
-      let h = Math.min(500, Math.round((window.screen?.availHeight || 800) * 0.55));
-      try {
-        const saved = JSON.parse(localStorage.getItem('dtos_todo_pip_size') || 'null');
-        if (saved?.w && saved?.h) { w = saved.w; h = saved.h; }
-      } catch { /* noop */ }
-
       const pip: Window = await (window as unknown as {
         documentPictureInPicture: { requestWindow: (o: { width: number; height: number }) => Promise<Window> };
-      }).documentPictureInPicture.requestWindow({ width: w, height: h });
-
-      // Recordar el tamaño cuando el usuario la redimensiona.
-      pip.addEventListener('resize', () => {
-        try { localStorage.setItem('dtos_todo_pip_size', JSON.stringify({ w: pip.innerWidth, h: pip.innerHeight })); } catch { /* noop */ }
-      });
+      }).documentPictureInPicture.requestWindow({ width: COLLAPSED.w, height: COLLAPSED.h });
 
       copyStyles(document, pip.document);
-      // Heredar tema (clase 'dark' en <html>) y limpiar márgenes.
       pip.document.documentElement.className = document.documentElement.className;
       pip.document.body.style.margin = '0';
 
@@ -89,25 +124,23 @@ export default function GlobalTodo() {
       pip.document.body.appendChild(container);
 
       const root = createRoot(container);
-      root.render(<PipContent />);
+      root.render(<PipApp pip={pip} />);
       rootRef.current = root;
       pipWinRef.current = pip;
 
-      // Al cerrar la ventana flotante, desmontar el root de React.
       pip.addEventListener('pagehide', () => {
         try { root.unmount(); } catch { /* noop */ }
         rootRef.current = null;
         pipWinRef.current = null;
       });
 
-      setOpen(false); // cerrar el panel lateral para no duplicar
+      setOpen(false);
     } catch (e) {
       console.error('No se pudo abrir el To-Do flotante:', e);
-      setOpen(true); // si falla el flotante, abrir el panel lateral
+      setOpen(true); // respaldo: panel lateral
     }
   };
 
-  // El botón ámbar abre el flotante directo (si el navegador lo soporta); si no, el panel.
   const launch = () => {
     if (pipSupported()) openFloating();
     else setOpen(true);
@@ -115,7 +148,7 @@ export default function GlobalTodo() {
 
   return (
     <>
-      {/* Botón flotante (se oculta cuando el panel está abierto) */}
+      {/* Botón ámbar: abre el mini flotante */}
       {!open && (
         <button
           onClick={launch}
@@ -126,7 +159,7 @@ export default function GlobalTodo() {
         </button>
       )}
 
-      {/* Panel lateral (no-modal) */}
+      {/* Panel lateral (respaldo cuando no hay soporte PiP) */}
       {open && (
         <div className="fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
           <div className="flex items-center justify-between px-4 py-3 bg-amber-500 text-white flex-shrink-0">
@@ -134,26 +167,14 @@ export default function GlobalTodo() {
               <ListTodo className="h-5 w-5" />
               Mis pendientes
             </span>
-            <div className="flex items-center gap-1">
-              {pipSupported() && (
-                <button
-                  onClick={openFloating}
-                  className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
-                  title="Abrir como ventana flotante (encima de todo)"
-                >
-                  <PictureInPicture2 className="h-4 w-4" />
-                </button>
-              )}
-              <button
-                onClick={() => setOpen(false)}
-                className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
-                title="Cerrar"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
+            <button
+              onClick={() => setOpen(false)}
+              className="h-7 w-7 p-0 rounded hover:bg-white/20 flex items-center justify-center"
+              title="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-
           <div className="flex-1 overflow-y-auto p-4">
             <TodoList />
           </div>
