@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, GripVertical, Send } from 'lucide-react';
+import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -267,29 +267,22 @@ export default function TodoList() {
                       <div
                         ref={dragProvided.innerRef}
                         {...dragProvided.draggableProps}
+                        {...(!selectMode ? dragProvided.dragHandleProps : {})}
                         onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
                         className={cn(
                           'group flex items-center gap-2 px-3 py-2.5 bg-card',
-                          selectMode && 'cursor-pointer',
+                          selectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
                           selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30',
                           snapshot.isDragging && 'shadow-lg rounded-md ring-1 ring-amber-400'
                         )}
                       >
-                        {selectMode ? (
+                        {selectMode && (
                           <input
                             type="checkbox"
                             checked={selected.has(todo.id)}
                             readOnly
                             className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
                           />
-                        ) : (
-                          <span
-                            {...dragProvided.dragHandleProps}
-                            className="flex-shrink-0 text-muted-foreground/30 hover:text-muted-foreground cursor-grab active:cursor-grabbing"
-                            title="Arrastrar para ordenar"
-                          >
-                            <GripVertical className="h-4 w-4" />
-                          </span>
                         )}
                         {!selectMode && (
                           <button onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
