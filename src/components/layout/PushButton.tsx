@@ -20,20 +20,17 @@ export default function PushButton({ isMisTareasView }: { isMisTareasView?: bool
   const handleClick = async () => {
     setLoading(true);
     try {
-      if (!granted) {
-        const r = await enablePush();
-        if (r.ok) {
-          setGranted(true);
-          toast({ title: 'Notificaciones activadas', description: 'Recibirás avisos del DTOS en este dispositivo.' });
-        } else {
-          toast({ title: 'No se pudo activar', description: REASONS[r.reason || ''] || r.reason, variant: 'destructive' });
-        }
-      } else {
-        // Ya activadas: re-registra el token y manda una de prueba.
-        await enablePush();
-        await apiClient.post('/api/push/test', {});
-        toast({ title: 'Notificación de prueba enviada', description: 'Debería llegarte en un momento.' });
+      // Siempre (re)registra el token — pide permiso si falta. Evita quedar en
+      // "permiso concedido pero sin token registrado".
+      const r = await enablePush();
+      if (!r.ok) {
+        toast({ title: 'No se pudo activar', description: REASONS[r.reason || ''] || r.reason, variant: 'destructive' });
+        return;
       }
+      setGranted(true);
+      // Manda una de prueba para confirmar que llega.
+      await apiClient.post('/api/push/test', {});
+      toast({ title: 'Notificaciones activas ✅', description: 'Te enviamos una de prueba; debería llegarte en un momento.' });
     } catch (e) {
       toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
     } finally {
