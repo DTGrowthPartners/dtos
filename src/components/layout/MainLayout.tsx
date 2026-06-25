@@ -8,12 +8,15 @@ import { CommandPalette } from '@/components/CommandPalette';
 import GlobalAiTaskDialog from '@/components/tasks/GlobalAiTaskDialog';
 import LiveChat from '@/components/chat/LiveChat';
 import GlobalTodo from '@/components/todos/GlobalTodo';
+import LiquidBackground from '@/components/theme/LiquidBackground';
 
 export function MainLayout() {
   const { collapsed } = useSidebar();
 
   return (
     <div className="app-shell min-h-screen bg-background">
+      {/* Video de fondo (solo tema Liquid Glass) */}
+      <LiquidBackground />
       {/* Global Command Palette - Ctrl+K */}
       <CommandPalette />
 
