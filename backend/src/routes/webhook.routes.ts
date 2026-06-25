@@ -6,6 +6,7 @@ import { googleSheetsService } from '../services/googleSheets.service';
 import { invoiceService } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
+import { sendPushToMemberName } from '../services/push.service';
 import { resolveDestino } from '../config/notifyPhones';
 import { generateDueRecurringInvoices } from '../services/recurringInvoices.service';
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
@@ -154,6 +155,19 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     }
   } else {
     console.warn('[Webhook] Sin destino WhatsApp para', asignado, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
+  }
+
+  // Notificación push (PWA) al responsable, además del WhatsApp.
+  try {
+    const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` · ${task.proyecto}` : '';
+    await sendPushToMemberName(asignado, {
+      title: (isUpdate ? `✏️ Tarea actualizada${proyectoTxt}` : `🔴 Tarea urgente${proyectoTxt}`),
+      body: task.titulo,
+      url: '/tareas',
+      tag: `task-${task.id}`,
+    });
+  } catch (e) {
+    console.error('[Webhook] push tarea falló:', (e as Error).message);
   }
 
   res.status(201).json({
@@ -568,6 +582,19 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
         }
       } else {
         console.warn('[Bot API] Sin destino WhatsApp para', normalizedAssignee, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
+      }
+
+      // Notificación push (PWA) al responsable, además del WhatsApp.
+      try {
+        const proyectoPush = projectNameResolved && projectNameResolved !== 'Sin proyecto' ? ` · ${projectNameResolved}` : '';
+        await sendPushToMemberName(normalizedAssignee, {
+          title: `🔴 Tarea urgente${proyectoPush}`,
+          body: taskTitle,
+          url: '/tareas',
+          tag: `task-${docRef.id}`,
+        });
+      } catch (e) {
+        console.error('[Bot API] push tarea urgente falló:', (e as Error).message);
       }
     }
 
