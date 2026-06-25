@@ -548,6 +548,23 @@ export default function CRM() {
   };
 
   const handleChangeStage = async (dealId: string, newStageId: string) => {
+    // Regla de calificación: no avanzar fuera de "Sin Calificar" sin servicio + valor + responsable.
+    const movingDeal = deals.find((d) => d.id === dealId);
+    const fromStage = stages.find((s) => s.id === movingDeal?.stageId);
+    const toStage = stages.find((s) => s.id === newStageId);
+    if (
+      movingDeal &&
+      fromStage?.slug === 'sin-calificar' &&
+      toStage?.slug !== 'sin-calificar' &&
+      !(movingDeal.serviceId && movingDeal.estimatedValue && movingDeal.estimatedValue > 0 && movingDeal.ownerId)
+    ) {
+      toast({
+        title: 'Falta calificar el prospecto',
+        description: 'Para avanzar necesita: servicio, valor estimado y responsable asignado.',
+        variant: 'destructive',
+      });
+      return;
+    }
     try {
       await apiClient.patch(`/api/crm/deals/${dealId}/stage`, { stageId: newStageId });
       toast({ title: 'Etapa actualizada' });
@@ -887,6 +904,25 @@ export default function CRM() {
 
     const newStageId = destination.droppableId;
     const dealId = draggableId;
+
+    // Regla de calificación: no se puede sacar un deal de "Sin Calificar" sin
+    // servicio + valor estimado + responsable.
+    const movingDeal = deals.find((d) => d.id === dealId);
+    const fromStage = stages.find((s) => s.id === source.droppableId);
+    const toStage = stages.find((s) => s.id === newStageId);
+    if (
+      movingDeal &&
+      fromStage?.slug === 'sin-calificar' &&
+      toStage?.slug !== 'sin-calificar' &&
+      !(movingDeal.serviceId && movingDeal.estimatedValue && movingDeal.estimatedValue > 0 && movingDeal.ownerId)
+    ) {
+      toast({
+        title: 'Falta calificar el prospecto',
+        description: 'Para avanzar necesita: servicio, valor estimado y responsable asignado.',
+        variant: 'destructive',
+      });
+      return;
+    }
 
     // Optimistic UI update
     const updatedDeals = deals.map((deal) => {

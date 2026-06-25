@@ -472,6 +472,16 @@ export const changeStage = async (id: string, data: ChangeStageDto, userId: stri
   const newStage = await prisma.dealStage.findUnique({ where: { id: data.stageId } });
   if (!newStage) throw new Error('Stage not found');
 
+  // Regla de calificación: no avanzar fuera de "Sin Calificar" sin servicio + valor + responsable.
+  const oldStage = await prisma.dealStage.findUnique({ where: { id: existingDeal.stageId } });
+  if (oldStage?.slug === 'sin-calificar' && newStage.slug !== 'sin-calificar') {
+    const calificado =
+      existingDeal.serviceId && existingDeal.estimatedValue && existingDeal.estimatedValue > 0 && existingDeal.ownerId;
+    if (!calificado) {
+      throw new Error('El prospecto debe tener servicio, valor estimado y responsable antes de salir de "Sin Calificar".');
+    }
+  }
+
   // Update the deal stage
   const deal = await prisma.deal.update({
     where: { id },
