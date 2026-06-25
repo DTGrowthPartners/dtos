@@ -25,4 +25,4 @@ setPersistence(auth, browserLocalPersistence).catch((err) => {
   console.warn('Firebase: could not set local persistence', err);
 });
 
-export { db, auth };
+export { db, auth, app };

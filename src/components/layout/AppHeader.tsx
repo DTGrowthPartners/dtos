@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { NotificationsDropdown } from '@/components/notifications/NotificationsDropdown';
+import PushButton from '@/components/layout/PushButton';
 import { cn } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -168,6 +169,9 @@ export function AppHeader() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Activar / probar notificaciones push (PWA) */}
+        <PushButton isMisTareasView={isMisTareasView} />
 
         {/* Notifications */}
         <NotificationsDropdown isMisTareasView={isMisTareasView} />
