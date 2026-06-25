@@ -276,6 +276,9 @@ model Deal {
 
   // Valor
   estimatedValue    Float?    // Valor estimado mensual
+  implementationValue Float?  // Valor de implementación/setup (pago único)
+  monthlyRecurring  Float?    // MRR: mensualidad recurrente
+  contractMonths    Int?      // Meses de contrato (para el ACV)
   currency          String    @default("COP")
 
   // Servicio de interés

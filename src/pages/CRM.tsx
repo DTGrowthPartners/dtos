@@ -136,6 +136,9 @@ interface Deal {
   stageId: string;
   stage?: DealStage;
   estimatedValue?: number;
+  implementationValue?: number;
+  monthlyRecurring?: number;
+  contractMonths?: number;
   currency: string;
   serviceId?: string;
   service?: { id: string; name: string; icon: string };
@@ -417,6 +420,9 @@ export default function CRM() {
     email: '',
     stageId: '',
     estimatedValue: '',
+    implementationValue: '',
+    monthlyRecurring: '',
+    contractMonths: '',
     currency: 'COP',
     serviceId: '',
     serviceNotes: '',
@@ -519,6 +525,9 @@ export default function CRM() {
       const payload = {
         ...formData,
         estimatedValue: formData.estimatedValue ? parseFloat(formData.estimatedValue) : undefined,
+        implementationValue: formData.implementationValue ? parseFloat(formData.implementationValue) : undefined,
+        monthlyRecurring: formData.monthlyRecurring ? parseFloat(formData.monthlyRecurring) : undefined,
+        contractMonths: formData.contractMonths ? parseInt(formData.contractMonths, 10) : undefined,
         tags: formData.tags ? formData.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         probability: formData.probability,
         nextFollowUp: formData.nextFollowUp || undefined,
@@ -846,6 +855,9 @@ export default function CRM() {
       email: deal.email || '',
       stageId: deal.stageId,
       estimatedValue: deal.estimatedValue?.toString() || '',
+      implementationValue: deal.implementationValue?.toString() || '',
+      monthlyRecurring: deal.monthlyRecurring?.toString() || '',
+      contractMonths: deal.contractMonths?.toString() || '',
       currency: deal.currency,
       serviceId: deal.serviceId || '',
       serviceNotes: deal.serviceNotes || '',
@@ -873,6 +885,9 @@ export default function CRM() {
       email: '',
       stageId: stages[0]?.id || '',
       estimatedValue: '',
+      implementationValue: '',
+      monthlyRecurring: '',
+      contractMonths: '',
       currency: 'COP',
       serviceId: '',
       serviceNotes: '',
@@ -1623,6 +1638,22 @@ export default function CRM() {
                       <span>Valor estimado: {formatCurrency(selectedDeal.estimatedValue, selectedDeal.currency)}</span>
                     </div>
                   )}
+                  {(selectedDeal.implementationValue || selectedDeal.monthlyRecurring) && (() => {
+                    const impl = selectedDeal.implementationValue || 0;
+                    const mrr = selectedDeal.monthlyRecurring || 0;
+                    const meses = selectedDeal.contractMonths || (mrr ? 12 : 0);
+                    const acv = impl + mrr * meses;
+                    return (
+                      <div className="flex items-start gap-2 text-sm">
+                        <DollarSign className="h-4 w-4 text-muted-foreground mt-0.5" />
+                        <div className="leading-snug">
+                          {impl > 0 && <div>Implementación: {formatCurrency(impl, selectedDeal.currency)}</div>}
+                          {mrr > 0 && <div>MRR: {formatCurrency(mrr, selectedDeal.currency)} × {meses} meses</div>}
+                          <div className="font-semibold">ACV: {formatCurrency(acv, selectedDeal.currency)}</div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {selectedDeal.service && (
                     <div className="flex items-center gap-2 text-sm">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
@@ -2042,6 +2073,40 @@ export default function CRM() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              {/* Valor del negocio: implementación / MRR / ACV (brief bloque 3) */}
+              <div className="space-y-2 rounded-lg border border-border p-3">
+                <Label className="text-sm font-medium">Valor del negocio (opcional)</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Implementación</Label>
+                    <Input type="number" placeholder="0" value={formData.implementationValue}
+                      onChange={(e) => setFormData({ ...formData, implementationValue: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">MRR (mensual)</Label>
+                    <Input type="number" placeholder="0" value={formData.monthlyRecurring}
+                      onChange={(e) => setFormData({ ...formData, monthlyRecurring: e.target.value })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Meses contrato</Label>
+                    <Input type="number" placeholder="12" value={formData.contractMonths}
+                      onChange={(e) => setFormData({ ...formData, contractMonths: e.target.value })} />
+                  </div>
+                </div>
+                {(() => {
+                  const impl = parseFloat(formData.implementationValue) || 0;
+                  const mrr = parseFloat(formData.monthlyRecurring) || 0;
+                  const meses = parseInt(formData.contractMonths, 10) || (mrr ? 12 : 0);
+                  const acv = impl + mrr * meses;
+                  return acv > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      ACV (valor del contrato): <span className="font-semibold text-foreground">{formatCurrency(acv)}</span>
+                      {mrr > 0 && <span> · {formatCurrency(impl)} + {formatCurrency(mrr)} × {meses} meses</span>}
+                    </p>
+                  ) : null;
+                })()}
               </div>
 
               <div className="space-y-2">

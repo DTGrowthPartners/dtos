@@ -22,6 +22,9 @@ export interface CreateDealDto {
   email?: string;
   stageId: string;
   estimatedValue?: number;
+  implementationValue?: number;
+  monthlyRecurring?: number;
+  contractMonths?: number;
   currency?: string;
   serviceId?: string;
   serviceNotes?: string;
@@ -46,6 +49,9 @@ export interface UpdateDealDto {
   email?: string;
   stageId?: string;
   estimatedValue?: number;
+  implementationValue?: number;
+  monthlyRecurring?: number;
+  contractMonths?: number;
   currency?: string;
   serviceId?: string;
   serviceNotes?: string;
@@ -75,6 +81,9 @@ export interface DealDto {
   stageId: string;
   stage?: DealStageDto;
   estimatedValue?: number;
+  implementationValue?: number;
+  monthlyRecurring?: number;
+  contractMonths?: number;
   currency: string;
   serviceId?: string;
   service?: {
