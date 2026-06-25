@@ -465,6 +465,19 @@ export const updateDeal = async (id: string, data: UpdateDealDto, userId: string
   return deal;
 };
 
+// Probabilidad por defecto por etapa (slug). Se autocompleta al mover el deal;
+// Dairo la puede ajustar a mano luego en la ficha. (Brief MEJORAS 2 — bloque 3.)
+const STAGE_DEFAULT_PROBABILITY: Record<string, number> = {
+  'sin-calificar': 5,
+  nuevo: 10,
+  contactado: 25,
+  reunion: 45,
+  propuesta: 65,
+  negociacion: 85,
+  ganado: 100,
+  perdido: 0,
+};
+
 export const changeStage = async (id: string, data: ChangeStageDto, userId: string) => {
   const existingDeal = await prisma.deal.findUnique({ where: { id } });
   if (!existingDeal) throw new Error('Deal not found');
@@ -487,6 +500,10 @@ export const changeStage = async (id: string, data: ChangeStageDto, userId: stri
     where: { id },
     data: {
       stageId: data.stageId,
+      // Autocompletar probabilidad según la etapa (Dairo puede ajustarla luego)
+      ...(STAGE_DEFAULT_PROBABILITY[newStage.slug] !== undefined
+        ? { probability: STAGE_DEFAULT_PROBABILITY[newStage.slug] }
+        : {}),
       // Update timestamps based on stage
       ...(newStage.slug === 'contactado' && !existingDeal.firstContactAt
         ? { firstContactAt: new Date() }
