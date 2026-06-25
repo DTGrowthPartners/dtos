@@ -574,7 +574,7 @@ export default function Dashboard() {
         </div>
 
         {/* Admin Stats Grid - 10 cards */}
-        <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title={`Ingresos ${currentMonthName || 'Mes'}`}
             value={isLoading ? '...' : formatCurrency(monthlyIncome, hideFinances)}
@@ -966,7 +966,7 @@ export default function Dashboard() {
       </div>
 
       {/* User Stats Grid - 4 cards */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Mis Tareas Pendientes"
           value={isLoading ? '...' : myPendingTasks.length}
