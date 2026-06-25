@@ -6,8 +6,10 @@ import { apiClient } from '@/lib/api';
 import { enablePush, pushPermission } from '@/lib/push';
 
 const REASONS: Record<string, string> = {
-  'no-soportado': 'Tu navegador no soporta notificaciones push.',
-  'permiso-denegado': 'Permiso denegado. Actívalo desde los ajustes del navegador.',
+  'no-instalada': 'Abre el DTOS desde el ÍCONO instalado en la pantalla de inicio (no desde Safari) y vuelve a intentar.',
+  'no-soportado': 'Tu navegador/dispositivo no soporta notificaciones push.',
+  'no-soportado-fcm': 'FCM no es compatible aquí (posible iOS). Avísame para usar push nativo.',
+  'permiso-denegado': 'Permiso denegado. Actívalo en Ajustes → Notificaciones.',
   'sin-token': 'No se pudo obtener el token de notificaciones.',
   'sin-vapid': 'Falta configurar la clave VAPID.',
 };
@@ -24,7 +26,10 @@ export default function PushButton({ isMisTareasView }: { isMisTareasView?: bool
       // "permiso concedido pero sin token registrado".
       const r = await enablePush();
       if (!r.ok) {
-        toast({ title: 'No se pudo activar', description: REASONS[r.reason || ''] || r.reason, variant: 'destructive' });
+        const msg = REASONS[r.reason || ''] || r.reason || 'Error desconocido';
+        toast({ title: 'No se pudo activar', description: msg, variant: 'destructive' });
+        // Alert visible en móvil (para diagnosticar): muestra el motivo exacto.
+        try { alert('🔔 No se activó: ' + (r.reason || '') + '\n' + msg); } catch { /* noop */ }
         return;
       }
       setGranted(true);

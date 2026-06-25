@@ -12,9 +12,17 @@ export type EnablePushResult = { ok: boolean; reason?: string };
  */
 export async function enablePush(): Promise<EnablePushResult> {
   try {
-    if (!(await isSupported()) || !('Notification' in window) || !('serviceWorker' in navigator)) {
+    const isiOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const standalone =
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      (navigator as unknown as { standalone?: boolean }).standalone === true;
+    // En iOS el push SOLO funciona con la PWA instalada (abierta desde el ícono de inicio).
+    if (isiOS && !standalone) return { ok: false, reason: 'no-instalada' };
+
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
       return { ok: false, reason: 'no-soportado' };
     }
+    if (!(await isSupported())) return { ok: false, reason: 'no-soportado-fcm' };
     if (!VAPID_KEY) return { ok: false, reason: 'sin-vapid' };
 
     const perm = await Notification.requestPermission();
