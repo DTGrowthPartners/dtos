@@ -40,15 +40,35 @@ export async function enablePush(): Promise<EnablePushResult> {
   }
 }
 
-/** Escucha mensajes en primer plano (app abierta) y muestra una notificación local. */
+/** Escucha mensajes en primer plano (app abierta) y muestra una notificación visible. */
 export async function listenForegroundPush() {
   try {
     if (!(await isSupported())) return;
     const messaging = getMessaging(app);
-    onMessage(messaging, (payload) => {
+    onMessage(messaging, async (payload) => {
       const n = payload.notification || {};
+      const data = (payload.data || {}) as Record<string, string>;
+      const title = n.title || data.title || 'DTOS';
+      const opts: NotificationOptions = {
+        body: n.body || data.body || '',
+        icon: '/icon-192.png',
+        badge: '/favicon-48x48.png',
+        data: { url: data.url || '/' },
+        tag: data.tag,
+      };
+      // En iOS (PWA) `new Notification()` en primer plano NO muestra banner;
+      // el service worker (showNotification) sí. Usamos el SW si está disponible.
+      try {
+        const reg = await navigator.serviceWorker?.ready;
+        if (reg) {
+          await reg.showNotification(title, opts);
+          return;
+        }
+      } catch {
+        /* fallback abajo */
+      }
       if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(n.title || 'DTOS', { body: n.body || '', icon: '/img/logo.png' });
+        new Notification(title, opts);
       }
     });
   } catch {
