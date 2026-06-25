@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Search, User, ChevronRight, Moon, Sun, LogOut, Command, Sparkles, Check } from 'lucide-react';
+import { Search, User, ChevronRight, Moon, Sun, LogOut, Command, Sparkles, Check, Droplets } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -136,7 +136,9 @@ export function AppHeader() {
               className={isMisTareasView ? "text-slate-400 hover:text-slate-200" : "text-muted-foreground hover:text-foreground"}
               title="Tema"
             >
-              {theme === 'aurora' ? (
+              {theme === 'liquid' ? (
+                <Droplets className="h-5 w-5 text-cyan-300" />
+              ) : theme === 'aurora' ? (
                 <Sparkles className="h-5 w-5 text-violet-400" />
               ) : isDark ? (
                 <Moon className="h-5 w-5" />
@@ -152,6 +154,7 @@ export function AppHeader() {
               { id: 'light' as Theme, label: 'Claro', icon: <Sun className="mr-2 h-4 w-4" /> },
               { id: 'dark' as Theme, label: 'Oscuro', icon: <Moon className="mr-2 h-4 w-4" /> },
               { id: 'aurora' as Theme, label: 'Aurora', icon: <Sparkles className="mr-2 h-4 w-4 text-violet-500" /> },
+              { id: 'liquid' as Theme, label: 'Liquid Glass', icon: <Droplets className="mr-2 h-4 w-4 text-cyan-500" /> },
             ]).map((opt) => (
               <DropdownMenuItem
                 key={opt.id}
