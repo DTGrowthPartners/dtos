@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import PipelineAnalytics from '@/components/crm/PipelineAnalytics';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -351,6 +352,7 @@ export default function CRM() {
   const [metrics, setMetrics] = useState<PipelineMetrics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [view, setView] = useState<'pipeline' | 'analitica'>('pipeline'); // pestañas Pipeline | Analítica
   const [stageFilter, setStageFilter] = useState<string>('all'); // 'all' o stageId
   const [dateFilter, setDateFilter] = useState<string>('all'); // all | today | week | month
   const [ownerFilter, setOwnerFilter] = useState<string>('all'); // all | none | userId
@@ -1027,6 +1029,28 @@ export default function CRM() {
         </div>
       </div>
 
+      {/* Tabs: Pipeline | Analítica */}
+      <div className="flex gap-1 border-b border-border">
+        <button
+          onClick={() => setView('pipeline')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${view === 'pipeline' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Pipeline
+        </button>
+        <button
+          onClick={() => setView('analitica')}
+          className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${view === 'analitica' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+        >
+          Analítica
+        </button>
+      </div>
+
+      {view === 'analitica' && (
+        <PipelineAnalytics deals={deals} stages={stages} formatCurrency={formatCurrency} />
+      )}
+
+      {view === 'pipeline' && (
+       <>
       {/* Metrics */}
       {metrics && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1447,6 +1471,8 @@ export default function CRM() {
             ))}
           </div>
         </div>
+      )}
+       </>
       )}
 
       {/* Deal Detail Sheet */}
