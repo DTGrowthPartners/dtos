@@ -156,19 +156,8 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
   } else {
     console.warn('[Webhook] Sin destino WhatsApp para', asignado, '— configura TEAM_PHONES / URGENT_TASKS_PHONE');
   }
-
-  // Notificación push (PWA) al responsable, además del WhatsApp.
-  try {
-    const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` · ${task.proyecto}` : '';
-    await sendPushToMemberName(asignado, {
-      title: (isUpdate ? `✏️ Tarea actualizada${proyectoTxt}` : `🔴 Tarea urgente${proyectoTxt}`),
-      body: task.titulo,
-      url: '/tareas',
-      tag: `task-${task.id}`,
-    });
-  } catch (e) {
-    console.error('[Webhook] push tarea falló:', (e as Error).message);
-  }
+  // Nota: el push del frontend lo dispara /api/notifications/task (cualquier tarea),
+  // así que aquí NO se envía push para evitar duplicados.
 
   res.status(201).json({
     success: true,

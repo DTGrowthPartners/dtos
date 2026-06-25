@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import notificationService from '../services/notification.service';
+import { sendPushToUser } from '../services/push.service';
 
 const prisma = new PrismaClient();
 
@@ -119,6 +120,13 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
         resourceType: 'task',
       });
       console.log('[Notifications] Created notification:', notification?.id);
+      // Push (PWA) al asignado — CUALQUIER tarea (no solo alta prioridad).
+      sendPushToUser(assigneeUser.id, {
+        title: 'Nueva tarea asignada',
+        body: `${senderName} te asignó: ${taskTitle}`,
+        url: '/tareas',
+        tag: `task-${taskId}`,
+      }).catch((e) => console.error('[Notifications] push task_assigned falló:', (e as Error).message));
     } else if (type === 'task_completed') {
       // Find task creator
       const creatorUser = await prisma.user.findFirst({
