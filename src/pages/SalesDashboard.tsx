@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Area, Line, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -13,8 +13,22 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { CalendarDays } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 
-interface Tx { importe: number; fecha: string }
+interface Tx {
+  importe: number;
+  fecha: string;
+  categoria?: string;
+  entidad?: string;
+  terceroNombre?: string;
+  descripcion?: string;
+}
 interface FinanceData { ingresos?: Tx[]; gastos?: Tx[] }
+interface PaymentPoint {
+  x: number;
+  monto: number;
+  cliente: string;
+  fecha: string;
+  descripcion?: string;
+}
 
 type Period = 'hoy' | '7d' | 'mes' | 'mesant' | 'ano' | 'custom';
 
@@ -26,6 +40,61 @@ const fmtCompact = (n: number) =>
   Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : '$' + Math.round(n / 1000) + 'K';
 
 const startsWithLocalDate = (fecha: string) => fecha; // las fechas vienen "YYYY-MM-DD..."
+
+const isPagoCliente = (tx: Tx) => (tx.categoria || '').trim().toUpperCase() === 'PAGO DE CLIENTE';
+
+const dateParts = (fecha: string) => {
+  const [date] = (fecha || '').split('T');
+  const [year, month, day] = date.split('-').map(Number);
+  return { year, month: month - 1, day, date };
+};
+
+const fmtDate = (fecha: string) => {
+  const { year, month, day } = dateParts(fecha);
+  if (!year || month < 0 || !day) return fecha;
+  return new Date(year, month, day).toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const SalesChartTooltip = ({ active, payload, label, model }: any) => {
+  if (!active || !payload?.length) return null;
+
+  const dayData = payload[0]?.payload;
+  const dayPayments: PaymentPoint[] = dayData?.dayPayments || [];
+  const series = payload.filter((item: any) => item.value != null && item.dataKey !== 'dayPayments');
+
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
+      <div className="font-medium text-foreground mb-1">{model.unidad} {model.xLabel(label as number)}</div>
+      <div className="space-y-0.5">
+        {series.map((item: any) => {
+          const name = String(item.name || item.dataKey);
+          return (
+            <div key={item.dataKey} className="flex items-center justify-between gap-5">
+              <span className="text-muted-foreground">{name.charAt(0).toUpperCase() + name.slice(1)}</span>
+              <span className="font-medium text-foreground">{fmt(Number(item.value))}</span>
+            </div>
+          );
+        })}
+      </div>
+      {dayPayments.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border space-y-1.5">
+          {dayPayments.map((pm, i) => (
+            <div key={i}>
+              <div className="font-semibold text-emerald-500">{fmt(pm.monto)}</div>
+              <div className="text-foreground">{pm.cliente}</div>
+              <div className="text-muted-foreground">{fmtDate(pm.fecha)}</div>
+              {pm.descripcion && <div className="max-w-[220px] text-muted-foreground">{pm.descripcion}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function SalesDashboard() {
   const [period, setPeriod] = useState<Period>('mes');
@@ -99,8 +168,25 @@ export default function SalesDashboard() {
 
       const incByDay = Array(daysInMonth + 1).fill(0);
       const expByDay = Array(daysInMonth + 1).fill(0);
-      ingresos.forEach((t) => { if (t.fecha?.startsWith(prefix)) incByDay[new Date(t.fecha).getDate()] += t.importe || 0; });
-      gastos.forEach((t) => { if (t.fecha?.startsWith(prefix)) expByDay[new Date(t.fecha).getDate()] += t.importe || 0; });
+      const payments: PaymentPoint[] = [];
+      ingresos.forEach((t) => {
+        if (!t.fecha?.startsWith(prefix)) return;
+        const { day } = dateParts(t.fecha);
+        incByDay[day] += t.importe || 0;
+        if (isPagoCliente(t)) {
+          payments.push({
+            x: day,
+            monto: t.importe || 0,
+            cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar',
+            fecha: t.fecha,
+            descripcion: t.descripcion,
+          });
+        }
+      });
+      gastos.forEach((t) => {
+        if (!t.fecha?.startsWith(prefix)) return;
+        expByDay[dateParts(t.fecha).day] += t.importe || 0;
+      });
 
       let cumI = 0, cumE = 0;
       const mtdIngresos = incByDay.slice(0, elapsed + 1).reduce((a, b) => a + b, 0);
@@ -110,10 +196,11 @@ export default function SalesDashboard() {
       const data = [];
       for (let d = 1; d <= daysInMonth; d++) {
         cumI += incByDay[d]; cumE += expByDay[d];
-        const p: Record<string, number | null> = { x: d };
+        const p: Record<string, any> = { x: d };
         p.ingresos = d <= elapsed ? cumI : null;
         p.gastos = d <= elapsed ? cumE : null;
         p.proyeccion = isCurrent && d >= elapsed ? mtdIngresos + avgPerDay * (d - elapsed) : null;
+        p.dayPayments = payments.filter((pm) => pm.x === d);
         data.push(p);
       }
       const proyeccion = isCurrent ? mtdIngresos + avgPerDay * (daysInMonth - elapsed) : mtdIngresos;
@@ -122,7 +209,7 @@ export default function SalesDashboard() {
         titulo: (isCurrent ? 'Mes en curso · ' : '') + MONTHS[mn].charAt(0).toUpperCase() + MONTHS[mn].slice(1) + ' ' + yy,
         chartTitle: `Acumulado · ${MONTHS[mn]}`,
         xLabel: (v: number) => String(v),
-        isCurrent, elapsed, total: daysInMonth, mtdIngresos, mtdGastos, avgPerDay, neededPerDay, proyeccion, data,
+        isCurrent, elapsed, total: daysInMonth, xDomain: [1, daysInMonth] as [number, number], xTicks: data.map((p) => p.x), mtdIngresos, mtdGastos, avgPerDay, neededPerDay, proyeccion, data, payments,
         unidad: 'día',
       };
     }
@@ -132,8 +219,25 @@ export default function SalesDashboard() {
       const prefix = `${y}-`;
       const incByMonth = Array(12).fill(0);
       const expByMonth = Array(12).fill(0);
-      ingresos.forEach((t) => { if (t.fecha?.startsWith(prefix)) incByMonth[new Date(t.fecha).getMonth()] += t.importe || 0; });
-      gastos.forEach((t) => { if (t.fecha?.startsWith(prefix)) expByMonth[new Date(t.fecha).getMonth()] += t.importe || 0; });
+      const payments: PaymentPoint[] = [];
+      ingresos.forEach((t) => {
+        if (!t.fecha?.startsWith(prefix)) return;
+        const { month } = dateParts(t.fecha);
+        incByMonth[month] += t.importe || 0;
+        if (isPagoCliente(t)) {
+          payments.push({
+            x: month,
+            monto: t.importe || 0,
+            cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar',
+            fecha: t.fecha,
+            descripcion: t.descripcion,
+          });
+        }
+      });
+      gastos.forEach((t) => {
+        if (!t.fecha?.startsWith(prefix)) return;
+        expByMonth[dateParts(t.fecha).month] += t.importe || 0;
+      });
       let cumI = 0, cumE = 0;
       const mtdIngresos = incByMonth.slice(0, m + 1).reduce((a, b) => a + b, 0);
       const mtdGastos = expByMonth.slice(0, m + 1).reduce((a, b) => a + b, 0);
@@ -141,23 +245,25 @@ export default function SalesDashboard() {
       const data = [];
       for (let i = 0; i < 12; i++) {
         cumI += incByMonth[i]; cumE += expByMonth[i];
-        const p: Record<string, number | null> = { x: i };
+        const p: Record<string, any> = { x: i };
         p.ingresos = i <= m ? cumI : null;
         p.gastos = i <= m ? cumE : null;
         p.proyeccion = i >= m ? mtdIngresos + avgPerMonth * (i - m) : null;
+        p.dayPayments = payments.filter((pm) => pm.x === i);
         data.push(p);
       }
       const proyeccion = mtdIngresos + avgPerMonth * (11 - m);
       return {
         titulo: `Año ${y}`, chartTitle: `Acumulado · ${y}`, xLabel: (v: number) => MONTHS_SHORT[v] || '',
         isCurrent: true, elapsed: m + 1, total: 12, mtdIngresos, mtdGastos, avgPerDay: avgPerMonth,
-        neededPerDay: Math.max(0, meta * 12 - mtdIngresos) / Math.max(1, 11 - m), proyeccion, data, unidad: 'mes',
+        neededPerDay: Math.max(0, meta * 12 - mtdIngresos) / Math.max(1, 11 - m), proyeccion, data, payments, xDomain: [0, 11] as [number, number], xTicks: data.map((p) => p.x), unidad: 'mes',
       };
     }
 
     // ----- HOY / 7 DÍAS -----
     const nDays = period === 'hoy' ? 1 : 7;
     const data = [];
+    const payments: PaymentPoint[] = [];
     let cumI = 0, cumE = 0, mtdIngresos = 0, mtdGastos = 0;
     for (let i = nDays - 1; i >= 0; i--) {
       const d = new Date(y, m, today - i);
@@ -165,11 +271,20 @@ export default function SalesDashboard() {
       const inc = sum(ingresos, (f) => f.startsWith(key));
       const exp = sum(gastos, (f) => f.startsWith(key));
       cumI += inc; cumE += exp; mtdIngresos += inc; mtdGastos += exp;
-      data.push({ x: d.getDate(), ingresos: cumI, gastos: cumE, proyeccion: null });
+      const dayPayments = ingresos.filter((t) => t.fecha?.startsWith(key) && isPagoCliente(t)).map((t) => ({
+          x: d.getDate(), monto: t.importe || 0,
+          cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar',
+          fecha: t.fecha, descripcion: t.descripcion,
+        }));
+      data.push({ x: d.getDate(), ingresos: cumI, gastos: cumE, proyeccion: null, dayPayments });
+      dayPayments.forEach((p) => payments.push(p));
     }
     return {
       titulo: period === 'hoy' ? 'Hoy' : 'Últimos 7 días', chartTitle: period === 'hoy' ? 'Hoy' : 'Acumulado · 7 días',
       xLabel: (v: number) => String(v), isCurrent: false, elapsed: nDays, total: nDays,
+      xDomain: [data[0]?.x || 1, data[data.length - 1]?.x || nDays] as [number, number],
+      xTicks: data.map((p) => p.x),
+      payments,
       mtdIngresos, mtdGastos, avgPerDay: mtdIngresos / nDays, neededPerDay: 0, proyeccion: mtdIngresos, data, unidad: 'día',
     };
   }, [period, ingresos, gastos, meta, range]);
@@ -327,17 +442,16 @@ export default function SalesDashboard() {
                   <linearGradient id="gG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.30} /><stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} /></linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
-                <XAxis dataKey="x" tickFormatter={model.xLabel} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval="preserveStartEnd" />
+                <XAxis dataKey="x" type="number" domain={model.xDomain} ticks={model.xTicks} tickFormatter={model.xLabel} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} interval="preserveStartEnd" />
                 <YAxis tickFormatter={(v) => fmtCompact(v)} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={52} />
-                <Tooltip
-                  formatter={(v: number, n: string) => [fmt(v), n.charAt(0).toUpperCase() + n.slice(1)]}
-                  labelFormatter={(l) => `${model.unidad} ${model.xLabel(l as number)}`}
-                  contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
-                />
+                <Tooltip content={(props) => <SalesChartTooltip {...props} model={model} />} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
                 <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
+                {model.payments.map((pm, i) => (
+                  <ReferenceDot key={i} x={pm.x} y={pm.monto} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
+                ))}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
