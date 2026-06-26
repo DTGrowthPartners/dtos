@@ -40,6 +40,7 @@ import {
   ComposedChart,
   Scatter,
   ZAxis,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -125,7 +126,6 @@ export default function Dashboard() {
   // Tendencia mensual ya agregada por el backend (getFinanceData.financeByMonth)
   const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; income?: number; expenses?: number; proyectado?: number }[]>([]);
   const [projection, setProjection] = useState<{ value: number; low: number; high: number; slopePerMonth: number; slopePct: number; r2: number } | null>(null);
-  const [paymentDots, setPaymentDots] = useState<{ x: number; y: number; client: string; fecha: string }[]>([]);
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
@@ -375,6 +375,73 @@ export default function Dashboard() {
     return Math.round((myCompletedTasks.length / total) * 100);
   }, [myTasks, myCompletedTasks]);
 
+  // ── Gráfico diario acumulado del mes en curso ─────────────────────────
+  const currentMonthChartData = useMemo(() => {
+    if (!financeTransactions.length) return [];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const today = now.getDate();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+
+    const txInc = financeTransactions.filter(t =>
+      t.tipo === 'ingreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria)
+    );
+    const txExp = financeTransactions.filter(t =>
+      t.tipo === 'egreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria)
+    );
+
+    let cumInc = 0, cumExp = 0;
+    const cumIncArr: number[] = [];
+    const cumExpArr: number[] = [];
+    for (let d = 1; d <= today; d++) {
+      const ds = `${prefix}-${String(d).padStart(2, '0')}`;
+      cumInc += txInc.filter(t => t.fecha === ds).reduce((s, t) => s + t.importe, 0);
+      cumExp += txExp.filter(t => t.fecha === ds).reduce((s, t) => s + t.importe, 0);
+      cumIncArr.push(cumInc);
+      cumExpArr.push(cumExp);
+    }
+
+    // OLS sobre ingreso acumulado diario → proyección al resto del mes
+    let projFn: ((d: number) => number) | null = null;
+    if (today >= 2) {
+      const xs = Array.from({ length: today }, (_, i) => i + 1);
+      const xbar = xs.reduce((s, x) => s + x, 0) / today;
+      const ybar = cumIncArr.reduce((s, y) => s + y, 0) / today;
+      let Sxy = 0, Sxx = 0;
+      for (let i = 0; i < today; i++) { Sxy += (xs[i] - xbar) * (cumIncArr[i] - ybar); Sxx += (xs[i] - xbar) ** 2; }
+      const b = Sxx ? Sxy / Sxx : 0;
+      const a = ybar - b * xbar;
+      projFn = (d: number) => Math.max(0, Math.round(a + b * d));
+    }
+
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const d = i + 1;
+      const hasData = d <= today;
+      return {
+        day: d,
+        income: hasData ? cumIncArr[d - 1] : undefined,
+        expenses: hasData ? cumExpArr[d - 1] : undefined,
+        proyeccion: projFn && d >= today ? projFn(d) : undefined,
+      };
+    });
+  }, [financeTransactions]);
+
+  // Puntos de pago individuales del mes en curso
+  const currentMonthPaymentDots = useMemo(() => {
+    const now = new Date();
+    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    return financeTransactions
+      .filter(t => t.tipo === 'ingreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
+      .map(t => ({
+        x: parseInt(t.fecha.split('-')[2] || '1'),
+        y: t.importe,
+        client: (t as any).terceroId || t.terceroNombre || 'Sin cliente',
+        fecha: t.fecha,
+      }));
+  }, [financeTransactions]);
+
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -528,26 +595,6 @@ export default function Dashboard() {
             setProjection(null);
           }
           setMonthlyTrend(trend);
-
-          // Compute income payment dots for the chart (past 5 months + current month)
-          const dots: { x: number; y: number; client: string; fecha: string }[] = [];
-          for (const t of expenses.filter(tx => tx.tipo === 'ingreso')) {
-            if (!t.fecha || isExcludedCategory(t.categoria)) continue;
-            const tDate = new Date(t.fecha + 'T12:00:00');
-            for (let off = -PAST; off <= 0; off++) {
-              const m = new Date(now.getFullYear(), now.getMonth() + off, 1);
-              if (tDate.getFullYear() === m.getFullYear() && tDate.getMonth() === m.getMonth()) {
-                dots.push({
-                  x: PAST + off,
-                  y: t.importe,
-                  client: (t as any).terceroId || t.terceroNombre || 'Sin cliente',
-                  fecha: t.fecha,
-                });
-                break;
-              }
-            }
-          }
-          setPaymentDots(dots);
 
           setCrmDeals(deals);
           setCrmStages(stages);
@@ -767,12 +814,12 @@ export default function Dashboard() {
 
         {/* Charts Row */}
         <div className="grid gap-6 lg:grid-cols-2">
-          {/* Income Trends Chart */}
+          {/* Income cumulative chart — current month */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
-                Tendencia de Ingresos y Proyección
+                Ingresos · Mes en curso · {currentMonthName} {new Date().getFullYear()}
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -786,47 +833,45 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart
-                      data={(monthlyTrend.length ? monthlyTrend : incomeByMonth).map((p, i) => ({ ...p, _x: i }))}
-                      margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                    >
+                    <ComposedChart data={currentMonthChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                       <defs>
                         <linearGradient id="dashGradIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
-                          <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.30} />
+                          <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.04} />
                         </linearGradient>
                         <linearGradient id="dashGradExpense" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#ef4444" stopOpacity={0.22} />
-                          <stop offset="100%" stopColor="#ef4444" stopOpacity={0} />
+                          <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.22} />
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.04} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
                       <XAxis
-                        dataKey="_x"
+                        dataKey="day"
                         type="number"
-                        domain={[0, Math.max(0, (monthlyTrend.length || 1) - 1)]}
-                        tickCount={monthlyTrend.length || 9}
-                        tickFormatter={(i: number) => {
-                          const src = monthlyTrend.length ? monthlyTrend : incomeByMonth;
-                          return src[Math.round(i)]?.month || '';
-                        }}
+                        domain={[1, currentMonthChartData.length || 30]}
+                        tickFormatter={(d: number) => (d === 1 || d % 5 === 0) ? String(d) : ''}
                         tick={{ fontSize: 11 }}
                         tickLine={false}
                         axisLine={false}
+                        allowDuplicatedCategory={false}
                       />
-                      <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
+                      <YAxis
+                        tick={{ fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v) => `$${(v / 1_000_000).toFixed(0)}M`}
+                        width={42}
+                      />
                       <Tooltip
                         content={({ active, payload }: any) => {
                           if (!active || !payload?.length) return null;
-                          const monthIdx = payload[0]?.payload?._x ?? payload[0]?.payload?.x;
-                          const src = monthlyTrend.length ? monthlyTrend : incomeByMonth;
-                          const monthLabel = src[Math.round(monthIdx)]?.month || '';
-                          const areaSeries = payload.filter((p: any) => p.dataKey != null);
+                          const day = payload[0]?.payload?.day ?? payload[0]?.payload?.x;
+                          const areaSeries = payload.filter((p: any) => p.dataKey != null && p.value != null);
                           const dotSeries = payload.filter((p: any) => p.payload?.client);
                           return (
                             <div style={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 220 }}>
-                              {monthLabel && <p style={{ fontWeight: 600, marginBottom: 4 }}>{monthLabel}</p>}
-                              {areaSeries.filter((p: any) => p.value != null).map((p: any, i: number) => (
+                              <p style={{ fontWeight: 600, marginBottom: 4 }}>Día {day}</p>
+                              {areaSeries.map((p: any, i: number) => (
                                 <p key={i} style={{ color: p.color }}>{p.name}: ${Number(p.value).toLocaleString()}</p>
                               ))}
                               {dotSeries.map((p: any, i: number) => (
@@ -840,23 +885,26 @@ export default function Dashboard() {
                           );
                         }}
                       />
-                      <Area type="monotone" dataKey="income" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#dashGradIncome)" dot={false} activeDot={{ r: 4 }} />
-                      <Area type="monotone" dataKey="expenses" name="Gastos" stroke="#ef4444" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} />
-                      <Area type="monotone" dataKey="proyectado" name="Ingreso Proyectado" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" fill="none" dot={false} activeDot={{ r: 3 }} connectNulls />
+                      <Area type="monotone" dataKey="income" name="Ingresos (acum.)" stroke="#3b82f6" strokeWidth={2.5} fill="url(#dashGradIncome)" dot={false} activeDot={{ r: 4 }} connectNulls />
+                      <Area type="monotone" dataKey="expenses" name="Gastos (acum.)" stroke="#f59e0b" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} connectNulls />
+                      <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={{ r: 3 }} connectNulls />
                       <ZAxis range={[55, 55]} />
-                      <Scatter data={paymentDots} name="Pago de cliente" fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
+                      <Scatter data={currentMonthPaymentDots} name="Pago de cliente" fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </div>
-              {projection && !hideFinances && (
-                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                  <span className="inline-block h-2 w-2 rounded-full bg-violet-500 mr-1 align-middle" />
-                  <span className="font-semibold text-foreground">Ingreso proyectado del mes: ${projection.value.toLocaleString()}</span>
-                  {' '}· IP 90%: ${projection.low.toLocaleString()}–${projection.high.toLocaleString()}
-                  {' '}· tendencia {projection.slopePerMonth >= 0 ? '+' : ''}${projection.slopePerMonth.toLocaleString()}/mes ({projection.slopePct >= 0 ? '+' : ''}{projection.slopePct.toFixed(1)}%) · ajuste R²={projection.r2.toFixed(2)} · regresión lineal con intervalo de predicción
-                </p>
-              )}
+              {!hideFinances && currentMonthChartData.length > 0 && (() => {
+                const last = currentMonthChartData[currentMonthChartData.length - 1];
+                const endProj = last?.proyeccion;
+                return endProj ? (
+                  <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                    <span className="inline-block h-2 w-2 rounded-full bg-violet-500 mr-1 align-middle" />
+                    <span className="font-semibold text-foreground">Ingreso proyectado al cierre del mes: ${endProj.toLocaleString()}</span>
+                    {' '}· regresión lineal sobre ingreso acumulado diario
+                  </p>
+                ) : null;
+              })()}
             </CardContent>
           </Card>
 
