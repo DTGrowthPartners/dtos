@@ -852,13 +852,10 @@ export default function Dashboard() {
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
                       <XAxis
                         dataKey="day"
-                        type="number"
-                        domain={[1, currentMonthChartData.length || 30]}
                         tickFormatter={(d: number) => (d === 1 || d % 5 === 0) ? String(d) : ''}
                         tick={{ fontSize: 11 }}
                         tickLine={false}
                         axisLine={false}
-                        allowDuplicatedCategory={false}
                       />
                       <YAxis
                         tick={{ fontSize: 11 }}
@@ -895,7 +892,7 @@ export default function Dashboard() {
                       <Area type="monotone" dataKey="expenses" name="Gastos (acum.)" stroke="#f59e0b" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} connectNulls />
                       <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={{ r: 3 }} connectNulls />
                       {currentMonthPaymentDots.map((dot, i) => (
-                        <ReferenceDot key={i} x={dot.x} y={dot.y} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
+                        <ReferenceDot key={i} x={dot.x as any} y={dot.y} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
                       ))}
                     </ComposedChart>
                   </ResponsiveContainer>
