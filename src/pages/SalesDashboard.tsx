@@ -222,11 +222,12 @@ export default function SalesDashboard() {
       const payments: PaymentPoint[] = [];
       ingresos.forEach((t) => {
         if (!t.fecha?.startsWith(prefix)) return;
-        const { month } = dateParts(t.fecha);
+        const { month, day } = dateParts(t.fecha);
         incByMonth[month] += t.importe || 0;
         if (isPagoCliente(t)) {
+          const daysInMon = new Date(y, month + 1, 0).getDate();
           payments.push({
-            x: month,
+            x: month + (day - 1) / daysInMon, // posición fraccionaria dentro del mes
             monto: t.importe || 0,
             cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar',
             fecha: t.fecha,
