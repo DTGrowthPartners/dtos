@@ -12,7 +12,7 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreHorizontal } from 'lucide-react';
+import { MoreHorizontal, Pencil } from 'lucide-react';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -74,6 +74,7 @@ export default function FixedAssetsPanel() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
@@ -94,27 +95,52 @@ export default function FixedAssetsPanel() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const createAsset = async () => {
+  const saveAsset = async () => {
     if (!form.name || !form.category || !form.cost || !form.acquisitionDate) {
       toast({ title: 'Faltan datos', description: 'Nombre, categoría, costo y fecha son obligatorios', variant: 'destructive' });
       return;
     }
     try {
       setSaving(true);
-      await apiClient.post('/api/fixed-assets', {
-        ...form,
-        cost: Number(form.cost),
-        quantity: Number(form.quantity) || 1,
-      });
-      toast({ title: 'Activo registrado', description: `${form.name} · ${fmt(Number(form.cost))}` });
+      const payload = { ...form, cost: Number(form.cost), quantity: Number(form.quantity) || 1 };
+      if (editingId) {
+        await apiClient.put(`/api/fixed-assets/${editingId}`, payload);
+        toast({ title: 'Activo actualizado', description: `${form.name} · ${fmt(Number(form.cost))}` });
+      } else {
+        await apiClient.post('/api/fixed-assets', payload);
+        toast({ title: 'Activo registrado', description: `${form.name} · ${fmt(Number(form.cost))}` });
+      }
       setShowForm(false);
       setForm(emptyForm);
+      setEditingId(null);
       fetchData();
     } catch (error) {
-      toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo registrar', variant: 'destructive' });
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo guardar', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEdit = (a: FixedAsset) => {
+    setEditingId(a.id);
+    setForm({
+      name: a.name,
+      category: a.category,
+      cost: String(a.cost),
+      acquisitionDate: (a.acquisitionDate || '').split('T')[0],
+      quantity: String(a.quantity ?? 1),
+      serialNumber: a.serialNumber || '',
+      location: a.location || '',
+      responsible: a.responsible || '',
+      notes: a.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const openNew = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
   };
 
   const changeStatus = async (a: FixedAsset, status: string) => {
@@ -177,7 +203,7 @@ export default function FixedAssetsPanel() {
         <h3 className="text-lg font-semibold">Propiedad, Planta y Equipo</h3>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}><RefreshCcw className="h-4 w-4" /></Button>
-          <Button size="sm" onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" />Nuevo activo</Button>
+          <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nuevo activo</Button>
         </div>
       </div>
 
@@ -221,6 +247,9 @@ export default function FixedAssetsPanel() {
                           <Button variant="ghost" size="sm"><MoreHorizontal className="h-4 w-4" /></Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => startEdit(a)}>
+                            <Pencil className="h-4 w-4 mr-2" />Editar
+                          </DropdownMenuItem>
                           {a.status !== 'activo' && <DropdownMenuItem onClick={() => changeStatus(a, 'activo')}>Marcar activo</DropdownMenuItem>}
                           {a.status !== 'en_reparacion' && <DropdownMenuItem onClick={() => changeStatus(a, 'en_reparacion')}>En reparación</DropdownMenuItem>}
                           {a.status !== 'dado_de_baja' && <DropdownMenuItem onClick={() => changeStatus(a, 'dado_de_baja')}>Dar de baja</DropdownMenuItem>}
@@ -238,10 +267,10 @@ export default function FixedAssetsPanel() {
         </CardContent>
       </Card>
 
-      {/* Create dialog */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      {/* Create / Edit dialog */}
+      <Dialog open={showForm} onOpenChange={(o) => { setShowForm(o); if (!o) { setForm(emptyForm); setEditingId(null); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Nuevo activo (PP&E)</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? 'Editar activo (PP&E)' : 'Nuevo activo (PP&E)'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
               <Label>Nombre del activo *</Label>
@@ -292,8 +321,8 @@ export default function FixedAssetsPanel() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button onClick={createAsset} disabled={saving}>{saving ? 'Guardando…' : 'Registrar'}</Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyForm); setEditingId(null); }}>Cancelar</Button>
+            <Button onClick={saveAsset} disabled={saving}>{saving ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Registrar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
