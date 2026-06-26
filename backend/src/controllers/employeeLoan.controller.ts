@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { employeeLoanService } from '../services/employeeLoan.service';
+import { googleSheetsService } from '../services/googleSheets.service';
 
 export const getSummary = async (_req: Request, res: Response) => {
   try {
@@ -91,6 +92,24 @@ export const addPayment = async (req: Request, res: Response) => {
       amount: Number(data.amount),
       paidAt: data.paidAt ? new Date(data.paidAt) : undefined,
     });
+
+    // Register in Google Sheets (non-blocking — failure doesn't roll back the payment)
+    try {
+      const paymentDate = data.paidAt
+        ? new Date(data.paidAt).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0];
+      await googleSheetsService.addEmployeeLoanPayment({
+        fecha: paymentDate,
+        importe: Number(data.amount),
+        employeeName: loan.employeeName,
+        consecutivo: loan.consecutivo,
+        paymentMethod: data.paymentMethod || 'transferencia',
+        cuentaDestino: data.cuentaDestino || '',
+      });
+    } catch (sheetsErr) {
+      console.error('Google Sheets write failed (payment already saved):', sheetsErr);
+    }
+
     res.status(201).json(loan);
   } catch (error: any) {
     console.error('Error adding loan payment:', error);

@@ -675,6 +675,79 @@ export class GoogleSheetsService {
   }
 
 
+  // ==================== EMPLOYEE LOAN PAYMENTS ====================
+
+  async addEmployeeLoanPayment(params: {
+    fecha: string;
+    importe: number;
+    employeeName: string;
+    consecutivo?: number | null;
+    paymentMethod: string;
+    cuentaDestino?: string;
+  }): Promise<void> {
+    const fmtConsec = (n?: number | null) => (n ? `CxC-${String(n).padStart(4, '0')}` : '');
+    const consec = fmtConsec(params.consecutivo);
+    const descripcion = consec ? `${params.employeeName} · ${consec}` : params.employeeName;
+
+    const [year, month, day] = params.fecha.split('-').map(Number);
+    const now = new Date();
+    const serialDate = this.dateToSerialNumber(
+      new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds())
+    );
+
+    const spreadsheet = await this.sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
+    const isTransferencia = params.paymentMethod === 'transferencia';
+    const sheetTitle = isTransferencia ? 'Entradas' : 'Salidas';
+    const sheetInfo = spreadsheet.data.sheets?.find(
+      (s: { properties?: { title?: string; sheetId?: number } }) => s.properties?.title === sheetTitle
+    );
+    if (!sheetInfo) throw new Error(`No se encontró la hoja "${sheetTitle}"`);
+    const sheetId = sheetInfo.properties?.sheetId;
+
+    await this.sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: {
+        requests: [{
+          insertDimension: {
+            range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: 2 },
+            inheritFromBefore: false,
+          },
+        }],
+      },
+    });
+
+    if (isTransferencia) {
+      // Entradas: A=Fecha, B=Importe, C=Desc, D=Categoria, E=Cuenta, F=Entidad, G=Tercero, H=ClasifIngreso, I=NoCuentaCobro, J=TipoTransaccion
+      const values = [[
+        serialDate, params.importe, descripcion,
+        'Cuentas por Cobrar', params.cuentaDestino || '',
+        params.employeeName, params.employeeName,
+        '', consec, '',
+      ]];
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Entradas!A2:J2',
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+    } else {
+      // Salidas: A=Fecha, B=Importe, C=Desc, D=Categoria, E=Cuenta, F=Entidad, G=TerceroId, H=NoCxCEmpleado
+      const values = [[
+        serialDate, params.importe, descripcion,
+        'Cuentas por Cobrar a Empleados (Cuenta)', '',
+        params.employeeName, '', consec,
+      ]];
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'Salidas!A2:H2',
+        valueInputOption: 'RAW',
+        requestBody: { values },
+      });
+    }
+
+    console.log(`Employee loan payment written to ${sheetTitle}:`, descripcion, params.importe);
+  }
+
   // ==================== PERSONAL DAIRO ====================
   // Hoja "Personal Dairo" - Gastos personales de Dairo (separados de DT Growth Partners)
   // Columnas: A=Fecha, B=Valor, C=Descripcion, D=Categoria, E=Cuenta, F=Tipo de Movimiento (Salida/Entrada)

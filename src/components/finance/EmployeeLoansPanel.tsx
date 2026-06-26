@@ -74,7 +74,7 @@ export default function EmployeeLoansPanel() {
   const [statementLoan, setStatementLoan] = useState<EmployeeLoan | null>(null);
 
   const [payFor, setPayFor] = useState<EmployeeLoan | null>(null);
-  const [payForm, setPayForm] = useState({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', reference: '', notes: '' });
+  const [payForm, setPayForm] = useState({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', cuentaDestino: '', reference: '', notes: '' });
 
   const fetchData = async () => {
     try {
@@ -150,7 +150,7 @@ export default function EmployeeLoansPanel() {
       });
       toast({ title: 'Abono registrado', description: `${fmt(Number(payForm.amount))} de ${payFor.employeeName}` });
       setPayFor(null);
-      setPayForm({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', reference: '', notes: '' });
+      setPayForm({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', cuentaDestino: '', reference: '', notes: '' });
       fetchData();
     } catch (error) {
       toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo abonar', variant: 'destructive' });
@@ -328,8 +328,8 @@ export default function EmployeeLoansPanel() {
                 </div>
               </div>
               <div>
-                <Label>Método</Label>
-                <Select value={payForm.paymentMethod} onValueChange={(v) => setPayForm({ ...payForm, paymentMethod: v })}>
+                <Label>Método de pago</Label>
+                <Select value={payForm.paymentMethod} onValueChange={(v) => setPayForm({ ...payForm, paymentMethod: v, cuentaDestino: '' })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="transferencia">Transferencia</SelectItem>
@@ -339,6 +339,16 @@ export default function EmployeeLoansPanel() {
                   </SelectContent>
                 </Select>
               </div>
+              {payForm.paymentMethod === 'transferencia' && (
+                <div>
+                  <Label>Cuenta destino *</Label>
+                  <Input
+                    value={payForm.cuentaDestino}
+                    onChange={(e) => setPayForm({ ...payForm, cuentaDestino: e.target.value })}
+                    placeholder="Ej. Bancolombia, Nequi, Daviplata…"
+                  />
+                </div>
+              )}
               <div>
                 <Label>Referencia / notas</Label>
                 <Input value={payForm.reference} onChange={(e) => setPayForm({ ...payForm, reference: e.target.value })} placeholder="Opcional" />
