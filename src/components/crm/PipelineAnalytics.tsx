@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { TrendingUp, Target, Clock, Trophy, XCircle, AlertTriangle } from 'lucide-react';
+import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
 
 interface Props {
   deals: any[];
@@ -67,6 +68,9 @@ export default function PipelineAnalytics({ deals, stages, formatCurrency }: Pro
 
   return (
     <div className="space-y-6">
+      {/* Embudo de conversión (mismo del dashboard) */}
+      <PipelineFunnel />
+
       {/* KPIs estrella */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>

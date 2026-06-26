@@ -6,6 +6,8 @@ import {
 } from 'recharts';
 import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
+import OperationsSection from '@/components/dashboard/OperationsSection';
 
 interface Tx { importe: number; fecha: string }
 interface FinanceData { ingresos?: Tx[]; gastos?: Tx[] }
@@ -279,6 +281,12 @@ export default function SalesDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Embudo de conversión (pipeline) */}
+      <PipelineFunnel />
+
+      {/* Operación — carga y entregas */}
+      <OperationsSection />
 
       {/* Accesos rápidos */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
