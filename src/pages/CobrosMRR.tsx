@@ -27,6 +27,15 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
 
 interface Cobro {
   id: string;
@@ -94,6 +103,21 @@ const COPbig = (n: number) => {
   return COP(n);
 };
 
+// ── MRR desde la hoja Entradas (Google Sheets) ──
+// Una transacción de ingreso de la hoja Entradas (vía /api/finance/data).
+interface FinanceTx {
+  importe: number;
+  fecha: string;       // YYYY-MM-DD
+  categoria?: string;  // p.ej. "PAGO DE CLIENTE"
+  entidad?: string;    // columna Tercero
+  terceroId?: string;  // columna Clasificación Ingreso
+}
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+const esPagoCliente = (c?: string) => (c || '').trim().toUpperCase() === 'PAGO DE CLIENTE';
+// "Ingreso recurrente" y "Recurrente" son la misma clasificación.
+const esRecurrente = (c?: string) => ['ingreso recurrente', 'recurrente'].includes((c || '').trim().toLowerCase());
+const esPuntual = (c?: string) => (c || '').trim().toLowerCase() === 'proyectos puntuales';
+
 const ESTADO_META: Record<Cobro['estado'], { label: string; classes: string; icon: React.ComponentType<{ className?: string }> }> = {
   pagado: { label: 'Pagado', classes: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600', icon: CheckCircle2 },
   pendiente: { label: 'Pendiente', classes: 'border-amber-500/40 bg-amber-500/10 text-amber-600', icon: Clock },
@@ -130,6 +154,15 @@ export default function CobrosMRR() {
   const [referencia, setReferencia] = useState('');
   const [nota, setNota] = useState('');
 
+  // Ingresos de la hoja Entradas (para el MRR recurrente) — se trae una sola vez.
+  const [finIngresos, setFinIngresos] = useState<FinanceTx[]>([]);
+  useEffect(() => {
+    apiClient
+      .get<{ ingresos: FinanceTx[] }>('/api/finance/data')
+      .then((d) => setFinIngresos(d.ingresos || []))
+      .catch(() => {});
+  }, []);
+
   const load = async (p = period) => {
     setLoading(true);
     try {
@@ -157,6 +190,52 @@ export default function CobrosMRR() {
     if (!s) return data.cobros;
     return data.cobros.filter((c) => c.clienteNombre.toLowerCase().includes(s));
   }, [data, search]);
+
+  // MRR recurrente calculado desde la hoja Entradas para el periodo seleccionado.
+  // Solo "PAGO DE CLIENTE" con Clasificación Ingreso = recurrente, agrupado por Tercero.
+  const sheetMRR = useMemo(() => {
+    const pagos = finIngresos.filter((t) => esPagoCliente(t.categoria));
+    const recPeriodo = pagos.filter((t) => esRecurrente(t.terceroId) && (t.fecha || '').startsWith(period));
+    const porTercero = new Map<string, number>();
+    for (const t of recPeriodo) {
+      const k = (t.entidad || 'Sin tercero').trim();
+      porTercero.set(k, (porTercero.get(k) || 0) + (t.importe || 0));
+    }
+    const recurrentes = [...porTercero.entries()]
+      .map(([tercero, monto]) => ({ tercero, monto }))
+      .sort((x, y) => y.monto - x.monto);
+    const mrr = recurrentes.reduce((s, r) => s + r.monto, 0);
+    const clientes = recurrentes.length;
+    const arpu = clientes ? mrr / clientes : 0;
+    const puntual = pagos
+      .filter((t) => esPuntual(t.terceroId) && (t.fecha || '').startsWith(period))
+      .reduce((s, t) => s + (t.importe || 0), 0);
+
+    // Tendencia mensual del ingreso recurrente: desde el primer mes con datos
+    // hasta el periodo seleccionado (máximo 12 meses para legibilidad).
+    const byMonth = new Map<string, number>();
+    for (const t of pagos) {
+      if (!esRecurrente(t.terceroId)) continue;
+      const ym = (t.fecha || '').slice(0, 7);
+      if (ym) byMonth.set(ym, (byMonth.get(ym) || 0) + (t.importe || 0));
+    }
+    const conDatos = [...byMonth.keys()].filter((ym) => ym <= period).sort();
+    const trend: { ym: string; label: string; total: number }[] = [];
+    if (conDatos.length) {
+      const [fy, fm] = conDatos[0].split('-').map(Number);
+      const [py, pm] = period.split('-').map(Number);
+      const totalMeses = (py - fy) * 12 + (pm - fm) + 1;
+      const inicio = Math.max(0, totalMeses - 12);
+      for (let k = inicio; k < totalMeses; k++) {
+        const d = new Date(fy, fm - 1 + k, 1);
+        const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        // Corte = último día del mes (30 o 31, 28/29 en febrero).
+        const corte = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        trend.push({ ym, label: `${corte} ${MESES_CORTOS[d.getMonth()]}`, total: byMonth.get(ym) || 0 });
+      }
+    }
+    return { mrr, clientes, arpu, puntual, recurrentes, trend };
+  }, [finIngresos, period]);
 
   const openPay = (c: Cobro) => {
     setPayTarget(c);
@@ -227,6 +306,77 @@ export default function CobrosMRR() {
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
         </Button>
       </div>
+
+      {/* MRR según hoja Entradas (Ingresos recurrentes) */}
+      <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-violet-500/5 p-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-violet-600 font-medium">
+              <RefreshCw className="h-3.5 w-3.5" /> MRR · Ingresos recurrentes <span className="normal-case tracking-normal text-muted-foreground/70">(hoja Entradas)</span>
+            </div>
+            <div className="text-3xl font-bold text-foreground tabular-nums mt-1">{COPbig(sheetMRR.mrr)}</div>
+            <div className="text-[11px] text-muted-foreground mt-1 tabular-nums">
+              {sheetMRR.clientes} clientes recurrentes × {COP(sheetMRR.arpu)} prom. · <span className="capitalize">{periodLabel(period)}</span>
+            </div>
+            <div className="text-[10px] text-muted-foreground/70 mt-0.5">
+              suma de "PAGO DE CLIENTE" con Clasificación Ingreso = recurrente, por Tercero
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-muted-foreground">Proyectos puntuales <span className="text-muted-foreground/60">(no MRR)</span></div>
+            <div className="text-xl font-bold tabular-nums text-sky-600">{COPbig(sheetMRR.puntual)}</div>
+          </div>
+        </div>
+
+        {/* Tendencia mensual del ingreso recurrente (línea) */}
+        <div className="mt-4">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1">Tendencia del ingreso recurrente</div>
+          <div className="h-[220px]">
+            {sheetMRR.trend.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={sheetMRR.trend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={42} tickFormatter={(v) => `$${(v / 1_000_000).toFixed(0)}M`} />
+                  <Tooltip
+                    formatter={(v: number) => [COP(v), 'Recurrente']}
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                  />
+                  <Line type="monotone" dataKey="total" name="Ingreso recurrente" stroke="#8b5cf6" strokeWidth={2.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-muted-foreground">Sin datos de ingreso recurrente.</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Clientes recurrentes del periodo (hoja Entradas) */}
+      {sheetMRR.recurrentes.length > 0 && (
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2 flex items-center justify-between text-xs uppercase tracking-wider text-muted-foreground bg-muted/40">
+            <span>Clientes recurrentes · <span className="capitalize">{periodLabel(period)}</span></span>
+            <span className="normal-case tracking-normal text-[10px] text-muted-foreground/70">según hoja Entradas</span>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {sheetMRR.recurrentes
+                .filter((r) => !search.trim() || r.tercero.toLowerCase().includes(search.toLowerCase()))
+                .map((r) => (
+                  <tr key={r.tercero} className="border-t border-border hover:bg-muted/30">
+                    <td className="px-4 py-2">{r.tercero}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-medium">{COP(r.monto)}</td>
+                  </tr>
+                ))}
+              <tr className="border-t border-border bg-muted/30 font-semibold">
+                <td className="px-4 py-2">Total MRR</td>
+                <td className="px-4 py-2 text-right tabular-nums text-violet-600">{COP(sheetMRR.mrr)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* MRR grande + stats del mes */}
       <div className="grid gap-4 md:grid-cols-4">
