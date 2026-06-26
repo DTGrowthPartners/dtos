@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
@@ -35,8 +35,18 @@ export default function TodoList() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  // Cuando la lista llena la pantalla (99vh) ya no se pueden agregar más pendientes.
+  const [atLimit, setAtLimit] = useState(false);
   // Ventana activa real (la flotante PiP si aplica) para que confirm() salga ahí.
   const activeWindow = (): Window => containerRef.current?.ownerDocument?.defaultView ?? window;
+
+  // El límite se alcanza cuando el contenido de la lista supera su alto visible
+  // (que está topado a ~99vh): a partir de ahí desborda/scrollea => no se agrega más.
+  const measureLimit = useCallback(() => {
+    const el = listRef.current;
+    setAtLimit(!!el && el.scrollHeight > el.clientHeight + 4);
+  }, []);
   // Convertir pendiente -> tarea real
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [convertTodo, setConvertTodo] = useState<Todo | null>(null);
@@ -94,6 +104,18 @@ export default function TodoList() {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [user?.id]);
 
+  // Recalcular el límite cuando cambian los pendientes o el tamaño de la ventana.
+  useEffect(() => { measureLimit(); }, [todos, loading, measureLimit]);
+  useEffect(() => {
+    const el = listRef.current;
+    const win = activeWindow();
+    if (!el) return;
+    const ro = new ResizeObserver(() => measureLimit());
+    ro.observe(el);
+    win.addEventListener('resize', measureLimit);
+    return () => { ro.disconnect(); win.removeEventListener('resize', measureLimit); };
+  }, [todos.length, loading, measureLimit]);
+
   const pendientes = useMemo(() => todos.filter((t) => !t.done).length, [todos]);
   const eo = (t: Todo) => t.order ?? t.createdAt; // orden efectivo
   const sortTodos = (arr: Todo[]) =>
@@ -122,7 +144,7 @@ export default function TodoList() {
 
   const add = async () => {
     const t = text.trim();
-    if (!t || !user || adding) return;
+    if (!t || !user || adding || atLimit) return;
     setAdding(true);
     const tempId = `temp-${Date.now()}`;
     setTodos((prev) => [{ id: tempId, text: t, done: false, userId: user.id, createdAt: Date.now() }, ...prev]);
@@ -240,13 +262,19 @@ export default function TodoList() {
           ref={inputRef}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Agregar un pendiente y Enter…"
+          placeholder={atLimit ? 'Pantalla llena — completa o elimina pendientes' : 'Agregar un pendiente y Enter…'}
+          disabled={atLimit}
           autoFocus
         />
-        <Button type="submit" size="icon" disabled={!text.trim() || adding}>
+        <Button type="submit" size="icon" disabled={!text.trim() || adding || atLimit}>
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         </Button>
       </form>
+      {atLimit && (
+        <p className="text-xs text-amber-600 dark:text-amber-400 -mt-1">
+          Llegaste al límite de la pantalla (99vh). Completa o elimina pendientes para agregar más.
+        </p>
+      )}
 
       {loading ? (
         <div className="text-center py-8 text-muted-foreground text-sm">Cargando…</div>
@@ -260,9 +288,10 @@ export default function TodoList() {
           <Droppable droppableId="todos-list">
             {(dropProvided) => (
               <div
-                ref={dropProvided.innerRef}
+                ref={(el) => { dropProvided.innerRef(el); listRef.current = el; }}
                 {...dropProvided.droppableProps}
-                className="rounded-xl border border-border bg-card divide-y divide-border max-h-[55vh] overflow-y-auto"
+                className="rounded-xl border border-border bg-card divide-y divide-border overflow-y-auto"
+                style={{ maxHeight: 'calc(99vh - 130px)' }}
               >
                 {todos.map((todo, index) => (
                   <Draggable key={todo.id} draggableId={todo.id} index={index} isDragDisabled={selectMode}>
