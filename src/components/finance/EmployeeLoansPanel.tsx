@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, RefreshCcw, Users, HandCoins, Wallet } from 'lucide-react';
+import { Plus, Trash2, DollarSign, RefreshCcw, Users, HandCoins, Wallet, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -67,6 +67,7 @@ export default function EmployeeLoansPanel() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [payFor, setPayFor] = useState<EmployeeLoan | null>(null);
   const [payForm, setPayForm] = useState({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', reference: '', notes: '' });
@@ -90,27 +91,49 @@ export default function EmployeeLoansPanel() {
 
   useEffect(() => { fetchData(); }, []);
 
-  const createLoan = async () => {
+  const saveLoan = async () => {
     if (!form.employeeName || !form.concept || !form.totalAmount || !form.date) {
       toast({ title: 'Faltan datos', description: 'Empleado, concepto, monto y fecha son obligatorios', variant: 'destructive' });
       return;
     }
     try {
       setSaving(true);
-      await apiClient.post('/api/employee-loans', {
-        ...form,
-        totalAmount: Number(form.totalAmount),
-        dueDate: form.dueDate || undefined,
-      });
-      toast({ title: 'Préstamo registrado', description: `${form.employeeName} · ${fmt(Number(form.totalAmount))}` });
+      const payload = { ...form, totalAmount: Number(form.totalAmount), dueDate: form.dueDate || undefined };
+      if (editingId) {
+        await apiClient.put(`/api/employee-loans/${editingId}`, payload);
+        toast({ title: 'Préstamo actualizado', description: `${form.employeeName} · ${fmt(Number(form.totalAmount))}` });
+      } else {
+        await apiClient.post('/api/employee-loans', payload);
+        toast({ title: 'Préstamo registrado', description: `${form.employeeName} · ${fmt(Number(form.totalAmount))}` });
+      }
       setShowForm(false);
       setForm(emptyForm);
+      setEditingId(null);
       fetchData();
     } catch (error) {
-      toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo registrar', variant: 'destructive' });
+      toast({ title: 'Error', description: error instanceof Error ? error.message : 'No se pudo guardar', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
+  };
+
+  const startEdit = (loan: EmployeeLoan) => {
+    setEditingId(loan.id);
+    setForm({
+      employeeName: loan.employeeName,
+      concept: loan.concept,
+      totalAmount: String(loan.totalAmount),
+      date: (loan.date || '').split('T')[0],
+      dueDate: loan.dueDate ? (loan.dueDate || '').split('T')[0] : '',
+      notes: loan.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const openNew = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setShowForm(true);
   };
 
   const registerPayment = async () => {
@@ -180,7 +203,7 @@ export default function EmployeeLoansPanel() {
         <h3 className="text-lg font-semibold">Cuentas por Cobrar a Empleados</h3>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchData}><RefreshCcw className="h-4 w-4" /></Button>
-          <Button size="sm" onClick={() => setShowForm(true)}><Plus className="h-4 w-4 mr-2" />Nuevo préstamo</Button>
+          <Button size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-2" />Nuevo préstamo</Button>
         </div>
       </div>
 
@@ -223,6 +246,9 @@ export default function EmployeeLoansPanel() {
                           <DollarSign className="h-4 w-4 text-emerald-600" />
                         </Button>
                       )}
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(l)} title="Editar">
+                        <Pencil className="h-4 w-4 text-blue-500" />
+                      </Button>
                       <Button variant="ghost" size="sm" onClick={() => removeLoan(l)} title="Eliminar">
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -235,10 +261,10 @@ export default function EmployeeLoansPanel() {
         </CardContent>
       </Card>
 
-      {/* Create dialog */}
-      <Dialog open={showForm} onOpenChange={setShowForm}>
+      {/* Create / Edit dialog */}
+      <Dialog open={showForm} onOpenChange={(o) => { setShowForm(o); if (!o) { setForm(emptyForm); setEditingId(null); } }}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Nuevo préstamo a empleado</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? 'Editar préstamo' : 'Nuevo préstamo a empleado'}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
               <Label>Empleado *</Label>
@@ -268,8 +294,8 @@ export default function EmployeeLoansPanel() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowForm(false)}>Cancelar</Button>
-            <Button onClick={createLoan} disabled={saving}>{saving ? 'Guardando…' : 'Registrar'}</Button>
+            <Button variant="outline" onClick={() => { setShowForm(false); setForm(emptyForm); setEditingId(null); }}>Cancelar</Button>
+            <Button onClick={saveLoan} disabled={saving}>{saving ? 'Guardando…' : editingId ? 'Guardar cambios' : 'Registrar'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
