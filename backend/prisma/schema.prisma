@@ -531,6 +531,118 @@ model AccountPayment {
   createdAt       DateTime  @default(now())
 }
 
+// ==================== CUENTAS POR COBRAR A EMPLEADOS ====================
+
+model EmployeeLoan {
+  id            String    @id @default(cuid())
+
+  // Empleado (nombre mostrado + relación opcional con un Tercero/empleado)
+  employeeName  String
+  terceroId     String?   // id del Tercero (empleado), opcional
+
+  // Concepto y montos
+  concept       String    // préstamo, anticipo de nómina, etc.
+  totalAmount   Float      // monto total prestado
+  paidAmount    Float     @default(0) // suma de abonos
+  currency      String    @default("COP")
+
+  // Fechas
+  date          DateTime  // fecha del préstamo
+  dueDate       DateTime? // fecha límite de pago (opcional)
+
+  // Estado: pendiente | parcial | pagado | cancelado
+  status        String    @default("pendiente")
+
+  notes         String?
+  payments      EmployeeLoanPayment[]
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model EmployeeLoanPayment {
+  id            String       @id @default(cuid())
+  loanId        String
+  loan          EmployeeLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  currency      String       @default("COP")
+  paidAt        DateTime     @default(now())
+  paymentMethod String?      // transferencia, efectivo, descuento_nomina, etc.
+  reference     String?
+  notes         String?
+  createdAt     DateTime     @default(now())
+}
+
+// ==================== CUENTAS POR PAGAR ====================
+
+model Payable {
+  id            String    @id @default(cuid())
+
+  // Proveedor / tercero a quien se le debe
+  supplierName  String
+  terceroId     String?   // id del Tercero (proveedor), opcional
+
+  concept       String
+  category      String?   // servicios, software, arriendo, impuestos, nómina, etc.
+
+  totalAmount   Float
+  paidAmount    Float     @default(0) // suma de abonos
+  currency      String    @default("COP")
+
+  issueDate     DateTime  // fecha de la cuenta/factura del proveedor
+  dueDate       DateTime? // fecha de vencimiento
+
+  // Estado: pendiente | parcial | pagado | vencido | cancelado
+  status        String    @default("pendiente")
+
+  notes         String?
+  payments      PayablePayment[]
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PayablePayment {
+  id            String   @id @default(cuid())
+  payableId     String
+  payable       Payable  @relation(fields: [payableId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  currency      String   @default("COP")
+  paidAt        DateTime @default(now())
+  paymentMethod String?
+  reference     String?
+  notes         String?
+  createdAt     DateTime @default(now())
+}
+
+// ==================== PROPIEDAD, PLANTA Y EQUIPO ====================
+
+model FixedAsset {
+  id              String    @id @default(cuid())
+
+  name            String    // nombre del activo
+  category        String    // equipo_computo, muebles, vehiculos, maquinaria, otros
+  acquisitionDate DateTime  // fecha de compra
+  cost            Float     // costo de adquisición
+  currency        String    @default("COP")
+  quantity        Int       @default(1)
+
+  serialNumber    String?   // serial / placa
+  location        String?   // ubicación física
+  responsible     String?   // responsable / custodio
+
+  // Estado: activo | en_reparacion | dado_de_baja
+  status          String    @default("activo")
+  disposalDate    DateTime? // fecha de baja
+
+  notes           String?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
 // Calendar Events for meetings/appointments with clients/prospects
 model CalendarEvent {
   id              String    @id @default(cuid())

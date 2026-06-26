@@ -30,6 +30,9 @@ import logsRoutes from './routes/logs.routes';
 import cobrosRoutes from './routes/cobros.routes';
 import transcribeRoutes from './routes/transcribe.routes';
 import propuestasRoutes from './routes/propuestas.routes';
+import employeeLoanRoutes from './routes/employeeLoan.routes';
+import payableRoutes from './routes/payable.routes';
+import fixedAssetRoutes from './routes/fixedAsset.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -81,6 +84,9 @@ app.use('/api/logs', logsRoutes);
 app.use('/api/cobros', cobrosRoutes);
 app.use('/api/transcribe', transcribeRoutes);
 app.use('/api/propuestas', propuestasRoutes);
+app.use('/api/employee-loans', employeeLoanRoutes);
+app.use('/api/payables', payableRoutes);
+app.use('/api/fixed-assets', fixedAssetRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

@@ -18,6 +18,9 @@ import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
 import InvoicesPanel from '@/components/finance/InvoicesPanel';
+import EmployeeLoansPanel from '@/components/finance/EmployeeLoansPanel';
+import PayablesPanel from '@/components/finance/PayablesPanel';
+import FixedAssetsPanel from '@/components/finance/FixedAssetsPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
 import IncomeReport from '@/components/finance/IncomeReport';
 import IncomeStatement from '@/components/finance/IncomeStatement';
@@ -1233,6 +1236,18 @@ export default function Finanzas() {
                   <FileText className="h-4 w-4" />
                   Facturas
                 </TabsTrigger>
+                <TabsTrigger value="empleados" className="flex items-center gap-2 whitespace-nowrap">
+                  <Users className="h-4 w-4" />
+                  Cobrar a Empleados
+                </TabsTrigger>
+                <TabsTrigger value="por-pagar" className="flex items-center gap-2 whitespace-nowrap">
+                  <CreditCard className="h-4 w-4" />
+                  Por Pagar
+                </TabsTrigger>
+                <TabsTrigger value="ppe" className="flex items-center gap-2 whitespace-nowrap">
+                  <Building2 className="h-4 w-4" />
+                  Propiedad, Planta y Equipo
+                </TabsTrigger>
                 <TabsTrigger value="reportes" className="flex items-center gap-2 whitespace-nowrap">
                   <TrendingUp className="h-4 w-4" />
                   Reportes
@@ -1275,6 +1290,18 @@ export default function Finanzas() {
 
           <TabsContent value="cuentas-cobro" className="mt-6">
             <InvoicesPanel />
+          </TabsContent>
+
+          <TabsContent value="empleados" className="mt-6">
+            <EmployeeLoansPanel />
+          </TabsContent>
+
+          <TabsContent value="por-pagar" className="mt-6">
+            <PayablesPanel />
+          </TabsContent>
+
+          <TabsContent value="ppe" className="mt-6">
+            <FixedAssetsPanel />
           </TabsContent>
 
           <TabsContent value="reportes" className="mt-6">
