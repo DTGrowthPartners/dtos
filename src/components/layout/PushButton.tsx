@@ -22,20 +22,24 @@ export default function PushButton({ isMisTareasView }: { isMisTareasView?: bool
   const handleClick = async () => {
     setLoading(true);
     try {
-      // Siempre (re)registra el token — pide permiso si falta. Evita quedar en
-      // "permiso concedido pero sin token registrado".
+      const wasGranted = pushPermission() === 'granted';
+      // Siempre (re)registra/refresca el token — pide permiso si falta.
       const r = await enablePush();
       if (!r.ok) {
         const msg = REASONS[r.reason || ''] || r.reason || 'Error desconocido';
         toast({ title: 'No se pudo activar', description: msg, variant: 'destructive' });
-        // Alert visible en móvil (para diagnosticar): muestra el motivo exacto.
         try { alert('🔔 No se activó: ' + (r.reason || '') + '\n' + msg); } catch { /* noop */ }
         return;
       }
       setGranted(true);
-      // Manda una de prueba para confirmar que llega.
-      await apiClient.post('/api/push/test', {});
-      toast({ title: 'Notificaciones activas ✅', description: 'Te enviamos una de prueba; debería llegarte en un momento.' });
+      if (!wasGranted) {
+        // Primera activación: una sola notificación de bienvenida.
+        await apiClient.post('/api/push/test', {});
+        toast({ title: 'Notificaciones activadas ✅', description: 'Te llega un aviso de prueba; de ahí en adelante recibes las notificaciones reales (tareas, etc.).' });
+      } else {
+        // Ya estaban activas: solo confirmar, sin reenviar la de prueba.
+        toast({ title: 'Notificaciones activas', description: 'Ya estás recibiendo notificaciones en este dispositivo.' });
+      }
     } catch (e) {
       toast({ title: 'Error', description: (e as Error).message, variant: 'destructive' });
     } finally {
