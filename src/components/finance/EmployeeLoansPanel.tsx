@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, DollarSign, RefreshCcw, Users, HandCoins, Wallet, Pencil } from 'lucide-react';
+import { Plus, Trash2, DollarSign, RefreshCcw, Users, HandCoins, Wallet, Pencil, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,6 +26,7 @@ interface LoanPayment {
 
 interface EmployeeLoan {
   id: string;
+  consecutivo?: number;
   employeeName: string;
   concept: string;
   totalAmount: number;
@@ -48,6 +49,8 @@ interface Summary {
 
 const fmt = (n: number) => '$' + (n || 0).toLocaleString('es-CO');
 const fmtDate = (d?: string) => (d ? new Date(d).toLocaleDateString('es-CO') : '—');
+// Consecutivo de cuenta por cobrar a empleado (ej. 1 -> "CxC-0001")
+const fmtConsec = (n?: number) => (n ? `CxC-${String(n).padStart(4, '0')}` : '');
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   pendiente: { label: 'Pendiente', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
@@ -68,6 +71,7 @@ export default function EmployeeLoansPanel() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [statementLoan, setStatementLoan] = useState<EmployeeLoan | null>(null);
 
   const [payFor, setPayFor] = useState<EmployeeLoan | null>(null);
   const [payForm, setPayForm] = useState({ amount: '', paidAt: new Date().toISOString().split('T')[0], paymentMethod: 'transferencia', reference: '', notes: '' });
@@ -233,7 +237,10 @@ export default function EmployeeLoansPanel() {
                 const st = STATUS[l.status] || STATUS.pendiente;
                 return (
                   <tr key={l.id} className="border-t hover:bg-muted/30">
-                    <td className="px-4 py-3 font-medium">{l.employeeName}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {l.employeeName}
+                      {l.consecutivo ? <span className="block text-[11px] font-mono text-muted-foreground font-normal">{fmtConsec(l.consecutivo)}</span> : null}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{l.concept}</td>
                     <td className="px-4 py-3 text-muted-foreground">{fmtDate(l.date)}</td>
                     <td className="px-4 py-3 text-right">{fmt(l.totalAmount)}</td>
@@ -241,6 +248,9 @@ export default function EmployeeLoansPanel() {
                     <td className="px-4 py-3 text-right font-semibold">{fmt(saldo)}</td>
                     <td className="px-4 py-3 text-center"><Badge variant="outline" className={st.cls}>{st.label}</Badge></td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <Button variant="ghost" size="sm" onClick={() => setStatementLoan(l)} title="Estado de cuenta">
+                        <FileText className="h-4 w-4 text-violet-600" />
+                      </Button>
                       {l.status !== 'pagado' && l.status !== 'cancelado' && (
                         <Button variant="ghost" size="sm" onClick={() => setPayFor(l)} title="Registrar abono">
                           <DollarSign className="h-4 w-4 text-emerald-600" />
@@ -338,6 +348,61 @@ export default function EmployeeLoansPanel() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setPayFor(null)}>Cancelar</Button>
             <Button onClick={registerPayment} disabled={saving || !payForm.amount}>{saving ? 'Guardando…' : 'Abonar'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Estado de cuenta */}
+      <Dialog open={!!statementLoan} onOpenChange={(o) => !o && setStatementLoan(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              Estado de Cuenta
+              {statementLoan?.consecutivo ? <Badge variant="outline" className="font-mono">{fmtConsec(statementLoan.consecutivo)}</Badge> : null}
+            </DialogTitle>
+          </DialogHeader>
+          {statementLoan && (
+            <div className="space-y-4">
+              <div className="rounded-lg border p-3 flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="font-semibold truncate">{statementLoan.employeeName}</p>
+                  <p className="text-sm text-muted-foreground">{statementLoan.concept}</p>
+                  <p className="text-xs text-muted-foreground mt-1">Fecha: {fmtDate(statementLoan.date)}{statementLoan.dueDate ? ` · Límite: ${fmtDate(statementLoan.dueDate)}` : ''}</p>
+                </div>
+                <Badge variant="outline" className={(STATUS[statementLoan.status] || STATUS.pendiente).cls}>
+                  {(STATUS[statementLoan.status] || STATUS.pendiente).label}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Total</p><p className="font-bold text-sm">{fmt(statementLoan.totalAmount)}</p></div>
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Abonado</p><p className="font-bold text-sm text-green-600">{fmt(statementLoan.paidAmount)}</p></div>
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Saldo</p><p className="font-bold text-sm text-red-500">{fmt(statementLoan.totalAmount - statementLoan.paidAmount)}</p></div>
+              </div>
+              <div>
+                <p className="text-sm font-medium mb-2">Movimientos ({statementLoan.payments?.length || 0})</p>
+                {!statementLoan.payments || statementLoan.payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-3 text-center">Sin abonos registrados.</p>
+                ) : (
+                  <div className="border rounded-lg divide-y max-h-60 overflow-auto">
+                    {statementLoan.payments.map((p) => (
+                      <div key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
+                        <div className="min-w-0">
+                          <p>{fmtDate(p.paidAt)}</p>
+                          <p className="text-xs text-muted-foreground truncate">{p.paymentMethod || 'Abono'}{p.reference ? ` · ${p.reference}` : ''}</p>
+                        </div>
+                        <p className="font-medium text-green-600">{fmt(p.amount)}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { const l = statementLoan; setStatementLoan(null); if (l) startEdit(l); }}>
+              <Pencil className="h-4 w-4 mr-2" />Editar
+            </Button>
+            <Button onClick={() => setStatementLoan(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

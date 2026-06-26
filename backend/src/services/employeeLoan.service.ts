@@ -67,8 +67,17 @@ export const employeeLoanService = {
   },
 
   async create(data: CreateEmployeeLoanDto) {
+    // Consecutivo secuencial = max + 1
+    const last = await prisma.employeeLoan.findFirst({
+      where: { consecutivo: { not: null } },
+      orderBy: { consecutivo: 'desc' },
+      select: { consecutivo: true },
+    });
+    const consecutivo = (last?.consecutivo || 0) + 1;
+
     return prisma.employeeLoan.create({
       data: {
+        consecutivo,
         employeeName: data.employeeName,
         terceroId: data.terceroId || null,
         concept: data.concept,

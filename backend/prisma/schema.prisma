@@ -536,6 +536,9 @@ model AccountPayment {
 model EmployeeLoan {
   id            String    @id @default(cuid())
 
+  // Consecutivo (numero secuencial) — uno por cada cuenta por cobrar a empleado
+  consecutivo   Int?
+
   // Empleado (nombre mostrado + relación opcional con un Tercero/empleado)
   employeeName  String
   terceroId     String?   // id del Tercero (empleado), opcional
