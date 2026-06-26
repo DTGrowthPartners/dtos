@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import notificationService from '../services/notification.service';
-import { sendPushToUser } from '../services/push.service';
+import { sendPushToUser, resolveTeamUser } from '../services/push.service';
 
 const prisma = new PrismaClient();
 
@@ -86,7 +86,7 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
     const { type, taskTitle, taskId, assigneeName, senderName } = req.body;
 
     // Find user by firstName (team member name)
-    const assigneeUser = await prisma.user.findFirst({
+    let assigneeUser = await prisma.user.findFirst({
       where: {
         firstName: {
           equals: assigneeName,
@@ -94,6 +94,12 @@ export const sendTaskNotification = async (req: Request, res: Response) => {
         },
       },
     });
+
+    // Respaldo robusto (acentos / 1 letra de diferencia, ej. "Jhonathan" vs "Jhonatan")
+    if (!assigneeUser) {
+      const resolved = await resolveTeamUser(assigneeName);
+      if (resolved) assigneeUser = await prisma.user.findUnique({ where: { id: resolved.id } });
+    }
 
     if (!assigneeUser) {
       // If user not found, just return success (not all team members may be registered)
