@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/contexts/SidebarContext";
 import { MainLayout } from "@/components/layout/MainLayout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Dashboard from "@/pages/Dashboard";
+import SalesDashboard from "@/pages/SalesDashboard";
 import ExecutiveDashboard from "@/pages/ExecutiveDashboard";
 import Clientes from "@/pages/Clientes";
 import Servicios from "@/pages/Servicios";
@@ -71,8 +72,9 @@ const App = () => (
 
             {/* Main App Routes */}
             <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/" element={<SalesDashboard />} />
+              <Route path="/dashboard" element={<SalesDashboard />} />
+              <Route path="/dashboard-clasico" element={<Dashboard />} />
               <Route path="/dashboard-executive" element={<ExecutiveDashboard />} />
               <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
               <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
