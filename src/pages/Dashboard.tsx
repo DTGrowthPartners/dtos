@@ -24,6 +24,7 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { apiClient } from '@/lib/api';
+import { isExcludedCategory } from '@/lib/financeFilters';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { TEAM_MEMBERS, type Task, type TeamMemberName } from '@/types/taskTypes';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -119,7 +120,8 @@ export default function Dashboard() {
   const [clientsWithServices, setClientsWithServices] = useState(0);
   const [financeTransactions, setFinanceTransactions] = useState<FinanceTransaction[]>([]);
   // Tendencia mensual ya agregada por el backend (getFinanceData.financeByMonth)
-  const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; income: number; expenses: number }[]>([]);
+  const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; income?: number; expenses?: number; proyectado?: number }[]>([]);
+  const [projection, setProjection] = useState<{ value: number; low: number; high: number; slopePerMonth: number; slopePct: number; r2: number } | null>(null);
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
@@ -438,11 +440,13 @@ export default function Dashboard() {
           setCurrentMonthName(monthNames[now.getMonth()]);
 
           // Filter transactions for current month only
+          // Mismo filtro que el Estado de Resultados: excluye traslados, reembolsos,
+          // reservas y ajustes de saldo, para que las cifras coincidan.
           const monthlyIngresos = (financeData.ingresos || []).filter(t => {
-            return t.fecha?.startsWith(currentMonthPrefix) && t.categoria !== 'AJUSTE SALDO';
+            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedCategory(t.categoria);
           });
           const monthlyGastos = (financeData.gastos || []).filter(t => {
-            return t.fecha?.startsWith(currentMonthPrefix) && t.categoria !== 'AJUSTE SALDO';
+            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedCategory(t.categoria);
           });
 
           // Calculate current month totals
@@ -453,16 +457,71 @@ export default function Dashboard() {
           setMonthlyExpenses(currentMonthExpenses);
           setFinanceTransactions(expenses);
 
-          // El último punto de la tendencia es el mes EN CURSO: usar el acumulado
-          // real del mes (lo que llevamos hasta hoy, igual que las tarjetas) en vez
-          // del valor del backend, para que se vea el mes parcial y la baja real.
-          const trend = [...(financeData.financeByMonth || [])];
-          if (trend.length > 0) {
-            trend[trend.length - 1] = {
-              ...trend[trend.length - 1],
-              income: currentMonthIncome,
-              expenses: currentMonthExpenses,
-            };
+          // ── Serie mensual: Ingresos/Gastos reales + Ingreso Proyectado ─────
+          // Ingresos y Gastos reales por mes (mismo filtro que el Estado de
+          // Resultados). El "Ingreso Proyectado" es la TENDENCIA estadística por
+          // regresión lineal (mínimos cuadrados) sobre el histórico de ingresos:
+          // una recta suave que pasa por el centro de los datos y se extiende a los
+          // meses futuros, con intervalo de predicción del 90%.
+          const shortMonths = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+          const ymPrefix = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          const monthIncome = (prefix: string) => (financeData.ingresos || [])
+            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
+            .reduce((sum, t) => sum + (t.importe || 0), 0);
+          const monthExpenses = (prefix: string) => (financeData.gastos || [])
+            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
+            .reduce((sum, t) => sum + (t.importe || 0), 0);
+
+          // Histórico de meses COMPLETOS (el mes en curso va parcial -> fuera del ajuste).
+          const histYs: number[] = [];
+          for (let i = 12; i >= 1; i--) {
+            const inc = monthIncome(ymPrefix(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+            if (inc > 0) histYs.push(inc);
+          }
+          const n = histYs.length;
+
+          // Regresión lineal por mínimos cuadrados: y = a + b·x  (x = índice de mes)
+          let a = 0, b = 0, sErr = 0, xbar = 0, Sxx = 0, r2 = 0, meanY = 0;
+          if (n >= 2) {
+            xbar = (n - 1) / 2;
+            meanY = histYs.reduce((p, y) => p + y, 0) / n;
+            let Sxy = 0;
+            for (let i = 0; i < n; i++) { Sxx += (i - xbar) ** 2; Sxy += (i - xbar) * (histYs[i] - meanY); }
+            b = Sxx ? Sxy / Sxx : 0;
+            a = meanY - b * xbar;
+            let sse = 0, sst = 0;
+            for (let i = 0; i < n; i++) { const e = histYs[i] - (a + b * i); sse += e * e; sst += (histYs[i] - meanY) ** 2; }
+            sErr = n > 2 ? Math.sqrt(sse / (n - 2)) : 0; // error estándar de la regresión
+            r2 = sst ? 1 - sse / sst : 0;
+          }
+          const fit = (x: number) => Math.max(0, Math.round(a + b * x)); // tendencia en el mes x
+
+          // Ventana: 5 meses previos + mes en curso + 3 meses proyectados.
+          const PAST = 5, FUTURE = 3;
+          const trend: { month: string; income?: number; expenses?: number; proyectado?: number }[] = [];
+          for (let off = -PAST; off <= FUTURE; off++) {
+            const d = new Date(now.getFullYear(), now.getMonth() + off, 1);
+            const prefix = ymPrefix(d);
+            const isFuture = off > 0;
+            const x = n + off; // posición del mes en la regresión (mes en curso = n)
+            const point: { month: string; income?: number; expenses?: number; proyectado?: number } = { month: shortMonths[d.getMonth()] };
+            if (!isFuture) { point.income = monthIncome(prefix); point.expenses = monthExpenses(prefix); }
+            if (n >= 2 && x >= 0) point.proyectado = fit(x);
+            trend.push(point);
+          }
+
+          // Intervalo de predicción del 90% para el mes en curso (x = n).
+          if (n > 2 && Sxx > 0) {
+            const x0 = n;
+            const tcrit = 2.353; // t de Student ~90% (gl=3) para muestras chicas
+            const hw = tcrit * sErr * Math.sqrt(1 + 1 / n + ((x0 - xbar) ** 2) / Sxx);
+            const central = fit(x0);
+            setProjection({ value: central, low: Math.max(0, Math.round(central - hw)), high: Math.round(central + hw), slopePerMonth: Math.round(b), slopePct: meanY ? (b / meanY) * 100 : 0, r2 });
+          } else if (n >= 2) {
+            const central = fit(n);
+            setProjection({ value: central, low: central, high: central, slopePerMonth: Math.round(b), slopePct: meanY ? (b / meanY) * 100 : 0, r2 });
+          } else {
+            setProjection(null);
           }
           setMonthlyTrend(trend);
           setCrmDeals(deals);
@@ -688,7 +747,7 @@ export default function Dashboard() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
                 <BarChart3 className="h-4 w-4" />
-                Tendencia de Ingresos (6 meses)
+                Tendencia de Ingresos y Proyección
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -715,17 +774,26 @@ export default function Dashboard() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                      <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
                       <Tooltip
-                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                        formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
                         contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
                       />
                       <Area type="monotone" dataKey="income" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#dashGradIncome)" dot={false} activeDot={{ r: 4 }} />
                       <Area type="monotone" dataKey="expenses" name="Gastos" stroke="#ef4444" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} />
+                      <Area type="monotone" dataKey="proyectado" name="Ingreso Proyectado" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" fill="none" dot={false} activeDot={{ r: 3 }} connectNulls />
                     </AreaChart>
                   </ResponsiveContainer>
                 )}
               </div>
+              {projection && !hideFinances && (
+                <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                  <span className="inline-block h-2 w-2 rounded-full bg-violet-500 mr-1 align-middle" />
+                  <span className="font-semibold text-foreground">Ingreso proyectado del mes: ${projection.value.toLocaleString()}</span>
+                  {' '}· IP 90%: ${projection.low.toLocaleString()}–${projection.high.toLocaleString()}
+                  {' '}· tendencia {projection.slopePerMonth >= 0 ? '+' : ''}${projection.slopePerMonth.toLocaleString()}/mes ({projection.slopePct >= 0 ? '+' : ''}{projection.slopePct.toFixed(1)}%) · ajuste R²={projection.r2.toFixed(2)} · regresión lineal con intervalo de predicción
+                </p>
+              )}
             </CardContent>
           </Card>
 

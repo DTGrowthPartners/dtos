@@ -4,6 +4,7 @@ import { exportIncomeStatementPDF, exportIncomeStatementExcel } from '@/lib/fina
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
+import { isExcludedCategory } from '@/lib/financeFilters';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DateRange } from 'react-day-picker';
@@ -60,12 +61,9 @@ const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
 const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Helper to check if a category is excluded
-const isExcluded = (categoria: string | undefined | null): boolean => {
-  if (!categoria) return false;
-  const upper = categoria.trim().toUpperCase();
-  return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
-};
+// Filtro de categorías excluidas — compartido con el Dashboard para que las
+// cifras de Ingresos/Gastos coincidan (ver src/lib/financeFilters.ts).
+const isExcluded = isExcludedCategory;
 
 // Normalize date helper
 const normalizeDate = (dateStr: string): string => {
