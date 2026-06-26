@@ -8,11 +8,15 @@ import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, 
 import { Link } from 'react-router-dom';
 import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
 import OperationsSection from '@/components/dashboard/OperationsSection';
+import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { CalendarDays } from 'lucide-react';
+import type { DateRange } from 'react-day-picker';
 
 interface Tx { importe: number; fecha: string }
 interface FinanceData { ingresos?: Tx[]; gastos?: Tx[] }
 
-type Period = 'hoy' | '7d' | 'mes' | 'mesant' | 'ano';
+type Period = 'hoy' | '7d' | 'mes' | 'mesant' | 'ano' | 'custom';
 
 const MONTHS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const MONTHS_SHORT = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -30,6 +34,8 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState(() => Number(localStorage.getItem('dash.meta')) || 22000000);
   const [presupuesto, setPresupuesto] = useState(() => Number(localStorage.getItem('dash.presupuesto')) || 14500000);
+  const [range, setRange] = useState<DateRange | undefined>();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     apiClient
@@ -57,6 +63,29 @@ export default function SalesDashboard() {
 
     const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const sum = (txs: Tx[], pred: (d: string) => boolean) => txs.filter((t) => pred(startsWithLocalDate(t.fecha))).reduce((s, t) => s + (t.importe || 0), 0);
+
+    // ----- RANGO PERSONALIZADO -----
+    if (period === 'custom' && range?.from && range?.to) {
+      const start = new Date(range.from); start.setHours(0, 0, 0, 0);
+      const end = new Date(range.to); end.setHours(0, 0, 0, 0);
+      const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
+      const data = [];
+      let cumI = 0, cumE = 0, totI = 0, totE = 0;
+      for (let i = 0; i < days; i++) {
+        const d = new Date(start.getTime() + i * 86400000);
+        const key = ymd(d);
+        const inc = sum(ingresos, (f) => f.startsWith(key));
+        const exp = sum(gastos, (f) => f.startsWith(key));
+        cumI += inc; cumE += exp; totI += inc; totE += exp;
+        data.push({ x: `${d.getDate()}/${d.getMonth() + 1}`, ingresos: cumI, gastos: cumE, proyeccion: null });
+      }
+      const fmtD = (d: Date) => `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+      return {
+        titulo: `${fmtD(start)} – ${fmtD(end)} ${end.getFullYear()}`, chartTitle: 'Acumulado · rango',
+        xLabel: (v: number | string) => String(v), isCurrent: false, elapsed: days, total: days,
+        mtdIngresos: totI, mtdGastos: totE, avgPerDay: totI / days, neededPerDay: 0, proyeccion: totI, data, unidad: '',
+      };
+    }
 
     // ----- MES (en curso) o MES ANTERIOR -----
     if (period === 'mes' || period === 'mesant') {
@@ -143,7 +172,7 @@ export default function SalesDashboard() {
       xLabel: (v: number) => String(v), isCurrent: false, elapsed: nDays, total: nDays,
       mtdIngresos, mtdGastos, avgPerDay: mtdIngresos / nDays, neededPerDay: 0, proyeccion: mtdIngresos, data, unidad: 'día',
     };
-  }, [period, ingresos, gastos, meta]);
+  }, [period, ingresos, gastos, meta, range]);
 
   const metaPct = Math.min(100, Math.round((model.mtdIngresos / Math.max(1, meta)) * 100));
   const presupPct = Math.round((model.mtdGastos / Math.max(1, presupuesto)) * 100);
@@ -167,7 +196,7 @@ export default function SalesDashboard() {
           <p className="text-sm text-muted-foreground">Ingresos</p>
           <h1 className="text-2xl sm:text-3xl font-bold">{model.titulo}</h1>
         </div>
-        <div className="flex items-center gap-1 rounded-xl bg-muted/60 p-1 self-start">
+        <div className="flex items-center gap-1 rounded-xl bg-muted/60 p-1 self-start flex-wrap">
           {periods.map((p) => (
             <button
               key={p.id}
@@ -177,6 +206,39 @@ export default function SalesDashboard() {
               {p.label}
             </button>
           ))}
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <button
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${period === 'custom' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <CalendarDays className="h-4 w-4" /> Personalizado
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <CalendarPicker mode="range" numberOfMonths={2} selected={range} onSelect={setRange} defaultMonth={range?.from} />
+              <div className="flex flex-wrap items-center gap-2 border-t border-border p-3">
+                {([
+                  { label: 'Q1', range: () => { const y = new Date().getFullYear(); return { from: new Date(y, 0, 1), to: new Date(y, 2, 31) }; } },
+                  { label: 'Q2', range: () => { const y = new Date().getFullYear(); return { from: new Date(y, 3, 1), to: new Date(y, 5, 30) }; } },
+                  { label: 'Q3', range: () => { const y = new Date().getFullYear(); return { from: new Date(y, 6, 1), to: new Date(y, 8, 30) }; } },
+                  { label: 'Q4', range: () => { const y = new Date().getFullYear(); return { from: new Date(y, 9, 1), to: new Date(y, 11, 31) }; } },
+                  { label: 'Últ. 30d', range: () => ({ from: new Date(Date.now() - 30 * 86400000), to: new Date() }) },
+                  { label: 'Últ. 90d', range: () => ({ from: new Date(Date.now() - 90 * 86400000), to: new Date() }) },
+                ] as { label: string; range: () => DateRange }[]).map((p) => (
+                  <button key={p.label} onClick={() => setRange(p.range())} className="px-2.5 py-1 text-xs rounded-md border border-border hover:bg-muted text-muted-foreground hover:text-foreground">
+                    {p.label}
+                  </button>
+                ))}
+                <button
+                  disabled={!range?.from || !range?.to}
+                  onClick={() => { setPeriod('custom'); setPickerOpen(false); }}
+                  className="ml-auto px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground font-medium disabled:opacity-50"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
