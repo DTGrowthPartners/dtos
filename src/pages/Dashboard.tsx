@@ -41,6 +41,7 @@ import {
   Scatter,
   ZAxis,
   Line,
+  ReferenceDot,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -133,6 +134,13 @@ export default function Dashboard() {
   const [totalDisponible, setTotalDisponible] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [currentMonthName, setCurrentMonthName] = useState('');
+  const [currentMonthChartData, setCurrentMonthChartData] = useState<{
+    day: number; income?: number; expenses?: number; proyeccion?: number;
+    pays: { y: number; client: string; fecha: string }[];
+  }[]>([]);
+  const [currentMonthPaymentDots, setCurrentMonthPaymentDots] = useState<
+    { x: number; y: number; client: string; fecha: string }[]
+  >([]);
 
   // Hide/show finances toggle (persisted in localStorage)
   const [hideFinances, setHideFinances] = useState(() => {
@@ -375,72 +383,6 @@ export default function Dashboard() {
     return Math.round((myCompletedTasks.length / total) * 100);
   }, [myTasks, myCompletedTasks]);
 
-  // ── Gráfico diario acumulado del mes en curso ─────────────────────────
-  const currentMonthChartData = useMemo(() => {
-    if (!financeTransactions.length) return [];
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth();
-    const today = now.getDate();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const prefix = `${year}-${String(month + 1).padStart(2, '0')}`;
-
-    const txInc = financeTransactions.filter(t =>
-      t.tipo === 'ingreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria)
-    );
-    const txExp = financeTransactions.filter(t =>
-      t.tipo === 'egreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria)
-    );
-
-    let cumInc = 0, cumExp = 0;
-    const cumIncArr: number[] = [];
-    const cumExpArr: number[] = [];
-    for (let d = 1; d <= today; d++) {
-      const ds = `${prefix}-${String(d).padStart(2, '0')}`;
-      cumInc += txInc.filter(t => t.fecha === ds).reduce((s, t) => s + t.importe, 0);
-      cumExp += txExp.filter(t => t.fecha === ds).reduce((s, t) => s + t.importe, 0);
-      cumIncArr.push(cumInc);
-      cumExpArr.push(cumExp);
-    }
-
-    // OLS sobre ingreso acumulado diario → proyección al resto del mes
-    let projFn: ((d: number) => number) | null = null;
-    if (today >= 2) {
-      const xs = Array.from({ length: today }, (_, i) => i + 1);
-      const xbar = xs.reduce((s, x) => s + x, 0) / today;
-      const ybar = cumIncArr.reduce((s, y) => s + y, 0) / today;
-      let Sxy = 0, Sxx = 0;
-      for (let i = 0; i < today; i++) { Sxy += (xs[i] - xbar) * (cumIncArr[i] - ybar); Sxx += (xs[i] - xbar) ** 2; }
-      const b = Sxx ? Sxy / Sxx : 0;
-      const a = ybar - b * xbar;
-      projFn = (d: number) => Math.max(0, Math.round(a + b * d));
-    }
-
-    return Array.from({ length: daysInMonth }, (_, i) => {
-      const d = i + 1;
-      const hasData = d <= today;
-      return {
-        day: d,
-        income: hasData ? cumIncArr[d - 1] : undefined,
-        expenses: hasData ? cumExpArr[d - 1] : undefined,
-        proyeccion: projFn && d >= today ? projFn(d) : undefined,
-      };
-    });
-  }, [financeTransactions]);
-
-  // Puntos de pago individuales del mes en curso
-  const currentMonthPaymentDots = useMemo(() => {
-    const now = new Date();
-    const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    return financeTransactions
-      .filter(t => t.tipo === 'ingreso' && t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
-      .map(t => ({
-        x: parseInt(t.fecha.split('-')[2] || '1'),
-        y: t.importe,
-        client: (t as any).terceroId || t.terceroNombre || 'Sin cliente',
-        fecha: t.fecha,
-      }));
-  }, [financeTransactions]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -527,6 +469,69 @@ export default function Dashboard() {
           setMonthlyIncome(currentMonthIncome);
           setMonthlyExpenses(currentMonthExpenses);
           setFinanceTransactions(expenses);
+
+          // ── Gráfico diario acumulado del mes en curso ──────────────────
+          {
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            const today = now.getDate();
+            const txInc = monthlyIngresos; // ya filtrados por mes y categoría
+            const txExp = monthlyGastos;
+
+            let cumInc = 0, cumExp = 0;
+            const cumIncArr: number[] = [], cumExpArr: number[] = [];
+            for (let d = 1; d <= today; d++) {
+              const ds = `${currentMonthPrefix}-${String(d).padStart(2, '0')}`;
+              cumInc += txInc.filter(t => t.fecha === ds).reduce((s, t) => s + (t.importe || 0), 0);
+              cumExp += txExp.filter(t => t.fecha === ds).reduce((s, t) => s + (t.importe || 0), 0);
+              cumIncArr.push(cumInc);
+              cumExpArr.push(cumExp);
+            }
+
+            let projFn: ((d: number) => number) | null = null;
+            if (today >= 2) {
+              const xs = Array.from({ length: today }, (_, i) => i + 1);
+              const xbar = xs.reduce((s, x) => s + x, 0) / today;
+              const ybar = cumIncArr.reduce((s, y) => s + y, 0) / today;
+              let Sxy = 0, Sxx = 0;
+              for (let i = 0; i < today; i++) { Sxy += (xs[i] - xbar) * (cumIncArr[i] - ybar); Sxx += (xs[i] - xbar) ** 2; }
+              const slope = Sxx ? Sxy / Sxx : 0;
+              const intercept = ybar - slope * xbar;
+              projFn = (d: number) => Math.max(0, Math.round(intercept + slope * d));
+            }
+
+            const chartDays = Array.from({ length: daysInMonth }, (_, i) => {
+              const d = i + 1;
+              const hasData = d <= today;
+              return {
+                day: d,
+                income: hasData ? cumIncArr[d - 1] : undefined,
+                expenses: hasData ? cumExpArr[d - 1] : undefined,
+                proyeccion: projFn && d >= today ? projFn(d) : undefined,
+                pays: [] as { y: number; client: string; fecha: string }[],
+              };
+            });
+
+            for (const t of txInc) {
+              const dayNum = parseInt((t.fecha || '').split('-')[2] || '0');
+              if (dayNum >= 1 && dayNum <= daysInMonth) {
+                chartDays[dayNum - 1].pays.push({
+                  y: t.importe || 0,
+                  client: (t as any).terceroId || (t as any).entidad || (t as any).terceroNombre || 'Sin cliente',
+                  fecha: t.fecha || '',
+                });
+              }
+            }
+
+            setCurrentMonthChartData(chartDays);
+            setCurrentMonthPaymentDots(
+              txInc.map(t => ({
+                x: parseInt((t.fecha || '').split('-')[2] || '1'),
+                y: t.importe || 0,
+                client: (t as any).terceroId || (t as any).entidad || (t as any).terceroNombre || 'Sin cliente',
+                fecha: t.fecha || '',
+              }))
+            );
+          }
 
           // ── Serie mensual: Ingresos/Gastos reales + Ingreso Proyectado ─────
           // Ingresos y Gastos reales por mes (mismo filtro que el Estado de
@@ -865,22 +870,23 @@ export default function Dashboard() {
                       <Tooltip
                         content={({ active, payload }: any) => {
                           if (!active || !payload?.length) return null;
-                          const day = payload[0]?.payload?.day ?? payload[0]?.payload?.x;
-                          const areaSeries = payload.filter((p: any) => p.dataKey != null && p.value != null);
-                          const dotSeries = payload.filter((p: any) => p.payload?.client);
+                          const data = payload[0]?.payload;
+                          if (!data) return null;
+                          const series = payload.filter((p: any) => p.value != null);
                           return (
-                            <div style={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 220 }}>
-                              <p style={{ fontWeight: 600, marginBottom: 4 }}>Día {day}</p>
-                              {areaSeries.map((p: any, i: number) => (
+                            <div style={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 240 }}>
+                              <p style={{ fontWeight: 600, marginBottom: 4 }}>Día {data.day}</p>
+                              {series.map((p: any, i: number) => (
                                 <p key={i} style={{ color: p.color }}>{p.name}: ${Number(p.value).toLocaleString()}</p>
                               ))}
-                              {dotSeries.map((p: any, i: number) => (
-                                <div key={i} style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsl(var(--border))' }}>
-                                  <p style={{ color: '#22c55e', fontWeight: 600 }}>${Number(p.payload.y).toLocaleString()}</p>
-                                  <p style={{ color: 'hsl(var(--muted-foreground))' }}>{p.payload.client}</p>
-                                  <p style={{ color: 'hsl(var(--muted-foreground))' }}>{p.payload.fecha}</p>
+                              {data.pays?.length > 0 && (
+                                <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsl(var(--border))' }}>
+                                  <p style={{ color: '#22c55e', fontWeight: 600, marginBottom: 2 }}>Pagos recibidos:</p>
+                                  {data.pays.map((p: any, i: number) => (
+                                    <p key={i} style={{ color: '#22c55e' }}>• {p.client}: ${Number(p.y).toLocaleString()}</p>
+                                  ))}
                                 </div>
-                              ))}
+                              )}
                             </div>
                           );
                         }}
@@ -888,8 +894,9 @@ export default function Dashboard() {
                       <Area type="monotone" dataKey="income" name="Ingresos (acum.)" stroke="#3b82f6" strokeWidth={2.5} fill="url(#dashGradIncome)" dot={false} activeDot={{ r: 4 }} connectNulls />
                       <Area type="monotone" dataKey="expenses" name="Gastos (acum.)" stroke="#f59e0b" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} connectNulls />
                       <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="5 5" dot={false} activeDot={{ r: 3 }} connectNulls />
-                      <ZAxis range={[55, 55]} />
-                      <Scatter data={currentMonthPaymentDots} name="Pago de cliente" fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
+                      {currentMonthPaymentDots.map((dot, i) => (
+                        <ReferenceDot key={i} x={dot.x} y={dot.y} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
+                      ))}
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
