@@ -37,6 +37,9 @@ import {
   Bar,
   AreaChart,
   Area,
+  ComposedChart,
+  Scatter,
+  ZAxis,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -122,6 +125,7 @@ export default function Dashboard() {
   // Tendencia mensual ya agregada por el backend (getFinanceData.financeByMonth)
   const [monthlyTrend, setMonthlyTrend] = useState<{ month: string; income?: number; expenses?: number; proyectado?: number }[]>([]);
   const [projection, setProjection] = useState<{ value: number; low: number; high: number; slopePerMonth: number; slopePct: number; r2: number } | null>(null);
+  const [paymentDots, setPaymentDots] = useState<{ x: number; y: number; client: string; fecha: string }[]>([]);
   const [crmDeals, setCrmDeals] = useState<CRMDeal[]>([]);
   const [crmStages, setCrmStages] = useState<CRMStage[]>([]);
   const [topClients, setTopClients] = useState<{ name: string, total: number }[]>([]);
@@ -524,6 +528,27 @@ export default function Dashboard() {
             setProjection(null);
           }
           setMonthlyTrend(trend);
+
+          // Compute income payment dots for the chart (past 5 months + current month)
+          const dots: { x: number; y: number; client: string; fecha: string }[] = [];
+          for (const t of expenses.filter(tx => tx.tipo === 'ingreso')) {
+            if (!t.fecha || isExcludedCategory(t.categoria)) continue;
+            const tDate = new Date(t.fecha + 'T12:00:00');
+            for (let off = -PAST; off <= 0; off++) {
+              const m = new Date(now.getFullYear(), now.getMonth() + off, 1);
+              if (tDate.getFullYear() === m.getFullYear() && tDate.getMonth() === m.getMonth()) {
+                dots.push({
+                  x: PAST + off,
+                  y: t.importe,
+                  client: (t as any).terceroId || t.terceroNombre || 'Sin cliente',
+                  fecha: t.fecha,
+                });
+                break;
+              }
+            }
+          }
+          setPaymentDots(dots);
+
           setCrmDeals(deals);
           setCrmStages(stages);
           setDisponible(disponibleData.cuentas || []);
@@ -761,7 +786,10 @@ export default function Dashboard() {
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={monthlyTrend.length ? monthlyTrend : incomeByMonth} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <ComposedChart
+                      data={(monthlyTrend.length ? monthlyTrend : incomeByMonth).map((p, i) => ({ ...p, _x: i }))}
+                      margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    >
                       <defs>
                         <linearGradient id="dashGradIncome" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#22c55e" stopOpacity={0.35} />
@@ -773,16 +801,51 @@ export default function Dashboard() {
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" className="stroke-muted" vertical={false} />
-                      <XAxis dataKey="month" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                      <XAxis
+                        dataKey="_x"
+                        type="number"
+                        domain={[0, Math.max(0, (monthlyTrend.length || 1) - 1)]}
+                        tickCount={monthlyTrend.length || 9}
+                        tickFormatter={(i: number) => {
+                          const src = monthlyTrend.length ? monthlyTrend : incomeByMonth;
+                          return src[Math.round(i)]?.month || '';
+                        }}
+                        tick={{ fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
                       <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
                       <Tooltip
-                        formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name]}
-                        contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8 }}
+                        content={({ active, payload }: any) => {
+                          if (!active || !payload?.length) return null;
+                          const monthIdx = payload[0]?.payload?._x ?? payload[0]?.payload?.x;
+                          const src = monthlyTrend.length ? monthlyTrend : incomeByMonth;
+                          const monthLabel = src[Math.round(monthIdx)]?.month || '';
+                          const areaSeries = payload.filter((p: any) => p.dataKey != null);
+                          const dotSeries = payload.filter((p: any) => p.payload?.client);
+                          return (
+                            <div style={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, padding: '8px 12px', fontSize: 12, maxWidth: 220 }}>
+                              {monthLabel && <p style={{ fontWeight: 600, marginBottom: 4 }}>{monthLabel}</p>}
+                              {areaSeries.filter((p: any) => p.value != null).map((p: any, i: number) => (
+                                <p key={i} style={{ color: p.color }}>{p.name}: ${Number(p.value).toLocaleString()}</p>
+                              ))}
+                              {dotSeries.map((p: any, i: number) => (
+                                <div key={i} style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid hsl(var(--border))' }}>
+                                  <p style={{ color: '#22c55e', fontWeight: 600 }}>${Number(p.payload.y).toLocaleString()}</p>
+                                  <p style={{ color: 'hsl(var(--muted-foreground))' }}>{p.payload.client}</p>
+                                  <p style={{ color: 'hsl(var(--muted-foreground))' }}>{p.payload.fecha}</p>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
                       />
                       <Area type="monotone" dataKey="income" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#dashGradIncome)" dot={false} activeDot={{ r: 4 }} />
                       <Area type="monotone" dataKey="expenses" name="Gastos" stroke="#ef4444" strokeWidth={2} fill="url(#dashGradExpense)" dot={false} activeDot={{ r: 3 }} />
                       <Area type="monotone" dataKey="proyectado" name="Ingreso Proyectado" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="5 5" fill="none" dot={false} activeDot={{ r: 3 }} connectNulls />
-                    </AreaChart>
+                      <ZAxis range={[55, 55]} />
+                      <Scatter data={paymentDots} name="Pago de cliente" fill="#22c55e" stroke="#fff" strokeWidth={1.5} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </div>
