@@ -93,6 +93,52 @@ export const sendPushToUser = async (
   return { sent: res.successCount, failed: res.failureCount, tokens: tokens.length };
 };
 
+/**
+ * Envía push de un mensaje de chat a los participantes de la sala que NO estén
+ * activos (online). Lee la sala (chat_rooms) y la presencia (user_presence) de
+ * Firestore. No envía a salas de IA. Para el chat general, va a todo el equipo.
+ */
+export const sendChatPush = async (
+  roomId: string,
+  senderId: string,
+  senderName: string,
+  text: string,
+  hasImage = false
+) => {
+  const fs = getFirestore();
+  const roomSnap = await fs.collection('chat_rooms').doc(roomId).get();
+  if (!roomSnap.exists) return;
+  const room = roomSnap.data() as { type?: string; participants?: string[] };
+  if (room.type === 'ai') return; // las respuestas de María no notifican
+
+  let recipientIds: string[];
+  if (room.type === 'general' || !room.participants?.length) {
+    const users = await prisma.user.findMany({ select: { id: true } });
+    recipientIds = users.map((u) => u.id).filter((id) => id !== senderId);
+  } else {
+    // Solo un participante real puede disparar push a su sala.
+    if (!room.participants.includes(senderId)) return;
+    recipientIds = room.participants.filter((id) => id !== senderId && id !== 'ai_assistant');
+  }
+  if (!recipientIds.length) return;
+
+  // No molestar a quien ya tiene la app abierta y activa (presencia 'online').
+  const presence = await Promise.all(
+    recipientIds.map((id) => fs.collection('user_presence').doc(id).get())
+  );
+  const online = new Set(
+    presence.filter((s) => s.exists && (s.data() as { status?: string })?.status === 'online').map((s) => s.id)
+  );
+  const targets = recipientIds.filter((id) => !online.has(id));
+  if (!targets.length) return;
+
+  const title = room.type === 'general' ? `${senderName} · Chat General` : senderName;
+  const body = (text?.trim() || (hasImage ? '📷 Imagen' : 'Nuevo mensaje')).slice(0, 120);
+  await Promise.all(
+    targets.map((id) => sendPushToUser(id, { title, body, url: '/', tag: `chat-${roomId}` }).catch(() => {}))
+  );
+};
+
 /** Envía push al miembro del equipo por nombre (resolución robusta a acentos/typos). */
 export const sendPushToMemberName = async (firstName: string, payload: PushPayload) => {
   const user = await resolveTeamUser(firstName);

@@ -398,14 +398,19 @@ export default function LiveChat() {
         );
       } else {
         // Regular team chat
+        const messageText = newMessage.trim();
         await sendMessage(
           activeRoomId,
-          newMessage.trim(),
+          messageText,
           user.id,
           userName,
           currentUser?.photoUrl
         );
         setNewMessage('');
+        // Push (PWA) a los participantes que no estén activos en la app.
+        apiClient
+          .post('/api/chat/notify', { roomId: activeRoomId, senderName: userName, text: messageText })
+          .catch(() => {});
       }
 
       // Refocus input after sending for continuous typing

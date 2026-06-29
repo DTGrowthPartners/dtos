@@ -92,6 +92,7 @@ export const addPayment = async (req: Request, res: Response) => {
       amount: Number(data.amount),
       paidAt: data.paidAt ? new Date(data.paidAt) : undefined,
     });
+    if (!loan) return res.status(404).json({ error: 'Préstamo no encontrado' });
 
     // Register in Google Sheets (non-blocking — failure doesn't roll back the payment)
     try {
