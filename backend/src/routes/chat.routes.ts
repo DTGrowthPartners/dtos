@@ -14,6 +14,7 @@ router.post('/notify', (req: Request, res: Response) => {
   const senderId = (req as any).user?.userId;
   const { roomId, senderName, text, hasImage } = req.body || {};
   if (!roomId || !senderId) return res.status(400).json({ error: 'roomId requerido' });
+  console.log(`[chat push] /notify room=${roomId} sender=${senderId} (${senderName || '?'})`);
   // fire-and-forget: no bloquear el envío del mensaje
   sendChatPush(roomId, senderId, senderName || 'Alguien', text || '', !!hasImage)
     .catch((e) => console.error('[chat push] falló:', (e as Error).message));

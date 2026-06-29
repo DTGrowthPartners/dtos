@@ -130,13 +130,23 @@ export const sendChatPush = async (
     presence.filter((s) => s.exists && (s.data() as { status?: string })?.status === 'online').map((s) => s.id)
   );
   const targets = recipientIds.filter((id) => !online.has(id));
+  console.log(
+    `[chat push] room=${roomId} type=${room.type || '?'} recipients=${recipientIds.length} online-skip=${online.size} targets=${targets.length}`
+  );
   if (!targets.length) return;
 
   const title = room.type === 'general' ? `${senderName} · Chat General` : senderName;
   const body = (text?.trim() || (hasImage ? '📷 Imagen' : 'Nuevo mensaje')).slice(0, 120);
-  await Promise.all(
-    targets.map((id) => sendPushToUser(id, { title, body, url: '/', tag: `chat-${roomId}` }).catch(() => {}))
+  const results = await Promise.all(
+    targets.map((id) =>
+      sendPushToUser(id, { title, body, url: '/', tag: `chat-${roomId}` }).catch((e) => {
+        console.error('[chat push] error a', id, (e as Error).message);
+        return { sent: 0, failed: 1, tokens: 0 };
+      })
+    )
   );
+  const sent = results.reduce((a, r) => a + r.sent, 0);
+  console.log(`[chat push] enviados=${sent} de ${targets.length} destinatario(s)`);
 };
 
 /** Envía push al miembro del equipo por nombre (resolución robusta a acentos/typos). */
