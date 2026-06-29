@@ -109,7 +109,8 @@ export default function GlobalTodo() {
         <button
           onClick={() => setOpen(true)}
           title="Mis pendientes"
-          className="fixed bottom-24 right-4 z-40 h-14 w-14 rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center"
+          style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 5rem)' }}
+          className="fixed right-4 z-40 h-14 w-14 rounded-full bg-amber-500 text-white shadow-lg hover:bg-amber-600 transition-all flex items-center justify-center"
         >
           <ListTodo className="h-6 w-6" />
         </button>
@@ -142,7 +143,7 @@ export default function GlobalTodo() {
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-4" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
             <TodoList />
           </div>
         </div>

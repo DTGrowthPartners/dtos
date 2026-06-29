@@ -604,7 +604,8 @@ export default function LiveChat() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-4 right-4 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center"
+          style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          className="fixed right-4 z-50 h-14 w-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-all flex items-center justify-center"
         >
           <MessageCircle className="h-6 w-6" />
           {totalUnread > 0 && (
@@ -619,7 +620,8 @@ export default function LiveChat() {
       {isOpen && isMinimized && (
         <button
           onClick={() => setIsMinimized(false)}
-          className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all"
+          style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+          className="fixed right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 transition-all"
         >
           <MessageCircle className="h-4 w-4" />
           <span className="text-sm font-medium">Chat</span>
@@ -1018,7 +1020,7 @@ export default function LiveChat() {
               )}
 
               {/* Input */}
-              <form onSubmit={handleSendMessage} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId.startsWith('ai_') && attachedImages.length > 0 ? '' : 'border-t'}`}>
+              <form onSubmit={handleSendMessage} style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId.startsWith('ai_') && attachedImages.length > 0 ? '' : 'border-t'}`}>
                 {activeRoomId.startsWith('ai_') && (
                   <>
                     <input
