@@ -137,6 +137,25 @@ export default function LiveChat() {
   // Imágenes adjuntas (data URLs) para enviar a María (visión)
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
 
+  // iOS/móvil: cuando se abre el teclado, iOS lo superpone (no encoge el layout),
+  // así que ajustamos el panel al área realmente visible vía visualViewport.
+  const [viewport, setViewport] = useState<{ top: number; height: number }>(() => ({
+    top: 0,
+    height: typeof window !== 'undefined' ? window.innerHeight : 0,
+  }));
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setViewport({ top: vv.offsetTop, height: vv.height });
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, []);
+
   // Reduce una imagen (máx 1600px, JPEG 0.85) para enviar un payload liviano y
   // acelerar la visión, manteniendo el texto legible para OCR.
   const downscaleToDataURL = (file: File): Promise<string> =>
@@ -647,7 +666,10 @@ export default function LiveChat() {
 
       {/* Chat Sidebar (panel lateral derecho de altura completa) */}
       {isOpen && !isMinimized && (
-        <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] bg-background border-l border-border shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200">
+        <div
+          style={{ top: viewport.top, height: viewport.height }}
+          className="fixed right-0 z-50 w-full sm:w-[400px] bg-background border-l border-border shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200"
+        >
           {/* Header */}
           <div style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }} className="relative z-10 flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
