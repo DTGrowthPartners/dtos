@@ -147,12 +147,17 @@ export default function SalesDashboard() {
         const inc = sum(ingresos, (f) => f.startsWith(key));
         const exp = sum(gastos, (f) => f.startsWith(key));
         cumI += inc; cumE += exp; totI += inc; totE += exp;
-        data.push({ x: `${d.getDate()}/${d.getMonth() + 1}`, ingresos: cumI, gastos: cumE, proyeccion: null });
+        data.push({ x: i, ingresos: cumI, gastos: cumE, proyeccion: null, dayPayments: [] as PaymentPoint[] });
       }
       const fmtD = (d: Date) => `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+      const step = Math.max(1, Math.ceil(days / 10));
       return {
         titulo: `${fmtD(start)} – ${fmtD(end)} ${end.getFullYear()}`, chartTitle: 'Acumulado · rango',
-        xLabel: (v: number | string) => String(v), isCurrent: false, elapsed: days, total: days,
+        xLabel: (v: number | string) => { const d = new Date(start.getTime() + Number(v) * 86400000); return `${d.getDate()}/${d.getMonth() + 1}`; },
+        isCurrent: false, elapsed: days, total: days,
+        xDomain: [0, days - 1] as [number, number],
+        xTicks: data.filter((_, i) => i % step === 0).map((p) => p.x),
+        payments: [] as PaymentPoint[],
         mtdIngresos: totI, mtdGastos: totE, avgPerDay: totI / days, neededPerDay: 0, proyeccion: totI, data, unidad: '',
       };
     }
@@ -450,7 +455,7 @@ export default function SalesDashboard() {
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
                 <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
-                {model.payments.map((pm, i) => (
+                {(model.payments || []).map((pm, i) => (
                   <ReferenceDot key={i} x={pm.x} y={pm.monto} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
                 ))}
               </ComposedChart>
