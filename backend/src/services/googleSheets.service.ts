@@ -323,6 +323,35 @@ export class GoogleSheetsService {
     return days;
   }
 
+  /**
+   * Pagos de clientes desde la hoja Entradas (fuente de verdad de Dairo).
+   * Lee A:J y filtra Categoría = "PAGO DE CLIENTE". Devuelve quién pagó (Tercero),
+   * cuánto, cuándo, contra qué cuenta de cobro y si fue pago total o abono.
+   */
+  async getClientPayments(): Promise<Array<{
+    fecha: string; importe: number; descripcion: string; cuenta: string;
+    tercero: string; clasificacion: string; cuentaCobro: string; tipoPago: string;
+  }>> {
+    const resp = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: 'Entradas!A1:J',
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    });
+    const rows = resp.data.values || [];
+    return rows
+      .filter((r: any[]) => r[1] && String(r[3] || '').trim().toUpperCase() === 'PAGO DE CLIENTE')
+      .map((r: any[]) => ({
+        fecha: this.parseDate(r[0]),
+        importe: this.parseAmount(r[1]),
+        descripcion: String(r[2] || ''),
+        cuenta: String(r[4] || ''),
+        tercero: String(r[5] || ''),
+        clasificacion: String(r[6] || ''),
+        cuentaCobro: r[8] != null ? String(r[8]) : '',
+        tipoPago: String(r[9] || ''),
+      }));
+  }
+
   async addExpense(expense: {
     fecha: string;
     importe: number;

@@ -356,6 +356,33 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
         </Panel>
       </div>
 
+      {/* Pagos recibidos · Google Sheets (fuente del contador) */}
+      <Panel title="Pagos recibidos · Google Sheets" icon={Receipt}>
+        {c.payments && c.payments.length > 0 ? (
+          <>
+            <div className="flex items-center justify-between text-sm mb-3 pb-2 border-b border-border">
+              <span className="text-muted-foreground">Total pagado (hoja Entradas)</span>
+              <span className="font-semibold text-emerald-400 tabular-nums">{fmtFull(c.paidSheets || 0)}</span>
+            </div>
+            <div className="space-y-1.5 max-h-80 overflow-y-auto">
+              {c.payments.map((p, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 py-1.5 border-b border-border/40 last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-sm truncate">{p.descripcion || 'Pago de cliente'}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {(p.fecha || '').slice(0, 10)}{p.cuenta ? ` · ${p.cuenta}` : ''}{p.cuentaCobro ? ` · CC ${p.cuentaCobro}` : ''}{p.tipoPago ? ` · ${p.tipoPago}` : ''}
+                    </p>
+                  </div>
+                  <span className="text-sm tabular-nums text-emerald-400 shrink-0">{fmtFull(p.importe)}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground">Sin pagos registrados en Google Sheets (hoja Entradas) para este cliente.</p>
+        )}
+      </Panel>
+
       {/* Editar cliente */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="sm:max-w-[460px]">

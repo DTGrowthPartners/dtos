@@ -31,6 +31,8 @@ export interface ClientV2 {
   urgencyLabel: string;         // "Vencido hace 2 días", "Vence hoy", "Cobra en 3 días", "Próximo: 10 jul"
   sedes?: number;
   invoices: CInvoice[];
+  payments?: { fecha: string; importe: number; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }[];
+  paidSheets?: number;
   ads?: CAds;
   activity: CActivity[];
   totals: { facturado: number; pagado: number; pendiente: number; ltvMonths: number };

@@ -8,6 +8,7 @@ import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, 
 import { Link } from 'react-router-dom';
 import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
 import OperationsSection from '@/components/dashboard/OperationsSection';
+import AiUsageWidget from '@/components/dashboard/AiUsageWidget';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarDays } from 'lucide-react';
@@ -457,6 +458,9 @@ export default function SalesDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Consumo de IA semanal */}
+      <AiUsageWidget />
 
       {/* Embudo de conversión (pipeline) */}
       <PipelineFunnel />

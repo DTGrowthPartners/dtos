@@ -1,7 +1,13 @@
 import { PrismaClient } from '@prisma/client';
 import { currentPeriod } from './cobros.service';
+import { googleSheetsService } from './googleSheets.service';
 
 const prisma = new PrismaClient();
+
+// Normaliza un nombre para cruzar cliente (sistema) ↔ Tercero (hoja Entradas).
+const normName = (s: string) =>
+  (s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\b(SAS|LTDA|S\.A\.S|SA)\b/g, '').replace(/[^A-Z0-9]/g, '');
 
 const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const DAY = 86400000;
@@ -38,6 +44,9 @@ export interface ClienteV2 {
   outstandingBalance: number; balanceLabel: string;
   nextBilling: string; urgency: Urgency; urgencyLabel: string;
   invoices: { id: string; amount: number; status: string }[];
+  // Pagos reales desde la hoja Entradas de Google Sheets (fuente de Dairo)
+  payments: { fecha: string; importe: number; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }[];
+  paidSheets: number;
   ads: null;
   activity: { label: string; date: string; positive?: boolean }[];
   totals: { facturado: number; pagado: number; pendiente: number; ltvMonths: number };
@@ -55,6 +64,15 @@ export const getClientesV2 = async () => {
     include: { service: { select: { name: true, price: true } } },
   });
   const cobros = await prisma.cobro.findMany({ orderBy: { fechaCobro: 'desc' } });
+
+  // Pagos reales desde Google Sheets (hoja Entradas). No bloquear si Sheets falla.
+  let sheetPayments: Array<{ tercero: string; importe: number; fecha: string; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string; _norm: string }> = [];
+  try {
+    const raw = await googleSheetsService.getClientPayments();
+    sheetPayments = raw.map((p) => ({ ...p, _norm: normName(p.tercero) }));
+  } catch (e) {
+    console.warn('[clientes-v2] no se pudo leer pagos de Sheets:', (e as Error).message);
+  }
 
   // Servicios activos por cliente
   const svcByClient = new Map<string, { names: string[]; monthly: number; billingDay: number; hasRecurring: boolean; services: ClienteV2['services'] }>();
@@ -129,6 +147,13 @@ export const getClientesV2 = async () => {
     const pagado = withEstado.filter((c) => c.est === 'pagado').reduce((a, c) => a + c.monto, 0);
     const ltvMonths = Math.max(1, Math.round((Date.now() - cl.createdAt.getTime()) / (DAY * 30)));
 
+    // Pagos reales de este cliente desde Sheets (cruce por nombre normalizado)
+    const norm = normName(cl.name);
+    const cp = norm.length >= 4
+      ? sheetPayments.filter((p) => p._norm.length >= 4 && (norm.includes(p._norm) || p._norm.includes(norm)))
+      : [];
+    const paidSheets = cp.reduce((a, p) => a + p.importe, 0);
+
     return {
       id: cl.id,
       name: cl.name,
@@ -153,6 +178,11 @@ export const getClientesV2 = async () => {
         .sort((a, b) => b.fechaCobro.getTime() - a.fechaCobro.getTime())
         .slice(0, 8)
         .map((c) => ({ id: c.id, amount: c.monto, status: c.est === 'pagado' ? 'pagada' : c.est === 'vencido' ? 'vencida' : 'pendiente' })),
+      payments: cp
+        .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
+        .slice(0, 20)
+        .map((p) => ({ fecha: p.fecha, importe: Math.round(p.importe), descripcion: p.descripcion, cuenta: p.cuenta, cuentaCobro: p.cuentaCobro, tipoPago: p.tipoPago })),
+      paidSheets: Math.round(paidSheets),
       ads: null,
       activity: buildActivity(withEstado),
       totals: { facturado: Math.round(facturado), pagado: Math.round(pagado), pendiente: Math.round(outstanding), ltvMonths },
