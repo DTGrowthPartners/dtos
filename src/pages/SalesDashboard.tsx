@@ -434,7 +434,7 @@ export default function SalesDashboard() {
       <Card>
         <CardContent className="pt-5">
           <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
-          <div className="h-[320px]">
+          <div className="h-[400px] sm:h-[440px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={model.data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
                 <defs>

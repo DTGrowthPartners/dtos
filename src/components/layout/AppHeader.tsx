@@ -90,11 +90,16 @@ export function AppHeader() {
           : "border-border bg-card dark:bg-slate-900/80 supports-[backdrop-filter]:bg-card/60"
       )}
     >
-      {/* Breadcrumbs */}
-      <div className="flex items-center gap-2 text-sm">
-        <span className={isMisTareasView ? "text-slate-400" : "text-muted-foreground"}>DT-OS</span>
-        <ChevronRight className={cn("h-4 w-4", isMisTareasView ? "text-slate-400" : "text-muted-foreground")} />
-        <span className={cn("font-medium", isMisTareasView ? "text-slate-200" : "text-foreground")}>{currentPath}</span>
+      {/* Breadcrumbs + logo de marca (logo solo en movil; en desktop el logo va en el sidebar) */}
+      <div className="flex items-center gap-2 text-sm pl-12 lg:pl-0 min-w-0">
+        <img
+          src="/img/logo.png"
+          alt="DT Growth Partners"
+          className="h-6 w-auto shrink-0 brightness-0 dark:brightness-100 lg:hidden"
+        />
+        <span className={cn("hidden lg:inline", isMisTareasView ? "text-slate-400" : "text-muted-foreground")}>DT-OS</span>
+        <ChevronRight className={cn("hidden lg:inline-block h-4 w-4", isMisTareasView ? "text-slate-400" : "text-muted-foreground")} />
+        <span className={cn("font-medium truncate", isMisTareasView ? "text-slate-200" : "text-foreground")}>{currentPath}</span>
       </div>
 
       {/* Actions */}
