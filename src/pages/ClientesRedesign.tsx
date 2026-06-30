@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, Calendar, Clock, AlertTriangle, AlertCircle, MessageCircle, FileText,
-  Briefcase, Receipt, TrendingUp, Activity, CheckCircle2, Loader2,
+  Briefcase, Receipt, TrendingUp, Activity, CheckCircle2, Loader2, Pencil,
   Megaphone, Target, ShoppingBag, Image as ImageIcon,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import {
   fmtFull, fmtM, requiereAccion,
   type ClientV2, type ContractType,
@@ -196,8 +201,35 @@ const invoiceDot: Record<CInvStatus, string> = {
 };
 type CInvStatus = 'pagada' | 'pendiente' | 'vencida';
 
-function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
+function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => void; onUpdated: () => void }) {
   const cc = contractChip[c.contractType];
+  const { toast } = useToast();
+  const [editOpen, setEditOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+
+  const openEdit = () => {
+    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+    setEditOpen(true);
+  };
+  const save = async () => {
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    try {
+      await apiClient.put(`/api/clients/${c.id}`, {
+        name: form.name.trim(), email: form.email.trim(), nit: form.nit.trim() || undefined,
+        phone: form.phone.trim() || undefined, address: form.address.trim() || undefined,
+      });
+      setEditOpen(false);
+      toast({ title: 'Cliente actualizado' });
+      onUpdated();
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4 animate-fade-in">
       <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -224,6 +256,9 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <button onClick={openEdit} className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors">
+              <Pencil className="h-4 w-4" /> Editar
+            </button>
             <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors">
               <MessageCircle className="h-4 w-4" /> WhatsApp
             </button>
@@ -254,9 +289,14 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
                     <div className={`h-8 w-8 rounded-lg ${v.cls} flex items-center justify-center shrink-0`}>
                       <v.Icon className="h-4 w-4" />
                     </div>
-                    <span className="text-sm truncate">{s.name} <span className="text-xs text-emerald-400">● {s.status}</span></span>
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">{s.name} <span className="text-xs text-emerald-400">● {s.status}</span></p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${s.recurring === false ? 'bg-violet-500/15 text-violet-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                        {s.recurring === false ? 'Único' : 'Recurrente'}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-sm tabular-nums text-muted-foreground shrink-0">{s.monthlyPrice > 0 ? fmtFull(s.monthlyPrice) : '—'}</span>
+                  <span className="text-sm tabular-nums text-muted-foreground shrink-0">{s.monthlyPrice > 0 ? `${fmtFull(s.monthlyPrice)}${s.recurring === false ? '' : '/mes'}` : '—'}</span>
                 </div>
               );
             })}
@@ -315,6 +355,31 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
           </div>
         </Panel>
       </div>
+
+      {/* Editar cliente */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader><DialogTitle>Editar cliente</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1"><Label className="text-xs">Nombre *</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">Email</Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="text-xs">NIT/RUT</Label>
+                <Input value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Teléfono</Label>
+                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Dirección</Label>
+              <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>Cancelar</Button>
+            <Button onClick={save} disabled={saving || !form.name.trim()}>{saving ? 'Guardando…' : 'Guardar'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -337,12 +402,16 @@ export default function ClientesRedesign() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ClientV2 | null>(null);
 
-  useEffect(() => {
-    apiClient.get<ClientesV2Response>('/api/clientes-v2').then(setData).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  const load = () =>
+    apiClient.get<ClientesV2Response>('/api/clientes-v2').then((d) => {
+      setData(d);
+      setSelected((prev) => (prev ? d.clients.find((c) => c.id === prev.id) || prev : null));
+    }).catch(() => {});
+
+  useEffect(() => { load().finally(() => setLoading(false)); /* eslint-disable-next-line */ }, []);
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!data) return <div className="text-center py-20 text-muted-foreground">No se pudieron cargar los clientes.</div>;
-  if (selected) return <ClientDetail c={selected} onBack={() => setSelected(null)} />;
+  if (selected) return <ClientDetail c={selected} onBack={() => setSelected(null)} onUpdated={load} />;
   return <ClientesPanel data={data} onSelect={setSelected} />;
 }

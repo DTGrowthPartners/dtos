@@ -31,9 +31,10 @@ export type Urgency = 'overdue' | 'due_today' | 'due_soon' | 'ok';
 
 export interface ClienteV2 {
   id: string; name: string; initials: string; status: string;
+  email?: string; phone?: string; address?: string;
   contractType: 'mrr' | 'project'; monthlyValue: number; nit?: string; clientSince: string;
   servicesSummary: string; servicesCount: number;
-  services: { name: string; status: string; monthlyPrice: number }[];
+  services: { name: string; status: string; monthlyPrice: number; frecuencia: string; recurring: boolean }[];
   outstandingBalance: number; balanceLabel: string;
   nextBilling: string; urgency: Urgency; urgencyLabel: string;
   invoices: { id: string; amount: number; status: string }[];
@@ -47,7 +48,7 @@ export const getClientesV2 = async () => {
   const period = currentPeriod();
 
   const clients = await prisma.client.findMany({
-    select: { id: true, name: true, nit: true, status: true, createdAt: true },
+    select: { id: true, name: true, nit: true, status: true, createdAt: true, email: true, phone: true, address: true },
   });
   const clientServices = await prisma.clientService.findMany({
     where: { estado: 'activo' },
@@ -56,12 +57,12 @@ export const getClientesV2 = async () => {
   const cobros = await prisma.cobro.findMany({ orderBy: { fechaCobro: 'desc' } });
 
   // Servicios activos por cliente
-  const svcByClient = new Map<string, { names: string[]; monthly: number; billingDay: number; hasRecurring: boolean; services: { name: string; status: string; monthlyPrice: number }[] }>();
+  const svcByClient = new Map<string, { names: string[]; monthly: number; billingDay: number; hasRecurring: boolean; services: ClienteV2['services'] }>();
   for (const cs of clientServices) {
     const price = cs.precioCliente ?? cs.service.price ?? 0;
     const cur = svcByClient.get(cs.clientId) || { names: [], monthly: 0, billingDay: 5, hasRecurring: false, services: [] };
     cur.names.push(cs.service.name);
-    cur.services.push({ name: cs.service.name, status: cs.estado, monthlyPrice: Math.round(price) });
+    cur.services.push({ name: cs.service.name, status: cs.estado, monthlyPrice: Math.round(price), frecuencia: cs.frecuencia, recurring: cs.frecuencia !== 'unico' });
     if (cs.frecuencia !== 'unico') {
       cur.hasRecurring = true;
       cur.monthly += normalizeToMonthly(price, cs.frecuencia);
@@ -133,11 +134,14 @@ export const getClientesV2 = async () => {
       name: cl.name,
       initials: initialsOf(cl.name),
       status: cl.status,
+      email: cl.email || undefined,
+      phone: cl.phone || undefined,
+      address: cl.address || undefined,
       contractType: svc?.hasRecurring || !svc ? 'mrr' : 'project',
       monthlyValue: Math.round(svc?.monthly || 0),
       nit: cl.nit || undefined,
       clientSince: monthYear(cl.createdAt),
-      servicesSummary: svc?.names.join(' · ') || 'Sin servicios',
+      servicesSummary: svc?.names.length ? [...new Set(svc.names)].join(' · ') : 'Sin servicios',
       servicesCount: svc?.services.length || 0,
       services: svc?.services || [],
       outstandingBalance: Math.round(outstanding),
@@ -155,22 +159,23 @@ export const getClientesV2 = async () => {
     };
   });
 
-  // Resumen (KPIs)
-  const mrrActivo = out.reduce((a, c) => a + c.monthlyValue, 0);
-  const recurrentes = out.filter((c) => c.monthlyValue > 0).length;
-  const porCobrar = out.reduce((a, c) => a + c.outstandingBalance, 0);
-  const clientesConSaldo = out.filter((c) => c.outstandingBalance > 0).length;
+  // Solo clientes activos en la lista (y los KPIs se calculan sobre ellos)
+  const active = out.filter((c) => c.status === 'active');
+
+  const mrrActivo = active.reduce((a, c) => a + c.monthlyValue, 0);
+  const recurrentes = active.filter((c) => c.monthlyValue > 0).length;
+  const porCobrar = active.reduce((a, c) => a + c.outstandingBalance, 0);
+  const clientesConSaldo = active.filter((c) => c.outstandingBalance > 0).length;
   const cobradoMes = cobros
     .filter((c) => c.periodo === period && computeEstado(c.estado, c.paidAt, c.fechaCobro) === 'pagado')
     .reduce((a, c) => a + c.monto, 0);
-  const activos = out.filter((c) => c.status === 'active').length;
 
   const URG: Record<Urgency, number> = { overdue: 0, due_today: 1, due_soon: 2, ok: 3 };
-  out.sort((a, b) => URG[a.urgency] - URG[b.urgency] || b.outstandingBalance - a.outstandingBalance || a.name.localeCompare(b.name));
+  active.sort((a, b) => URG[a.urgency] - URG[b.urgency] || b.outstandingBalance - a.outstandingBalance || a.name.localeCompare(b.name));
 
   return {
-    summary: { mrrActivo, recurrentes, porCobrar, clientesConSaldo, cobradoMes: Math.round(cobradoMes), activos, total: out.length },
-    clients: out,
+    summary: { mrrActivo, recurrentes, porCobrar, clientesConSaldo, cobradoMes: Math.round(cobradoMes), activos: active.length, total: out.length },
+    clients: active,
   };
 };
 

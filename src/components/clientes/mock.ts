@@ -4,7 +4,7 @@
 export type ContractType = 'mrr' | 'project' | 'retainer';
 export type Urgency = 'overdue' | 'due_today' | 'due_soon' | 'ok';
 
-export interface CService { name: string; status: 'activo' | 'pausado'; monthlyPrice: number }
+export interface CService { name: string; status: 'activo' | 'pausado'; monthlyPrice: number; frecuencia?: string; recurring?: boolean }
 export interface CInvoice { id: string; amount: number; status: 'pagada' | 'pendiente' | 'vencida' }
 export interface CAds { metaSpend: number; waConversations: number; waDelta: number; costPerConv: number; mainCampaign: string }
 export interface CActivity { label: string; date: string; positive?: boolean }
@@ -14,6 +14,9 @@ export interface ClientV2 {
   name: string;
   initials: string;
   status: 'active' | 'inactive';
+  email?: string;
+  phone?: string;
+  address?: string;
   contractType: ContractType;
   monthlyValue: number;
   nit?: string;
