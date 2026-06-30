@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft, Calendar, Clock, AlertTriangle, AlertCircle, MessageCircle, FileText,
-  Briefcase, Receipt, TrendingUp, Activity, CheckCircle2,
+  Briefcase, Receipt, TrendingUp, Activity, CheckCircle2, Loader2,
   Megaphone, Target, ShoppingBag, Image as ImageIcon,
 } from 'lucide-react';
+import { apiClient } from '@/lib/api';
 import {
-  MOCK_CLIENTS, KPIS, fmtFull, fmtM, requiereAccion, sortByUrgency,
+  fmtFull, fmtM, requiereAccion,
   type ClientV2, type ContractType,
 } from '@/components/clientes/mock';
+
+interface Summary { mrrActivo: number; recurrentes: number; porCobrar: number; clientesConSaldo: number; cobradoMes: number; activos: number; total: number }
+interface ClientesV2Response { summary: Summary; clients: ClientV2[] }
 
 /* ───────────────────────── helpers de estilo ───────────────────────── */
 
@@ -115,27 +119,32 @@ function GroupHeader({ color, title, count }: { color: string; title: string; co
 
 /* ───────────────────────── Vista LISTA ───────────────────────── */
 
-function ClientesPanel({ onSelect }: { onSelect: (c: ClientV2) => void }) {
-  const { accion, alDia } = useMemo(() => {
-    const sorted = [...MOCK_CLIENTS].sort(sortByUrgency);
-    return {
-      accion: sorted.filter(requiereAccion),
-      alDia: sorted.filter((c) => !requiereAccion(c)),
-    };
-  }, []);
+function ClientesPanel({ data, onSelect }: { data: ClientesV2Response; onSelect: (c: ClientV2) => void }) {
+  const { summary, clients } = data;
+  const { accion, alDia } = useMemo(() => ({
+    accion: clients.filter(requiereAccion),
+    alDia: clients.filter((c) => !requiereAccion(c)),
+  }), [clients]);
+
+  const kpis = [
+    { label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} recurrentes`, accent: 'border-l-blue-500' },
+    { label: 'Por cobrar', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} cliente${summary.clientesConSaldo === 1 ? '' : 's'}`, accent: 'border-l-amber-500' },
+    { label: 'Cobrado este mes', value: fmtM(summary.cobradoMes), sub: 'mes en curso', accent: 'border-l-emerald-500' },
+    { label: 'Clientes activos', value: String(summary.activos), sub: `de ${summary.total}`, accent: 'border-l-border' },
+  ];
 
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Header */}
       <div>
         <h1 className="text-xl font-medium">
-          Clientes <span className="text-sm text-muted-foreground font-normal">22 empresas · 7 activas · ordenadas por urgencia de cobro</span>
+          Clientes <span className="text-sm text-muted-foreground font-normal">{summary.total} empresas · {summary.activos} activas · ordenadas por urgencia de cobro</span>
         </h1>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {KPIS.map((k) => <KpiCard key={k.label} {...k} />)}
+        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
       </div>
 
       {/* Requiere acción */}
@@ -324,8 +333,16 @@ function Row({ label, value, extra }: { label: string; value: string; extra?: st
 /* ───────────────────────── Página ───────────────────────── */
 
 export default function ClientesRedesign() {
+  const [data, setData] = useState<ClientesV2Response | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ClientV2 | null>(null);
-  return selected
-    ? <ClientDetail c={selected} onBack={() => setSelected(null)} />
-    : <ClientesPanel onSelect={setSelected} />;
+
+  useEffect(() => {
+    apiClient.get<ClientesV2Response>('/api/clientes-v2').then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+  if (!data) return <div className="text-center py-20 text-muted-foreground">No se pudieron cargar los clientes.</div>;
+  if (selected) return <ClientDetail c={selected} onBack={() => setSelected(null)} />;
+  return <ClientesPanel data={data} onSelect={setSelected} />;
 }
