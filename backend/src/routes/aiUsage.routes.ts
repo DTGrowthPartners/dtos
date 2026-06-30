@@ -1,43 +1,29 @@
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middlewares/auth.middleware';
-import admin from 'firebase-admin';
+import axios from 'axios';
 
 const router = Router();
 router.use(authMiddleware);
 
-// GET /api/ai-usage — uso semanal de la IA (respuestas de María en el chat), últimas 8 semanas.
+// Proxy de Claude (suscripción) que corre en el VPS.
+const DARIO_URL = process.env.CHAT_AI_BASE_URL?.replace(/\/v1\/?$/, '') || 'http://localhost:3456';
+
+// GET /api/ai-usage — estado del Claude del VPS (DARIO): salud, oauth y requests.
 router.get('/', async (_req: Request, res: Response) => {
   try {
-    const db = admin.firestore();
-    const snap = await db.collection('chat_messages').where('senderId', '==', 'ai_assistant').get();
-    const times = snap.docs.map((d) => Number(d.data().createdAt) || 0).filter(Boolean);
-
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const dow = (startOfDay.getDay() + 6) % 7; // lunes = 0
-    const weekStart = new Date(startOfDay);
-    weekStart.setDate(weekStart.getDate() - dow);
-    const WEEK = 7 * 86400000;
-
-    const weekly: { label: string; count: number }[] = [];
-    for (let w = 7; w >= 0; w--) {
-      const s = weekStart.getTime() - w * WEEK;
-      const e = s + WEEK;
-      const count = times.filter((t) => t >= s && t < e).length;
-      const d = new Date(s);
-      weekly.push({ label: `${d.getDate()}/${d.getMonth() + 1}`, count });
-    }
-
+    const r = await axios.get(`${DARIO_URL}/`, { timeout: 4000 });
+    const d = r.data || {};
     res.json({
-      today: times.filter((t) => t >= startOfDay.getTime()).length,
-      thisWeek: weekly[weekly.length - 1].count,
-      lastWeek: weekly[weekly.length - 2]?.count || 0,
-      total: times.length,
-      weekly,
+      plan: process.env.CLAUDE_PLAN || 'Max (20x)',
+      reachable: true,
+      status: d.status || 'unknown',           // ok | degraded
+      oauth: d.oauth || 'unknown',              // ok | broken
+      requests: typeof d.requests === 'number' ? d.requests : null,
+      refreshFailures: typeof d.refreshFailures === 'number' ? d.refreshFailures : null,
+      lastError: d.lastRefreshError || null,
     });
   } catch (e: any) {
-    console.error('[ai-usage] error:', e.message);
-    res.status(500).json({ error: e.message });
+    res.json({ plan: process.env.CLAUDE_PLAN || 'Max (20x)', reachable: false, status: 'down', oauth: 'unknown', requests: null, error: e.message });
   }
 });
 

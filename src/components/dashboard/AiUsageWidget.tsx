@@ -1,62 +1,101 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
-import { Sparkles } from 'lucide-react';
-import { BarChart, Bar, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 
-interface Usage {
-  today: number; thisWeek: number; lastWeek: number; total: number;
-  weekly: { label: string; count: number }[];
+interface Status {
+  plan: string;
+  reachable: boolean;
+  status: string;        // ok | degraded | down
+  oauth: string;         // ok | broken | unknown
+  requests: number | null;
+  refreshFailures: number | null;
+  lastError?: string | null;
+}
+
+const CLAUDE = '#D97757';
+
+// Marca de Claude (sunburst) en SVG.
+function ClaudeMark({ size = 30 }: { size?: number }) {
+  const rays = Array.from({ length: 16 });
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ color: CLAUDE }}>
+      {rays.map((_, i) => {
+        const a = (i * 22.5 * Math.PI) / 180;
+        return (
+          <line
+            key={i}
+            x1={12 + Math.cos(a) * 3.4} y1={12 + Math.sin(a) * 3.4}
+            x2={12 + Math.cos(a) * 10.6} y2={12 + Math.sin(a) * 10.6}
+            stroke="currentColor" strokeWidth={2.1} strokeLinecap="round"
+          />
+        );
+      })}
+    </svg>
+  );
 }
 
 export default function AiUsageWidget() {
-  const [u, setU] = useState<Usage | null>(null);
-  useEffect(() => { apiClient.get<Usage>('/api/ai-usage').then(setU).catch(() => {}); }, []);
-  if (!u) return null;
+  const [s, setS] = useState<Status | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const delta = u.lastWeek ? Math.round((u.thisWeek / u.lastWeek - 1) * 100) : 0;
+  const load = () => {
+    setLoading(true);
+    apiClient.get<Status>('/api/ai-usage').then(setS).catch(() => setS(null)).finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  if (!s && loading) return null;
+
+  const healthy = !!s?.reachable && (s.status === 'ok' || s.status === 'healthy') && s.oauth === 'ok';
+  const barColor = healthy ? CLAUDE : s?.reachable ? '#f59e0b' : '#ef4444';
+  const BARS = 30;
 
   return (
     <Card>
-      <CardContent className="pt-5">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold flex items-center gap-2"><Sparkles className="h-4 w-4 text-violet-400" /> Consumo de IA · semanal</h3>
-          <span className="text-xs text-muted-foreground">{u.total.toLocaleString('es-CO')} interacciones · María</span>
-        </div>
+      <CardContent className="py-4">
+        <div className="flex items-center gap-3">
+          <ClaudeMark />
+          <div className="leading-tight">
+            <p className="font-semibold">Claude</p>
+            <p className="text-xs text-muted-foreground">{s?.plan || 'Max (20x)'}</p>
+          </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Esta semana</p>
-            <p className="text-2xl font-bold tabular-nums leading-tight">{u.thisWeek}</p>
-            <p className={`text-xs ${delta >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>{delta >= 0 ? '+' : ''}{delta}% vs anterior</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Hoy</p>
-            <p className="text-2xl font-bold tabular-nums leading-tight">{u.today}</p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Sem. pasada</p>
-            <p className="text-2xl font-bold tabular-nums leading-tight text-muted-foreground">{u.lastWeek}</p>
-          </div>
-        </div>
-
-        <div className="h-20">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={u.weekly} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-              <Tooltip
-                cursor={{ fill: 'hsl(var(--muted))', opacity: 0.3 }}
-                formatter={(v: number) => [`${v} interacciones`, 'IA']}
-                labelFormatter={(l) => `Semana del ${l}`}
-                contentStyle={{ background: 'hsl(var(--popover))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }}
+          {/* Medidor de barras */}
+          <div className="flex-1 flex items-center justify-end gap-[3px] h-7 overflow-hidden">
+            {Array.from({ length: BARS }).map((_, i) => (
+              <span
+                key={i}
+                className="w-[3px] rounded-full"
+                style={{ height: '100%', background: barColor, opacity: healthy ? (i >= BARS - 2 ? 0.4 : 1) : 0.85 }}
               />
-              <Bar dataKey="count" radius={[3, 3, 0, 0]}>
-                {u.weekly.map((_, i) => (
-                  <Cell key={i} fill={i === u.weekly.length - 1 ? '#8b5cf6' : 'rgba(139,92,246,0.45)'} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+            ))}
+          </div>
+
+          <button onClick={load} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Actualizar">
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
+
+        {/* Pie: estado + requests */}
+        <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+          <span className={healthy ? 'text-emerald-500' : s?.reachable ? 'text-amber-500' : 'text-red-500'}>
+            {healthy ? '● Operativo' : s?.reachable ? '● Degradado' : '● Caído'}
+            {s?.oauth && <span className="text-muted-foreground"> · OAuth {s.oauth === 'ok' ? 'OK' : 'roto'}</span>}
+          </span>
+          {s?.requests != null && <span className="tabular-nums">{s.requests.toLocaleString('es-CO')} requests</span>}
+        </div>
+
+        {!healthy && (
+          <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
+            <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-amber-300">
+              {!s?.reachable
+                ? 'No se pudo contactar a DARIO (proxy de Claude en el VPS).'
+                : 'La suscripción necesita re-autenticarse: DARIO no puede refrescar el token de Claude (María puede fallar).'}
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
