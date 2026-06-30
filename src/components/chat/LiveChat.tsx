@@ -649,7 +649,7 @@ export default function LiveChat() {
       {isOpen && !isMinimized && (
         <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] bg-background border-l border-border shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200">
           {/* Header */}
-          <div className="relative z-10 flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
+          <div style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }} className="relative z-10 flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {view === 'chat' && (
                 <Button

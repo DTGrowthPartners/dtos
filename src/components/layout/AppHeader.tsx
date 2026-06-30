@@ -82,8 +82,9 @@ export function AppHeader() {
 
   return (
     <header
+      style={{ paddingTop: 'env(safe-area-inset-top)' }}
       className={cn(
-        "sticky top-0 z-30 flex h-16 items-center justify-between border-b backdrop-blur px-6",
+        "sticky top-0 z-30 flex min-h-[4rem] items-center justify-between border-b backdrop-blur px-6",
         isMisTareasView
           ? "border-slate-800/50 bg-[rgb(2,6,23)] supports-[backdrop-filter]:bg-[rgb(2,6,23)]/95"
           : "border-border bg-card dark:bg-slate-900/80 supports-[backdrop-filter]:bg-card/60"

@@ -119,7 +119,7 @@ export default function GlobalTodo() {
       {/* Panel lateral (respaldo cuando no hay soporte PiP) */}
       {open && (
         <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[360px] bg-background border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-          <div className="flex items-center justify-between px-4 py-3 bg-amber-500 text-white flex-shrink-0">
+          <div style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }} className="flex items-center justify-between px-4 py-3 bg-amber-500 text-white flex-shrink-0">
             <span className="font-semibold flex items-center gap-2">
               <ListTodo className="h-5 w-5" />
               Mis pendientes
