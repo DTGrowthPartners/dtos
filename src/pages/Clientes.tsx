@@ -153,9 +153,8 @@ export default function Clientes() {
   const [services, setServices] = useState<{ id: string; name: string; price: number }[]>([]);
   const [addRecurring, setAddRecurring] = useState(false);
   const [recurring, setRecurring] = useState({ serviceId: '', precioCliente: '', frecuencia: 'mensual', diaCobro: '5' });
-  // MRR y deuda (pendiente+vencido del mes) por cliente, para mostrar en las cards.
-  const [mrrByClient, setMrrByClient] = useState<Record<string, number>>({});
-  const [debtByClient, setDebtByClient] = useState<Record<string, number>>({});
+  // Info de cobro del mes por cliente (MRR, deuda, estado, próximo cobro, servicios).
+  const [cobroByClient, setCobroByClient] = useState<Record<string, { mrr: number; debt: number; estado: string; fechaCobro: string; servicios: string[] }>>({});
 
   useEffect(() => {
     fetchClients();
@@ -168,18 +167,31 @@ export default function Clientes() {
     try {
       const now = new Date();
       const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const res = await apiClient.get<{ rows?: { clientId: string; monto: number; estado: string }[] }>(`/api/cobros?period=${period}`);
-      const mrr: Record<string, number> = {};
-      const debt: Record<string, number> = {};
+      const res = await apiClient.get<{ rows?: { clientId: string; monto: number; estado: string; fechaCobro: string; servicios?: string[] }[] }>(`/api/cobros?period=${period}`);
+      const map: Record<string, { mrr: number; debt: number; estado: string; fechaCobro: string; servicios: string[] }> = {};
       (res.rows || []).forEach((r) => {
-        mrr[r.clientId] = (mrr[r.clientId] || 0) + (r.monto || 0);
-        if (r.estado !== 'pagado') debt[r.clientId] = (debt[r.clientId] || 0) + (r.monto || 0);
+        map[r.clientId] = {
+          mrr: r.monto || 0,
+          debt: r.estado !== 'pagado' ? (r.monto || 0) : 0,
+          estado: r.estado,
+          fechaCobro: r.fechaCobro,
+          servicios: r.servicios || [],
+        };
       });
-      setMrrByClient(mrr);
-      setDebtByClient(debt);
+      setCobroByClient(map);
     } catch { /* noop */ }
   };
   const fmtCop = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
+  const fmtFecha = (s?: string) => {
+    if (!s) return '';
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const estadoBadge: Record<string, { label: string; cls: string }> = {
+    pagado: { label: 'Pagado', cls: 'bg-green-500/15 text-green-500' },
+    pendiente: { label: 'Pendiente', cls: 'bg-amber-500/15 text-amber-500' },
+    vencido: { label: 'Vencido', cls: 'bg-red-500/15 text-red-500' },
+  };
 
   const fetchServices = async () => {
     try {
@@ -709,6 +721,33 @@ export default function Clientes() {
         </div>
       </div>
 
+      {/* Resumen */}
+      {activeTab === 'empresas' && (() => {
+        const vals = Object.values(cobroByClient);
+        const mrrTotal = vals.reduce((a, v) => a + v.mrr, 0);
+        const debtTotal = vals.reduce((a, v) => a + v.debt, 0);
+        const conRec = vals.filter((v) => v.mrr > 0).length;
+        const cards = [
+          { label: 'Empresas', value: String(clients.length), sub: `${activeCount} activos`, cls: 'text-foreground' },
+          { label: 'Con recurrente', value: `${conRec}`, sub: `de ${clients.length}`, cls: 'text-primary' },
+          { label: 'MRR total', value: fmtCop(mrrTotal), sub: 'mensual', cls: 'text-emerald-500' },
+          { label: 'Por cobrar', value: fmtCop(debtTotal), sub: 'pendiente + vencido', cls: debtTotal > 0 ? 'text-red-500' : 'text-muted-foreground' },
+        ];
+        return (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {cards.map((c) => (
+              <Card key={c.label}>
+                <CardContent className="p-3">
+                  <p className="text-xs text-muted-foreground">{c.label}</p>
+                  <p className={`text-lg sm:text-xl font-bold tabular-nums leading-tight ${c.cls}`}>{c.value}</p>
+                  <p className="text-[11px] text-muted-foreground/70">{c.sub}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -796,10 +835,14 @@ export default function Clientes() {
                       <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-0.5">
-                          {mrrByClient[client.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{fmtCop(mrrByClient[client.id])}/mes</span>}
-                          {debtByClient[client.id] > 0
-                            ? <span className="text-xs font-semibold text-red-500 tabular-nums">Debe {fmtCop(debtByClient[client.id])}</span>
-                            : <span className="text-xs text-green-500">Al día</span>}
+                          {cobroByClient[client.id]?.mrr > 0
+                            ? <span className="text-xs text-muted-foreground tabular-nums">{fmtCop(cobroByClient[client.id].mrr)}/mes</span>
+                            : <span className="text-xs text-muted-foreground/50">—</span>}
+                          {cobroByClient[client.id]?.debt > 0
+                            ? <span className="text-xs font-semibold text-red-500 tabular-nums">Debe {fmtCop(cobroByClient[client.id].debt)}</span>
+                            : cobroByClient[client.id]?.mrr > 0
+                              ? <span className="text-xs text-green-500">Al día</span>
+                              : null}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -898,23 +941,49 @@ export default function Clientes() {
                         <span className="truncate">{client.address}</span>
                       </div>
                     )}
-                    {/* MRR + cuánto debe */}
-                    <div className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-border">
-                      {mrrByClient[client.id] > 0 ? (
-                        <span className="text-xs text-muted-foreground">MRR <b className="text-foreground tabular-nums">{fmtCop(mrrByClient[client.id])}</b></span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground/60">Sin recurrente</span>
-                      )}
-                      {debtByClient[client.id] > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-500 tabular-nums">
-                          Debe {fmtCop(debtByClient[client.id])}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-500">
-                          <Check className="h-3 w-3" /> Al día
-                        </span>
-                      )}
-                    </div>
+                    {/* Detalle de facturación */}
+                    {(() => {
+                      const info = cobroByClient[client.id];
+                      const eb = info ? estadoBadge[info.estado] : null;
+                      return (
+                        <div className="pt-2 mt-1 border-t border-border space-y-2">
+                          {/* Servicios contratados */}
+                          {info?.servicios?.length ? (
+                            <div className="flex flex-wrap gap-1">
+                              {info.servicios.slice(0, 3).map((s, i) => (
+                                <span key={i} className="px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-medium truncate max-w-[120px]">{s}</span>
+                              ))}
+                              {info.servicios.length > 3 && <span className="text-[10px] text-muted-foreground self-center">+{info.servicios.length - 3}</span>}
+                            </div>
+                          ) : null}
+                          {/* MRR + estado / deuda */}
+                          <div className="flex items-center justify-between gap-2">
+                            {info && info.mrr > 0 ? (
+                              <span className="text-xs text-muted-foreground">MRR <b className="text-foreground tabular-nums">{fmtCop(info.mrr)}</b>/mes</span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/60">Sin recurrente</span>
+                            )}
+                            {info && info.debt > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-500 tabular-nums">
+                                Debe {fmtCop(info.debt)}
+                              </span>
+                            ) : info && info.mrr > 0 ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-500">
+                                <Check className="h-3 w-3" /> Al día
+                              </span>
+                            ) : null}
+                          </div>
+                          {/* Próximo cobro + estado + cliente desde */}
+                          <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-2">
+                              {info?.fechaCobro && <span className="inline-flex items-center gap-1"><Calendar className="h-3 w-3" /> {fmtFecha(info.fechaCobro)}</span>}
+                              {eb && <span className={`px-1.5 py-0.5 rounded-full font-medium ${eb.cls}`}>{eb.label}</span>}
+                            </span>
+                            {client.createdAt && <span>desde {fmtFecha(client.createdAt)}</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </CardContent>
                 </Card>
               ))}
