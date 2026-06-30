@@ -192,18 +192,18 @@ export default function Productos() {
           <h1 className="text-2xl font-bold text-foreground">Productos DT Cloud Hub</h1>
           <p className="text-muted-foreground">Estado de desarrollo y métricas de uso</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           <Button
             onClick={() => {
               resetForm();
               setIsDialogOpen(true);
             }}
-            className="w-full md:w-auto"
+            className="w-full sm:w-auto"
           >
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Producto
           </Button>
-          <Button variant="outline" className="w-full md:w-auto">
+          <Button variant="outline" className="w-full sm:w-auto">
             <Code className="h-4 w-4 mr-2" />
             Ver Documentación
           </Button>

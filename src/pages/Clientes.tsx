@@ -153,12 +153,33 @@ export default function Clientes() {
   const [services, setServices] = useState<{ id: string; name: string; price: number }[]>([]);
   const [addRecurring, setAddRecurring] = useState(false);
   const [recurring, setRecurring] = useState({ serviceId: '', precioCliente: '', frecuencia: 'mensual', diaCobro: '5' });
+  // MRR y deuda (pendiente+vencido del mes) por cliente, para mostrar en las cards.
+  const [mrrByClient, setMrrByClient] = useState<Record<string, number>>({});
+  const [debtByClient, setDebtByClient] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetchClients();
     fetchTerceros();
     fetchServices();
+    fetchCobros();
   }, []);
+
+  const fetchCobros = async () => {
+    try {
+      const now = new Date();
+      const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const res = await apiClient.get<{ rows?: { clientId: string; monto: number; estado: string }[] }>(`/api/cobros?period=${period}`);
+      const mrr: Record<string, number> = {};
+      const debt: Record<string, number> = {};
+      (res.rows || []).forEach((r) => {
+        mrr[r.clientId] = (mrr[r.clientId] || 0) + (r.monto || 0);
+        if (r.estado !== 'pagado') debt[r.clientId] = (debt[r.clientId] || 0) + (r.monto || 0);
+      });
+      setMrrByClient(mrr);
+      setDebtByClient(debt);
+    } catch { /* noop */ }
+  };
+  const fmtCop = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 
   const fetchServices = async () => {
     try {
@@ -671,16 +692,16 @@ export default function Clientes() {
           <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
           <p className="text-muted-foreground">{clients.length} empresas · {activeCount} activos</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
           {activeTab === 'empresas' && (
             <>
-              <Button variant="outline" onClick={handleImportClients} className="w-full md:w-auto">
+              <Button variant="outline" onClick={handleImportClients} className="w-full sm:w-auto">
                 <Upload className="h-4 w-4 mr-2" /> Importar
               </Button>
-              <Button variant="outline" onClick={handleOpenImportCRM} className="w-full md:w-auto">
+              <Button variant="outline" onClick={handleOpenImportCRM} className="w-full sm:w-auto">
                 <ArrowDownToLine className="h-4 w-4 mr-2" /> Desde Ventas
               </Button>
-              <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="w-full md:w-auto">
+              <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="w-full sm:w-auto">
                 <Plus className="h-4 w-4 mr-2" /> Nueva Empresa
               </Button>
             </>
@@ -754,6 +775,7 @@ export default function Clientes() {
                     <TableHead>Email</TableHead>
                     <TableHead>NIT/RUT</TableHead>
                     <TableHead>Teléfono</TableHead>
+                    <TableHead>MRR / Debe</TableHead>
                     <TableHead>Estado</TableHead>
                     <TableHead className="text-right w-[80px]"></TableHead>
                   </TableRow>
@@ -772,6 +794,14 @@ export default function Clientes() {
                       <TableCell className="text-muted-foreground">{client.email}</TableCell>
                       <TableCell className="text-muted-foreground">{client.nit || '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{client.phone || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          {mrrByClient[client.id] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{fmtCop(mrrByClient[client.id])}/mes</span>}
+                          {debtByClient[client.id] > 0
+                            ? <span className="text-xs font-semibold text-red-500 tabular-nums">Debe {fmtCop(debtByClient[client.id])}</span>
+                            : <span className="text-xs text-green-500">Al día</span>}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                           client.status === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'
@@ -868,6 +898,23 @@ export default function Clientes() {
                         <span className="truncate">{client.address}</span>
                       </div>
                     )}
+                    {/* MRR + cuánto debe */}
+                    <div className="flex items-center justify-between gap-2 pt-2 mt-1 border-t border-border">
+                      {mrrByClient[client.id] > 0 ? (
+                        <span className="text-xs text-muted-foreground">MRR <b className="text-foreground tabular-nums">{fmtCop(mrrByClient[client.id])}</b></span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground/60">Sin recurrente</span>
+                      )}
+                      {debtByClient[client.id] > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-500/15 text-red-500 tabular-nums">
+                          Debe {fmtCop(debtByClient[client.id])}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-500">
+                          <Check className="h-3 w-3" /> Al día
+                        </span>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
