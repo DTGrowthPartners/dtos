@@ -1,7 +1,17 @@
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
+// Las librerías de PDF/Excel (jspdf, xlsx, etc.) son pesadas (~700KB). Se cargan SOLO
+// al exportar, en un chunk aparte, para no inflar el bundle de Finanzas.
+const loadPdf = async () => {
+  const [jspdf, autotable] = await Promise.all([import('jspdf'), import('jspdf-autotable')]);
+  const jsPDF = (jspdf as any).default || jspdf;
+  const autoTable = (autotable as any).default || autotable;
+  return { jsPDF, autoTable };
+};
+const loadXlsx = async () => {
+  const [xlsx, fileSaver] = await Promise.all([import('xlsx'), import('file-saver')]);
+  const XLSX = (xlsx as any).utils ? xlsx : (xlsx as any).default;
+  const saveAs = (fileSaver as any).saveAs || (fileSaver as any).default;
+  return { XLSX, saveAs };
+};
 
 // ============================================================
 // DATOS DE LA EMPRESA
@@ -207,6 +217,7 @@ export interface IncomeStatementExportData {
 // ---------- PDF ----------
 
 export async function exportIncomeStatementPDF(data: IncomeStatementExportData) {
+  const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
 
   await drawHeader(doc, 'ESTADO DE RESULTADOS', `Con corte a ${data.periodLabel}`);
@@ -297,7 +308,8 @@ export async function exportIncomeStatementPDF(data: IncomeStatementExportData) 
 
 // ---------- Excel ----------
 
-export function exportIncomeStatementExcel(data: IncomeStatementExportData) {
+export async function exportIncomeStatementExcel(data: IncomeStatementExportData) {
+  const { XLSX, saveAs } = await loadXlsx();
   const hasComision = data.comisionParticipacion > 0;
   const utilidadNeta = data.utilidadBruta - data.comisionParticipacion;
 
@@ -380,6 +392,7 @@ export interface BalanceSheetExportData {
 // ---------- PDF ----------
 
 export async function exportBalanceSheetPDF(data: BalanceSheetExportData) {
+  const { jsPDF, autoTable } = await loadPdf();
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
 
   await drawHeader(doc, 'ESTADO DE SITUACIÓN FINANCIERA', `Con corte a ${data.periodLabel}`);
@@ -489,7 +502,8 @@ export async function exportBalanceSheetPDF(data: BalanceSheetExportData) {
 
 // ---------- Excel ----------
 
-export function exportBalanceSheetExcel(data: BalanceSheetExportData) {
+export async function exportBalanceSheetExcel(data: BalanceSheetExportData) {
+  const { XLSX, saveAs } = await loadXlsx();
   const diff = Math.abs(data.totalActivos - (data.totalPasivos + data.totalPatrimonio));
   const checkText = diff < 1
     ? `Activos ($${fmtNum(data.totalActivos)}) = Pasivos ($${fmtNum(data.totalPasivos)}) + Patrimonio ($${fmtNum(data.totalPatrimonio)})`
