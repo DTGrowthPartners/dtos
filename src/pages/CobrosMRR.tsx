@@ -27,6 +27,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import MrrAssignment from '@/components/cobros/MrrAssignment';
 import {
   LineChart,
   Line,
@@ -306,6 +307,9 @@ export default function CobrosMRR() {
           <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
         </Button>
       </div>
+
+      {/* Asignar MRR por cliente (servicios recurrentes) */}
+      <MrrAssignment />
 
       {/* MRR según hoja Entradas (Ingresos recurrentes) */}
       <div className="rounded-xl border border-violet-500/30 bg-gradient-to-br from-violet-500/10 to-violet-500/5 p-5">
