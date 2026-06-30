@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ArrowLeft, Calendar, Clock, AlertTriangle, AlertCircle, MessageCircle, FileText,
   Briefcase, Receipt, TrendingUp, Activity, CheckCircle2,
+  Megaphone, Target, ShoppingBag, Image as ImageIcon,
 } from 'lucide-react';
 import {
   MOCK_CLIENTS, KPIS, fmtFull, fmtM, requiereAccion, sortByUrgency,
@@ -18,6 +19,16 @@ const contractChip: Record<ContractType, { label: string; cls: string }> = {
 
 const balanceColor = (c: ClientV2) =>
   c.outstandingBalance === 0 ? 'text-emerald-400' : c.urgency === 'overdue' ? 'text-red-400' : 'text-amber-400';
+
+const serviceVisual = (name: string) => {
+  const n = name.toLowerCase();
+  if (n.includes('whatsapp') || n.includes('bot')) return { Icon: MessageCircle, cls: 'bg-emerald-500/15 text-emerald-300' };
+  if (n.includes('shopify')) return { Icon: ShoppingBag, cls: 'bg-violet-500/15 text-violet-300' };
+  if (n.includes('contenido')) return { Icon: ImageIcon, cls: 'bg-pink-500/15 text-pink-300' };
+  if (n.includes('pauta') || n.includes('gesti')) return { Icon: Target, cls: 'bg-teal-500/15 text-teal-300' };
+  if (n.includes('meta') || n.includes('ads')) return { Icon: Megaphone, cls: 'bg-blue-500/15 text-blue-300' };
+  return { Icon: Briefcase, cls: 'bg-blue-500/15 text-blue-300' };
+};
 
 const urgencyChip = (c: ClientV2) => {
   switch (c.urgency) {
@@ -72,7 +83,7 @@ function ClientCard({ c, onClick }: { c: ClientV2; onClick: () => void }) {
           </div>
         </div>
         <div className="text-right shrink-0">
-          <p className={`text-sm font-semibold tabular-nums ${balanceColor(c)}`}>{fmtFull(c.outstandingBalance)}</p>
+          <p className={`text-base font-semibold tabular-nums ${balanceColor(c)}`}>{fmtFull(c.outstandingBalance)}</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">{c.balanceLabel}</p>
         </div>
       </div>
@@ -150,7 +161,7 @@ function ClientesPanel({ onSelect }: { onSelect: (c: ClientV2) => void }) {
 
 function MiniStat({ label, value, cls }: { label: string; value: string; cls?: string }) {
   return (
-    <div className="rounded-lg bg-card border border-border px-4 py-3">
+    <div className="rounded-lg bg-muted/30 border border-border/60 px-4 py-3">
       <p className="text-[11px] text-muted-foreground">{label}</p>
       <p className={`text-lg font-medium tabular-nums leading-tight ${cls || ''}`}>{value}</p>
     </div>
@@ -199,16 +210,16 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
                   <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 font-medium">MRR · {fmtM(c.monthlyValue)}/mes</span>
                 )}
                 {c.nit && <span className="text-muted-foreground">NIT {c.nit}</span>}
-                <span className="text-muted-foreground">· Cliente desde {c.clientSince}</span>
               </div>
+              <p className="text-xs text-muted-foreground mt-1">· Cliente desde {c.clientSince}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors">
               <MessageCircle className="h-4 w-4" /> WhatsApp
             </button>
-            <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-              <Receipt className="h-4 w-4" /> Cobrar
+            <button className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm hover:bg-muted/50 transition-colors">
+              <FileText className="h-4 w-4" /> Cobrar
             </button>
           </div>
         </div>
@@ -226,17 +237,20 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
       <div className="grid lg:grid-cols-2 gap-4">
         <Panel title="Servicios activos" icon={Briefcase}>
           <div className="space-y-2">
-            {c.services.map((s, i) => (
-              <div key={i} className="flex items-center justify-between gap-3 py-1.5">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-8 w-8 rounded-lg bg-blue-500/15 text-blue-300 flex items-center justify-center shrink-0">
-                    <Briefcase className="h-4 w-4" />
+            {c.services.map((s, i) => {
+              const v = serviceVisual(s.name);
+              return (
+                <div key={i} className="flex items-center justify-between gap-3 py-1.5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className={`h-8 w-8 rounded-lg ${v.cls} flex items-center justify-center shrink-0`}>
+                      <v.Icon className="h-4 w-4" />
+                    </div>
+                    <span className="text-sm truncate">{s.name} <span className="text-xs text-emerald-400">● {s.status}</span></span>
                   </div>
-                  <span className="text-sm truncate">{s.name} <span className="text-xs text-emerald-400">● {s.status}</span></span>
+                  <span className="text-sm tabular-nums text-muted-foreground shrink-0">{s.monthlyPrice > 0 ? fmtFull(s.monthlyPrice) : '—'}</span>
                 </div>
-                <span className="text-sm tabular-nums text-muted-foreground shrink-0">{s.monthlyPrice > 0 ? fmtFull(s.monthlyPrice) : '—'}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Panel>
 
@@ -268,7 +282,7 @@ function ClientDetail({ c, onBack }: { c: ClientV2; onBack: () => void }) {
 
       {/* Grid 2: Pauta + Actividad */}
       <div className="grid lg:grid-cols-2 gap-4">
-        <Panel title="Rendimiento de pauta (mes)" icon={TrendingUp}>
+        <Panel title={`Rendimiento de pauta (${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][new Date().getMonth()]})`} icon={TrendingUp}>
           {c.ads ? (
             <div className="space-y-2.5 text-sm">
               <Row label="Inversión Meta Ads" value={fmtM(c.ads.metaSpend)} />
