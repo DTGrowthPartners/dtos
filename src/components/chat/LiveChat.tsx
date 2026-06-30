@@ -649,13 +649,13 @@ export default function LiveChat() {
       {isOpen && !isMinimized && (
         <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] bg-background border-l border-border shadow-2xl overflow-hidden flex flex-col animate-in slide-in-from-right duration-200">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
+          <div className="relative z-10 flex items-center justify-between px-4 py-3 bg-primary text-primary-foreground flex-shrink-0">
             <div className="flex items-center gap-2 min-w-0 flex-1">
               {view === 'chat' && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20 flex-shrink-0"
+                  className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20 flex-shrink-0"
                   onClick={() => setView('list')}
                 >
                   <ArrowLeft className="h-4 w-4" />
@@ -676,7 +676,7 @@ export default function LiveChat() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                  className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                   onClick={() => setShowNewChatDialog(true)}
                   title="Nuevo chat"
                 >
@@ -688,7 +688,7 @@ export default function LiveChat() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                    className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                     onClick={handleNewAIChat}
                     title="Nueva conversación"
                   >
@@ -697,7 +697,7 @@ export default function LiveChat() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                    className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                     onClick={() => handleDeleteAIChat()}
                     title="Borrar esta conversación"
                   >
@@ -708,7 +708,7 @@ export default function LiveChat() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                 onClick={() => setIsMinimized(true)}
               >
                 <Minimize2 className="h-4 w-4" />
@@ -716,7 +716,7 @@ export default function LiveChat() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-7 w-7 p-0 text-primary-foreground hover:bg-primary-foreground/20"
+                className="h-9 w-9 p-0 text-primary-foreground hover:bg-primary-foreground/20"
                 onClick={() => setIsOpen(false)}
               >
                 <X className="h-4 w-4" />
@@ -726,7 +726,7 @@ export default function LiveChat() {
 
           {view === 'list' ? (
             /* Conversation List */
-            <ScrollArea className="flex-1">
+            <div className="flex-1 min-h-0 overflow-y-auto">
               <div className="p-2">
                 {/* General Chat */}
                 <button
@@ -899,12 +899,12 @@ export default function LiveChat() {
                   </div>
                 )}
               </div>
-            </ScrollArea>
+            </div>
           ) : (
             /* Chat View */
             <>
               {/* Messages */}
-              <ScrollArea className="flex-1">
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 <div className="p-3 space-y-2">
                   {messages.length === 0 ? (
                     <div className="text-center py-8 text-muted-foreground text-sm">
@@ -1003,7 +1003,7 @@ export default function LiveChat() {
                   )}
                   <div ref={messagesEndRef} />
                 </div>
-              </ScrollArea>
+              </div>
 
               {/* Miniaturas de imágenes adjuntas (solo chat de María) */}
               {activeRoomId.startsWith('ai_') && attachedImages.length > 0 && (
