@@ -125,7 +125,7 @@ export function AppSidebar() {
       <button
         onClick={() => setMobileOpen(!mobileOpen)}
         className={cn(
-          "lg:hidden fixed top-4 z-[60] p-2 rounded-lg bg-sidebar text-sidebar-foreground shadow-lg border border-sidebar-border hover:bg-sidebar-accent transition-all duration-300",
+          "lg:hidden fixed top-4 z-[45] p-2 rounded-lg bg-sidebar text-sidebar-foreground shadow-lg border border-sidebar-border hover:bg-sidebar-accent transition-all duration-300",
           mobileOpen ? (collapsed ? "left-[4.5rem]" : "left-[16.5rem]") : "left-4"
         )}
         aria-label="Toggle menu"
