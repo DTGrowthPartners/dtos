@@ -36,16 +36,23 @@ export default function TodoList() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-  // Cuando la lista llena la pantalla (99vh) ya no se pueden agregar más pendientes.
+  // Cuando la lista llena la pantalla ya no se pueden agregar más pendientes.
   const [atLimit, setAtLimit] = useState(false);
+  // Alto máximo real de la lista: el espacio que hay desde su tope hasta el fondo visible.
+  const [maxH, setMaxH] = useState<number | undefined>(undefined);
   // Ventana activa real (la flotante PiP si aplica) para que confirm() salga ahí.
   const activeWindow = (): Window => containerRef.current?.ownerDocument?.defaultView ?? window;
 
-  // El límite se alcanza cuando el contenido de la lista supera su alto visible
-  // (que está topado a ~99vh): a partir de ahí desborda/scrollea => no se agrega más.
+  // Mide el espacio disponible hasta el fondo de la pantalla y bloquea SOLO cuando el
+  // contenido ya no cabe ahí (no antes). Así no queda hueco vacío debajo.
   const measureLimit = useCallback(() => {
     const el = listRef.current;
-    setAtLimit(!!el && el.scrollHeight > el.clientHeight + 4);
+    if (!el) { setAtLimit(false); return; }
+    const win = el.ownerDocument?.defaultView ?? window;
+    const top = el.getBoundingClientRect().top;
+    const avail = Math.max(140, Math.floor(win.innerHeight - top - 12));
+    setMaxH(avail);
+    setAtLimit(el.scrollHeight > avail + 4);
   }, []);
   // Convertir pendiente -> tarea real
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
@@ -291,7 +298,7 @@ export default function TodoList() {
                 ref={(el) => { dropProvided.innerRef(el); listRef.current = el; }}
                 {...dropProvided.droppableProps}
                 className="rounded-xl border border-border bg-card divide-y divide-border overflow-y-auto"
-                style={{ maxHeight: 'calc(99vh - 130px)' }}
+                style={{ maxHeight: maxH ? `${maxH}px` : undefined }}
               >
                 {todos.map((todo, index) => (
                   <Draggable key={todo.id} draggableId={todo.id} index={index} isDragDisabled={selectMode}>
