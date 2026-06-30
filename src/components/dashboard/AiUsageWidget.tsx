@@ -5,17 +5,14 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Status {
   plan: string;
-  reachable: boolean;
-  status: string;        // ok | degraded | down
-  oauth: string;         // ok | broken | unknown
-  requests: number | null;
-  refreshFailures: number | null;
-  lastError?: string | null;
+  authenticated: boolean;
+  hasToken: boolean;
+  expiresInMin: number | null;
+  usagePct: number | null;
 }
 
 const CLAUDE = '#D97757';
 
-// Marca de Claude (sunburst) en SVG.
 function ClaudeMark({ size = 30 }: { size?: number }) {
   const rays = Array.from({ length: 16 });
   return (
@@ -47,9 +44,12 @@ export default function AiUsageWidget() {
 
   if (!s && loading) return null;
 
-  const healthy = !!s?.reachable && (s.status === 'ok' || s.status === 'healthy') && s.oauth === 'ok';
-  const barColor = healthy ? CLAUDE : s?.reachable ? '#f59e0b' : '#ef4444';
+  const ok = !!s?.authenticated;
+  const pct = s?.usagePct;                       // % de uso real (si el backend lo expone)
+  const barColor = ok ? CLAUDE : '#ef4444';
   const BARS = 30;
+  // Si hay % real, llena según el uso; si no, la barra refleja el estado de sesión.
+  const filled = pct != null ? Math.round((pct / 100) * BARS) : ok ? BARS : 0;
 
   return (
     <Card>
@@ -61,13 +61,16 @@ export default function AiUsageWidget() {
             <p className="text-xs text-muted-foreground">{s?.plan || 'Max (20x)'}</p>
           </div>
 
-          {/* Medidor de barras */}
           <div className="flex-1 flex items-center justify-end gap-[3px] h-7 overflow-hidden">
             {Array.from({ length: BARS }).map((_, i) => (
               <span
                 key={i}
                 className="w-[3px] rounded-full"
-                style={{ height: '100%', background: barColor, opacity: healthy ? (i >= BARS - 2 ? 0.4 : 1) : 0.85 }}
+                style={{
+                  height: '100%',
+                  background: pct != null ? (i < filled ? barColor : 'hsl(var(--muted))') : barColor,
+                  opacity: pct != null ? 1 : ok ? (i >= BARS - 2 ? 0.4 : 1) : 0.5,
+                }}
               />
             ))}
           </div>
@@ -77,22 +80,21 @@ export default function AiUsageWidget() {
           </button>
         </div>
 
-        {/* Pie: estado + requests */}
         <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span className={healthy ? 'text-emerald-500' : s?.reachable ? 'text-amber-500' : 'text-red-500'}>
-            {healthy ? '● Operativo' : s?.reachable ? '● Degradado' : '● Caído'}
-            {s?.oauth && <span className="text-muted-foreground"> · OAuth {s.oauth === 'ok' ? 'OK' : 'roto'}</span>}
+          <span className={ok ? 'text-emerald-500' : 'text-red-500'}>
+            {ok ? '● Sesión activa' : '● Sin sesión'}
+            {pct != null && <span className="text-muted-foreground"> · {pct}% del límite</span>}
+            {ok && s?.expiresInMin != null && s.expiresInMin > 0 && (
+              <span className="text-muted-foreground"> · token {Math.floor(s.expiresInMin / 60)}h{s.expiresInMin % 60}m</span>
+            )}
           </span>
-          {s?.requests != null && <span className="tabular-nums">{s.requests.toLocaleString('es-CO')} requests</span>}
         </div>
 
-        {!healthy && (
+        {!ok && (
           <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
             <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-amber-300">
-              {!s?.reachable
-                ? 'No se pudo contactar a DARIO (proxy de Claude en el VPS).'
-                : 'La suscripción necesita re-autenticarse: DARIO no puede refrescar el token de Claude (María puede fallar).'}
+              Claude no tiene sesión iniciada en el VPS (token vacío) — María puede fallar. Hay que re-loguear la suscripción.
             </p>
           </div>
         )}
