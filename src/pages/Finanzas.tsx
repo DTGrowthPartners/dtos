@@ -4,6 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import ToolsBreakdown from '@/components/finance/ToolsBreakdown';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -1666,6 +1667,9 @@ export default function Finanzas() {
             </div>
           )}
         </div>
+
+        {/* Desglose de herramientas / IA */}
+        <ToolsBreakdown gastos={gastos} />
 
         {/* Top Clientes por Facturación */}
         <div className="rounded-xl border border-border bg-card p-4 sm:p-6">
