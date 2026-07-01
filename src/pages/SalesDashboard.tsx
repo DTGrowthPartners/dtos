@@ -108,11 +108,26 @@ export default function SalesDashboard() {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
-    apiClient
-      .get<FinanceData>('/api/finance/data')
-      .then((d) => { setIngresos(d.ingresos || []); setGastos(d.gastos || []); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let alive = true;
+    const fetchFinance = () => {
+      apiClient
+        .get<FinanceData>('/api/finance/data')
+        .then((d) => { if (alive) { setIngresos(d.ingresos || []); setGastos(d.gastos || []); } })
+        .catch(() => {})
+        .finally(() => { if (alive) setLoading(false); });
+    };
+    fetchFinance();
+    // Auto-refresh: al volver a la pestaña y cada 3 min, relee Sheets en vivo.
+    const onVisible = () => { if (document.visibilityState === 'visible') fetchFinance(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', fetchFinance);
+    const id = window.setInterval(fetchFinance, 180000);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', fetchFinance);
+      clearInterval(id);
+    };
   }, []);
 
   const editMeta = () => {
