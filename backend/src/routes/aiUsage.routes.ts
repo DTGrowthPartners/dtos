@@ -28,9 +28,12 @@ const readCreds = () => {
 
 // Consulta el uso real (utilización 5h y 7d) llamando a la API con el token OAuth.
 const fetchUsage = async (token: string) => {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6000);
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
+      signal: ctrl.signal,
       headers: {
         'content-type': 'application/json',
         authorization: `Bearer ${token}`,
@@ -59,6 +62,8 @@ const fetchUsage = async (token: string) => {
     };
   } catch {
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 };
 
