@@ -6,12 +6,12 @@ import { AppHeader } from './AppHeader';
 import { AppFooter } from './AppFooter';
 import { useSidebar } from '@/contexts/SidebarContext';
 import LiquidBackground from '@/components/theme/LiquidBackground';
+// El chat se carga junto con la app (no diferido) para que esté listo y notifique rápido.
+import LiveChat from '@/components/chat/LiveChat';
 
-// Widgets globales pesados (incluyen firebase/chat): se difieren para no bloquear
-// la primera carga de la página. Cargan en segundo plano una vez montado el layout.
+// Otros widgets globales se difieren para no bloquear la primera carga de la página.
 const CommandPalette = lazy(() => import('@/components/CommandPalette').then((m) => ({ default: m.CommandPalette })));
 const GlobalAiTaskDialog = lazy(() => import('@/components/tasks/GlobalAiTaskDialog'));
-const LiveChat = lazy(() => import('@/components/chat/LiveChat'));
 const GlobalTodo = lazy(() => import('@/components/todos/GlobalTodo'));
 
 export function MainLayout() {
@@ -45,10 +45,12 @@ export function MainLayout() {
         <AppFooter />
       </div>
 
-      {/* Pendientes (To-Do) global + Live Chat — diferidos */}
+      {/* Live Chat (cargado con la app) */}
+      <LiveChat />
+
+      {/* Pendientes (To-Do) global — diferido */}
       <Suspense fallback={null}>
         <GlobalTodo />
-        <LiveChat />
       </Suspense>
     </div>
   );

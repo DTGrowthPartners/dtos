@@ -13,6 +13,7 @@ export interface Todo {
   createdAt: number;
   completedAt?: number | null;
   order?: number; // orden manual (drag). Si falta, se usa createdAt.
+  flagged?: boolean; // destacada con 🐸 (clic derecho / botón)
 }
 
 // Carga los to-dos del usuario. Filtra por userId y ordena en cliente (evita índice compuesto):
@@ -23,7 +24,11 @@ export const loadTodos = async (userId: string): Promise<Todo[]> => {
   const eo = (t: Todo) => t.order ?? t.createdAt;
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() } as Todo))
-    .sort((a, b) => (a.done === b.done ? eo(b) - eo(a) : a.done ? 1 : -1));
+    .sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (!a.done && !!a.flagged !== !!b.flagged) return a.flagged ? -1 : 1; // destacadas primero
+      return eo(b) - eo(a);
+    });
 };
 
 export const createTodo = async (userId: string, text: string): Promise<string> => {

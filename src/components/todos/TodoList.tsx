@@ -126,7 +126,11 @@ export default function TodoList() {
   const pendientes = useMemo(() => todos.filter((t) => !t.done).length, [todos]);
   const eo = (t: Todo) => t.order ?? t.createdAt; // orden efectivo
   const sortTodos = (arr: Todo[]) =>
-    [...arr].sort((a, b) => (a.done === b.done ? eo(b) - eo(a) : a.done ? 1 : -1));
+    [...arr].sort((a, b) => {
+      if (a.done !== b.done) return a.done ? 1 : -1;
+      if (!a.done && !!a.flagged !== !!b.flagged) return a.flagged ? -1 : 1; // destacadas primero
+      return eo(b) - eo(a);
+    });
 
   // Reordenar arrastrando: recalcula el `order` del ítem movido entre sus vecinos.
   const onDragEnd = (result: DropResult) => {
@@ -177,6 +181,13 @@ export default function TodoList() {
   const remove = async (todo: Todo) => {
     setTodos((prev) => prev.filter((x) => x.id !== todo.id));
     try { await deleteTodo(todo.id); } catch { load(); }
+  };
+
+  // Destacar/quitar con 🐸 (clic derecho o botón). Las destacadas suben.
+  const toggleFlag = async (todo: Todo) => {
+    const flagged = !todo.flagged;
+    setTodos((prev) => sortTodos(prev.map((x) => (x.id === todo.id ? { ...x, flagged } : x))));
+    try { await updateTodo(todo.id, { flagged }); } catch { load(); }
   };
 
   const clearDone = async () => {
@@ -308,10 +319,12 @@ export default function TodoList() {
                         {...dragProvided.draggableProps}
                         {...(!selectMode ? dragProvided.dragHandleProps : {})}
                         onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
+                        onContextMenu={selectMode ? undefined : (e) => { e.preventDefault(); toggleFlag(todo); }}
                         className={cn(
                           'group flex items-center gap-2 px-3 py-2.5 bg-card',
                           selectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
                           selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30',
+                          todo.flagged && !todo.done && !selectMode && 'bg-emerald-50/70 dark:bg-emerald-950/20',
                           snapshot.isDragging && 'shadow-lg rounded-md ring-1 ring-amber-400'
                         )}
                       >
@@ -335,6 +348,16 @@ export default function TodoList() {
                         <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
                           {todo.text}
                         </span>
+                        {!selectMode && (
+                          <button
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={() => toggleFlag(todo)}
+                            className={cn('flex-shrink-0 text-base leading-none transition-opacity', todo.flagged ? 'opacity-100' : 'opacity-30 hover:opacity-100')}
+                            title={todo.flagged ? 'Quitar destacado' : 'Destacar 🐸 (o clic derecho)'}
+                          >
+                            🐸
+                          </button>
+                        )}
                         {!selectMode && (
                           <button
                             onPointerDown={(e) => e.stopPropagation()}
