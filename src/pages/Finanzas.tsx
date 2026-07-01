@@ -1669,7 +1669,7 @@ export default function Finanzas() {
         </div>
 
         {/* Desglose de herramientas / IA */}
-        <ToolsBreakdown gastos={gastos} />
+        <ToolsBreakdown gastos={filteredGastos} />
 
         {/* Top Clientes por Facturación */}
         <div className="rounded-xl border border-border bg-card p-4 sm:p-6">

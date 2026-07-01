@@ -16,7 +16,8 @@ const RULES: { name: string; color: string; re: RegExp }[] = [
   { name: 'Canva', color: '#06b6d4', re: /canva/i },
 ];
 
-const isToolCategory = (c?: string) => /herramient|software|servidor|hosting|dominio|saas|suscrip/i.test(c || '');
+// La categoría dedicada de herramientas (para agrupar lo que no se identifica por nombre).
+const isToolCategory = (c?: string) => /herramient/i.test(c || '');
 const COP = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 
 export default function ToolsBreakdown({ gastos }: { gastos: Tx[] }) {
@@ -24,8 +25,9 @@ export default function ToolsBreakdown({ gastos }: { gastos: Tx[] }) {
     const by: Record<string, number> = {};
     let otras = 0;
     for (const t of gastos) {
-      const text = `${t.descripcion || ''} ${t.categoria || ''}`;
-      const rule = RULES.find((r) => r.re.test(text));
+      // Se detecta el servicio SOLO por la descripción (no por la categoría, que
+      // ya trae los nombres 'Claude, GPT...' y contaminaría la detección).
+      const rule = RULES.find((r) => r.re.test(t.descripcion || ''));
       if (rule) by[rule.name] = (by[rule.name] || 0) + (t.importe || 0);
       else if (isToolCategory(t.categoria)) otras += t.importe || 0;
     }
@@ -45,7 +47,7 @@ export default function ToolsBreakdown({ gastos }: { gastos: Tx[] }) {
         </h3>
         <span className="text-sm font-bold tabular-nums">{COP(total)}</span>
       </div>
-      <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">Desglose por servicio (detectado de la descripción)</p>
+      <p className="text-xs sm:text-sm text-muted-foreground mb-3 sm:mb-4">Del período filtrado · detectado por la descripción del gasto</p>
 
       <div className="space-y-2.5">
         {rows.map((r) => {
