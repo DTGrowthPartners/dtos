@@ -44,6 +44,12 @@ const startsWithLocalDate = (fecha: string) => fecha; // las fechas vienen "YYYY
 
 const isPagoCliente = (tx: Tx) => (tx.categoria || '').trim().toUpperCase() === 'PAGO DE CLIENTE';
 
+// Excluye traslados entre cuentas propias y ajustes contables: no son venta ni gasto real.
+const isRealMovement = (tx: Tx) => {
+  const c = (tx.categoria || '').trim().toUpperCase();
+  return !c.startsWith('TRASLADO') && c !== 'AJUSTE SALDO';
+};
+
 const dateParts = (fecha: string) => {
   const [date] = (fecha || '').split('T');
   const [year, month, day] = date.split('-').map(Number);
@@ -112,7 +118,7 @@ export default function SalesDashboard() {
     const fetchFinance = () => {
       apiClient
         .get<FinanceData>('/api/finance/data')
-        .then((d) => { if (alive) { setIngresos(d.ingresos || []); setGastos(d.gastos || []); } })
+        .then((d) => { if (alive) { setIngresos((d.ingresos || []).filter(isRealMovement)); setGastos((d.gastos || []).filter(isRealMovement)); } })
         .catch(() => {})
         .finally(() => { if (alive) setLoading(false); });
     };
