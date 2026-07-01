@@ -8,10 +8,23 @@ interface Status {
   authenticated: boolean;
   hasToken: boolean;
   expiresInMin: number | null;
-  usagePct: number | null;
+  pct5h: number | null;
+  pct7d: number | null;
+  reset5h: number | null; // unix seconds
+  reset7d: number | null;
 }
 
 const CLAUDE = '#D97757';
+const usageColor = (p: number) => (p >= 90 ? '#ef4444' : p >= 70 ? '#f59e0b' : CLAUDE);
+
+const fmtReset = (unixSec: number | null) => {
+  if (!unixSec) return '';
+  const ms = unixSec * 1000 - Date.now();
+  if (ms <= 0) return 'ahora';
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+};
 
 function ClaudeMark({ size = 30 }: { size?: number }) {
   const rays = Array.from({ length: 16 });
@@ -36,20 +49,20 @@ export default function AiUsageWidget() {
   const [s, setS] = useState<Status | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const load = (force = false) => {
     setLoading(true);
-    apiClient.get<Status>('/api/ai-usage').then(setS).catch(() => setS(null)).finally(() => setLoading(false));
+    apiClient.get<Status>(`/api/ai-usage${force ? '?force=1' : ''}`).then(setS).catch(() => setS(null)).finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
 
   if (!s && loading) return null;
 
   const ok = !!s?.authenticated;
-  const pct = s?.usagePct;                       // % de uso real (si el backend lo expone)
-  const barColor = ok ? CLAUDE : '#ef4444';
+  const pct = s?.pct5h;                 // uso del bloque de 5h (el representativo)
+  const hasPct = ok && pct != null;
   const BARS = 30;
-  // Si hay % real, llena según el uso; si no, la barra refleja el estado de sesión.
-  const filled = pct != null ? Math.round((pct / 100) * BARS) : ok ? BARS : 0;
+  const color = hasPct ? usageColor(pct as number) : ok ? CLAUDE : '#ef4444';
+  const filled = hasPct ? Math.max(pct! > 0 ? 1 : 0, Math.round((pct! / 100) * BARS)) : ok ? 0 : 0;
 
   return (
     <Card>
@@ -66,36 +79,41 @@ export default function AiUsageWidget() {
               <span
                 key={i}
                 className="w-[3px] rounded-full"
-                style={{
-                  height: '100%',
-                  background: pct != null ? (i < filled ? barColor : 'hsl(var(--muted))') : barColor,
-                  opacity: pct != null ? 1 : ok ? (i >= BARS - 2 ? 0.4 : 1) : 0.5,
-                }}
+                style={{ height: '100%', background: i < filled ? color : 'hsl(var(--muted))' }}
               />
             ))}
           </div>
 
-          <button onClick={load} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Actualizar">
+          <button onClick={() => load(true)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Actualizar uso">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span className={ok ? 'text-emerald-500' : 'text-red-500'}>
-            {ok ? '● Sesión activa' : '● Sin sesión'}
-            {pct != null && <span className="text-muted-foreground"> · {pct}% del límite</span>}
-            {ok && s?.expiresInMin != null && s.expiresInMin > 0 && (
-              <span className="text-muted-foreground"> · token {Math.floor(s.expiresInMin / 60)}h{s.expiresInMin % 60}m</span>
-            )}
-          </span>
+        <div className="mt-2 flex items-center justify-between text-[11px]">
+          {hasPct ? (
+            <>
+              <span className="font-medium" style={{ color }}>
+                Uso 5h: {pct}%
+                {s?.reset5h ? <span className="text-muted-foreground font-normal"> · reset en {fmtReset(s.reset5h)}</span> : null}
+              </span>
+              {s?.pct7d != null && (
+                <span className="text-muted-foreground">Semana: {s.pct7d}%{s.reset7d ? ` · ${fmtReset(s.reset7d)}` : ''}</span>
+              )}
+            </>
+          ) : (
+            <span className={ok ? 'text-emerald-500' : 'text-red-500'}>
+              {ok ? '● Sesión activa' : '● Sin sesión'}
+              {ok && s?.expiresInMin != null && s.expiresInMin > 0 && (
+                <span className="text-muted-foreground"> · token {Math.floor(s.expiresInMin / 60)}h {s.expiresInMin % 60}m</span>
+              )}
+            </span>
+          )}
         </div>
 
         {!ok && (
           <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
             <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-amber-300">
-              Claude no tiene sesión iniciada en el VPS (token vacío) — María puede fallar. Hay que re-loguear la suscripción.
-            </p>
+            <p className="text-amber-300">Claude no tiene sesión iniciada en el VPS — hay que re-loguear la suscripción.</p>
           </div>
         )}
       </CardContent>
