@@ -58,59 +58,27 @@ export default function AiUsageWidget() {
   if (!s && loading) return null;
 
   const ok = !!s?.authenticated;
-  const pct = s?.pct5h;                 // uso del bloque de 5h (el representativo)
-  const hasPct = ok && pct != null;
-  const BARS = 30;
-  const color = hasPct ? usageColor(pct as number) : ok ? CLAUDE : '#ef4444';
-  const filled = hasPct ? Math.max(pct! > 0 ? 1 : 0, Math.round((pct! / 100) * BARS)) : ok ? 0 : 0;
 
   return (
-    <Card>
-      <CardContent className="py-4">
-        <div className="flex items-center gap-3">
-          <ClaudeMark />
-          <div className="leading-tight">
-            <p className="font-semibold">Claude</p>
-            <p className="text-xs text-muted-foreground">{s?.plan || 'Max (20x)'}</p>
+    <Card className="w-full max-w-sm">
+      <CardContent className="py-3">
+        <div className="flex items-center gap-2.5">
+          <ClaudeMark size={26} />
+          <div className="leading-tight flex-1 min-w-0">
+            <p className="font-semibold text-sm">Claude</p>
+            <p className="text-[11px] text-muted-foreground">{s?.plan || 'Max (20x)'}</p>
           </div>
-
-          <div className="flex-1 flex items-center justify-end gap-[3px] h-7 overflow-hidden">
-            {Array.from({ length: BARS }).map((_, i) => (
-              <span
-                key={i}
-                className="w-[3px] rounded-full"
-                style={{ height: '100%', background: i < filled ? color : 'hsl(var(--muted))' }}
-              />
-            ))}
-          </div>
-
           <button onClick={() => load(true)} className="text-muted-foreground hover:text-foreground transition-colors shrink-0" title="Actualizar uso">
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-[11px]">
-          {hasPct ? (
-            <>
-              <span className="font-medium" style={{ color }}>
-                Uso 5h: {pct}%
-                {s?.reset5h ? <span className="text-muted-foreground font-normal"> · reset en {fmtReset(s.reset5h)}</span> : null}
-              </span>
-              {s?.pct7d != null && (
-                <span className="text-muted-foreground">Semana: {s.pct7d}%{s.reset7d ? ` · ${fmtReset(s.reset7d)}` : ''}</span>
-              )}
-            </>
-          ) : (
-            <span className={ok ? 'text-emerald-500' : 'text-red-500'}>
-              {ok ? '● Sesión activa' : '● Sin sesión'}
-              {ok && s?.expiresInMin != null && s.expiresInMin > 0 && (
-                <span className="text-muted-foreground"> · token {Math.floor(s.expiresInMin / 60)}h {s.expiresInMin % 60}m</span>
-              )}
-            </span>
-          )}
-        </div>
-
-        {!ok && (
+        {ok ? (
+          <div className="mt-3 space-y-2">
+            <Meter label="5h" pct={s?.pct5h ?? null} reset={s?.reset5h ?? null} />
+            <Meter label="Semana" pct={s?.pct7d ?? null} reset={s?.reset7d ?? null} />
+          </div>
+        ) : (
           <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs">
             <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
             <p className="text-amber-300">Claude no tiene sesión iniciada en el VPS — hay que re-loguear la suscripción.</p>
@@ -118,5 +86,27 @@ export default function AiUsageWidget() {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+// Barra de uso compacta (etiqueta + barritas + % + reset).
+function Meter({ label, pct, reset }: { label: string; pct: number | null; reset: number | null }) {
+  const BARS = 22;
+  const has = pct != null;
+  const color = has ? usageColor(pct) : 'hsl(var(--muted))';
+  const filled = has ? Math.max(pct > 0 ? 1 : 0, Math.round((pct / 100) * BARS)) : 0;
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-12 shrink-0 text-[11px] text-muted-foreground">{label}</span>
+      <div className="flex-1 flex items-center gap-[2px] h-4 overflow-hidden">
+        {Array.from({ length: BARS }).map((_, i) => (
+          <span key={i} className="flex-1 rounded-full" style={{ height: '100%', background: i < filled ? color : 'hsl(var(--muted))' }} />
+        ))}
+      </div>
+      <span className="w-24 shrink-0 text-right text-[11px] font-medium" style={{ color: has ? color : undefined }}>
+        {has ? `${pct}%` : '—'}
+        {reset ? <span className="text-muted-foreground font-normal"> · {fmtReset(reset)}</span> : null}
+      </span>
+    </div>
   );
 }
