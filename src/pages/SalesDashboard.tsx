@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  ComposedChart, Area, Line, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Area, Line, ReferenceDot, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil, ChevronDown } from 'lucide-react';
@@ -138,6 +138,9 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState(() => Number(localStorage.getItem('dash.meta')) || 22000000);
   const [presupuesto, setPresupuesto] = useState(() => Number(localStorage.getItem('dash.presupuesto')) || 14500000);
+  const [metaByMonth, setMetaByMonth] = useState<Record<number, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('dash.metaByMonth') || '{}'); } catch { return {}; }
+  });
   const [range, setRange] = useState<DateRange | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
@@ -168,6 +171,16 @@ export default function SalesDashboard() {
   const editMeta = () => {
     const v = prompt('Meta de ingresos del mes (COP):', String(meta));
     if (v && !isNaN(Number(v))) { const n = Number(v); setMeta(n); localStorage.setItem('dash.meta', String(n)); }
+  };
+  const editMonthMeta = (monthIdx: number) => {
+    const current = metaByMonth[monthIdx] ?? meta;
+    const v = prompt(`Meta de ingresos · ${MONTHS[monthIdx]} (COP):`, String(current));
+    if (v && !isNaN(Number(v))) {
+      const n = Number(v);
+      const next = { ...metaByMonth, [monthIdx]: n };
+      setMetaByMonth(next);
+      localStorage.setItem('dash.metaByMonth', JSON.stringify(next));
+    }
   };
   const editPresupuesto = () => {
     const v = prompt('Presupuesto de gastos del mes (COP):', String(presupuesto));
@@ -259,8 +272,9 @@ export default function SalesDashboard() {
         p.dayPayments = payments.filter((pm) => pm.x === d);
         data.push(p);
       }
+      const monthMeta = metaByMonth[mn] ?? meta;
       const proyeccion = isCurrent ? mtdIngresos + avgPerDay * (daysInMonth - elapsed) : mtdIngresos;
-      const neededPerDay = isCurrent ? Math.max(0, meta - mtdIngresos) / Math.max(1, daysInMonth - elapsed) : 0;
+      const neededPerDay = isCurrent ? Math.max(0, monthMeta - mtdIngresos) / Math.max(1, daysInMonth - elapsed) : 0;
       const daily = !isCurrent ? Array.from({ length: daysInMonth }, (_, i) => {
         const d = i + 1;
         const ing = incByDay[d] || 0;
@@ -272,7 +286,7 @@ export default function SalesDashboard() {
         chartTitle: `Acumulado · ${MONTHS[mn]}`,
         xLabel: (v: number) => String(v),
         isCurrent, elapsed, total: daysInMonth, xDomain: [1, daysInMonth] as [number, number], xTicks: data.map((p) => p.x), mtdIngresos, mtdGastos, avgPerDay, neededPerDay, proyeccion, data, payments,
-        unidad: 'día', daily,
+        unidad: 'día', daily, monthMeta, monthIdx: mn,
       };
     }
 
@@ -335,41 +349,91 @@ export default function SalesDashboard() {
       };
     }
 
-    // ----- HOY / 7 DÍAS -----
-    const nDays = period === 'hoy' ? 1 : 7;
-    const data = [];
-    const payments: PaymentPoint[] = [];
-    let cumI = 0, cumE = 0, mtdIngresos = 0, mtdGastos = 0;
-    for (let i = nDays - 1; i >= 0; i--) {
-      const d = new Date(y, m, today - i);
-      const key = ymd(d);
-      const inc = sum(ingresos, (f) => f.startsWith(key));
-      const exp = sum(gastos, (f) => f.startsWith(key));
-      cumI += inc; cumE += exp; mtdIngresos += inc; mtdGastos += exp;
-      const dayPayments = ingresos.filter((t) => t.fecha?.startsWith(key) && isPagoCliente(t)).map((t) => ({
-          x: d.getDate(), monto: t.importe || 0,
-          cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar',
-          fecha: t.fecha, descripcion: t.descripcion,
-        }));
-      data.push({ x: d.getDate(), ingresos: cumI, gastos: cumE, proyeccion: null, dayPayments });
-      dayPayments.forEach((p) => payments.push(p));
+    // ----- HOY (24 horas) -----
+    if (period === 'hoy') {
+      const todayKey = ymd(new Date(y, m, today));
+      const currentHour = now.getHours();
+      const incByHour = Array(24).fill(0);
+      const expByHour = Array(24).fill(0);
+      ingresos.forEach((t) => {
+        if (!t.fecha?.startsWith(todayKey)) return;
+        const h = t.fecha.length > 10 ? parseInt(t.fecha.substring(11, 13), 10) : 0;
+        if (h >= 0 && h < 24) incByHour[h] += t.importe || 0;
+      });
+      gastos.forEach((t) => {
+        if (!t.fecha?.startsWith(todayKey)) return;
+        const h = t.fecha.length > 10 ? parseInt(t.fecha.substring(11, 13), 10) : 0;
+        if (h >= 0 && h < 24) expByHour[h] += t.importe || 0;
+      });
+      const mtdIngresos = incByHour.reduce((a, b) => a + b, 0);
+      const mtdGastos = expByHour.reduce((a, b) => a + b, 0);
+      let cumI = 0, cumE = 0;
+      const data = [];
+      const payments: PaymentPoint[] = [];
+      for (let h = 0; h < 24; h++) {
+        cumI += incByHour[h]; cumE += expByHour[h];
+        const dayPayments = ingresos
+          .filter((t) => {
+            if (!t.fecha?.startsWith(todayKey) || !isPagoCliente(t)) return false;
+            const th = t.fecha.length > 10 ? parseInt(t.fecha.substring(11, 13), 10) : 0;
+            return th === h;
+          })
+          .map((t) => ({ x: h, monto: t.importe || 0, cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar', fecha: t.fecha, descripcion: t.descripcion }));
+        data.push({ x: h, ingresos: h <= currentHour ? cumI : null, gastos: h <= currentHour ? cumE : null, proyeccion: null, dayPayments });
+        dayPayments.forEach((p) => payments.push(p));
+      }
+      return {
+        titulo: 'Hoy', chartTitle: 'Hoy · acumulado por hora',
+        xLabel: (v: number) => `${String(v).padStart(2, '0')}h`,
+        isCurrent: false, elapsed: currentHour + 1, total: 24,
+        xDomain: [0, 23] as [number, number],
+        xTicks: [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22],
+        payments, mtdIngresos, mtdGastos, avgPerDay: mtdIngresos, neededPerDay: 0, proyeccion: mtdIngresos, data, unidad: '',
+      };
     }
-    return {
-      titulo: period === 'hoy' ? 'Hoy' : 'Últimos 7 días', chartTitle: period === 'hoy' ? 'Hoy' : 'Acumulado · 7 días',
-      xLabel: (v: number) => String(v), isCurrent: false, elapsed: nDays, total: nDays,
-      xDomain: [data[0]?.x || 1, data[data.length - 1]?.x || nDays] as [number, number],
-      xTicks: data.map((p) => p.x),
-      payments,
-      mtdIngresos, mtdGastos, avgPerDay: mtdIngresos / nDays, neededPerDay: 0, proyeccion: mtdIngresos, data, unidad: 'día',
-    };
-  }, [period, ingresos, gastos, meta, range]);
 
-  const metaPct = Math.min(100, Math.round((model.mtdIngresos / Math.max(1, meta)) * 100));
+    // ----- 7 DÍAS (valor real por día, no acumulado) -----
+    {
+      const days7 = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(y, m, today - (6 - i));
+        return { key: ymd(d), label: `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`, date: d, idx: i };
+      });
+      const data: Record<string, any>[] = [];
+      const payments: PaymentPoint[] = [];
+      let mtdIngresos = 0, mtdGastos = 0;
+      days7.forEach(({ key, idx }) => {
+        const inc = sum(ingresos, (f) => f.startsWith(key));
+        const exp = sum(gastos, (f) => f.startsWith(key));
+        mtdIngresos += inc; mtdGastos += exp;
+        const dayPayments = ingresos
+          .filter((t) => t.fecha?.startsWith(key) && isPagoCliente(t))
+          .map((t) => ({ x: idx, monto: t.importe || 0, cliente: t.terceroNombre || t.entidad || 'Cliente sin identificar', fecha: t.fecha, descripcion: t.descripcion }));
+        data.push({ x: idx, ingresos: inc, gastos: exp, proyeccion: null, dayPayments });
+        dayPayments.forEach((p) => payments.push(p));
+      });
+      const labels = days7.map(({ label }) => label);
+      return {
+        titulo: 'Últimos 7 días', chartTitle: 'Últimos 7 días · por día',
+        xLabel: (v: number) => labels[v] ?? '',
+        isCurrent: false, elapsed: 7, total: 7,
+        xDomain: [0, 6] as [number, number],
+        xTicks: [0, 1, 2, 3, 4, 5, 6],
+        payments, mtdIngresos, mtdGastos, avgPerDay: mtdIngresos / 7, neededPerDay: 0, proyeccion: mtdIngresos, data, unidad: '',
+      };
+    }
+  }, [period, ingresos, gastos, meta, metaByMonth, range]);
+
+  const activeMeta: number = (model as any).monthMeta ?? meta;
+  const metaPct = Math.min(100, Math.round((model.mtdIngresos / Math.max(1, activeMeta)) * 100));
   const presupPct = Math.round((model.mtdGastos / Math.max(1, presupuesto)) * 100);
   const ritmoPct = model.neededPerDay > 0 ? Math.round((model.avgPerDay / model.neededPerDay - 1) * 100) : 0;
   const enLinea = model.avgPerDay >= model.neededPerDay;
-  const proyVsMeta = model.proyeccion - meta;
+  const proyVsMeta = model.proyeccion - activeMeta;
   const showMetaCards = period === 'mes' || period === 'ano';
+  const onEditMeta = () => {
+    const mIdx = (model as any).monthIdx;
+    if (mIdx !== undefined) editMonthMeta(mIdx); else editMeta();
+  };
 
   const periods: { id: Period; label: string }[] = [
     { id: 'hoy', label: 'Hoy' }, { id: '7d', label: '7d' }, { id: 'mes', label: 'Mes' },
@@ -443,7 +507,7 @@ export default function SalesDashboard() {
               {showMetaCards && (
                 <>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    de meta {fmt(meta)} <button onClick={editMeta} className="inline-flex items-center text-primary hover:underline ml-1"><Pencil className="h-3 w-3" /></button>
+                    de meta {fmt(activeMeta)} <button onClick={onEditMeta} className="inline-flex items-center text-primary hover:underline ml-1"><Pencil className="h-3 w-3" /></button>
                   </p>
                   <div className="h-2 rounded-full bg-muted mt-2 overflow-hidden">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${metaPct}%` }} />
@@ -524,6 +588,9 @@ export default function SalesDashboard() {
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
                 <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
+                {period === 'mes' && (model as any).monthMeta && (
+                  <ReferenceLine y={(model as any).monthMeta} stroke="#3b82f6" strokeDasharray="4 3" strokeWidth={1.5} label={{ value: `Meta ${fmtCompact((model as any).monthMeta)}`, fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
+                )}
                 {(model.payments || []).map((pm, i) => (
                   <ReferenceDot key={i} x={pm.x} y={pm.monto} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
                 ))}
