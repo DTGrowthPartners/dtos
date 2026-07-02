@@ -74,6 +74,7 @@ const navGroups: NavGroup[] = [
     dotColor: 'bg-amber-500',
     items: [
       { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
+      { title: 'Reporte de gastos', path: '/finanzas?tab=reportes', icon: FileBarChart, permission: 'finanzas' },
       { title: 'Cobros & MRR', path: '/cobros', icon: Receipt, permission: 'cobros', badge: 'nuevo' },
     ],
   },

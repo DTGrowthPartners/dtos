@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2, Pencil, Trash2, Check, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -182,6 +183,7 @@ const formatCompactCurrency = (value: number): string => {
 };
 
 export default function Finanzas() {
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>('resumen');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
@@ -454,6 +456,15 @@ export default function Finanzas() {
   useEffect(() => {
     applyDatePreset('thisMonth');
   }, []);
+
+  // Acceso directo desde el sidebar: /finanzas?tab=reportes abre la pestaña Reportes
+  // (sub-pestaña Gastos por defecto) con el mes actual.
+  useEffect(() => {
+    if (searchParams.get('tab') === 'reportes') {
+      setActiveTab('reportes');
+      applyDatePreset('thisMonth');
+    }
+  }, [searchParams]);
 
   const fetchFinanceData = async (silent = false) => {
     try {
