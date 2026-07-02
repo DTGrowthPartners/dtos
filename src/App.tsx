@@ -17,7 +17,6 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const SalesDashboard = lazy(() => import("@/pages/SalesDashboard"));
 const ExecutiveDashboard = lazy(() => import("@/pages/ExecutiveDashboard"));
 const Clientes = lazy(() => import("@/pages/Clientes"));
-const ClientesRedesign = lazy(() => import("@/pages/ClientesRedesign"));
 const Servicios = lazy(() => import("@/pages/Servicios"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const MisTareas = lazy(() => import("@/pages/MisTareas"));
@@ -88,7 +87,6 @@ const App = () => (
                 <Route path="/dashboard-clasico" element={<Dashboard />} />
                 <Route path="/dashboard-executive" element={<ExecutiveDashboard />} />
                 <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
-                <Route path="/clientes-v2" element={<ProtectedRoute requiredPermission="clientes"><ClientesRedesign /></ProtectedRoute>} />
                 <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
                 <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
                 <Route path="/mis-tareas" element={<MisTareas />} />

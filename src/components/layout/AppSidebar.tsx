@@ -23,7 +23,6 @@ import {
   Receipt,
   Globe,
   MonitorSmartphone,
-  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -56,7 +55,6 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Ventas', path: '/crm', icon: TrendingUp, permission: 'crm' },
       { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
-      { title: 'Clientes 2', path: '/clientes-v2', icon: Sparkles, permission: 'clientes', badge: 'nuevo' },
       { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
       { title: 'Propuestas', path: '/propuestas', icon: FileText, permission: 'propuestas', badge: 'nuevo' },
     ],
