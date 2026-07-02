@@ -20,7 +20,8 @@ import {
 } from '@/components/clientes/mock';
 
 interface Summary {
-  mrrActivo: number; recurrentes: number; porCobrar: number; clientesConSaldo: number;
+  mrrActivo: number; recurrentes: number; ipp?: number; conProyecto?: number;
+  porCobrar: number; clientesConSaldo: number;
   cobradoMes: number; cobrosMesTotal?: number; cobrosMesPagados?: number;
   proyectosActivos?: number; activos: number; total: number;
 }
@@ -174,11 +175,12 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
     ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} al día`
     : 'mes en curso';
 
+  const ipp = summary.ipp ?? 0;
   const kpis = [
     { label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} recurrentes`, accent: 'border-l-blue-500' },
+    { label: 'IPP (proyectos)', value: fmtM(ipp), sub: `${summary.conProyecto ?? proyCount} con proyecto`, accent: 'border-l-violet-500' },
     { label: 'Pendiente de cobro', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} con saldo`, accent: 'border-l-amber-500' },
     { label: 'Cobros este mes', value: fmtM(summary.cobradoMes), sub: cobrosSub, accent: 'border-l-emerald-500' },
-    { label: 'Proyectos activos', value: String(proyCount), sub: 'sin recurrencia mensual', accent: 'border-l-violet-500' },
   ];
 
   return (
@@ -306,8 +308,11 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium">
                   <CheckCircle2 className="h-3 w-3" /> {c.status === 'active' ? 'Activo' : 'Inactivo'}
                 </span>
-                {c.contractType === 'mrr' && (
+                {c.monthlyValue > 0 && (
                   <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 font-medium">MRR · {fmtM(c.monthlyValue)}/mes</span>
+                )}
+                {(c.projectValue ?? 0) > 0 && (
+                  <span className="px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-400 font-medium">IPP · {fmtM(c.projectValue!)}</span>
                 )}
                 {c.nit && <span className="text-muted-foreground">NIT {c.nit}</span>}
               </div>

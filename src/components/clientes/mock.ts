@@ -19,6 +19,7 @@ export interface ClientV2 {
   address?: string;
   contractType: ContractType;
   monthlyValue: number;
+  projectValue?: number;        // IPP: ingreso por proyecto (pago único)
   nit?: string;
   clientSince: string;          // "ene 2026"
   servicesSummary: string;      // "Meta Ads · WhatsApp Bot"

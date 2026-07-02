@@ -104,6 +104,8 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
   const [isLoading, setIsLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingService, setEditingService] = useState<ClientService | null>(null);
+  const [creatingNew, setCreatingNew] = useState(false);
+  const [newServiceName, setNewServiceName] = useState('');
 
   const [formData, setFormData] = useState({
     serviceId: '',
@@ -146,8 +148,22 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     setIsLoading(true);
 
     try {
+      // Servicio adicional al vuelo: si el usuario escribió un nombre nuevo, se crea
+      // primero en el catálogo y se asigna al cliente.
+      let serviceId = formData.serviceId;
+      if (!editingService && creatingNew && newServiceName.trim()) {
+        const created = await apiClient.post<{ id: string }>('/api/services', {
+          name: newServiceName.trim(),
+          price: formData.precioCliente ? parseFloat(formData.precioCliente) : 0,
+          currency: formData.moneda,
+          status: 'active',
+        });
+        serviceId = created.id;
+        await fetchAvailableServices();
+      }
+
       const payload = {
-        serviceId: formData.serviceId,
+        serviceId,
         precioCliente: formData.precioCliente ? parseFloat(formData.precioCliente) : undefined,
         moneda: formData.moneda,
         frecuencia: formData.frecuencia,
@@ -224,6 +240,8 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
       notas: '',
     });
     setEditingService(null);
+    setCreatingNew(false);
+    setNewServiceName('');
   };
 
   const getEstadoBadge = (estado: string) => {
@@ -265,7 +283,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
             </p>
           )}
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} disabled={unassignedServices.length === 0}>
+        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Agregar Servicio
         </Button>
@@ -357,32 +375,52 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
           </DialogHeader>
           <form onSubmit={handleSubmit}>
             <div className="space-y-4 py-4">
-              {/* Selector de servicio */}
+              {/* Selector de servicio (del catálogo) o crear uno nuevo al vuelo */}
               <div className="space-y-2">
-                <Label>Servicio *</Label>
-                <Select
-                  value={formData.serviceId}
-                  onValueChange={(value) => {
-                    const service = availableServices.find(s => s.id === value);
-                    setFormData({
-                      ...formData,
-                      serviceId: value,
-                      precioCliente: service?.price.toString() || '',
-                    });
-                  }}
-                  disabled={!!editingService}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un servicio" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(editingService ? availableServices : unassignedServices).map((service) => (
-                      <SelectItem key={service.id} value={service.id}>
-                        {service.name} - {formatCurrency(service.price, service.currency)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label>Servicio *</Label>
+                  {!editingService && (
+                    <button
+                      type="button"
+                      onClick={() => { setCreatingNew(!creatingNew); setFormData({ ...formData, serviceId: '' }); setNewServiceName(''); }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      {creatingNew ? '← Elegir del catálogo' : '+ Crear servicio nuevo'}
+                    </button>
+                  )}
+                </div>
+                {creatingNew && !editingService ? (
+                  <Input
+                    placeholder="Nombre del servicio adicional"
+                    value={newServiceName}
+                    onChange={(e) => setNewServiceName(e.target.value)}
+                    autoFocus
+                  />
+                ) : (
+                  <Select
+                    value={formData.serviceId}
+                    onValueChange={(value) => {
+                      const service = availableServices.find(s => s.id === value);
+                      setFormData({
+                        ...formData,
+                        serviceId: value,
+                        precioCliente: service?.price.toString() || '',
+                      });
+                    }}
+                    disabled={!!editingService}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un servicio" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(editingService ? availableServices : unassignedServices).map((service) => (
+                        <SelectItem key={service.id} value={service.id}>
+                          {service.name} - {formatCurrency(service.price, service.currency)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Precio y Moneda */}
@@ -478,7 +516,7 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
               <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isLoading}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isLoading || !formData.serviceId}>
+              <Button type="submit" disabled={isLoading || (!formData.serviceId && !(creatingNew && newServiceName.trim()))}>
                 {isLoading ? 'Guardando...' : editingService ? 'Actualizar' : 'Agregar'}
               </Button>
             </DialogFooter>

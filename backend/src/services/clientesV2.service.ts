@@ -40,7 +40,7 @@ export type Urgency = 'overdue' | 'due_today' | 'due_soon' | 'ok';
 export interface ClienteV2 {
   id: string; name: string; initials: string; status: string;
   email?: string; phone?: string; address?: string;
-  contractType: 'mrr' | 'project'; monthlyValue: number; nit?: string; clientSince: string;
+  contractType: 'mrr' | 'project'; monthlyValue: number; projectValue: number; nit?: string; clientSince: string;
   sedes: number;
   servicesSummary: string; servicesCount: number;
   services: { name: string; status: string; monthlyPrice: number; frecuencia: string; recurring: boolean }[];
@@ -98,11 +98,11 @@ export const getClientesV2 = async () => {
     return '';
   };
 
-  // Servicios activos por cliente
-  const svcByClient = new Map<string, { names: string[]; monthly: number; billingDay: number; hasRecurring: boolean; services: ClienteV2['services'] }>();
+  // Servicios activos por cliente. monthly = MRR (recurrente); projectValue = IPP (pago único/proyecto).
+  const svcByClient = new Map<string, { names: string[]; monthly: number; projectValue: number; billingDay: number; hasRecurring: boolean; services: ClienteV2['services'] }>();
   for (const cs of clientServices) {
     const price = cs.precioCliente ?? cs.service.price ?? 0;
-    const cur = svcByClient.get(cs.clientId) || { names: [], monthly: 0, billingDay: 5, hasRecurring: false, services: [] };
+    const cur = svcByClient.get(cs.clientId) || { names: [], monthly: 0, projectValue: 0, billingDay: 5, hasRecurring: false, services: [] };
     cur.names.push(cs.service.name);
     cur.services.push({ name: cs.service.name, status: cs.estado, monthlyPrice: Math.round(price), frecuencia: cs.frecuencia, recurring: cs.frecuencia !== 'unico' });
     if (cs.frecuencia !== 'unico') {
@@ -112,6 +112,8 @@ export const getClientesV2 = async () => {
         const d = new Date(cs.fechaProximoCobro).getUTCDate();
         if (d >= 1 && d <= 28) cur.billingDay = d;
       }
+    } else {
+      cur.projectValue += price; // ingreso por proyecto (una sola vez)
     }
     svcByClient.set(cs.clientId, cur);
   }
@@ -177,6 +179,7 @@ export const getClientesV2 = async () => {
       address: cl.address || undefined,
       contractType: svc?.hasRecurring || !svc ? 'mrr' : 'project',
       monthlyValue: Math.round(svc?.monthly || 0),
+      projectValue: Math.round(svc?.projectValue || 0),
       nit: cl.nit || undefined,
       clientSince: monthYear(cl.createdAt),
       sedes: sedesByClient.get(cl.id) || 0,
@@ -205,6 +208,9 @@ export const getClientesV2 = async () => {
 
   const mrrActivo = active.reduce((a, c) => a + c.monthlyValue, 0);
   const recurrentes = active.filter((c) => c.monthlyValue > 0).length;
+  // IPP = Ingreso Por Proyecto: suma de servicios de pago único (proyectos).
+  const ipp = active.reduce((a, c) => a + c.projectValue, 0);
+  const conProyecto = active.filter((c) => c.projectValue > 0).length;
   const porCobrar = active.reduce((a, c) => a + c.outstandingBalance, 0);
   const clientesConSaldo = active.filter((c) => c.outstandingBalance > 0).length;
   // Cobrado este mes: pagos reales de Sheets con fecha en el mes en curso (cuadra con Finanzas).
@@ -224,7 +230,7 @@ export const getClientesV2 = async () => {
 
   return {
     summary: {
-      mrrActivo, recurrentes, porCobrar, clientesConSaldo,
+      mrrActivo, recurrentes, ipp: Math.round(ipp), conProyecto, porCobrar, clientesConSaldo,
       cobradoMes: Math.round(cobradoMes),
       cobrosMesTotal: recurrentesActivos.length, cobrosMesPagados: alDiaCount,
       proyectosActivos,
