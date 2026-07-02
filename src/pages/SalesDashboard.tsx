@@ -144,6 +144,7 @@ export default function SalesDashboard() {
   const [range, setRange] = useState<DateRange | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
+  const [editingMonthIdx, setEditingMonthIdx] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -340,7 +341,7 @@ export default function SalesDashboard() {
         const gastosReal = i <= m ? expByMonth[i] : null;
         const ingresosProy = i >= m ? ingresos : null;
         const gastosProy = i >= m ? gastos : null;
-        return { month: i, label, ingresos, gastos, neto: ingresos - gastos, isFuture, ingresosReal, gastosReal, ingresosProy, gastosProy };
+        return { month: i, label, ingresos, gastos, neto: ingresos - gastos, isFuture, ingresosReal, gastosReal, ingresosProy, gastosProy, metaIngreso: metaByMonth[i] ?? meta };
       });
       return {
         titulo: `Año ${y}`, chartTitle: `Acumulado · ${y}`, xLabel: (v: number) => MONTHS_SHORT[v] || '',
@@ -587,7 +588,6 @@ export default function SalesDashboard() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
-                <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke="#8b5cf6" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
                 {period === 'mes' && (model as any).monthMeta && (
                   <ReferenceLine y={(model as any).monthMeta} stroke="#3b82f6" strokeDasharray="4 3" strokeWidth={1.5} label={{ value: `Meta ${fmtCompact((model as any).monthMeta)}`, fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
                 )}
@@ -624,6 +624,7 @@ export default function SalesDashboard() {
                   <Area type="monotone" dataKey="gastosReal" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gMG)" connectNulls />
                   <Line type="monotone" dataKey="ingresosProy" name="Ingresos (proy.)" legendType="none" stroke="#22c55e" strokeWidth={2.5} strokeDasharray="6 5" dot={false} connectNulls />
                   <Line type="monotone" dataKey="gastosProy" name="Gastos (proy.)" legendType="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="metaIngreso" name="Presupuesto" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#3b82f6', strokeWidth: 0 }} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -641,6 +642,7 @@ export default function SalesDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Mes</TableHead>
+                      <TableHead className="text-right text-blue-400">Presupuesto</TableHead>
                       <TableHead className="text-right">Ingresos</TableHead>
                       <TableHead className="text-right">Gastos</TableHead>
                       <TableHead className="text-right">Neto</TableHead>
@@ -653,6 +655,36 @@ export default function SalesDashboard() {
                           {MONTHS[row.month]}
                           {row.isFuture && <span className="ml-1.5 text-[10px] font-normal text-violet-400">proy.</span>}
                         </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {editingMonthIdx === row.month ? (
+                            <input
+                              autoFocus
+                              type="number"
+                              defaultValue={metaByMonth[row.month] ?? meta}
+                              className="w-28 text-right bg-transparent border-b border-blue-400 outline-none text-blue-400"
+                              onBlur={(e) => {
+                                const n = Number(e.target.value);
+                                if (n > 0) {
+                                  const next = { ...metaByMonth, [row.month]: n };
+                                  setMetaByMonth(next);
+                                  localStorage.setItem('dash.metaByMonth', JSON.stringify(next));
+                                }
+                                setEditingMonthIdx(null);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                if (e.key === 'Escape') setEditingMonthIdx(null);
+                              }}
+                            />
+                          ) : (
+                            <span className="flex items-center justify-end gap-1.5">
+                              <span className="text-blue-400">{fmt(metaByMonth[row.month] ?? meta)}</span>
+                              <button onClick={() => setEditingMonthIdx(row.month)} className="text-muted-foreground hover:text-primary">
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className={`text-right tabular-nums text-emerald-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.ingresos)}</TableCell>
                         <TableCell className={`text-right tabular-nums text-amber-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.gastos)}</TableCell>
                         <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'} ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.neto)}</TableCell>
@@ -662,6 +694,7 @@ export default function SalesDashboard() {
                   <TableFooter>
                     <TableRow>
                       <TableCell className="font-semibold">Total {model.titulo.replace('Año ', '')}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-blue-400">{fmt(MONTHS.reduce((s, _, i) => s + (metaByMonth[i] ?? meta), 0))}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
