@@ -41,6 +41,7 @@ export interface ClienteV2 {
   id: string; name: string; initials: string; status: string;
   email?: string; phone?: string; address?: string;
   contractType: 'mrr' | 'project'; monthlyValue: number; nit?: string; clientSince: string;
+  sedes: number;
   servicesSummary: string; servicesCount: number;
   services: { name: string; status: string; monthlyPrice: number; frecuencia: string; recurring: boolean }[];
   outstandingBalance: number; balanceLabel: string;
@@ -66,6 +67,11 @@ export const getClientesV2 = async () => {
     include: { service: { select: { name: true, price: true } } },
   });
   const cobros = await prisma.cobro.findMany({ orderBy: { fechaCobro: 'desc' } });
+
+  // Sedes físicas por cliente
+  const sedesGrouped = await prisma.clientSede.groupBy({ by: ['clientId'], _count: { _all: true } }).catch(() => [] as any[]);
+  const sedesByClient = new Map<string, number>();
+  for (const s of sedesGrouped) sedesByClient.set(s.clientId, (s as any)._count._all);
 
   // Pagos reales desde Google Sheets (hoja Entradas). No bloquear si Sheets falla.
   let sheetPayments: Array<{ tercero: string; importe: number; fecha: string; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string; _norm: string }> = [];
@@ -168,6 +174,7 @@ export const getClientesV2 = async () => {
       monthlyValue: Math.round(svc?.monthly || 0),
       nit: cl.nit || undefined,
       clientSince: monthYear(cl.createdAt),
+      sedes: sedesByClient.get(cl.id) || 0,
       servicesSummary: svc?.names.length ? [...new Set(svc.names)].join(' · ') : 'Sin servicios',
       servicesCount: svc?.services.length || 0,
       services: svc?.services || [],
@@ -198,16 +205,28 @@ export const getClientesV2 = async () => {
   const recurrentes = active.filter((c) => c.monthlyValue > 0).length;
   const porCobrar = active.reduce((a, c) => a + c.outstandingBalance, 0);
   const clientesConSaldo = active.filter((c) => c.outstandingBalance > 0).length;
-  const cobradoMes = cobros
-    .filter((c) => c.periodo === period && computeEstado(c.estado, c.paidAt, c.fechaCobro) === 'pagado')
-    .reduce((a, c) => a + c.monto, 0);
+  const cobrosMes = cobros.filter((c) => c.periodo === period);
+  const cobrosMesPagados = cobrosMes.filter((c) => computeEstado(c.estado, c.paidAt, c.fechaCobro) === 'pagado');
+  const cobradoMes = cobrosMesPagados.reduce((a, c) => a + c.monto, 0);
+  const proyectosActivos = active.filter((c) => c.contractType === 'project').length;
 
   const URG: Record<Urgency, number> = { overdue: 0, due_today: 1, due_soon: 2, ok: 3 };
-  active.sort((a, b) => URG[a.urgency] - URG[b.urgency] || b.outstandingBalance - a.outstandingBalance || a.name.localeCompare(b.name));
+  // Devolvemos TODOS los clientes (el frontend filtra por chips); activos primero,
+  // luego por urgencia de cobro.
+  const sorted = [...out].sort((a, b) =>
+    Number(b.status === 'active') - Number(a.status === 'active') ||
+    URG[a.urgency] - URG[b.urgency] || b.outstandingBalance - a.outstandingBalance || a.name.localeCompare(b.name)
+  );
 
   return {
-    summary: { mrrActivo, recurrentes, porCobrar, clientesConSaldo, cobradoMes: Math.round(cobradoMes), activos: active.length, total: out.length },
-    clients: active,
+    summary: {
+      mrrActivo, recurrentes, porCobrar, clientesConSaldo,
+      cobradoMes: Math.round(cobradoMes),
+      cobrosMesTotal: cobrosMes.length, cobrosMesPagados: cobrosMesPagados.length,
+      proyectosActivos,
+      activos: active.length, total: out.length,
+    },
+    clients: sorted,
   };
 };
 
