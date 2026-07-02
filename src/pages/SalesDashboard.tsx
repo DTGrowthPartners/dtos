@@ -692,9 +692,9 @@ export default function SalesDashboard() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className={`text-right tabular-nums text-emerald-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.ingresos)}</TableCell>
-                        <TableCell className={`text-right tabular-nums text-amber-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.gastos)}</TableCell>
-                        <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'} ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.neto)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-500">{row.isFuture ? <span className="text-muted-foreground">—</span> : fmt(row.ingresos)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-amber-500">{row.isFuture ? <span className="text-muted-foreground">—</span> : fmt(row.gastos)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'}`}>{row.isFuture ? <span className="text-muted-foreground">—</span> : fmt(row.neto)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -702,9 +702,9 @@ export default function SalesDashboard() {
                     <TableRow>
                       <TableCell className="font-semibold">Total {model.titulo.replace('Año ', '')}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums text-blue-400">{fmt(MONTHS.reduce((s, _, i) => s + (metaByMonth[i] ?? meta), 0))}</TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
-                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-emerald-500">{fmt(model.monthly.filter((r: any) => !r.isFuture).reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-amber-500">{fmt(model.monthly.filter((r: any) => !r.isFuture).reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.filter((r: any) => !r.isFuture).reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
                     </TableRow>
                   </TableFooter>
                 </Table>
