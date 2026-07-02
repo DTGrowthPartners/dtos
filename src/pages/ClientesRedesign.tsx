@@ -137,6 +137,89 @@ function GroupHeader({ color, title, count }: { color: string; title: string; co
 
 /* ───────────────────────── Vista LISTA ───────────────────────── */
 
+const MESES3 = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const fmtDate = (iso: string, withYear = true): string => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return `${d.getUTCDate()} ${MESES3[d.getUTCMonth()]}${withYear ? ` ${d.getUTCFullYear()}` : ''}`;
+};
+
+// Celda "Próximo cobro": ícono + color según urgencia (verde lejano, ámbar próximo, rojo vencido).
+function ProximoCobro({ c }: { c: ClientV2 }) {
+  const map = {
+    overdue: { Icon: AlertCircle, cls: 'text-red-400', text: `Vencido ${fmtDate(c.nextBilling, false)}` },
+    due_today: { Icon: AlertTriangle, cls: 'text-amber-400', text: 'Vence hoy' },
+    due_soon: { Icon: Clock, cls: 'text-amber-400', text: fmtDate(c.nextBilling) },
+    ok: { Icon: Calendar, cls: 'text-muted-foreground', text: c.nextBilling ? fmtDate(c.nextBilling) : 'Sin recurrencia' },
+  } as const;
+  const m = map[c.urgency];
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm ${m.cls}`}>
+      <m.Icon className="h-4 w-4 shrink-0" /> {m.text}
+    </span>
+  );
+}
+
+function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
+  const cc = contractChip[c.contractType];
+  return (
+    <tr onClick={onClick} className="border-b border-border/60 last:border-0 hover:bg-muted/30 cursor-pointer transition-colors align-top">
+      <td className="px-4 py-4 min-w-[170px]">
+        <p className="font-medium leading-tight">{c.name}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">Desde {c.clientSince}{c.sedes ? ` · ${c.sedes} sede${c.sedes === 1 ? '' : 's'}` : ''}</p>
+      </td>
+      <td className="px-4 py-4">
+        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${c.status === 'active' ? 'border-emerald-500/30 text-emerald-400' : 'border-border text-muted-foreground'}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${c.status === 'active' ? 'bg-emerald-400' : 'bg-gray-400'}`} />
+          {c.status === 'active' ? 'Activo' : 'Inactivo'}
+        </span>
+      </td>
+      <td className="px-4 py-4 min-w-[170px]">
+        {c.services.length ? (
+          <ul className="space-y-1">
+            {c.services.map((s, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400 shrink-0 mt-[7px]" />
+                <span>{s.name}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <span className="text-xs text-muted-foreground">Sin servicios</span>}
+      </td>
+      <td className="px-4 py-4">
+        <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${cc.cls}`}>{cc.label}</span>
+      </td>
+      <td className="px-4 py-4">
+        <p className={`font-semibold tabular-nums ${balanceColor(c)}`}>{fmtFull(c.outstandingBalance)}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{c.balanceLabel}</p>
+      </td>
+      <td className="px-4 py-4 whitespace-nowrap"><ProximoCobro c={c} /></td>
+    </tr>
+  );
+}
+
+function ClientesTable({ rows, onSelect }: { rows: ClientV2[]; onSelect: (c: ClientV2) => void }) {
+  return (
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
+      <table className="w-full">
+        <thead>
+          <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
+            <th className="text-left font-medium px-4 py-3">Cliente</th>
+            <th className="text-left font-medium px-4 py-3">Estado</th>
+            <th className="text-left font-medium px-4 py-3">Servicios activos</th>
+            <th className="text-left font-medium px-4 py-3">Tipo</th>
+            <th className="text-left font-medium px-4 py-3">Saldo pendiente</th>
+            <th className="text-left font-medium px-4 py-3">Próximo cobro</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c) => <ClientRow key={c.id} c={c} onClick={() => onSelect(c)} />)}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function FilterChip({ active, label, count, onClick }: { active: boolean; label: string; count?: number; onClick: () => void }) {
   return (
     <button
@@ -165,31 +248,27 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
     }
   }, [clients, filter]);
 
-  const accion = filtered.filter(requiereAccion);
-  const alDia = filtered.filter((c) => !requiereAccion(c));
-
   const mrrCount = clients.filter((c) => c.status === 'active' && c.contractType === 'mrr').length;
   const proyCount = summary.proyectosActivos ?? clients.filter((c) => c.status === 'active' && c.contractType === 'project').length;
 
   const cobrosSub = summary.cobrosMesTotal
-    ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} al día`
+    ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} pagados`
     : 'mes en curso';
 
-  const ipp = summary.ipp ?? 0;
   const kpis = [
-    { label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} recurrentes`, accent: 'border-l-blue-500' },
-    { label: 'IPP (proyectos)', value: fmtM(ipp), sub: `${summary.conProyecto ?? proyCount} con proyecto`, accent: 'border-l-violet-500' },
-    { label: 'Pendiente de cobro', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} con saldo`, accent: 'border-l-amber-500' },
-    { label: 'Cobros este mes', value: fmtM(summary.cobradoMes), sub: cobrosSub, accent: 'border-l-emerald-500' },
+    { label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} clientes recurrentes`, valueCls: 'text-blue-400' },
+    { label: 'Pendiente de cobro', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} clientes con saldo`, valueCls: 'text-amber-400' },
+    { label: 'Cobros este mes', value: fmtM(summary.cobradoMes), sub: cobrosSub, valueCls: 'text-emerald-400' },
+    { label: 'Proyectos activos', value: String(proyCount), sub: 'Sin recurrencia mensual', valueCls: 'text-foreground' },
   ];
 
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Header + chips + nuevo */}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+      {/* Header + chips */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Clientes</h1>
-          <p className="text-sm text-muted-foreground">{summary.total} empresas · {summary.activos} activas · ordenadas por urgencia de cobro</p>
+          <p className="text-sm text-muted-foreground">{summary.total} empresas · {summary.activos} activas</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <FilterChip active={filter === 'todos'} label="Todos" count={summary.total} onClick={() => setFilter('todos')} />
@@ -201,30 +280,21 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs (planas, estilo mockup) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {kpis.map((k) => <KpiCard key={k.label} {...k} />)}
+        {kpis.map((k) => (
+          <div key={k.label} className="rounded-xl bg-card border border-border px-4 py-3">
+            <p className="text-[11px] text-muted-foreground">{k.label}</p>
+            <p className={`text-[26px] font-semibold leading-tight tabular-nums mt-0.5 ${k.valueCls}`}>{k.value}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{k.sub}</p>
+          </div>
+        ))}
       </div>
 
-      {filtered.length === 0 && (
-        <p className="text-center py-12 text-muted-foreground">No hay clientes en este filtro.</p>
-      )}
-
-      {/* Requiere acción */}
-      {accion.length > 0 && (
-        <div className="space-y-2">
-          <GroupHeader color="bg-red-500" title="Requiere acción" count={accion.length} />
-          {accion.map((c) => <ClientCard key={c.id} c={c} onClick={() => onSelect(c)} />)}
-        </div>
-      )}
-
-      {/* Al día */}
-      {alDia.length > 0 && (
-        <div className="space-y-2">
-          <GroupHeader color="bg-emerald-500" title="Al día" count={alDia.length} />
-          {alDia.map((c) => <ClientCard key={c.id} c={c} onClick={() => onSelect(c)} />)}
-        </div>
-      )}
+      {/* Tabla de clientes */}
+      {filtered.length === 0
+        ? <p className="text-center py-12 text-muted-foreground">No hay clientes en este filtro.</p>
+        : <ClientesTable rows={filtered} onSelect={onSelect} />}
     </div>
   );
 }
