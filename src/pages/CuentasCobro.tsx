@@ -62,6 +62,7 @@ interface ServiceItem {
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
+  serviceId?: string; // servicio del catálogo que se está facturando (para amarrar la factura)
 }
 
 interface Invoice {
@@ -215,11 +216,12 @@ const CuentasCobro = () => {
     e.preventDefault();
     setIsLoading(true);
 
+    const usados = serviceItems.filter(item => item.descripcion.trim() !== '');
     const submissionData = {
       ...invoiceData,
-      servicios: serviceItems
-        .filter(item => item.descripcion.trim() !== '') // Filter out empty descriptions
-        .map(({ id, ...rest }) => rest), // Remove id from items
+      // Amarra la factura al servicio facturado (el primer ítem con servicio del catálogo).
+      serviceId: usados.find(i => i.serviceId)?.serviceId,
+      servicios: usados.map(({ id, serviceId, ...rest }) => rest), // el PDF no necesita id/serviceId
     };
 
     try {
@@ -467,6 +469,7 @@ const CuentasCobro = () => {
                       <Select onValueChange={(serviceId) => {
                         const service = services.find(s => s.id === serviceId);
                         if (service) {
+                          handleServiceItemChange(item.id, 'serviceId', serviceId);
                           handleServiceItemChange(item.id, 'descripcion', service.description || service.name);
                           handleServiceItemChange(item.id, 'precio_unitario', service.price);
                         }

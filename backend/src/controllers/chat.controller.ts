@@ -56,7 +56,14 @@ ACCIONES (POST/PATCH):
 - POST /bot/sheets/gastos — registrar gasto. datos: { fecha (req), importe (req), categoria (req), entidad (req), descripcion (req), cuenta }
 - POST /bot/sheets/ingresos — registrar ingreso. datos: { fecha (req), importe (req), categoria, cuenta, entidad }
 - POST /bot/terceros — crear tercero
-- POST /bot/invoices/generate — generar cuenta de cobro. El sistema adjunta el PDF automáticamente; solo confirma al usuario los datos (cliente, número, total). No pegues links.`;
+- POST /bot/invoices/generate — generar cuenta de cobro. El sistema adjunta el PDF automáticamente; solo confirma al usuario los datos (cliente, número, total). No pegues links.
+
+CONTEXTO ACTUAL DEL SISTEMA (jul 2026):
+- Cada cliente puede tener SEDES (sucursales físicas: nombre, dirección, ciudad, teléfono) y varios CONTACTOS (terceros con cargo: gerencia, contador, etc.).
+- Los SERVICIOS se cobran como MRR (recurrente: mensual/quincenal/semanal/…) o como PROYECTO (pago único). El total recurrente de un cliente es su MRR; el total de proyectos es el IPP (Ingreso Por Proyecto).
+- Servicio unificado: "Gestión de campañas publicitarias en Meta Ads" (antes "Gestión de pautas publicitarias").
+- Las cuentas de cobro se pueden amarrar al servicio que facturan (campo serviceId).
+- El panel de Clientes muestra saldo pendiente y finanzas desde las Facturas reales (no desde Cobros).`;
 
 // Extrae una llamada a la API interna en JSON dentro del texto del modelo.
 // Forma esperada: {"metodo":"POST","ruta":"/bot/tasks","datos":{...}} (acepta alias).

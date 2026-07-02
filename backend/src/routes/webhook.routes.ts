@@ -3543,6 +3543,7 @@ router.post('/bot/invoices/generate', verifyBotApiKey, async (req: Request, res:
         concepto: cleanText(invoiceData.concepto) || null,
         servicio: cleanText(invoiceData.servicio_proyecto) || null,
         observaciones: cleanText(invoiceData.observaciones) || null,
+        serviceId: invoiceData.serviceId || null,
         filePath: generatedPath,
         createdBy: botUserId,
       },

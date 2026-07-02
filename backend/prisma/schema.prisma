@@ -135,6 +135,7 @@ model Service {
   clients     ClientService[]
   deals       Deal[]    // CRM: Deals interesados en este servicio
   portalStatuses PortalServiceStatus[] // Portal: estado del servicio por cliente
+  invoices    Invoice[] @relation("InvoiceService") // Cuentas de cobro que facturan este servicio
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 }
@@ -233,6 +234,9 @@ model Invoice {
   concepto        String?
   servicio        String?
   observaciones   String?
+  // Servicio del catálogo que factura esta cuenta de cobro (opcional)
+  serviceId       String?
+  service         Service? @relation("InvoiceService", fields: [serviceId], references: [id])
   filePath        String   // Ruta del PDF generado
   status          String   @default("pendiente") // pendiente, enviada, parcial, pagada
   paidAt          DateTime?

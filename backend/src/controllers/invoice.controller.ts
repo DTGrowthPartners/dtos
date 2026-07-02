@@ -67,6 +67,7 @@ class InvoiceController {
           concepto: cleanText(invoiceData.concepto) || null,
           servicio: cleanText(invoiceData.servicio_proyecto) || null,
           observaciones: cleanText(invoiceData.observaciones) || null,
+          serviceId: invoiceData.serviceId || null,
           filePath: generatedPath,
           createdBy: userId,
         },
