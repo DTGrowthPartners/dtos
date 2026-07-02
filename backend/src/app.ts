@@ -35,6 +35,7 @@ import propuestasRoutes from './routes/propuestas.routes';
 import employeeLoanRoutes from './routes/employeeLoan.routes';
 import payableRoutes from './routes/payable.routes';
 import fixedAssetRoutes from './routes/fixedAsset.routes';
+import configRoutes from './routes/config.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -91,6 +92,7 @@ app.use('/api/propuestas', propuestasRoutes);
 app.use('/api/employee-loans', employeeLoanRoutes);
 app.use('/api/payables', payableRoutes);
 app.use('/api/fixed-assets', fixedAssetRoutes);
+app.use('/api/config', configRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

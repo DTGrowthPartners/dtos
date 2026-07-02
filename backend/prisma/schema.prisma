@@ -791,6 +791,13 @@ model PortalExcelFile {
   updatedAt       DateTime  @updatedAt
 }
 
+// Configuración global de la app (clave-valor)
+model AppConfig {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 // Invitaciones para usuarios del portal de clientes
 model PortalInvitation {
   id              String    @id @default(cuid())

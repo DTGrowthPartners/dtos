@@ -114,6 +114,12 @@ const MonthlyTooltip = ({ active, payload, label }: any) => {
         {label} {row.isFuture && <span className="text-violet-400">(proyección)</span>}
       </div>
       <div className="space-y-0.5">
+        {row.metaIngreso != null && (
+          <div className="flex items-center justify-between gap-5">
+            <span className="text-blue-400">Proyección</span>
+            <span className="font-medium text-blue-400">{fmt(row.metaIngreso)}</span>
+          </div>
+        )}
         <div className="flex items-center justify-between gap-5">
           <span className="text-muted-foreground">Ingresos</span>
           <span className="font-medium text-foreground">{fmt(row.ingresos)}</span>
@@ -138,13 +144,17 @@ export default function SalesDashboard() {
   const [loading, setLoading] = useState(true);
   const [meta, setMeta] = useState(() => Number(localStorage.getItem('dash.meta')) || 22000000);
   const [presupuesto, setPresupuesto] = useState(() => Number(localStorage.getItem('dash.presupuesto')) || 14500000);
-  const [metaByMonth, setMetaByMonth] = useState<Record<number, number>>(() => {
-    try { return JSON.parse(localStorage.getItem('dash.metaByMonth') || '{}'); } catch { return {}; }
-  });
+  const [metaByMonth, setMetaByMonth] = useState<Record<number, number>>({});
   const [range, setRange] = useState<DateRange | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tableOpen, setTableOpen] = useState(false);
   const [editingMonthIdx, setEditingMonthIdx] = useState<number | null>(null);
+
+  useEffect(() => {
+    apiClient.get<{ value: Record<number, number> | null }>('/api/config/metaByMonth')
+      .then((d) => { if (d.value) setMetaByMonth(d.value); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -173,14 +183,15 @@ export default function SalesDashboard() {
     const v = prompt('Meta de ingresos del mes (COP):', String(meta));
     if (v && !isNaN(Number(v))) { const n = Number(v); setMeta(n); localStorage.setItem('dash.meta', String(n)); }
   };
+  const saveMetaByMonth = (next: Record<number, number>) => {
+    setMetaByMonth(next);
+    apiClient.put('/api/config/metaByMonth', { value: next }).catch(() => {});
+  };
   const editMonthMeta = (monthIdx: number) => {
     const current = metaByMonth[monthIdx] ?? meta;
     const v = prompt(`Meta de ingresos · ${MONTHS[monthIdx]} (COP):`, String(current));
     if (v && !isNaN(Number(v))) {
-      const n = Number(v);
-      const next = { ...metaByMonth, [monthIdx]: n };
-      setMetaByMonth(next);
-      localStorage.setItem('dash.metaByMonth', JSON.stringify(next));
+      saveMetaByMonth({ ...metaByMonth, [monthIdx]: Number(v) });
     }
   };
   const editPresupuesto = () => {
@@ -624,7 +635,7 @@ export default function SalesDashboard() {
                   <Area type="monotone" dataKey="gastosReal" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gMG)" connectNulls />
                   <Line type="monotone" dataKey="ingresosProy" name="Ingresos (proy.)" legendType="none" stroke="#22c55e" strokeWidth={2.5} strokeDasharray="6 5" dot={false} connectNulls />
                   <Line type="monotone" dataKey="gastosProy" name="Gastos (proy.)" legendType="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
-                  <Line type="monotone" dataKey="metaIngreso" name="Presupuesto" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#3b82f6', strokeWidth: 0 }} connectNulls />
+                  <Line type="monotone" dataKey="metaIngreso" name="Proyección" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3, fill: '#3b82f6', strokeWidth: 0 }} connectNulls />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -642,7 +653,7 @@ export default function SalesDashboard() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Mes</TableHead>
-                      <TableHead className="text-right text-blue-400">Presupuesto</TableHead>
+                      <TableHead className="text-right text-blue-400">Proyección ing.</TableHead>
                       <TableHead className="text-right">Ingresos</TableHead>
                       <TableHead className="text-right">Gastos</TableHead>
                       <TableHead className="text-right">Neto</TableHead>
@@ -664,11 +675,7 @@ export default function SalesDashboard() {
                               className="w-28 text-right bg-transparent border-b border-blue-400 outline-none text-blue-400"
                               onBlur={(e) => {
                                 const n = Number(e.target.value);
-                                if (n > 0) {
-                                  const next = { ...metaByMonth, [row.month]: n };
-                                  setMetaByMonth(next);
-                                  localStorage.setItem('dash.metaByMonth', JSON.stringify(next));
-                                }
+                                if (n > 0) saveMetaByMonth({ ...metaByMonth, [row.month]: n });
                                 setEditingMonthIdx(null);
                               }}
                               onKeyDown={(e) => {
