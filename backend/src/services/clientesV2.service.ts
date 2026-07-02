@@ -82,6 +82,22 @@ export const getClientesV2 = async () => {
     console.warn('[clientes-v2] no se pudo leer pagos de Sheets:', (e as Error).message);
   }
 
+  // Facturas reales (cuentas de cobro) — fuente de verdad de facturado/pagado/saldo.
+  const allInvoices = await prisma.invoice.findMany({ orderBy: { fecha: 'desc' } });
+  const invNorm = allInvoices.map((i) => ({
+    norm: normName(i.clientName || ''),
+    total: i.totalAmount, paid: i.paidAmount || 0, status: i.status,
+    numero: i.invoiceNumber, fecha: i.fecha,
+  }));
+
+  // Mes en curso (YYYY-MM) a partir de una fecha de Sheets (soporta ISO y DD/MM/YYYY).
+  const ymOf = (f: string): string => {
+    const s = (f || '').trim();
+    let m = s.match(/^(\d{4})-(\d{2})/); if (m) return `${m[1]}-${m[2]}`;
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if (m) return `${m[3]}-${m[2].padStart(2, '0')}`;
+    return '';
+  };
+
   // Servicios activos por cliente
   const svcByClient = new Map<string, { names: string[]; monthly: number; billingDay: number; hasRecurring: boolean; services: ClienteV2['services'] }>();
   for (const cs of clientServices) {
@@ -100,42 +116,40 @@ export const getClientesV2 = async () => {
     svcByClient.set(cs.clientId, cur);
   }
 
-  // Cobros por cliente (con estado recomputado)
-  const cobrosByClient = new Map<string, typeof cobros>();
-  for (const c of cobros) {
-    const arr = cobrosByClient.get(c.clientId) || [];
-    arr.push(c);
-    cobrosByClient.set(c.clientId, arr);
-  }
+  const invStatus = (s: string): 'pagada' | 'pendiente' | 'vencida' =>
+    s === 'pagada' ? 'pagada' : s === 'parcial' || s === 'pendiente' ? 'pendiente' : 'vencida';
 
   const out: ClienteV2[] = clients.map((cl) => {
     const svc = svcByClient.get(cl.id);
-    const cs = cobrosByClient.get(cl.id) || [];
-    const withEstado = cs.map((c) => ({ ...c, est: computeEstado(c.estado, c.paidAt, c.fechaCobro) }));
-    const unpaid = withEstado.filter((c) => c.est !== 'pagado');
-    const vencidos = unpaid.filter((c) => c.est === 'vencido').sort((a, b) => a.fechaCobro.getTime() - b.fechaCobro.getTime());
-    const pendientes = unpaid.filter((c) => c.est === 'pendiente').sort((a, b) => a.fechaCobro.getTime() - b.fechaCobro.getTime());
-    const outstanding = unpaid.reduce((a, c) => a + c.monto, 0);
+    const norm = normName(cl.name);
 
-    // Urgencia + próximo cobro
+    // Facturas de este cliente (cruce por nombre normalizado, agrupa variantes: ACBFIT/ACB Fit/ACBFIT SAS)
+    const myInv = norm.length >= 4
+      ? invNorm.filter((i) => i.norm.length >= 4 && (norm.includes(i.norm) || i.norm.includes(norm)))
+      : [];
+    const facturado = myInv.reduce((a, i) => a + i.total, 0);
+    const pagado = myInv.reduce((a, i) => a + i.paid, 0);
+    const openInv = myInv.filter((i) => i.status !== 'pagada').sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
+    const outstanding = openInv.reduce((a, i) => a + Math.max(0, i.total - i.paid), 0);
+
+    // Pagos reales de este cliente desde Sheets (cruce por nombre normalizado)
+    const cp = norm.length >= 4
+      ? sheetPayments.filter((p) => p._norm.length >= 4 && (norm.includes(p._norm) || p._norm.includes(norm)))
+      : [];
+    const paidSheets = cp.reduce((a, p) => a + p.importe, 0);
+
+    // Urgencia + próximo cobro: si debe (facturas abiertas) => acción; si no, proyecta el próximo cobro recurrente.
     let urgency: Urgency = 'ok';
     let urgencyLabel = '';
     let nextBilling = '';
-    if (vencidos.length) {
-      const f = vencidos[0].fechaCobro;
-      const days = Math.max(0, Math.floor((Date.now() - f.getTime()) / DAY));
-      urgency = 'overdue';
-      urgencyLabel = days === 0 ? 'Vencido hoy' : `Vencido hace ${days} día${days === 1 ? '' : 's'}`;
-      nextBilling = f.toISOString();
-    } else if (pendientes.length) {
-      const f = pendientes[0].fechaCobro;
-      const days = Math.ceil((f.getTime() - Date.now()) / DAY);
-      nextBilling = f.toISOString();
-      if (days <= 0) { urgency = 'due_today'; urgencyLabel = 'Vence hoy'; }
-      else if (days <= 5) { urgency = 'due_soon'; urgencyLabel = `Cobra en ${days} día${days === 1 ? '' : 's'}`; }
-      else { urgency = 'ok'; urgencyLabel = `Próximo: ${fmtDayMon(f)}`; }
+    if (outstanding > 0 && openInv.length) {
+      const oldest = openInv[0].fecha;
+      const days = Math.floor((Date.now() - oldest.getTime()) / DAY);
+      nextBilling = oldest.toISOString();
+      if (days > 5) { urgency = 'overdue'; urgencyLabel = `Vencido hace ${days} días`; }
+      else if (days >= 0) { urgency = 'due_today'; urgencyLabel = openInv.length === 1 ? '1 factura pendiente' : `${openInv.length} facturas pendientes`; }
+      else { urgency = 'due_soon'; urgencyLabel = 'Por cobrar'; }
     } else if (svc?.hasRecurring) {
-      // Sin cobros pendientes: proyectar el próximo según el día de cobro
       const now = new Date();
       const day = svc.billingDay;
       let y = now.getUTCFullYear(), m = now.getUTCMonth();
@@ -147,20 +161,11 @@ export const getClientesV2 = async () => {
       else { urgency = 'ok'; urgencyLabel = `Próximo: ${fmtDayMon(f)}`; }
     } else {
       urgency = 'ok';
-      urgencyLabel = 'Sin recurrencia';
+      urgencyLabel = myInv.length ? 'Al día' : 'Sin recurrencia';
     }
 
-    const balanceLabel = outstanding === 0 ? 'Al día' : unpaid.length === 1 ? '1 factura' : `${unpaid.length} facturas`;
-    const facturado = withEstado.reduce((a, c) => a + c.monto, 0);
-    const pagado = withEstado.filter((c) => c.est === 'pagado').reduce((a, c) => a + c.monto, 0);
+    const balanceLabel = outstanding === 0 ? 'Al día' : openInv.length === 1 ? '1 factura' : `${openInv.length} facturas`;
     const ltvMonths = Math.max(1, Math.round((Date.now() - cl.createdAt.getTime()) / (DAY * 30)));
-
-    // Pagos reales de este cliente desde Sheets (cruce por nombre normalizado)
-    const norm = normName(cl.name);
-    const cp = norm.length >= 4
-      ? sheetPayments.filter((p) => p._norm.length >= 4 && (norm.includes(p._norm) || p._norm.includes(norm)))
-      : [];
-    const paidSheets = cp.reduce((a, p) => a + p.importe, 0);
 
     return {
       id: cl.id,
@@ -183,17 +188,14 @@ export const getClientesV2 = async () => {
       nextBilling,
       urgency,
       urgencyLabel,
-      invoices: withEstado
-        .sort((a, b) => b.fechaCobro.getTime() - a.fechaCobro.getTime())
-        .slice(0, 8)
-        .map((c) => ({ id: c.id, amount: c.monto, status: c.est === 'pagado' ? 'pagada' : c.est === 'vencido' ? 'vencida' : 'pendiente' })),
+      invoices: myInv.slice(0, 8).map((i) => ({ id: i.numero, amount: Math.round(i.total), status: invStatus(i.status) })),
       payments: cp
         .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
         .slice(0, 20)
         .map((p) => ({ fecha: p.fecha, importe: Math.round(p.importe), descripcion: p.descripcion, cuenta: p.cuenta, cuentaCobro: p.cuentaCobro, tipoPago: p.tipoPago })),
       paidSheets: Math.round(paidSheets),
       ads: null,
-      activity: buildActivity(withEstado),
+      activity: myInv.slice(0, 6).map((i) => ({ label: i.status === 'pagada' ? 'Pago recibido' : 'Factura generada', date: fmtDayMon(i.fecha), positive: i.status === 'pagada' })),
       totals: { facturado: Math.round(facturado), pagado: Math.round(pagado), pendiente: Math.round(outstanding), ltvMonths },
     };
   });
@@ -205,9 +207,11 @@ export const getClientesV2 = async () => {
   const recurrentes = active.filter((c) => c.monthlyValue > 0).length;
   const porCobrar = active.reduce((a, c) => a + c.outstandingBalance, 0);
   const clientesConSaldo = active.filter((c) => c.outstandingBalance > 0).length;
-  const cobrosMes = cobros.filter((c) => c.periodo === period);
-  const cobrosMesPagados = cobrosMes.filter((c) => computeEstado(c.estado, c.paidAt, c.fechaCobro) === 'pagado');
-  const cobradoMes = cobrosMesPagados.reduce((a, c) => a + c.monto, 0);
+  // Cobrado este mes: pagos reales de Sheets con fecha en el mes en curso (cuadra con Finanzas).
+  const cobradoMes = sheetPayments.filter((p) => ymOf(p.fecha) === period).reduce((a, p) => a + p.importe, 0);
+  // "N de M al día": clientes recurrentes activos sin saldo pendiente.
+  const recurrentesActivos = active.filter((c) => c.monthlyValue > 0);
+  const alDiaCount = recurrentesActivos.filter((c) => c.outstandingBalance === 0).length;
   const proyectosActivos = active.filter((c) => c.contractType === 'project').length;
 
   const URG: Record<Urgency, number> = { overdue: 0, due_today: 1, due_soon: 2, ok: 3 };
@@ -222,7 +226,7 @@ export const getClientesV2 = async () => {
     summary: {
       mrrActivo, recurrentes, porCobrar, clientesConSaldo,
       cobradoMes: Math.round(cobradoMes),
-      cobrosMesTotal: cobrosMes.length, cobrosMesPagados: cobrosMesPagados.length,
+      cobrosMesTotal: recurrentesActivos.length, cobrosMesPagados: alDiaCount,
       proyectosActivos,
       activos: active.length, total: out.length,
     },

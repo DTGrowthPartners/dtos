@@ -171,7 +171,7 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
   const proyCount = summary.proyectosActivos ?? clients.filter((c) => c.status === 'active' && c.contractType === 'project').length;
 
   const cobrosSub = summary.cobrosMesTotal
-    ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} pagados`
+    ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} al día`
     : 'mes en curso';
 
   const kpis = [
