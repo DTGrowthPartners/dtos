@@ -44,6 +44,8 @@ import { apiClient } from '@/lib/api';
 import { authService } from '@/lib/auth';
 import { convertImageToBase64 } from '@/lib/imageService';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
+import ClientSedesManager from '@/components/clients/ClientSedesManager';
+import ClientContactsManager from '@/components/clients/ClientContactsManager';
 
 interface Client {
   id: string;
@@ -679,6 +681,14 @@ export default function Clientes() {
               <Briefcase className="h-4 w-4" />
               Servicios
             </TabsTrigger>
+            <TabsTrigger value="sedes" className="gap-2">
+              <MapPin className="h-4 w-4" />
+              Sedes
+            </TabsTrigger>
+            <TabsTrigger value="contactos" className="gap-2">
+              <Users className="h-4 w-4" />
+              Contactos
+            </TabsTrigger>
           </TabsList>
 
           {/* Tab: Info */}
@@ -797,6 +807,18 @@ export default function Clientes() {
           <TabsContent value="servicios" className="mt-4">
             <div className="rounded-xl border border-border bg-card p-6">
               <ClientServicesManager client={profileClient} onUpdate={() => {}} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="sedes" className="mt-4">
+            <div className="rounded-xl border border-border bg-card p-6">
+              <ClientSedesManager client={profileClient} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="contactos" className="mt-4">
+            <div className="rounded-xl border border-border bg-card p-6">
+              <ClientContactsManager client={profileClient} />
             </div>
           </TabsContent>
         </Tabs>

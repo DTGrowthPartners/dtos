@@ -69,4 +69,39 @@ export class ClientController {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Error sharing client' });
     }
   }
+
+  // ==================== Sedes ====================
+  async getSedes(req: Request, res: Response) {
+    try {
+      res.json(await clientService.getSedes(req.params.id));
+    } catch (error) {
+      res.status(500).json({ message: error instanceof Error ? error.message : 'Error fetching sedes' });
+    }
+  }
+
+  async addSede(req: Request, res: Response) {
+    try {
+      const sede = await clientService.addSede(req.params.id, req.body);
+      res.status(201).json(sede);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Error creating sede' });
+    }
+  }
+
+  async updateSede(req: Request, res: Response) {
+    try {
+      const sede = await clientService.updateSede(req.params.sedeId, req.body);
+      res.json(sede);
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Error updating sede' });
+    }
+  }
+
+  async deleteSede(req: Request, res: Response) {
+    try {
+      res.json(await clientService.deleteSede(req.params.sedeId));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Error deleting sede' });
+    }
+  }
 }

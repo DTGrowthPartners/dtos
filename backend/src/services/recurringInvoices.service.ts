@@ -55,6 +55,17 @@ const addMonths = (date: Date, months: number): Date => {
   return d;
 };
 
+/** Frecuencias sub-mensuales: se avanzan por días, no por meses. */
+const DAYS_BY_FREQ: Record<string, number> = { semanal: 7, quincenal: 15 };
+const addDays = (date: Date, days: number): Date => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+/** Avanza la fecha de cobro al siguiente periodo según la frecuencia. */
+const advance = (date: Date, frecuencia: string): Date =>
+  DAYS_BY_FREQ[frecuencia] ? addDays(date, DAYS_BY_FREQ[frecuencia]) : addMonths(date, MONTHS_BY_FREQ[frecuencia] || 1);
+
 export interface RecurringRunResult {
   generated: { cliente: string; servicio: string; monto: number; invoiceNumber: string }[];
   skipped: { cliente: string; motivo: string }[];
@@ -182,12 +193,11 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
       }
 
       // 4. Avanzar fechaProximoCobro al siguiente periodo futuro (evita duplicados).
-      const step = MONTHS_BY_FREQ[cs.frecuencia] || 1;
-      let next = addMonths(cs.fechaProximoCobro as Date, step);
+      let next = advance(cs.fechaProximoCobro as Date, cs.frecuencia);
       // Si sigue en el pasado (servicio muy atrasado), saltar hasta futuro sin generar de mas.
       let guard = 0;
       while (next.getTime() <= endOfToday.getTime() && guard < 60) {
-        next = addMonths(next, step);
+        next = advance(next, cs.frecuencia);
         guard++;
       }
       await prisma.clientService.update({

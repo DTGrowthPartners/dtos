@@ -44,6 +44,7 @@ export class TercerosService {
     esEmpleado?: boolean;
     estado?: string;
     search?: string;
+    clientId?: string;
   }) {
     const where: any = {};
 
@@ -52,6 +53,7 @@ export class TercerosService {
     if (filters?.esProveedor !== undefined) where.esProveedor = filters.esProveedor;
     if (filters?.esEmpleado !== undefined) where.esEmpleado = filters.esEmpleado;
     if (filters?.estado) where.estado = filters.estado;
+    if (filters?.clientId) where.clientId = filters.clientId;
 
     if (filters?.search) {
       where.OR = [

@@ -14,6 +14,8 @@ const DAY = 86400000;
 
 const normalizeToMonthly = (price: number, frecuencia: string): number => {
   switch (frecuencia) {
+    case 'semanal': return price * 4.333;   // ~4.33 semanas/mes
+    case 'quincenal': return price * 2;      // 2 pagos/mes
     case 'mensual': return price;
     case 'trimestral': return price / 3;
     case 'semestral': return price / 6;

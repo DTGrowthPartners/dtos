@@ -182,4 +182,50 @@ export class ClientService {
 
     return { message: 'Client deleted successfully' };
   }
+
+  // ==================== Sedes (sucursales físicas del cliente) ====================
+  async getSedes(clientId: string) {
+    return prisma.clientSede.findMany({
+      where: { clientId },
+      orderBy: [{ esPrincipal: 'desc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  async addSede(
+    clientId: string,
+    data: { nombre?: string; direccion?: string; ciudad?: string; telefono?: string; esPrincipal?: boolean }
+  ) {
+    if (!data?.nombre || !data.nombre.trim()) throw new Error('El nombre de la sede es obligatorio');
+    return prisma.clientSede.create({
+      data: {
+        clientId,
+        nombre: data.nombre.trim(),
+        direccion: data.direccion?.trim() || null,
+        ciudad: data.ciudad?.trim() || null,
+        telefono: data.telefono?.trim() || null,
+        esPrincipal: !!data.esPrincipal,
+      },
+    });
+  }
+
+  async updateSede(
+    sedeId: string,
+    data: { nombre?: string; direccion?: string; ciudad?: string; telefono?: string; esPrincipal?: boolean }
+  ) {
+    return prisma.clientSede.update({
+      where: { id: sedeId },
+      data: {
+        ...(data.nombre !== undefined ? { nombre: data.nombre.trim() } : {}),
+        ...(data.direccion !== undefined ? { direccion: data.direccion?.trim() || null } : {}),
+        ...(data.ciudad !== undefined ? { ciudad: data.ciudad?.trim() || null } : {}),
+        ...(data.telefono !== undefined ? { telefono: data.telefono?.trim() || null } : {}),
+        ...(data.esPrincipal !== undefined ? { esPrincipal: !!data.esPrincipal } : {}),
+      },
+    });
+  }
+
+  async deleteSede(sedeId: string) {
+    await prisma.clientSede.delete({ where: { id: sedeId } });
+    return { message: 'Sede eliminada' };
+  }
 }

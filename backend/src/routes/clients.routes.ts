@@ -16,6 +16,12 @@ router.put('/:id', clientController.update.bind(clientController));
 router.delete('/:id', clientController.remove.bind(clientController));
 router.post('/:id/share', clientController.shareClient.bind(clientController));
 
+// Client Sedes (sucursales físicas del cliente)
+router.get('/:id/sedes', clientController.getSedes.bind(clientController));
+router.post('/:id/sedes', clientController.addSede.bind(clientController));
+router.put('/:id/sedes/:sedeId', clientController.updateSede.bind(clientController));
+router.delete('/:id/sedes/:sedeId', clientController.deleteSede.bind(clientController));
+
 // Client Services (servicios asignados a un cliente)
 router.get('/:clientId/services', clientServiceController.getClientServices);
 router.post('/:clientId/services', clientServiceController.assignServiceToClient);

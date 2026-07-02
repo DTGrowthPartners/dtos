@@ -10,7 +10,7 @@ export class TercerosController {
 
   async findAll(req: Request, res: Response) {
     try {
-      const { esProspecto, esCliente, esProveedor, esEmpleado, estado, search } = req.query;
+      const { esProspecto, esCliente, esProveedor, esEmpleado, estado, search, clientId } = req.query;
 
       const terceros = await tercerosService.findAllTerceros({
         esProspecto: esProspecto === 'true' ? true : esProspecto === 'false' ? false : undefined,
@@ -19,6 +19,7 @@ export class TercerosController {
         esEmpleado: esEmpleado === 'true' ? true : esEmpleado === 'false' ? false : undefined,
         estado: estado as string,
         search: search as string,
+        clientId: clientId as string,
       });
 
       res.json(terceros);

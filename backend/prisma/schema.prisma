@@ -77,6 +77,7 @@ model Client {
   services    ClientService[]
   sharedWith  ClientShare[]  @relation("ClientShares")
   terceros    Tercero[]      @relation("TerceroClient") // Contactos asociados a este cliente
+  sedes       ClientSede[]   @relation("ClientSedes")   // Sedes físicas del cliente
   accounts    Account[]      @relation("AccountClient")  // Cuentas por cobrar/pagar
   cobros      Cobro[]        @relation("ClientCobros")    // Cobros mensuales (Cobros & MRR)
   calendarEvents CalendarEvent[]
@@ -92,6 +93,20 @@ model Client {
   metaBusinessId   String?   // ID del Business Manager de Meta
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
+}
+
+// Sede física de un cliente (una empresa puede tener varias: p. ej. dos clínicas).
+model ClientSede {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation("ClientSedes", fields: [clientId], references: [id], onDelete: Cascade)
+  nombre      String   // "Sede La Castellana", "Bocagrande"
+  direccion   String?
+  ciudad      String?
+  telefono    String?
+  esPrincipal Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model ClientShare {

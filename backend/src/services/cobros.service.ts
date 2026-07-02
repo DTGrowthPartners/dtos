@@ -5,6 +5,10 @@ const prisma = new PrismaClient();
 /** Normaliza un precio a su valor mensual segun la frecuencia (igual que metrics). */
 const normalizeToMonthly = (price: number, frecuencia: string): number => {
   switch (frecuencia) {
+    case 'semanal':
+      return price * 4.333; // ~4.33 semanas/mes
+    case 'quincenal':
+      return price * 2; // 2 pagos/mes
     case 'mensual':
       return price;
     case 'trimestral':
