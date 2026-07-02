@@ -348,12 +348,13 @@ export default function TodoList() {
                         <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
                           {todo.text}
                         </span>
-                        {!selectMode && (
+                        {/* El sapito solo aparece si la tarea está destacada (se activa con clic derecho). */}
+                        {!selectMode && todo.flagged && (
                           <button
                             onPointerDown={(e) => e.stopPropagation()}
                             onClick={() => toggleFlag(todo)}
-                            className={cn('flex-shrink-0 text-base leading-none transition-opacity', todo.flagged ? 'opacity-100' : 'opacity-30 hover:opacity-100')}
-                            title={todo.flagged ? 'Quitar destacado' : 'Destacar 🐸 (o clic derecho)'}
+                            className="flex-shrink-0 text-base leading-none transition-opacity opacity-100 hover:opacity-60"
+                            title="Quitar destacado"
                           >
                             🐸
                           </button>

@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { invoiceService, signInvoiceId } from '../services/invoice.service';
+import { invoiceService, signInvoiceId, cleanText } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
@@ -64,9 +64,9 @@ class InvoiceController {
           clientNit: invoiceData.identificacion,
           totalAmount,
           fecha: new Date(invoiceData.fecha),
-          concepto: invoiceData.concepto,
-          servicio: invoiceData.servicio_proyecto,
-          observaciones: invoiceData.observaciones,
+          concepto: cleanText(invoiceData.concepto) || null,
+          servicio: cleanText(invoiceData.servicio_proyecto) || null,
+          observaciones: cleanText(invoiceData.observaciones) || null,
           filePath: generatedPath,
           createdBy: userId,
         },
@@ -200,7 +200,8 @@ class InvoiceController {
       }
 
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename=${path.basename(absolutePath)}`);
+      // Nombre con la nomenclatura AAAAMMDDHHMMSS (número de cuenta), no el basename crudo.
+      res.setHeader('Content-Disposition', `inline; filename="cuenta_cobro_${invoice.invoiceNumber}.pdf"`);
       res.sendFile(absolutePath);
     } catch (error) {
       next(error);

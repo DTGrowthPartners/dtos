@@ -448,6 +448,117 @@ export default function Clientes() {
   );
   const tercerosSinOrg = filteredTerceros.filter(t => !t.organizacionId);
 
+  // Diálogo de crear/editar cliente. Se define una vez y se monta en AMBAS vistas
+  // (detalle y lista), que son returns mutuamente excluyentes, para que "Editar"
+  // funcione también desde el perfil del cliente.
+  const editDialog = (
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>{editingClient ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
+            <DialogDescription>{editingClient ? 'Actualiza la información del cliente' : 'Completa los datos del nuevo cliente'}</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4 py-4">
+              <div className="flex items-center gap-4">
+                <div className="relative h-20 w-20 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden bg-muted/50 flex-shrink-0">
+                  {formData.logo ? (
+                    <>
+                      <img src={formData.logo} alt="Logo" className="h-full w-full object-contain p-1" />
+                      <button type="button" onClick={() => setFormData({ ...formData, logo: '' })} className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-white rounded-full flex items-center justify-center hover:bg-destructive/90">
+                        <X className="h-3 w-3" />
+                      </button>
+                    </>
+                  ) : (
+                    <label className="cursor-pointer flex flex-col items-center justify-center h-full w-full hover:bg-muted/80 transition-colors">
+                      <ImagePlus className="h-6 w-6 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground mt-1">Logo</span>
+                      <input type="file" accept="image/*" onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) { try { setFormData({ ...formData, logo: await convertImageToBase64(file) }); } catch {} }
+                      }} className="hidden" disabled={isLoading} />
+                    </label>
+                  )}
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label htmlFor="name">Nombre *</Label>
+                  <Input id="name" placeholder="Nombre del cliente" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required disabled={isLoading} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">Email *</Label>
+                <Input id="email" type="email" placeholder="cliente@ejemplo.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required disabled={isLoading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nit">NIT/RUT</Label>
+                <Input id="nit" placeholder="123456789-0" value={formData.nit} onChange={(e) => setFormData({ ...formData, nit: e.target.value })} disabled={isLoading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Teléfono</Label>
+                <Input id="phone" type="tel" placeholder="+57 300 123 4567" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} disabled={isLoading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="address">Dirección</Label>
+                <Textarea id="address" placeholder="Dirección completa" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} disabled={isLoading} rows={2} />
+              </div>
+
+              {/* Ingreso mensual recurrente (MRR) — solo al crear */}
+              {!editingClient && (
+                <div className="space-y-2 rounded-lg border border-border p-3">
+                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                    <input type="checkbox" checked={addRecurring} onChange={(e) => setAddRecurring(e.target.checked)} className="h-4 w-4 accent-primary" disabled={isLoading} />
+                    Ingreso mensual recurrente (MRR)
+                  </label>
+                  {addRecurring && (
+                    <div className="space-y-2 pt-1">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Servicio</Label>
+                        <Select value={recurring.serviceId} onValueChange={(v) => setRecurring({ ...recurring, serviceId: v })}>
+                          <SelectTrigger><SelectValue placeholder="Selecciona un servicio" /></SelectTrigger>
+                          <SelectContent>
+                            {services.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Monto (COP)</Label>
+                          <Input type="number" placeholder="800000" value={recurring.precioCliente} onChange={(e) => setRecurring({ ...recurring, precioCliente: e.target.value })} disabled={isLoading} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Día de cobro</Label>
+                          <Input type="number" min={1} max={28} placeholder="5" value={recurring.diaCobro} onChange={(e) => setRecurring({ ...recurring, diaCobro: e.target.value })} disabled={isLoading} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Frecuencia</Label>
+                        <Select value={recurring.frecuencia} onValueChange={(v) => setRecurring({ ...recurring, frecuencia: v })}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mensual">Mensual</SelectItem>
+                            <SelectItem value="trimestral">Trimestral</SelectItem>
+                            <SelectItem value="semestral">Semestral</SelectItem>
+                            <SelectItem value="anual">Anual</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {services.length === 0 && (
+                        <p className="text-xs text-muted-foreground">No hay servicios creados. Crea uno en la sección de Servicios para poder asignarlo.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }} disabled={isLoading}>Cancelar</Button>
+              <Button type="submit" disabled={isLoading}>{isLoading ? 'Guardando...' : editingClient ? 'Actualizar' : 'Crear'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+  );
+
   // ════════════════════════════════════════════════════════
   //  CLIENT PROFILE VIEW (Full Page)
   // ════════════════════════════════════════════════════════
@@ -496,7 +607,7 @@ export default function Clientes() {
                     </div>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => { handleEdit(profileClient); }}>
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(profileClient)}>
                       <Edit className="h-4 w-4 mr-1" /> Editar
                     </Button>
                     <Button variant="outline" size="sm" onClick={() => handleToggleStatus(profileClient)}>
@@ -689,6 +800,9 @@ export default function Clientes() {
             </div>
           </TabsContent>
         </Tabs>
+
+        {/* Diálogo de editar cliente (también disponible desde el perfil) */}
+        {editDialog}
       </div>
     );
   }
@@ -1094,112 +1208,8 @@ export default function Clientes() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog Form */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{editingClient ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
-            <DialogDescription>{editingClient ? 'Actualiza la información del cliente' : 'Completa los datos del nuevo cliente'}</DialogDescription>
-          </DialogHeader>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4 py-4">
-              <div className="flex items-center gap-4">
-                <div className="relative h-20 w-20 rounded-lg border-2 border-dashed flex items-center justify-center overflow-hidden bg-muted/50 flex-shrink-0">
-                  {formData.logo ? (
-                    <>
-                      <img src={formData.logo} alt="Logo" className="h-full w-full object-contain p-1" />
-                      <button type="button" onClick={() => setFormData({ ...formData, logo: '' })} className="absolute -top-1 -right-1 h-5 w-5 bg-destructive text-white rounded-full flex items-center justify-center hover:bg-destructive/90">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </>
-                  ) : (
-                    <label className="cursor-pointer flex flex-col items-center justify-center h-full w-full hover:bg-muted/80 transition-colors">
-                      <ImagePlus className="h-6 w-6 text-muted-foreground" />
-                      <span className="text-xs text-muted-foreground mt-1">Logo</span>
-                      <input type="file" accept="image/*" onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) { try { setFormData({ ...formData, logo: await convertImageToBase64(file) }); } catch {} }
-                      }} className="hidden" disabled={isLoading} />
-                    </label>
-                  )}
-                </div>
-                <div className="flex-1 space-y-2">
-                  <Label htmlFor="name">Nombre *</Label>
-                  <Input id="name" placeholder="Nombre del cliente" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} required disabled={isLoading} />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input id="email" type="email" placeholder="cliente@ejemplo.com" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} required disabled={isLoading} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="nit">NIT/RUT</Label>
-                <Input id="nit" placeholder="123456789-0" value={formData.nit} onChange={(e) => setFormData({ ...formData, nit: e.target.value })} disabled={isLoading} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Teléfono</Label>
-                <Input id="phone" type="tel" placeholder="+57 300 123 4567" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} disabled={isLoading} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="address">Dirección</Label>
-                <Textarea id="address" placeholder="Dirección completa" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} disabled={isLoading} rows={2} />
-              </div>
-
-              {/* Ingreso mensual recurrente (MRR) — solo al crear */}
-              {!editingClient && (
-                <div className="space-y-2 rounded-lg border border-border p-3">
-                  <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                    <input type="checkbox" checked={addRecurring} onChange={(e) => setAddRecurring(e.target.checked)} className="h-4 w-4 accent-primary" disabled={isLoading} />
-                    Ingreso mensual recurrente (MRR)
-                  </label>
-                  {addRecurring && (
-                    <div className="space-y-2 pt-1">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Servicio</Label>
-                        <Select value={recurring.serviceId} onValueChange={(v) => setRecurring({ ...recurring, serviceId: v })}>
-                          <SelectTrigger><SelectValue placeholder="Selecciona un servicio" /></SelectTrigger>
-                          <SelectContent>
-                            {services.map((s) => (<SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Monto (COP)</Label>
-                          <Input type="number" placeholder="800000" value={recurring.precioCliente} onChange={(e) => setRecurring({ ...recurring, precioCliente: e.target.value })} disabled={isLoading} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Día de cobro</Label>
-                          <Input type="number" min={1} max={28} placeholder="5" value={recurring.diaCobro} onChange={(e) => setRecurring({ ...recurring, diaCobro: e.target.value })} disabled={isLoading} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Frecuencia</Label>
-                        <Select value={recurring.frecuencia} onValueChange={(v) => setRecurring({ ...recurring, frecuencia: v })}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="mensual">Mensual</SelectItem>
-                            <SelectItem value="trimestral">Trimestral</SelectItem>
-                            <SelectItem value="semestral">Semestral</SelectItem>
-                            <SelectItem value="anual">Anual</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      {services.length === 0 && (
-                        <p className="text-xs text-muted-foreground">No hay servicios creados. Crea uno en la sección de Servicios para poder asignarlo.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setIsDialogOpen(false); resetForm(); }} disabled={isLoading}>Cancelar</Button>
-              <Button type="submit" disabled={isLoading}>{isLoading ? 'Guardando...' : editingClient ? 'Actualizar' : 'Crear'}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog Form (crear/editar) — definido arriba, se monta en ambas vistas */}
+      {editDialog}
 
       {/* Import from CRM Dialog */}
       <Dialog open={isImportCRMOpen} onOpenChange={setIsImportCRMOpen}>

@@ -26,7 +26,18 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
         La ruta del archivo PDF generado.
     """
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
+
+    # --- NORMALIZACIÓN DE ENTRADAS ---
+    # Convierte None y los strings basura "undefined"/"null"/"none" en cadena vacía,
+    # para que el PDF nunca muestre "undefined" en Servicio/Proyecto ni Observaciones.
+    def _clean(v):
+        s = ('' if v is None else str(v)).strip()
+        return '' if s.lower() in ('undefined', 'null', 'none') else s
+
+    servicio_proyecto = _clean(servicio_proyecto)
+    concepto = _clean(concepto)
+    observaciones = _clean(observaciones)
+
     # --- DATOS DEL EMISOR ---
     emisor_nombre = "Dairo Tralasviña"
     emisor_cedula = "1143397563"
@@ -165,9 +176,11 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
     label_width = c.stringWidth(label_concepto, font_bold, 9)
     c.setFont(font_normal, 9)
     
-    # Usar servicio_proyecto si está disponible, sino usar concepto
-    texto_servicio = servicio_proyecto if servicio_proyecto else concepto
-    c.drawString(margen_izquierdo + label_width + 2, y, texto_servicio)
+    # Servicio/Proyecto: usa servicio_proyecto → concepto → 1ª descripción de servicio.
+    texto_servicio = servicio_proyecto or concepto
+    if not texto_servicio and servicios:
+        texto_servicio = str(servicios[0].get('descripcion', '')).strip()
+    c.drawString(margen_izquierdo + label_width + 2, y, texto_servicio or '-')
 
     # --- TABLA DE SERVICIOS ---
     col_widths = [250, 30, 120, 100]
@@ -236,9 +249,9 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
         observaciones_p.drawOn(c, margen_izquierdo, y - h)
         y -= (h + 20)
     else:
-        # Show placeholder or concept if no custom observations
+        # Sin observaciones propias: usar la nota estándar de régimen (nunca "undefined").
         c.setFont(font_normal, 9)
-        placeholder_text = concepto if not observaciones or observaciones == default_text else observaciones
+        placeholder_text = observaciones or default_text
         c.drawString(margen_izquierdo, y, placeholder_text)
         y -= 20
 

@@ -52,20 +52,29 @@ export const getOrCreateAIRoom = async (userId: string, userName: string): Promi
   const roomId = `ai_room_${userId}`;
   const roomRef = doc(db, ROOMS_COLLECTION, roomId);
   const roomSnap = await getDoc(roomRef);
+  const data = roomSnap.exists() ? (roomSnap.data() as any) : null;
 
-  if (!roomSnap.exists()) {
-    await setDoc(roomRef, {
-      id: roomId,
-      name: 'Chat con IA',
-      type: 'ai',
-      participants: [userId, 'ai_assistant'],
-      participantNames: {
-        [userId]: userName,
-        'ai_assistant': 'Kimi AI',
+  // Crea la sala si falta, o REPARA un doc parcial (p. ej. creado por un envío en
+  // carrera que solo dejó lastMessage) al que le faltan los campos estructurales.
+  // Preserva createdAt original para no reordenar la sala en cada apertura.
+  const needsRepair = !data || !Array.isArray(data.participants) || !data.participants.includes(userId) || data.type !== 'ai';
+  if (needsRepair) {
+    await setDoc(
+      roomRef,
+      {
+        id: roomId,
+        name: data?.name || 'Chat con IA',
+        type: 'ai',
+        participants: [userId, 'ai_assistant'],
+        participantNames: {
+          [userId]: userName,
+          'ai_assistant': 'María',
+        },
+        createdAt: data?.createdAt || Date.now(),
+        updatedAt: Date.now(),
       },
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
+      { merge: true }
+    );
   }
 
   return roomId;
@@ -140,16 +149,23 @@ export const sendMessage = async (
 
   const docRef = await addDoc(collection(db, MESSAGES_COLLECTION), messageData);
 
-  // Update room's last message
+  // Actualiza el último mensaje de la sala. Usamos setDoc con merge (no updateDoc)
+  // para que NO falle con "No document to update" si el doc de la sala todavía no
+  // existe (p. ej. carrera con la creación de la sala de IA al abrir el chat).
   const roomRef = doc(db, ROOMS_COLLECTION, roomId);
-  await updateDoc(roomRef, {
-    lastMessage: {
-      text: text.length > 50 ? text.substring(0, 50) + '...' : text,
-      senderName,
-      createdAt: Date.now(),
+  await setDoc(
+    roomRef,
+    {
+      id: roomId,
+      lastMessage: {
+        text: text.length > 50 ? text.substring(0, 50) + '...' : text,
+        senderName,
+        createdAt: Date.now(),
+      },
+      updatedAt: Date.now(),
     },
-    updatedAt: Date.now(),
-  });
+    { merge: true }
+  );
 
   return docRef.id;
 };

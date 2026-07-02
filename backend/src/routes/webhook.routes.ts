@@ -3,7 +3,7 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import admin from 'firebase-admin';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
-import { invoiceService } from '../services/invoice.service';
+import { invoiceService, getPublicInvoiceUrl, cleanText } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
 import { sendPushToMemberName } from '../services/push.service';
@@ -3540,9 +3540,9 @@ router.post('/bot/invoices/generate', verifyBotApiKey, async (req: Request, res:
         clientNit: invoiceData.identificacion,
         totalAmount,
         fecha: new Date(invoiceData.fecha),
-        concepto: invoiceData.concepto,
-        servicio: invoiceData.servicio_proyecto,
-        observaciones: invoiceData.observaciones,
+        concepto: cleanText(invoiceData.concepto) || null,
+        servicio: cleanText(invoiceData.servicio_proyecto) || null,
+        observaciones: cleanText(invoiceData.observaciones) || null,
         filePath: generatedPath,
         createdBy: botUserId,
       },
@@ -3566,6 +3566,8 @@ router.post('/bot/invoices/generate', verifyBotApiKey, async (req: Request, res:
         createdAt: invoice.createdAt.toISOString(),
       },
       downloadUrl: `/api/webhook/bot/invoices/${invoice.id}/download`,
+      // Link público firmado (abre el PDF sin login) — el chat lo comparte al usuario.
+      pdfUrl: getPublicInvoiceUrl(invoice.id),
     });
   } catch (error) {
     console.error('[Bot API] Error generando cuenta de cobro:', error);
@@ -3607,9 +3609,10 @@ router.get('/bot/invoices/:id/download', verifyBotApiKey, async (req: Request, r
       });
     }
 
-    const sanitizedFilename = path.basename(absolutePath).replace(/[^a-zA-Z0-9._-]/g, '_');
+    // Nombre con la nomenclatura AAAAMMDDHHMMSS (número de cuenta) para el bot de WhatsApp.
+    const sanitizedFilename = `cuenta_cobro_${invoice.invoiceNumber}.pdf`;
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=${sanitizedFilename}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
     res.sendFile(absolutePath);
   } catch (error) {
     console.error('[Bot API] Error descargando cuenta de cobro:', error);
@@ -3667,6 +3670,8 @@ router.get('/bot/invoices', verifyBotApiKey, async (req: Request, res: Response)
       servicio: inv.servicio,
       pagos: inv.payments.length,
       downloadUrl: `/api/webhook/bot/invoices/${inv.id}/download`,
+      // Link público firmado (abre el PDF sin login) — el chat lo adjunta como PDF.
+      pdfUrl: getPublicInvoiceUrl(inv.id),
     }));
 
     const totalPendiente = formatted

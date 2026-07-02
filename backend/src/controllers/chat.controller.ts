@@ -45,7 +45,7 @@ const WEBHOOK_CATALOG = `CONSULTAS (GET):
 - /bot/campaigns?client=<nombre> — campañas y métricas
 - /bot/crm  ·  /bot/crm/deals — pipeline y oportunidades
 - /bot/terceros — terceros (clientes/proveedores/empleados)
-- /bot/invoices — cuentas de cobro
+- /bot/invoices — cuentas de cobro. Para enviar el PDF NO pegues rutas ni links de descarga: solo identifica la cuenta (número/cliente) y el sistema adjunta el PDF automáticamente
 
 ACCIONES (POST/PATCH):
 - POST /bot/clients — crear cliente. datos: { nombre (req), email, nit, telefono, direccion }
@@ -56,7 +56,7 @@ ACCIONES (POST/PATCH):
 - POST /bot/sheets/gastos — registrar gasto. datos: { fecha (req), importe (req), categoria (req), entidad (req), descripcion (req), cuenta }
 - POST /bot/sheets/ingresos — registrar ingreso. datos: { fecha (req), importe (req), categoria, cuenta, entidad }
 - POST /bot/terceros — crear tercero
-- POST /bot/invoices/generate — generar cuenta de cobro (PDF)`;
+- POST /bot/invoices/generate — generar cuenta de cobro. El sistema adjunta el PDF automáticamente; solo confirma al usuario los datos (cliente, número, total). No pegues links.`;
 
 // Extrae una llamada a la API interna en JSON dentro del texto del modelo.
 // Forma esperada: {"metodo":"POST","ruta":"/bot/tasks","datos":{...}} (acepta alias).
@@ -370,6 +370,42 @@ ${styleGuide}`,
       if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
       messages.push({ role: 'user', content: effectiveMessage });
 
+      // Cuentas de cobro vistas en los resultados: guardamos su link público (PDF)
+      // para adjuntarlo como TARJETA en el chat, tanto al generar como al consultar.
+      type SeenInvoice = { numero: string; pdfUrl: string };
+      const invoicesSeen: SeenInvoice[] = [];
+      let attachPdf: { url: string; label: string } | null = null;
+      const remember = (numero: any, pdfUrl: any) => {
+        if (pdfUrl && typeof pdfUrl === 'string') invoicesSeen.push({ numero: numero != null ? String(numero) : '', pdfUrl });
+      };
+      const captureInvoices = (ruta: string, result: any) => {
+        if (!result) return;
+        if (/\/invoices\/generate/i.test(ruta) && result.success && result.pdfUrl) {
+          const numero = result.invoice?.invoiceNumber || '';
+          attachPdf = { url: result.pdfUrl, label: `Cuenta de cobro ${numero}`.trim() };
+          remember(numero, result.pdfUrl);
+        }
+        if (Array.isArray(result.invoices)) for (const inv of result.invoices) remember(inv.numero || inv.invoiceNumber, inv.pdfUrl);
+        if (result.invoice?.pdfUrl) remember(result.invoice.invoiceNumber, result.invoice.pdfUrl);
+      };
+
+      // Respuesta final: quita el link crudo del endpoint interno (requiere API key,
+      // no le sirve al usuario) y adjunta el PDF como tarjeta {{pdf:url|label}}.
+      const finalizeResponse = (text: string): string => {
+        let t = cleanResponse(text)
+          .replace(/`?\/?api\/webhook\/bot\/invoices\/[^\s`)]+`?/gi, '')
+          .replace(/[ \t]+\n/g, '\n')
+          .replace(/\n{3,}/g, '\n\n')
+          .trim();
+        let pick = attachPdf;
+        if (!pick && invoicesSeen.length) {
+          const m = invoicesSeen.find((i) => i.numero && t.includes(i.numero)) || (invoicesSeen.length === 1 ? invoicesSeen[0] : null);
+          if (m) pick = { url: m.pdfUrl, label: `Cuenta de cobro ${m.numero}`.trim() };
+        }
+        if (pick && !t.includes(pick.url)) t = `${t}\n\n{{pdf:${pick.url}|${pick.label}}}`;
+        return t;
+      };
+
       const MAX_STEPS = 6;
       for (let step = 1; step <= MAX_STEPS; step++) {
         console.log(`[Chat] (json) paso ${step}/${MAX_STEPS}`);
@@ -377,7 +413,7 @@ ${styleGuide}`,
         const content = completion.choices[0].message.content || '';
         const action = parseAction(content);
         if (!action) {
-          return res.json({ success: true, response: cleanResponse(content), usage: completion.usage });
+          return res.json({ success: true, response: finalizeResponse(content), usage: completion.usage });
         }
         console.log(`[Chat] (json) ejecutando ${action.metodo} ${action.ruta}`, action.datos);
         messages.push({ role: 'assistant', content });
@@ -387,13 +423,14 @@ ${styleGuide}`,
         } catch (error: any) {
           result = { success: false, error: error.message || 'Error al ejecutar la acción' };
         }
+        captureInvoices(action.ruta, result);
         messages.push({ role: 'user', content: `RESULTADO: ${JSON.stringify(result).slice(0, 6000)}` });
       }
 
       // Se agotaron los pasos: pedir una respuesta final con lo que haya.
       messages.push({ role: 'user', content: 'Responde ahora al usuario en lenguaje natural con la información que ya tienes. No hagas más llamadas.' });
       const finalCompletion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
-      return res.json({ success: true, response: cleanResponse(finalCompletion.choices[0].message.content || ''), usage: finalCompletion.usage });
+      return res.json({ success: true, response: finalizeResponse(finalCompletion.choices[0].message.content || ''), usage: finalCompletion.usage });
 
     } catch (error: any) {
       return handleAIError(error, res);

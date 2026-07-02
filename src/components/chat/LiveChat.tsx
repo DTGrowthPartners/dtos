@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus } from 'lucide-react';
+import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus, FileText, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -57,18 +57,71 @@ const showNotification = (title: string, body: string, icon?: string) => {
   }
 };
 
-// Renderiza **negrita** dentro de una línea de texto.
+// Renderiza **negrita**, links markdown [texto](url) y URLs sueltas como enlaces clicables.
 const renderInline = (text: string): React.ReactNode => {
-  const parts = text.split(/(\*\*[^*]+\*\*)/g);
-  return parts.map((p, i) =>
-    /^\*\*[^*]+\*\*$/.test(p) ? <strong key={i}>{p.slice(2, -2)}</strong> : <span key={i}>{p}</span>
-  );
+  const regex = /(\*\*[^*]+\*\*)|(\[[^\]]+\]\(https?:\/\/[^)\s]+\))|(https?:\/\/[^\s)]+)/g;
+  const nodes: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(text)) !== null) {
+    if (m.index > last) nodes.push(<span key={key++}>{text.slice(last, m.index)}</span>);
+    const tok = m[0];
+    if (tok.startsWith('**')) {
+      nodes.push(<strong key={key++}>{tok.slice(2, -2)}</strong>);
+    } else if (tok.startsWith('[')) {
+      const mm = tok.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/);
+      if (mm) {
+        nodes.push(
+          <a key={key++} href={mm[2]} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 break-all">{mm[1]}</a>
+        );
+      } else {
+        nodes.push(<span key={key++}>{tok}</span>);
+      }
+    } else {
+      nodes.push(
+        <a key={key++} href={tok} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-2 break-all">{tok}</a>
+      );
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) nodes.push(<span key={key++}>{text.slice(last)}</span>);
+  return nodes;
 };
+
+// Tarjeta de PDF adjunto (cuenta de cobro). Abre el link público firmado.
+function PdfAttachment({ url, label }: { url: string; label: string }) {
+  return (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="mt-2 flex items-center gap-3 rounded-xl border border-border bg-background/60 px-3 py-2.5 no-underline transition-colors hover:bg-accent/50"
+    >
+      <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-red-500/10 text-red-500">
+        <FileText className="h-5 w-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium text-foreground">{label || 'Cuenta de cobro'}</span>
+        <span className="block text-xs text-muted-foreground">PDF · abrir / descargar</span>
+      </span>
+      <Download className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+    </a>
+  );
+}
 
 // Formatea el texto del asistente (María): respeta saltos de línea, negritas y
 // listas con viñetas, en vez de mostrar un párrafo plano con asteriscos.
+// Además extrae adjuntos {{pdf:url|label}} y los muestra como tarjeta de PDF.
 function FormattedMessage({ text }: { text: string }) {
-  const lines = (text || '').split('\n');
+  const attachments: { url: string; label: string }[] = [];
+  const cleanText = (text || '')
+    .replace(/\{\{pdf:([^|}]+)\|([^}]*)\}\}/g, (_m, url, label) => {
+      attachments.push({ url: String(url).trim(), label: String(label || '').trim() });
+      return '';
+    })
+    .trim();
+  const lines = cleanText.split('\n');
   const blocks: React.ReactNode[] = [];
   let bullets: string[] = [];
 
@@ -108,7 +161,14 @@ function FormattedMessage({ text }: { text: string }) {
   });
   flushBullets('ul-end');
 
-  return <div className="space-y-0.5">{blocks}</div>;
+  return (
+    <div className="space-y-0.5">
+      {blocks}
+      {attachments.map((a, i) => (
+        <PdfAttachment key={`pdf-${i}`} url={a.url} label={a.label} />
+      ))}
+    </div>
+  );
 }
 
 export default function LiveChat() {

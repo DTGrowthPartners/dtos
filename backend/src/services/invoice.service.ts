@@ -3,6 +3,16 @@ import path from 'path';
 import crypto from 'crypto';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 
+// Normaliza valores de texto: convierte undefined/null y los strings basura
+// "undefined"/"null" (que algunos clientes envían literalmente) en cadena vacía.
+// Así el PDF nunca imprime "undefined" y spawn nunca recibe un arg no-string.
+export const cleanText = (v: any): string => {
+  const s = (v == null ? '' : String(v)).trim();
+  const low = s.toLowerCase();
+  return low === 'undefined' || low === 'null' ? '' : s;
+};
+const clean = cleanText;
+
 class InvoiceService {
   public async generateInvoicePdf(invoiceData: CreateInvoiceDto): Promise<{ generatedPath: string; invoiceNumber: string }> {
     return new Promise((resolve, reject) => {
@@ -21,16 +31,16 @@ class InvoiceService {
 
       // Path to the Python script
       const scriptPath = path.join(__dirname, 'generador.py');
-      
-      // Arguments for the Python script
+
+      // Arguments for the Python script (saneados: nunca undefined ni "undefined")
       const scriptArgs = [
-        nombre_cliente,
-        identificacion,
+        clean(nombre_cliente),
+        clean(identificacion),
         servicesJson,
-        observaciones,
-        concepto,
-        fecha,
-        servicio_proyecto || '',
+        clean(observaciones),
+        clean(concepto),
+        clean(fecha),
+        clean(servicio_proyecto),
       ];
 
       // Spawn the Python process
