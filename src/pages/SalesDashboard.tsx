@@ -5,7 +5,7 @@ import {
   ComposedChart, Area, Line, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '@/components/ui/table';
-import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil } from 'lucide-react';
+import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
 import OperationsSection from '@/components/dashboard/OperationsSection';
@@ -140,6 +140,7 @@ export default function SalesDashboard() {
   const [presupuesto, setPresupuesto] = useState(() => Number(localStorage.getItem('dash.presupuesto')) || 14500000);
   const [range, setRange] = useState<DateRange | undefined>();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tableOpen, setTableOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -260,12 +261,18 @@ export default function SalesDashboard() {
       }
       const proyeccion = isCurrent ? mtdIngresos + avgPerDay * (daysInMonth - elapsed) : mtdIngresos;
       const neededPerDay = isCurrent ? Math.max(0, meta - mtdIngresos) / Math.max(1, daysInMonth - elapsed) : 0;
+      const daily = !isCurrent ? Array.from({ length: daysInMonth }, (_, i) => {
+        const d = i + 1;
+        const ing = incByDay[d] || 0;
+        const gas = expByDay[d] || 0;
+        return { day: d, label: String(d), ingresos: ing, gastos: gas, neto: ing - gas };
+      }) : undefined;
       return {
         titulo: (isCurrent ? 'Mes en curso · ' : '') + MONTHS[mn].charAt(0).toUpperCase() + MONTHS[mn].slice(1) + ' ' + yy,
         chartTitle: `Acumulado · ${MONTHS[mn]}`,
         xLabel: (v: number) => String(v),
         isCurrent, elapsed, total: daysInMonth, xDomain: [1, daysInMonth] as [number, number], xTicks: data.map((p) => p.x), mtdIngresos, mtdGastos, avgPerDay, neededPerDay, proyeccion, data, payments,
-        unidad: 'día',
+        unidad: 'día', daily,
       };
     }
 
@@ -498,8 +505,8 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Gráfica acumulada (oculta en vista año, donde se muestra el detalle mes a mes) */}
-      {period !== 'ano' && <Card>
+      {/* Gráfica acumulada (oculta en año y mes anterior, donde se muestra el detalle día a día / mes a mes) */}
+      {period !== 'ano' && period !== 'mesant' && <Card>
         <CardContent className="pt-5">
           <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
           <div className="h-[400px] sm:h-[440px]">
@@ -526,7 +533,7 @@ export default function SalesDashboard() {
         </CardContent>
       </Card>}
 
-      {/* Detalle mes a mes: Ingresos, Gastos y Proyección */}
+      {/* Detalle mes a mes: Ingresos, Gastos y Proyección (vista Año) */}
       {period === 'ano' && model.monthly && (
         <Card>
           <CardContent className="pt-5">
@@ -554,39 +561,115 @@ export default function SalesDashboard() {
               </ResponsiveContainer>
             </div>
 
-            <div className="mt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mes</TableHead>
-                    <TableHead className="text-right">Ingresos</TableHead>
-                    <TableHead className="text-right">Gastos</TableHead>
-                    <TableHead className="text-right">Neto</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {model.monthly.map((row: any) => (
-                    <TableRow key={row.month}>
-                      <TableCell className="font-medium capitalize">
-                        {MONTHS[row.month]}
-                        {row.isFuture && <span className="ml-1.5 text-[10px] font-normal text-violet-400">proy.</span>}
-                      </TableCell>
-                      <TableCell className={`text-right tabular-nums text-emerald-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.ingresos)}</TableCell>
-                      <TableCell className={`text-right tabular-nums text-amber-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.gastos)}</TableCell>
-                      <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'} ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.neto)}</TableCell>
+            <button
+              onClick={() => setTableOpen((o) => !o)}
+              className="mt-4 flex w-full items-center justify-between rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+            >
+              <span>Tabla detalle por mes</span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${tableOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {tableOpen && (
+              <div className="mt-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mes</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Gastos</TableHead>
+                      <TableHead className="text-right">Neto</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-                <TableFooter>
-                  <TableRow>
-                    <TableCell className="font-semibold">Total {model.titulo.replace('Año ', '')}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
-                  </TableRow>
-                </TableFooter>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {model.monthly.map((row: any) => (
+                      <TableRow key={row.month}>
+                        <TableCell className="font-medium capitalize">
+                          {MONTHS[row.month]}
+                          {row.isFuture && <span className="ml-1.5 text-[10px] font-normal text-violet-400">proy.</span>}
+                        </TableCell>
+                        <TableCell className={`text-right tabular-nums text-emerald-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.ingresos)}</TableCell>
+                        <TableCell className={`text-right tabular-nums text-amber-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.gastos)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'} ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.neto)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-semibold">Total {model.titulo.replace('Año ', '')}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detalle día a día (vista Mes anterior) */}
+      {period === 'mesant' && model.daily && (
+        <Card>
+          <CardContent className="pt-5">
+            <h3 className="font-semibold">Detalle día a día · {model.titulo}</h3>
+            <p className="text-xs text-muted-foreground mb-3">Valor real por día (no acumulado)</p>
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={model.daily} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gDI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0.03} /></linearGradient>
+                    <linearGradient id="gDG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.30} /><stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} /></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
+                  <XAxis dataKey="label" interval={4} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={52} />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gDI)" />
+                  <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gDG)" />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
+
+            <button
+              onClick={() => setTableOpen((o) => !o)}
+              className="mt-4 flex w-full items-center justify-between rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+            >
+              <span>Tabla detalle por día</span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${tableOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {tableOpen && (
+              <div className="mt-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Día</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Gastos</TableHead>
+                      <TableHead className="text-right">Neto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {model.daily.filter((r: any) => r.ingresos > 0 || r.gastos > 0).map((row: any) => (
+                      <TableRow key={row.day}>
+                        <TableCell className="font-medium">{row.day}</TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-500">{fmt(row.ingresos)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-amber-500">{fmt(row.gastos)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'}`}>{fmt(row.neto)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-semibold">Total {model.titulo}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-emerald-500">{fmt(model.mtdIngresos)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-amber-500">{fmt(model.mtdGastos)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.mtdIngresos - model.mtdGastos)}</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
