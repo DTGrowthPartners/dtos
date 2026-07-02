@@ -80,9 +80,13 @@ interface Invoice {
 
 const INVOICE_STATUS = {
   pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
+  parcial: { label: 'Parcial', color: 'bg-orange-100 text-orange-800', icon: Clock },
   enviada: { label: 'Enviada', color: 'bg-blue-100 text-blue-800', icon: Send },
   pagada: { label: 'Pagada', color: 'bg-green-100 text-green-800', icon: CircleCheck },
 } as const;
+
+// Fallback seguro: cualquier estado desconocido no debe tumbar la página.
+const statusInfo = (s?: string) => INVOICE_STATUS[(s || 'pendiente') as keyof typeof INVOICE_STATUS] || INVOICE_STATUS.pendiente;
 
 const CuentasCobro = () => {
   const { toast } = useToast();
@@ -632,7 +636,7 @@ const CuentasCobro = () => {
                           <SelectTrigger className="w-[120px] h-8">
                             <SelectValue>
                               {(() => {
-                                const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                                const status = statusInfo(invoice.status);
                                 const StatusIcon = status.icon;
                                 return (
                                   <Badge className={cn("gap-1", status.color)}>

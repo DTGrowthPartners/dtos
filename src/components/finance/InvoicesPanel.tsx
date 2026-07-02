@@ -105,6 +105,9 @@ const INVOICE_STATUS = {
   pagada: { label: 'Pagada', color: 'bg-green-100 text-green-800', icon: CircleCheck },
 } as const;
 
+// Fallback seguro: un estado desconocido no debe tumbar la página.
+const statusInfo = (s?: string) => INVOICE_STATUS[(s || 'pendiente') as keyof typeof INVOICE_STATUS] || INVOICE_STATUS.pendiente;
+
 export default function InvoicesPanel() {
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
@@ -805,7 +808,7 @@ export default function InvoicesPanel() {
                             <SelectTrigger className="w-[120px] h-8">
                               <SelectValue>
                                 {(() => {
-                                  const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                                  const status = statusInfo(invoice.status);
                                   const StatusIcon = status.icon;
                                   return (
                                     <Badge className={cn("gap-1", status.color)}>
@@ -917,7 +920,7 @@ export default function InvoicesPanel() {
                   const saldo = invoice.totalAmount - (invoice.paidAmount || 0);
                   const isPaid = saldo <= 0;
                   const hasPayments = invoice.paidAmount > 0 || (invoice.payments && invoice.payments.length > 0);
-                  const status = INVOICE_STATUS[invoice.status || 'pendiente'];
+                  const status = statusInfo(invoice.status);
                   const StatusIcon = status.icon;
 
                   return (
