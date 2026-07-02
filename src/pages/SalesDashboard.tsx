@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   ComposedChart, Area, Line, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
+import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PipelineFunnel from '@/components/dashboard/PipelineFunnel';
@@ -99,6 +100,33 @@ const SalesChartTooltip = ({ active, payload, label, model }: any) => {
           ))}
         </div>
       )}
+    </div>
+  );
+};
+
+const MonthlyTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  return (
+    <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-md">
+      <div className="font-medium text-foreground mb-1">
+        {label} {row.isFuture && <span className="text-violet-400">(proyección)</span>}
+      </div>
+      <div className="space-y-0.5">
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-muted-foreground">Ingresos</span>
+          <span className="font-medium text-foreground">{fmt(row.ingresos)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-5">
+          <span className="text-muted-foreground">Gastos</span>
+          <span className="font-medium text-foreground">{fmt(row.gastos)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-5 pt-0.5 border-t border-border mt-1">
+          <span className="text-muted-foreground">Neto</span>
+          <span className="font-medium text-foreground">{fmt(row.neto)}</span>
+        </div>
+      </div>
     </div>
   );
 };
@@ -269,6 +297,7 @@ export default function SalesDashboard() {
       const mtdIngresos = incByMonth.slice(0, m + 1).reduce((a, b) => a + b, 0);
       const mtdGastos = expByMonth.slice(0, m + 1).reduce((a, b) => a + b, 0);
       const avgPerMonth = mtdIngresos / Math.max(1, m + 1);
+      const avgGastoPerMonth = mtdGastos / Math.max(1, m + 1);
       const data = [];
       for (let i = 0; i < 12; i++) {
         cumI += incByMonth[i]; cumE += expByMonth[i];
@@ -280,10 +309,22 @@ export default function SalesDashboard() {
         data.push(p);
       }
       const proyeccion = mtdIngresos + avgPerMonth * (11 - m);
+      // Detalle mes a mes (no acumulado): reales para meses transcurridos, proyección plana para los que faltan
+      const monthly = MONTHS_SHORT.map((label, i) => {
+        const isFuture = i > m;
+        const ingresos = isFuture ? avgPerMonth : incByMonth[i];
+        const gastos = isFuture ? avgGastoPerMonth : expByMonth[i];
+        // Series partidas para graficar: sólido hasta el mes actual, punteado desde ahí (ancladas en el mismo punto)
+        const ingresosReal = i <= m ? incByMonth[i] : null;
+        const gastosReal = i <= m ? expByMonth[i] : null;
+        const ingresosProy = i >= m ? ingresos : null;
+        const gastosProy = i >= m ? gastos : null;
+        return { month: i, label, ingresos, gastos, neto: ingresos - gastos, isFuture, ingresosReal, gastosReal, ingresosProy, gastosProy };
+      });
       return {
         titulo: `Año ${y}`, chartTitle: `Acumulado · ${y}`, xLabel: (v: number) => MONTHS_SHORT[v] || '',
         isCurrent: true, elapsed: m + 1, total: 12, mtdIngresos, mtdGastos, avgPerDay: avgPerMonth,
-        neededPerDay: Math.max(0, meta * 12 - mtdIngresos) / Math.max(1, 11 - m), proyeccion, data, payments, xDomain: [0, 11] as [number, number], xTicks: data.map((p) => p.x), unidad: 'mes',
+        neededPerDay: Math.max(0, meta * 12 - mtdIngresos) / Math.max(1, 11 - m), proyeccion, data, payments, xDomain: [0, 11] as [number, number], xTicks: data.map((p) => p.x), unidad: 'mes', monthly,
       };
     }
 
@@ -457,8 +498,8 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Gráfica acumulada */}
-      <Card>
+      {/* Gráfica acumulada (oculta en vista año, donde se muestra el detalle mes a mes) */}
+      {period !== 'ano' && <Card>
         <CardContent className="pt-5">
           <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
           <div className="h-[400px] sm:h-[440px]">
@@ -483,7 +524,72 @@ export default function SalesDashboard() {
             </ResponsiveContainer>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
+
+      {/* Detalle mes a mes: Ingresos, Gastos y Proyección */}
+      {period === 'ano' && model.monthly && (
+        <Card>
+          <CardContent className="pt-5">
+            <h3 className="font-semibold">Detalle mes a mes · {model.titulo.replace('Año ', '')}</h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Valor real por mes (no acumulado) · línea punteada y filas en violeta = proyección estimada para meses futuros
+            </p>
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={model.monthly} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gMI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0.03} /></linearGradient>
+                    <linearGradient id="gMG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.30} /><stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} /></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={52} />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Area type="monotone" dataKey="ingresosReal" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gMI)" connectNulls />
+                  <Area type="monotone" dataKey="gastosReal" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gMG)" connectNulls />
+                  <Line type="monotone" dataKey="ingresosProy" name="Ingresos (proy.)" legendType="none" stroke="#22c55e" strokeWidth={2.5} strokeDasharray="6 5" dot={false} connectNulls />
+                  <Line type="monotone" dataKey="gastosProy" name="Gastos (proy.)" legendType="none" stroke="#f59e0b" strokeWidth={2} strokeDasharray="6 5" dot={false} connectNulls />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="mt-4">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mes</TableHead>
+                    <TableHead className="text-right">Ingresos</TableHead>
+                    <TableHead className="text-right">Gastos</TableHead>
+                    <TableHead className="text-right">Neto</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {model.monthly.map((row: any) => (
+                    <TableRow key={row.month}>
+                      <TableCell className="font-medium capitalize">
+                        {MONTHS[row.month]}
+                        {row.isFuture && <span className="ml-1.5 text-[10px] font-normal text-violet-400">proy.</span>}
+                      </TableCell>
+                      <TableCell className={`text-right tabular-nums text-emerald-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.ingresos)}</TableCell>
+                      <TableCell className={`text-right tabular-nums text-amber-500 ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.gastos)}</TableCell>
+                      <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'} ${row.isFuture ? 'italic opacity-70' : ''}`}>{fmt(row.neto)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+                <TableFooter>
+                  <TableRow>
+                    <TableCell className="font-semibold">Total {model.titulo.replace('Año ', '')}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.ingresos, 0))}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.gastos, 0))}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{fmt(model.monthly.reduce((s: number, r: any) => s + r.neto, 0))}</TableCell>
+                  </TableRow>
+                </TableFooter>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Consumo de IA semanal */}
       <AiUsageWidget />
