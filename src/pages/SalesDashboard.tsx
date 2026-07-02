@@ -214,26 +214,23 @@ export default function SalesDashboard() {
       const start = new Date(range.from); start.setHours(0, 0, 0, 0);
       const end = new Date(range.to); end.setHours(0, 0, 0, 0);
       const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
-      const data = [];
-      let cumI = 0, cumE = 0, totI = 0, totE = 0;
-      for (let i = 0; i < days; i++) {
+      const fmtD = (d: Date) => `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
+      let totI = 0, totE = 0;
+      const daily = Array.from({ length: days }, (_, i) => {
         const d = new Date(start.getTime() + i * 86400000);
         const key = ymd(d);
-        const inc = sum(ingresos, (f) => f.startsWith(key));
+        const ing = sum(ingresos, (f) => f.startsWith(key));
         const exp = sum(gastos, (f) => f.startsWith(key));
-        cumI += inc; cumE += exp; totI += inc; totE += exp;
-        data.push({ x: i, ingresos: cumI, gastos: cumE, proyeccion: null, dayPayments: [] as PaymentPoint[] });
-      }
-      const fmtD = (d: Date) => `${d.getDate()} ${MONTHS_SHORT[d.getMonth()]}`;
-      const step = Math.max(1, Math.ceil(days / 10));
+        totI += ing; totE += exp;
+        return { day: i + 1, label: fmtD(d), ingresos: ing, gastos: exp, neto: ing - exp };
+      });
       return {
-        titulo: `${fmtD(start)} – ${fmtD(end)} ${end.getFullYear()}`, chartTitle: 'Acumulado · rango',
-        xLabel: (v: number | string) => { const d = new Date(start.getTime() + Number(v) * 86400000); return `${d.getDate()}/${d.getMonth() + 1}`; },
+        titulo: `${fmtD(start)} – ${fmtD(end)} ${end.getFullYear()}`, chartTitle: `Detalle día a día · ${fmtD(start)} – ${fmtD(end)}`,
+        xLabel: (v: number) => daily[v - 1]?.label ?? '',
         isCurrent: false, elapsed: days, total: days,
-        xDomain: [0, days - 1] as [number, number],
-        xTicks: data.filter((_, i) => i % step === 0).map((p) => p.x),
+        xDomain: [0, days - 1] as [number, number], xTicks: [],
         payments: [] as PaymentPoint[],
-        mtdIngresos: totI, mtdGastos: totE, avgPerDay: totI / days, neededPerDay: 0, proyeccion: totI, data, unidad: '',
+        mtdIngresos: totI, mtdGastos: totE, avgPerDay: totI / days, neededPerDay: 0, proyeccion: totI, data: [], unidad: '', daily,
       };
     }
 
@@ -581,8 +578,8 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Gráfica acumulada (oculta en año y mes anterior, donde se muestra el detalle día a día / mes a mes) */}
-      {period !== 'ano' && period !== 'mesant' && <Card>
+      {/* Gráfica acumulada (oculta en año, mes anterior y rango personalizado) */}
+      {period !== 'ano' && period !== 'mesant' && period !== 'custom' && <Card>
         <CardContent className="pt-5">
           <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
           <div className="h-[400px] sm:h-[440px]">
@@ -760,6 +757,73 @@ export default function SalesDashboard() {
                     {model.daily.filter((r: any) => r.ingresos > 0 || r.gastos > 0).map((row: any) => (
                       <TableRow key={row.day}>
                         <TableCell className="font-medium">{row.day}</TableCell>
+                        <TableCell className="text-right tabular-nums text-emerald-500">{fmt(row.ingresos)}</TableCell>
+                        <TableCell className="text-right tabular-nums text-amber-500">{fmt(row.gastos)}</TableCell>
+                        <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'}`}>{fmt(row.neto)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                  <TableFooter>
+                    <TableRow>
+                      <TableCell className="font-semibold">Total {model.titulo}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-emerald-500">{fmt(model.mtdIngresos)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums text-amber-500">{fmt(model.mtdGastos)}</TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums">{fmt(model.mtdIngresos - model.mtdGastos)}</TableCell>
+                    </TableRow>
+                  </TableFooter>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detalle día a día (vista Rango personalizado) */}
+      {period === 'custom' && (model as any).daily && (
+        <Card>
+          <CardContent className="pt-5">
+            <h3 className="font-semibold">{model.chartTitle}</h3>
+            <p className="text-xs text-muted-foreground mb-3">Valor real por día (no acumulado)</p>
+            <div className="h-[260px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={(model as any).daily} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gCI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0.03} /></linearGradient>
+                    <linearGradient id="gCG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.30} /><stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} /></linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
+                  <XAxis dataKey="label" interval={Math.max(0, Math.ceil((model as any).daily.length / 10) - 1)} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={52} />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gCI)" />
+                  <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gCG)" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+
+            <button
+              onClick={() => setTableOpen((o) => !o)}
+              className="mt-4 flex w-full items-center justify-between rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+            >
+              <span>Tabla detalle por día</span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${tableOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {tableOpen && (
+              <div className="mt-2">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead className="text-right">Ingresos</TableHead>
+                      <TableHead className="text-right">Gastos</TableHead>
+                      <TableHead className="text-right">Neto</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(model as any).daily.filter((r: any) => r.ingresos > 0 || r.gastos > 0).map((row: any) => (
+                      <TableRow key={row.day}>
+                        <TableCell className="font-medium">{row.label}</TableCell>
                         <TableCell className="text-right tabular-nums text-emerald-500">{fmt(row.ingresos)}</TableCell>
                         <TableCell className="text-right tabular-nums text-amber-500">{fmt(row.gastos)}</TableCell>
                         <TableCell className={`text-right tabular-nums font-medium ${row.neto >= 0 ? 'text-foreground' : 'text-destructive'}`}>{fmt(row.neto)}</TableCell>
