@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import type { DateRange } from 'react-day-picker';
 import PipelineAnalytics from '@/components/crm/PipelineAnalytics';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import { Button } from '@/components/ui/button';
@@ -357,7 +358,9 @@ export default function CRM() {
   const [searchQuery, setSearchQuery] = useState('');
   const [view, setView] = useState<'pipeline' | 'analitica'>('pipeline'); // pestañas Pipeline | Analítica
   const [stageFilter, setStageFilter] = useState<string>('all'); // 'all' o stageId
-  const [dateFilter, setDateFilter] = useState<string>('all'); // all | today | week | month
+  const [dateFilter, setDateFilter] = useState<string>('all'); // all | today | week | month | custom
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(); // rango personalizado (2 calendarios)
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [ownerFilter, setOwnerFilter] = useState<string>('all'); // all | none | userId
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -995,6 +998,10 @@ export default function CRM() {
         matchDate = created.getFullYear() === y;
       } else if (dateFilter === 'lastYear') {
         matchDate = created.getFullYear() === y - 1;
+      } else if (dateFilter === 'custom' && dateRange?.from && dateRange?.to) {
+        const from = new Date(dateRange.from); from.setHours(0, 0, 0, 0);
+        const to = new Date(dateRange.to); to.setHours(23, 59, 59, 999);
+        matchDate = created >= from && created <= to;
       }
     }
 
@@ -1160,6 +1167,39 @@ export default function CRM() {
             <SelectItem value="lastYear">Año pasado</SelectItem>
           </SelectContent>
         </Select>
+        {/* Filtro por rango de fechas (2 calendarios, estilo Shopify) */}
+        <Popover open={rangeOpen} onOpenChange={setRangeOpen}>
+          <PopoverTrigger asChild>
+            <Button variant={dateFilter === 'custom' ? 'default' : 'outline'} size="sm" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              {dateFilter === 'custom' && dateRange?.from && dateRange?.to
+                ? `${toYMD(dateRange.from).slice(5)} → ${toYMD(dateRange.to).slice(5)}`
+                : 'Rango'}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <CalendarPicker mode="range" numberOfMonths={2} selected={dateRange} onSelect={setDateRange} defaultMonth={dateRange?.from} />
+            <div className="flex flex-wrap items-center gap-2 border-t border-border p-3">
+              {([
+                { label: 'Este mes', range: () => { const n = new Date(); return { from: new Date(n.getFullYear(), n.getMonth(), 1), to: n }; } },
+                { label: 'Mes pasado', range: () => { const n = new Date(); return { from: new Date(n.getFullYear(), n.getMonth() - 1, 1), to: new Date(n.getFullYear(), n.getMonth(), 0) }; } },
+                { label: 'Últ. 30d', range: () => ({ from: new Date(Date.now() - 30 * 86400000), to: new Date() }) },
+                { label: 'Últ. 90d', range: () => ({ from: new Date(Date.now() - 90 * 86400000), to: new Date() }) },
+              ] as { label: string; range: () => DateRange }[]).map((p) => (
+                <button key={p.label} onClick={() => setDateRange(p.range())} className="px-2.5 py-1 text-xs rounded-md border border-border hover:bg-muted text-muted-foreground hover:text-foreground">
+                  {p.label}
+                </button>
+              ))}
+              <button
+                disabled={!dateRange?.from || !dateRange?.to}
+                onClick={() => { setDateFilter('custom'); setRangeOpen(false); }}
+                className="ml-auto px-3 py-1.5 text-sm rounded-md bg-primary text-primary-foreground font-medium disabled:opacity-50"
+              >
+                Aplicar
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
         {/* Filtro por responsable */}
         <Select value={ownerFilter} onValueChange={setOwnerFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
@@ -1177,7 +1217,7 @@ export default function CRM() {
           </SelectContent>
         </Select>
         {(stageFilter !== 'all' || dateFilter !== 'all' || ownerFilter !== 'all' || searchQuery) && (
-          <Button variant="ghost" size="sm" onClick={() => { setStageFilter('all'); setDateFilter('all'); setOwnerFilter('all'); setSearchQuery(''); }}>
+          <Button variant="ghost" size="sm" onClick={() => { setStageFilter('all'); setDateFilter('all'); setDateRange(undefined); setOwnerFilter('all'); setSearchQuery(''); }}>
             Limpiar
           </Button>
         )}
