@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus, FileText, Download } from 'lucide-react';
+import { driveTo, type UiAction } from '@/lib/uiDriver';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -174,6 +176,7 @@ function FormattedMessage({ text }: { text: string }) {
 export default function LiveChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const navigate = useNavigate();
   const [view, setView] = useState<ChatView>('list');
   const [activeRoomId, setActiveRoomId] = useState<string>(GENERAL_ROOM_ID);
   const [activeRoomName, setActiveRoomName] = useState<string>('Chat General');
@@ -475,6 +478,17 @@ export default function LiveChat() {
           'María',
           undefined
         );
+
+        // Driver de navegación: María puede llevar al usuario a una vista con
+        // datos precargados. Minimiza el chat para que se vea la vista.
+        if (data.uiAction) {
+          try {
+            setIsMinimized(true);
+            driveTo(data.uiAction as UiAction, navigate);
+          } catch (e) {
+            console.error('[uiDriver] error ejecutando acción:', e);
+          }
+        }
       } else {
         // Regular team chat
         const messageText = newMessage.trim();

@@ -532,6 +532,27 @@ export default function Tareas() {
     // Handle action=new to open new task modal
     if (action === 'new' && !isLoading) {
       resetForm();
+      // Prefill desde el driver del chat (María): ?titulo=&descripcion=&asignado=&prioridad=&fechaFin=
+      const titulo = searchParams.get('titulo');
+      const descripcion = searchParams.get('descripcion');
+      const asignado = searchParams.get('asignado');
+      const prioridad = (searchParams.get('prioridad') || '').toLowerCase();
+      const fechaFin = searchParams.get('fechaFin');
+      if (titulo || descripcion || asignado || prioridad || fechaFin) {
+        const prioMap: Record<string, Priority> = { baja: Priority.LOW, media: Priority.MEDIUM, alta: Priority.HIGH };
+        const validMembers = ['Lía', 'Dairo', 'Stiven', 'Edgardo', 'Jhonathan'];
+        const member = asignado
+          ? validMembers.find((m) => m.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '') === asignado.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''))
+          : undefined;
+        setFormData((prev) => ({
+          ...prev,
+          title: titulo || prev.title,
+          description: descripcion || prev.description,
+          assignee: (member as TeamMemberName) || prev.assignee,
+          priority: prioMap[prioridad] || prev.priority,
+          dueDate: fechaFin || prev.dueDate,
+        }));
+      }
       setIsDialogOpen(true);
       setSearchParams({}, { replace: true });
       return;

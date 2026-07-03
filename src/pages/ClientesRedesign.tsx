@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Calendar, Clock, AlertTriangle, AlertCircle, MessageCircle, FileText,
   Briefcase, Receipt, TrendingUp, Activity, CheckCircle2, Loader2, Pencil,
@@ -200,7 +200,7 @@ function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
 
 function ClientesTable({ rows, onSelect }: { rows: ClientV2[]; onSelect: (c: ClientV2) => void }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-card">
+    <div data-tour="tabla-clientes" className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full">
         <thead>
           <tr className="text-[11px] uppercase tracking-wider text-muted-foreground border-b border-border">
@@ -256,10 +256,10 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
     : 'mes en curso';
 
   const kpis = [
-    { label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} clientes recurrentes`, valueCls: 'text-blue-400' },
-    { label: 'Pendiente de cobro', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} clientes con saldo`, valueCls: 'text-amber-400' },
-    { label: 'Cobros este mes', value: fmtM(summary.cobradoMes), sub: cobrosSub, valueCls: 'text-emerald-400' },
-    { label: 'Proyectos activos', value: String(proyCount), sub: 'Sin recurrencia mensual', valueCls: 'text-foreground' },
+    { tour: 'kpi-mrr', label: 'MRR activo', value: fmtM(summary.mrrActivo), sub: `${summary.recurrentes} clientes recurrentes`, valueCls: 'text-blue-400' },
+    { tour: 'kpi-pendiente', label: 'Pendiente de cobro', value: fmtM(summary.porCobrar), sub: `${summary.clientesConSaldo} clientes con saldo`, valueCls: 'text-amber-400' },
+    { tour: 'kpi-cobros', label: 'Cobros este mes', value: fmtM(summary.cobradoMes), sub: cobrosSub, valueCls: 'text-emerald-400' },
+    { tour: 'kpi-proyectos', label: 'Proyectos activos', value: String(proyCount), sub: 'Sin recurrencia mensual', valueCls: 'text-foreground' },
   ];
 
   return (
@@ -283,7 +283,7 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
       {/* KPIs (planas, estilo mockup) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-xl bg-card border border-border px-4 py-3">
+          <div key={k.label} data-tour={k.tour} className="rounded-xl bg-card border border-border px-4 py-3">
             <p className="text-[11px] text-muted-foreground">{k.label}</p>
             <p className={`text-[26px] font-semibold leading-tight tabular-nums mt-0.5 ${k.valueCls}`}>{k.value}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{k.sub}</p>
@@ -642,6 +642,7 @@ export default function ClientesRedesign() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ClientV2 | null>(null);
   const [newOpen, setNewOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const load = () =>
     apiClient.get<ClientesV2Response>('/api/clientes-v2').then((d) => {
@@ -650,6 +651,19 @@ export default function ClientesRedesign() {
     }).catch(() => {});
 
   useEffect(() => { load().finally(() => setLoading(false)); /* eslint-disable-next-line */ }, []);
+
+  // Driver del chat (María): /clientes?cliente=<nombre> abre el detalle de ese cliente.
+  useEffect(() => {
+    const q = searchParams.get('cliente');
+    if (!q || !data) return;
+    const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const n = norm(q);
+    if (n.length >= 3) {
+      const c = data.clients.find((x) => norm(x.name).includes(n) || n.includes(norm(x.name)));
+      if (c) setSelected(c);
+    }
+    setSearchParams({}, { replace: true });
+  }, [data, searchParams]);
 
   if (loading) return <div className="flex h-[60vh] items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
   if (!data) return <div className="text-center py-20 text-muted-foreground">No se pudieron cargar los clientes.</div>;

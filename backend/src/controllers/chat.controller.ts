@@ -90,6 +90,25 @@ function parseAction(text: string): { metodo: string; ruta: string; datos: any }
   return null;
 }
 
+// Extrae una acción de UI (driver): María pide llevar al usuario a una vista de la
+// app con datos precargados. Forma: {"ui":{"vista":"tareas.nueva","params":{...},"highlight":"..."},"mensaje":"..."}
+function parseUiAction(text: string): { ui: { vista: string; params?: any; highlight?: string }; mensaje?: string } | null {
+  if (!text) return null;
+  let t = text.trim();
+  const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) t = fence[1].trim();
+  const tryParse = (s: string) => { try { return JSON.parse(s); } catch { return null; } };
+  let obj: any = tryParse(t);
+  if (!obj) {
+    const m = t.match(/\{[\s\S]*\}/);
+    if (m) obj = tryParse(m[0]);
+  }
+  if (obj && typeof obj === 'object' && obj.ui && typeof obj.ui.vista === 'string') {
+    return { ui: obj.ui, mensaje: typeof obj.mensaje === 'string' ? obj.mensaje : undefined };
+  }
+  return null;
+}
+
 // Limpia restos de sintaxis de herramientas de Claude que la capa OpenAI de DARIO
 // puede filtrar como texto plano, y los bloques de "pensamiento".
 function cleanResponse(text: string): string {
@@ -371,6 +390,17 @@ CÓMO OPERAR:
 - Al crear tareas, usa "creador":"María". Miembros válidos: Lía, Dairo, Stiven, Edgardo, Jhonathan.
 - Cuando ya tengas todo, responde al usuario en lenguaje natural normal (SIN JSON y sin más llamadas).
 
+DRIVER DE NAVEGACIÓN (llevar al usuario a una vista de la app):
+El usuario está DENTRO de la app DTOS. Cuando pida CREAR una tarea o una cuenta de cobro, o VER un cliente/vista, PREFIERE llevarlo a la vista con el formulario ya precargado para que él revise y confirme (en vez de crearlo tú por API). Para eso responde EXCLUSIVAMENTE con un JSON de una línea:
+  {"ui":{"vista":"<destino>","params":{...}},"mensaje":"frase corta para el usuario"}
+Destinos disponibles:
+- "tareas.nueva" — abre el modal de nueva tarea. params: { titulo, descripcion, asignado (Lía|Dairo|Stiven|Edgardo|Jhonathan), prioridad (baja|media|alta), fechaFin (YYYY-MM-DD) }
+- "cuentas-cobro.nueva" — abre el formulario de cuenta de cobro. params: { cliente (nombre), concepto, servicios: [{descripcion, cantidad, precio_unitario}] }
+- "clientes.detalle" — abre el perfil de un cliente. params: { nombre }
+- "clientes" | "tareas" | "cuentas-cobro" | "cobros" | "crm" | "finanzas" — solo navegar (finanzas acepta params: {tab:"reportes"}).
+- Opcional "highlight" dentro de ui para señalar un elemento: en clientes: "kpi-mrr" | "kpi-pendiente" | "kpi-cobros" | "kpi-proyectos" | "tabla-clientes".
+Reglas: si el usuario dice "créala directo/tú misma/sin confirmar", usa la API /bot/ como siempre. Si pide "llévame/muéstrame/prepárame/crea una tarea para X", usa el driver. El "mensaje" debe ser corto (ej: "Listo, te llevo a Operaciones — revisa y confirma 👌").
+
 ${styleGuide}`,
         },
       ];
@@ -418,6 +448,17 @@ ${styleGuide}`,
         console.log(`[Chat] (json) paso ${step}/${MAX_STEPS}`);
         const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.3, max_tokens: 1500 });
         const content = completion.choices[0].message.content || '';
+        // Acción de UI (driver): navegar al usuario dentro de la app con datos precargados.
+        const uiAct = parseUiAction(content);
+        if (uiAct) {
+          console.log(`[Chat] (json) uiAction -> ${uiAct.ui.vista}`);
+          return res.json({
+            success: true,
+            response: finalizeResponse(uiAct.mensaje || 'Listo, te llevo 👌'),
+            uiAction: uiAct.ui,
+            usage: completion.usage,
+          });
+        }
         const action = parseAction(content);
         if (!action) {
           return res.json({ success: true, response: finalizeResponse(content), usage: completion.usage });

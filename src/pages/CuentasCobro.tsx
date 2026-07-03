@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -117,6 +118,46 @@ const CuentasCobro = () => {
   useEffect(() => {
     fetchData();
   }, [toast]);
+
+  // Prefill desde el driver del chat (María): /cuentas-cobro?nueva=1&cliente=&concepto=&items=[...]
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('nueva') !== '1') return;
+    if (clients.length === 0) return; // espera a que carguen los clientes para cruzar el nombre
+
+    const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+    const nombre = searchParams.get('cliente') || '';
+    const n = norm(nombre);
+    const cl = n.length >= 3
+      ? clients.find((c) => norm(c.name).includes(n) || n.includes(norm(c.name)))
+      : undefined;
+
+    setInvoiceData((prev) => ({
+      ...prev,
+      cliente_id: cl?.id || prev.cliente_id,
+      nombre_cliente: cl?.name || nombre || prev.nombre_cliente,
+      identificacion: cl?.nit || prev.identificacion,
+      concepto: searchParams.get('concepto') || prev.concepto,
+    }));
+
+    const itemsRaw = searchParams.get('items');
+    if (itemsRaw) {
+      try {
+        const arr = JSON.parse(itemsRaw);
+        if (Array.isArray(arr) && arr.length) {
+          setServiceItems(arr.map((it: any, i: number) => ({
+            id: Date.now() + i,
+            descripcion: String(it.descripcion ?? it.description ?? ''),
+            cantidad: Number(it.cantidad ?? it.qty) || 1,
+            precio_unitario: Number(it.precio_unitario ?? it.precioUnitario ?? it.precio ?? it.valor) || 0,
+          })));
+        }
+      } catch { /* items malformados: se ignoran */ }
+    }
+
+    setSearchParams({}, { replace: true });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [clients, searchParams]);
 
   const fetchData = async () => {
     try {
