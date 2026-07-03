@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus, FileText, Download } from 'lucide-react';
 import { driveTo, type UiAction } from '@/lib/uiDriver';
+import MicButton from '@/components/MicButton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -1149,10 +1150,16 @@ export default function LiveChat() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onPaste={activeRoomId.startsWith('ai_') ? handlePaste : undefined}
-                  placeholder={activeRoomId.startsWith('ai_') ? 'Escribe o pega una imagen…' : 'Escribe un mensaje...'}
+                  placeholder={activeRoomId.startsWith('ai_') ? 'Escribe, dicta 🎙 o pega una imagen…' : 'Escribe un mensaje...'}
                   className="flex-1"
                   disabled={isLoading}
                   autoFocus
+                />
+                {/* Dictado por voz (Whisper): agrega la transcripción al mensaje */}
+                <MicButton
+                  onTranscribed={(text) => setNewMessage((prev) => (prev ? `${prev.trim()} ${text}` : text))}
+                  disabled={isLoading}
+                  title="Dictar mensaje"
                 />
                 <Button type="submit" size="icon" disabled={(!newMessage.trim() && attachedImages.length === 0) || isLoading}>
                   <Send className="h-4 w-4" />

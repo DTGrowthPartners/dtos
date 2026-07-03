@@ -3,6 +3,7 @@ import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send } from 'luc
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import MicButton from '@/components/MicButton';
 import { Label } from '@/components/ui/label';
 import {
   Dialog,
@@ -283,6 +284,14 @@ export default function TodoList() {
           placeholder={atLimit ? 'Pantalla llena — completa o elimina pendientes' : 'Agregar un pendiente y Enter…'}
           disabled={atLimit}
           autoFocus
+        />
+        {/* Dictado por voz (Whisper) */}
+        <MicButton
+          size="sm"
+          className="h-9 w-9"
+          onTranscribed={(t) => setText((prev) => (prev ? `${prev.trim()} ${t}` : t))}
+          disabled={atLimit}
+          title="Dictar pendiente"
         />
         <Button type="submit" size="icon" disabled={!text.trim() || adding || atLimit}>
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
