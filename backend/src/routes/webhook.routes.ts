@@ -10,6 +10,8 @@ import { sendPushToMemberName } from '../services/push.service';
 import { resolveDestino } from '../config/notifyPhones';
 import { generateDueRecurringInvoices } from '../services/recurringInvoices.service';
 import { runCobranza } from '../services/cobranza.service';
+import { runDailyDigest } from '../services/dailyDigest.service';
+import { runConciliacion } from '../services/conciliacion.service';
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
@@ -214,6 +216,30 @@ router.post('/bot/cobranza/run', verifyBotApiKey, async (_req: Request, res: Res
   } catch (error) {
     console.error('[Bot API] Error en cobranza:', error);
     res.status(500).json({ success: false, error: 'Error ejecutando cobranza' });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/digest/run — resumen diario de María en el Chat General.
+ */
+router.post('/bot/digest/run', verifyBotApiKey, async (_req: Request, res: Response) => {
+  try {
+    res.json({ success: true, ...(await runDailyDigest()) });
+  } catch (error) {
+    console.error('[Bot API] Error en digest:', error);
+    res.status(500).json({ success: false, error: 'Error generando el resumen diario' });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/conciliacion/run — concilia pagos de Sheets con facturas.
+ */
+router.post('/bot/conciliacion/run', verifyBotApiKey, async (_req: Request, res: Response) => {
+  try {
+    res.json({ success: true, ...(await runConciliacion()) });
+  } catch (error) {
+    console.error('[Bot API] Error en conciliación:', error);
+    res.status(500).json({ success: false, error: 'Error ejecutando conciliación' });
   }
 });
 

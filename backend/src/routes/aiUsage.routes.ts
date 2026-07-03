@@ -67,6 +67,21 @@ const fetchUsage = async (token: string) => {
   }
 };
 
+/** Snapshot del uso de Claude para otros servicios (p. ej. el resumen diario de María). */
+export const getUsageSnapshot = async (): Promise<{ authenticated: boolean; plan?: string; pct5h?: number | null; pct7d?: number | null }> => {
+  try {
+    const o = readCreds();
+    const authenticated = !!(o.accessToken && (!o.expiresAt || o.expiresAt > Date.now()));
+    if (!authenticated) return { authenticated: false };
+    let usage = cache.data && Date.now() - cache.ts < TTL ? cache.data : await fetchUsage(o.accessToken as string);
+    if (usage && !(cache.data && Date.now() - cache.ts < TTL)) cache = { ts: Date.now(), data: usage };
+    const plan = PLAN_LABEL[o.rateLimitTier || ''] || 'Claude';
+    return { authenticated, plan, pct5h: usage?.pct5h ?? null, pct7d: usage?.pct7d ?? null };
+  } catch {
+    return { authenticated: false };
+  }
+};
+
 // GET /api/ai-usage — plan, sesión y uso real (5h / 7d) de la suscripción de Claude en el VPS.
 router.get('/', async (req: Request, res: Response) => {
   try {

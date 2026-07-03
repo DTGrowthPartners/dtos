@@ -254,6 +254,20 @@ model Invoice {
   updatedAt       DateTime @updatedAt
 }
 
+// Registro idempotente de la conciliación pagos (Sheets) ↔ facturas.
+// Un pago de la hoja Entradas se procesa una sola vez (sheetKey único).
+model PagoConciliado {
+  id            String   @id @default(cuid())
+  sheetKey      String   @unique // fecha|importe|terceroNorm|cuentaCobro
+  invoiceId     String?
+  invoiceNumber String?
+  tercero       String
+  importe       Float
+  fecha         String   // fecha cruda de la hoja
+  estado        String   // aplicado, sugerido, sin-match, ya-pagada
+  createdAt     DateTime @default(now())
+}
+
 model InvoicePayment {
   id              String   @id @default(cuid())
   invoiceId       String
