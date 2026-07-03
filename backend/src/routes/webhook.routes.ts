@@ -9,6 +9,7 @@ import { agentSendMessage } from '../services/agents.service';
 import { sendPushToMemberName } from '../services/push.service';
 import { resolveDestino } from '../config/notifyPhones';
 import { generateDueRecurringInvoices } from '../services/recurringInvoices.service';
+import { runCobranza } from '../services/cobranza.service';
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
@@ -197,6 +198,22 @@ router.post('/bot/invoices/run-recurring', verifyBotApiKey, async (_req: Request
   } catch (error) {
     console.error('[Bot API] Error generando cuentas recurrentes:', error);
     res.status(500).json({ success: false, error: 'Error generando cuentas recurrentes' });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/cobranza/run
+ *
+ * Cobranza automática diaria: recordatorios de facturas vencidas por WhatsApp.
+ * En modo revisión (COBRANZA_ENVIO_CLIENTES != true) solo envía el resumen a Dairo.
+ */
+router.post('/bot/cobranza/run', verifyBotApiKey, async (_req: Request, res: Response) => {
+  try {
+    const result = await runCobranza();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Bot API] Error en cobranza:', error);
+    res.status(500).json({ success: false, error: 'Error ejecutando cobranza' });
   }
 });
 

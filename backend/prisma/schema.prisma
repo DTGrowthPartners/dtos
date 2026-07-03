@@ -245,6 +245,9 @@ model Invoice {
   filePath        String   // Ruta del PDF generado
   status          String   @default("pendiente") // pendiente, enviada, parcial, pagada
   paidAt          DateTime?
+  // Cobranza automática: último recordatorio enviado al cliente y cuántos van
+  lastReminderAt  DateTime?
+  remindersSent   Int      @default(0)
   payments        InvoicePayment[]
   createdBy       String
   createdAt       DateTime @default(now())
