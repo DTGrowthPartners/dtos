@@ -228,4 +228,50 @@ export class ClientService {
     await prisma.clientSede.delete({ where: { id: sedeId } });
     return { message: 'Sede eliminada' };
   }
+
+  // ==================== Comisión por inversión en pauta ====================
+  /**
+   * Calcula la comisión de un cliente para un periodo: % (del servicio marcado como
+   * comisión) sobre la inversión en Meta Ads. Si el cliente tiene metaAdAccountId,
+   * la inversión se trae de la API de Meta (ApiAppsuite); si no, hay que ingresarla manual.
+   */
+  async getComision(clientId: string, periodo: 'this_month' | 'last_month' | 'last_14d' | 'last_30d') {
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (!client) throw new Error('Client not found');
+
+    const comisionSvc = await prisma.clientService.findFirst({
+      where: { clientId, esComision: true, estado: 'activo' },
+      include: { service: { select: { name: true } } },
+    });
+    const porcentaje = comisionSvc?.porcentajeComision ?? null;
+
+    let inversion: number | null = null;
+    let fuente: 'meta' | 'manual' = 'manual';
+    let detalle: { name: string; spend: number }[] = [];
+    if (client.metaAdAccountId) {
+      try {
+        const { metaAdsService } = await import('./metaAds.service');
+        const campaigns = await metaAdsService.getCampaigns(client.metaAdAccountId, periodo);
+        detalle = campaigns
+          .map((c) => ({ name: c.name, spend: parseFloat(c.insights?.spend || '0') || 0 }))
+          .filter((c) => c.spend > 0);
+        inversion = detalle.reduce((a, c) => a + c.spend, 0);
+        fuente = 'meta';
+      } catch (e) {
+        console.warn('[comision] no se pudo leer Meta:', (e as Error).message);
+      }
+    }
+
+    return {
+      cliente: client.name,
+      periodo,
+      servicioComision: comisionSvc?.service.name || null,
+      porcentaje,
+      metaConectado: !!client.metaAdAccountId,
+      fuente,
+      inversion: inversion != null ? Math.round(inversion) : null,
+      comision: inversion != null && porcentaje != null ? Math.round((inversion * porcentaje) / 100) : null,
+      campanas: detalle,
+    };
+  }
 }

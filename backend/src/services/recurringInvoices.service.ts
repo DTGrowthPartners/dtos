@@ -91,6 +91,7 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
     where: {
       estado: 'activo',
       frecuencia: { not: 'unico' },
+      esComision: false, // comisión = valor variable, no se auto-factura con precio fijo
       fechaProximoCobro: { not: null, lte: endOfToday },
     },
     include: {

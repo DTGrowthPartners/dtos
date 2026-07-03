@@ -12,6 +12,8 @@ export interface CreateClientServiceDto {
   fechaProximoCobro?: Date;
   fechaVencimiento?: Date;
   notas?: string;
+  esComision?: boolean;
+  porcentajeComision?: number;
 }
 
 export interface UpdateClientServiceDto {
@@ -22,6 +24,8 @@ export interface UpdateClientServiceDto {
   fechaVencimiento?: Date;
   estado?: string;
   notas?: string;
+  esComision?: boolean;
+  porcentajeComision?: number;
 }
 
 // Constantes
@@ -117,6 +121,8 @@ export const assignServiceToClient = async (clientId: string, data: CreateClient
       fechaProximoCobro,
       fechaVencimiento: data.fechaVencimiento,
       notas: data.notas,
+      esComision: !!data.esComision,
+      porcentajeComision: data.porcentajeComision,
       estado: 'activo',
       startDate: fechaInicio,
     },
@@ -158,6 +164,8 @@ export const updateClientService = async (clientId: string, serviceId: string, d
       fechaVencimiento: data.fechaVencimiento,
       estado: data.estado,
       notas: data.notas,
+      esComision: data.esComision,
+      porcentajeComision: data.porcentajeComision,
       endDate: data.estado === 'cancelado' ? new Date() : undefined,
     },
     include: {

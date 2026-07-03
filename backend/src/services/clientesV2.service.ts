@@ -104,9 +104,16 @@ export const getClientesV2 = async () => {
   for (const cs of clientServices) {
     const price = cs.precioCliente ?? cs.service.price ?? 0;
     const cur = svcByClient.get(cs.clientId) || { names: [], monthly: 0, projectValue: 0, billingDay: 5, hasRecurring: false, services: [] };
-    cur.names.push(cs.service.name);
-    cur.services.push({ name: cs.service.name, status: cs.estado, monthlyPrice: Math.round(price), frecuencia: cs.frecuencia, recurring: cs.frecuencia !== 'unico' });
-    if (cs.frecuencia !== 'unico') {
+    const esComision = (cs as any).esComision === true;
+    const pct = (cs as any).porcentajeComision as number | null;
+    const displayName = esComision && pct ? `${cs.service.name} (${pct}% inversión)` : cs.service.name;
+    cur.names.push(displayName);
+    cur.services.push({ name: displayName, status: cs.estado, monthlyPrice: esComision ? 0 : Math.round(price), frecuencia: esComision ? 'comision' : cs.frecuencia, recurring: cs.frecuencia !== 'unico' });
+    if (esComision) {
+      // Comisión: recurrente pero de valor VARIABLE (% de la inversión en pauta).
+      // No suma al MRR fijo; se calcula y cobra al cierre del periodo.
+      cur.hasRecurring = true;
+    } else if (cs.frecuencia !== 'unico') {
       cur.hasRecurring = true;
       cur.monthly += normalizeToMonthly(price, cs.frecuencia);
       if (cs.fechaProximoCobro) {

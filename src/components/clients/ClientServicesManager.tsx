@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle, Percent, Calculator, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +47,19 @@ interface ClientService {
   fechaVencimiento?: string;
   estado: string;
   notas?: string;
+  esComision?: boolean;
+  porcentajeComision?: number;
+}
+
+interface ComisionCalc {
+  cliente: string;
+  periodo: string;
+  porcentaje: number | null;
+  metaConectado: boolean;
+  fuente: 'meta' | 'manual';
+  inversion: number | null;
+  comision: number | null;
+  campanas: { name: string; spend: number }[];
 }
 
 interface Client {
@@ -116,9 +130,20 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     fechaProximoCobro: '',
     fechaVencimiento: '',
     notas: '',
+    esComision: false,
+    porcentaje: '',
   });
 
+  // Calculadora de comisión (spend de Meta → % → cuenta de cobro)
+  const [calcOpen, setCalcOpen] = useState(false);
+  const [calcSvc, setCalcSvc] = useState<ClientService | null>(null);
+  const [calcPeriodo, setCalcPeriodo] = useState<'this_month' | 'last_month'>('last_month');
+  const [calcLoading, setCalcLoading] = useState(false);
+  const [calcData, setCalcData] = useState<ComisionCalc | null>(null);
+  const [calcInversion, setCalcInversion] = useState('');
+
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchClientServices();
@@ -171,6 +196,8 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
         fechaProximoCobro: formData.fechaProximoCobro || undefined,
         fechaVencimiento: formData.fechaVencimiento || undefined,
         notas: formData.notas || undefined,
+        esComision: formData.esComision,
+        porcentajeComision: formData.esComision && formData.porcentaje ? parseFloat(formData.porcentaje) : undefined,
       };
 
       if (editingService) {
@@ -207,6 +234,8 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
       fechaProximoCobro: cs.fechaProximoCobro?.split('T')[0] || '',
       fechaVencimiento: cs.fechaVencimiento?.split('T')[0] || '',
       notas: cs.notas || '',
+      esComision: !!cs.esComision,
+      porcentaje: cs.porcentajeComision?.toString() || '',
     });
     setIsDialogOpen(true);
   };
@@ -238,10 +267,53 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
       fechaProximoCobro: '',
       fechaVencimiento: '',
       notas: '',
+      esComision: false,
+      porcentaje: '',
     });
     setEditingService(null);
     setCreatingNew(false);
     setNewServiceName('');
+  };
+
+  // --- Calculadora de comisión ---
+  const openCalc = (cs: ClientService) => {
+    setCalcSvc(cs);
+    setCalcPeriodo('last_month');
+    setCalcData(null);
+    setCalcInversion('');
+    setCalcOpen(true);
+    fetchComision('last_month');
+  };
+
+  const fetchComision = async (periodo: 'this_month' | 'last_month') => {
+    setCalcLoading(true);
+    try {
+      const d = await apiClient.get<ComisionCalc>(`/api/clients/${client.id}/comision?periodo=${periodo}`);
+      setCalcData(d);
+      if (d.inversion != null) setCalcInversion(String(d.inversion));
+    } catch {
+      setCalcData(null);
+    } finally {
+      setCalcLoading(false);
+    }
+  };
+
+  const pctOf = (cs: ClientService | null) => cs?.porcentajeComision || calcData?.porcentaje || 0;
+  const inversionNum = parseFloat(calcInversion) || 0;
+  const comisionNum = Math.round((inversionNum * pctOf(calcSvc)) / 100);
+
+  const generarCuentaComision = () => {
+    if (!calcSvc || comisionNum <= 0) return;
+    const periodoLabel = calcPeriodo === 'last_month' ? 'mes anterior' : 'mes en curso';
+    const desc = `Comisión ${pctOf(calcSvc)}% sobre inversión en pauta (${periodoLabel}) — inversión $${inversionNum.toLocaleString('es-CO')}`;
+    const q = new URLSearchParams({
+      nueva: '1',
+      cliente: client.name,
+      concepto: desc,
+      items: JSON.stringify([{ descripcion: desc, cantidad: 1, precio_unitario: comisionNum }]),
+    });
+    setCalcOpen(false);
+    navigate(`/cuentas-cobro?${q.toString()}`);
   };
 
   const getEstadoBadge = (estado: string) => {
@@ -253,9 +325,9 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
   const assignedServiceIds = clientServices.map(cs => cs.serviceId);
   const unassignedServices = availableServices.filter(s => !assignedServiceIds.includes(s.id));
 
-  // Calcular totales
+  // Calcular totales (comisión no suma: valor variable según inversión)
   const totalMensual = clientServices
-    .filter(cs => cs.estado === 'activo')
+    .filter(cs => cs.estado === 'activo' && !cs.esComision)
     .reduce((sum, cs) => {
       const precio = cs.precioCliente ?? cs.service.price;
       switch (cs.frecuencia) {
@@ -319,17 +391,26 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-2 text-sm">
                         <div className="flex items-center gap-1 text-muted-foreground">
-                          <DollarSign className="h-3 w-3" />
-                          <span>{formatCurrency(precio, cs.moneda || 'COP')}</span>
-                          {cs.precioCliente && (
-                            <span className="text-xs line-through text-muted-foreground/50">
-                              {formatCurrency(cs.service.price, cs.service.currency)}
-                            </span>
+                          {cs.esComision ? (
+                            <>
+                              <Percent className="h-3 w-3 text-violet-400" />
+                              <span className="text-violet-400 font-medium">{cs.porcentajeComision || '?'}% de inversión</span>
+                            </>
+                          ) : (
+                            <>
+                              <DollarSign className="h-3 w-3" />
+                              <span>{formatCurrency(precio, cs.moneda || 'COP')}</span>
+                              {cs.precioCliente && (
+                                <span className="text-xs line-through text-muted-foreground/50">
+                                  {formatCurrency(cs.service.price, cs.service.currency)}
+                                </span>
+                              )}
+                            </>
                           )}
                         </div>
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          <span>{FRECUENCIAS.find(f => f.value === cs.frecuencia)?.label}</span>
+                          <span>{cs.esComision ? 'Variable · cierre de pauta' : FRECUENCIAS.find(f => f.value === cs.frecuencia)?.label}</span>
                         </div>
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <Calendar className="h-3 w-3" />
@@ -349,6 +430,11 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                     </div>
 
                     <div className="flex gap-1">
+                      {cs.esComision && (
+                        <Button variant="outline" size="sm" className="gap-1.5 text-violet-400 border-violet-500/40 hover:bg-violet-500/10" onClick={() => openCalc(cs)}>
+                          <Calculator className="h-4 w-4" /> Calcular
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(cs)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -471,6 +557,39 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                 </Select>
               </div>
 
+              {/* Cobro por comisión (% de la inversión en pauta) */}
+              <div className="space-y-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+                <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.esComision}
+                    onChange={(e) => setFormData({ ...formData, esComision: e.target.checked })}
+                    className="h-4 w-4 accent-primary"
+                    disabled={isLoading}
+                  />
+                  Cobro por comisión (% de la inversión en pauta)
+                </label>
+                {formData.esComision && (
+                  <div className="space-y-1 pt-1">
+                    <Label className="text-xs">Porcentaje (%)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.5"
+                      placeholder="10"
+                      value={formData.porcentaje}
+                      onChange={(e) => setFormData({ ...formData, porcentaje: e.target.value })}
+                      disabled={isLoading}
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      El valor NO es fijo: al cierre de la pauta se calcula el % sobre lo invertido
+                      (con el spend de Meta si el cliente está conectado) y se genera la cuenta de cobro.
+                    </p>
+                  </div>
+                )}
+              </div>
+
               {/* Fechas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -521,6 +640,73 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Calculadora de comisión: inversión (Meta o manual) → % → cuenta de cobro */}
+      <Dialog open={calcOpen} onOpenChange={setCalcOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-violet-400" /> Calcular comisión
+            </DialogTitle>
+            <DialogDescription>
+              {calcSvc?.porcentajeComision || '?'}% sobre la inversión en pauta de {client.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Periodo de la pauta</Label>
+              <Select value={calcPeriodo} onValueChange={(v) => { setCalcPeriodo(v as 'this_month' | 'last_month'); fetchComision(v as 'this_month' | 'last_month'); }}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="last_month">Mes anterior</SelectItem>
+                  <SelectItem value="this_month">Mes en curso</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {calcLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Loader2 className="h-4 w-4 animate-spin" /> Consultando inversión en Meta…
+              </div>
+            ) : calcData?.fuente === 'meta' && calcData.inversion != null ? (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300">
+                Inversión traída de Meta Ads ({calcData.campanas.length} campaña{calcData.campanas.length === 1 ? '' : 's'} con gasto). Puedes ajustarla si hace falta.
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                {calcData?.metaConectado
+                  ? 'No se pudo leer Meta — ingresa la inversión manualmente.'
+                  : 'Este cliente no tiene cuenta de Meta vinculada (metaAdAccountId) — ingresa la inversión manualmente.'}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Inversión del cliente en pauta (COP)</Label>
+              <Input
+                type="number"
+                placeholder="2000000"
+                value={calcInversion}
+                onChange={(e) => setCalcInversion(e.target.value)}
+              />
+            </div>
+
+            <div className="rounded-lg bg-muted/40 border border-border px-4 py-3 flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Comisión ({pctOf(calcSvc)}%)</span>
+              <span className="text-xl font-semibold tabular-nums text-violet-400">
+                {formatCurrency(comisionNum)}
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCalcOpen(false)}>Cerrar</Button>
+            <Button onClick={generarCuentaComision} disabled={comisionNum <= 0} className="gap-1.5">
+              Generar cuenta de cobro →
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

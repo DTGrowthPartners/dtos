@@ -104,4 +104,16 @@ export class ClientController {
       res.status(400).json({ message: error instanceof Error ? error.message : 'Error deleting sede' });
     }
   }
+
+  // ==================== Comisión ====================
+  async getComision(req: Request, res: Response) {
+    try {
+      const periodo = (['this_month', 'last_month', 'last_14d', 'last_30d'].includes(String(req.query.periodo))
+        ? req.query.periodo
+        : 'this_month') as 'this_month' | 'last_month' | 'last_14d' | 'last_30d';
+      res.json(await clientService.getComision(req.params.id, periodo));
+    } catch (error) {
+      res.status(400).json({ message: error instanceof Error ? error.message : 'Error calculando comisión' });
+    }
+  }
 }

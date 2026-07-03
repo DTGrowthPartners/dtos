@@ -24,6 +24,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
+import AiUsageWidget from '@/components/dashboard/AiUsageWidget';
 
 interface AgentMeta {
   id: string;
@@ -482,18 +483,16 @@ function AgentCard({ agent, onChanged }: { agent: AgentMeta; onChanged: () => vo
               </div>
             )}
 
-            {/* === Dairo === Claude tokens */}
+            {/* === Dairo === Uso de IA (tokens Claude de hoy) */}
             {stats.claude_hoy && (
-              <div className="text-[11px] text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 pt-2 border-t border-border/50">
-                {typeof stats.claude_hoy.tokens_input === 'number' && (
-                  <span>Tokens in: <strong className="text-foreground">{stats.claude_hoy.tokens_input.toLocaleString('es-CO')}</strong></span>
-                )}
-                {typeof stats.claude_hoy.tokens_output === 'number' && (
-                  <span>Tokens out: <strong className="text-foreground">{stats.claude_hoy.tokens_output.toLocaleString('es-CO')}</strong></span>
-                )}
-                {typeof stats.claude_hoy.cache_read === 'number' && (
-                  <span>Cache read: <strong className="text-foreground">{stats.claude_hoy.cache_read.toLocaleString('es-CO')}</strong></span>
-                )}
+              <div>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground font-medium mb-2">Uso de IA hoy (Claude)</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <StatBox label="Tokens in" value={stats.claude_hoy.tokens_input?.toLocaleString('es-CO')} icon={Activity} accent="primary" />
+                  <StatBox label="Tokens out" value={stats.claude_hoy.tokens_output?.toLocaleString('es-CO')} icon={Activity} accent="success" />
+                  <StatBox label="Cache read" value={stats.claude_hoy.cache_read?.toLocaleString('es-CO')} icon={Activity} accent="warning" />
+                  <StatBox label="Cache write" value={stats.claude_hoy.cache_write?.toLocaleString('es-CO')} icon={Activity} accent="warning" />
+                </div>
               </div>
             )}
           </div>
@@ -546,6 +545,9 @@ export default function Agentes() {
           Refrescar todos
         </Button>
       </div>
+
+      {/* Uso de la suscripción de Claude en el VPS (María + DARIO corren sobre ella) */}
+      <AiUsageWidget />
 
       {loading ? (
         <div className="text-center py-12 text-muted-foreground">Cargando…</div>

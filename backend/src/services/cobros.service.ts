@@ -99,6 +99,10 @@ export const getCobrosForPeriod = async (periodInput?: string) => {
   for (const cs of clientServices) {
     const price = cs.precioCliente ?? cs.service.price;
 
+    // Comisión (% de inversión): valor variable, no entra al cobro fijo mensual.
+    // Se calcula y factura al cierre del periodo desde el detalle del cliente.
+    if ((cs as any).esComision) continue;
+
     if (cs.frecuencia === 'unico') {
       const cur = puntualesByClient.get(cs.client.id) || {
         clienteNombre: cs.client.name,

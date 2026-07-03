@@ -150,7 +150,12 @@ model ClientService {
   // Precio y frecuencia de pago
   precioCliente     Float?    // Precio personalizado (override del servicio)
   moneda            String    @default("COP") // Moneda personalizada para este cliente
-  frecuencia        String    @default("mensual") // mensual, trimestral, semestral, anual, unico
+  frecuencia        String    @default("mensual") // semanal, quincenal, mensual, trimestral, semestral, anual, unico
+
+  // Cobro por comisión: el valor NO es fijo, es un % de la inversión del cliente en
+  // pauta (se calcula al cierre del periodo, con el spend de Meta si está conectado).
+  esComision        Boolean   @default(false)
+  porcentajeComision Float?   // ej. 10 = 10% de la inversión
 
   // Fechas de control
   fechaInicio       DateTime  @default(now())
