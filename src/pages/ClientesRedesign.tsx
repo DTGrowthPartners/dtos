@@ -161,7 +161,13 @@ function ProximoCobro({ c }: { c: ClientV2 }) {
 }
 
 function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
-  const cc = contractChip[c.contractType];
+  // Un cliente puede ser MRR y Proyecto a la vez (retainer + proyecto puntual):
+  // muestra ambas etiquetas.
+  const chips: { label: string; cls: string }[] = [];
+  if (c.servicesCount > 0) {
+    if (c.contractType === 'mrr') chips.push(contractChip.mrr);
+    if (c.contractType === 'project' || (c.projectValue ?? 0) > 0) chips.push(contractChip.project);
+  }
   return (
     <tr onClick={onClick} className="border-b border-border/60 last:border-0 hover:bg-muted/30 cursor-pointer transition-colors align-top">
       <td className="px-4 py-4 min-w-[170px]">
@@ -187,8 +193,14 @@ function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
         ) : <span className="text-xs text-muted-foreground">Sin servicios</span>}
       </td>
       <td className="px-4 py-4">
-        {c.servicesCount > 0
-          ? <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${cc.cls}`}>{cc.label}</span>
+        {chips.length > 0
+          ? (
+            <span className="flex flex-wrap gap-1">
+              {chips.map((ch) => (
+                <span key={ch.label} className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${ch.cls}`}>{ch.label}</span>
+              ))}
+            </span>
+          )
           : <span className="text-xs text-muted-foreground">—</span>}
       </td>
       <td className="px-4 py-4">
@@ -243,15 +255,16 @@ function ClientesPanel({ data, onSelect, onNew }: { data: ClientesV2Response; on
     switch (filter) {
       case 'todos': return clients;
       case 'activos': return clients.filter((c) => c.status === 'active');
-      case 'mrr': return clients.filter((c) => c.status === 'active' && c.contractType === 'mrr');
-      case 'proyectos': return clients.filter((c) => c.status === 'active' && c.contractType === 'project');
+      case 'mrr': return clients.filter((c) => c.status === 'active' && c.contractType === 'mrr' && c.servicesCount > 0);
+      // Proyectos: incluye clientes que además tienen MRR (proyecto puntual encima del retainer)
+      case 'proyectos': return clients.filter((c) => c.status === 'active' && ((c.projectValue ?? 0) > 0 || (c.contractType === 'project' && c.servicesCount > 0)));
       case 'deuda': return clients.filter((c) => c.outstandingBalance > 0);
       default: return clients;
     }
   }, [clients, filter]);
 
-  const mrrCount = clients.filter((c) => c.status === 'active' && c.contractType === 'mrr').length;
-  const proyCount = summary.proyectosActivos ?? clients.filter((c) => c.status === 'active' && c.contractType === 'project').length;
+  const mrrCount = clients.filter((c) => c.status === 'active' && c.contractType === 'mrr' && c.servicesCount > 0).length;
+  const proyCount = clients.filter((c) => c.status === 'active' && ((c.projectValue ?? 0) > 0 || (c.contractType === 'project' && c.servicesCount > 0))).length;
 
   const cobrosSub = summary.cobrosMesTotal
     ? `${summary.cobrosMesPagados ?? 0} de ${summary.cobrosMesTotal} pagados`

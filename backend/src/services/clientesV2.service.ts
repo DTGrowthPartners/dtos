@@ -230,7 +230,8 @@ export const getClientesV2 = async () => {
   // "N de M al día": clientes recurrentes activos sin saldo pendiente.
   const recurrentesActivos = active.filter((c) => c.monthlyValue > 0);
   const alDiaCount = recurrentesActivos.filter((c) => c.outstandingBalance === 0).length;
-  const proyectosActivos = active.filter((c) => c.contractType === 'project').length;
+  // Con proyecto: valor de proyecto > 0 o solo servicios de pago único (puede convivir con MRR)
+  const proyectosActivos = active.filter((c) => c.projectValue > 0 || (c.contractType === 'project' && c.servicesCount > 0)).length;
 
   const URG: Record<Urgency, number> = { overdue: 0, due_today: 1, due_soon: 2, ok: 3 };
   // Devolvemos TODOS los clientes (el frontend filtra por chips); activos primero,
