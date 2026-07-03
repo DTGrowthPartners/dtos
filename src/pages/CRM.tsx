@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -877,6 +878,29 @@ export default function CRM() {
     });
     setIsDialogOpen(true);
   };
+
+  // Driver del chat (María): /crm?nuevo=1&nombre=&empresa=&telefono=&email=&valor= abre el modal de deal precargado.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get('nuevo') !== '1') return;
+    const nombre = searchParams.get('nombre') || '';
+    const empresa = searchParams.get('empresa') || '';
+    const telefono = searchParams.get('telefono') || '';
+    const email = searchParams.get('email') || '';
+    const valor = searchParams.get('valor') || '';
+    resetForm();
+    setFormData((prev) => ({
+      ...prev,
+      name: nombre || prev.name,
+      company: empresa || prev.company,
+      phone: telefono || prev.phone,
+      email: email || prev.email,
+      estimatedValue: valor || prev.estimatedValue,
+    }));
+    setIsDialogOpen(true);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const resetForm = () => {
     setFormData({

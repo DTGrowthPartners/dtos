@@ -183,7 +183,7 @@ const formatCompactCurrency = (value: number): string => {
 };
 
 export default function Finanzas() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<string>('resumen');
   const [financeData, setFinanceData] = useState<FinanceData[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([]);
@@ -464,6 +464,46 @@ export default function Finanzas() {
       setActiveTab('reportes');
       applyDatePreset('thisMonth');
     }
+  }, [searchParams]);
+
+  // Driver del chat (María): /finanzas?registrar=ingreso|gasto&importe=&descripcion=&categoria=&entidad=&cuenta=
+  // abre el modal de registro con los campos precargados para confirmar.
+  useEffect(() => {
+    const registrar = searchParams.get('registrar');
+    if (registrar !== 'ingreso' && registrar !== 'gasto') return;
+    const pre = {
+      importe: searchParams.get('importe') || '',
+      descripcion: searchParams.get('descripcion') || '',
+      categoria: searchParams.get('categoria') || '',
+      entidad: searchParams.get('entidad') || '',
+      cuenta: searchParams.get('cuenta') || '',
+    };
+    if (registrar === 'ingreso') {
+      setIncomeForm((prev) => ({
+        ...prev,
+        importe: pre.importe || prev.importe,
+        descripcion: pre.descripcion || prev.descripcion,
+        categoria: pre.categoria || prev.categoria,
+        entidad: pre.entidad || prev.entidad,
+        cuenta: pre.cuenta || prev.cuenta,
+      }));
+      setShowAddIncomeModal(true);
+    } else {
+      setExpenseForm((prev) => ({
+        ...prev,
+        importe: pre.importe || prev.importe,
+        descripcion: pre.descripcion || prev.descripcion,
+        categoria: pre.categoria || prev.categoria,
+        entidad: pre.entidad || prev.entidad,
+        cuenta: pre.cuenta || prev.cuenta,
+      }));
+      setShowAddExpenseModal(true);
+    }
+    // limpia los params para no reabrir el modal al navegar
+    const next = new URLSearchParams(searchParams);
+    ['registrar', 'importe', 'descripcion', 'categoria', 'entidad', 'cuenta'].forEach((k) => next.delete(k));
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const fetchFinanceData = async (silent = false) => {

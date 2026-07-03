@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Receipt,
   RefreshCw,
@@ -149,6 +150,16 @@ export default function CobrosMRR() {
   const [search, setSearch] = useState('');
   const [payTarget, setPayTarget] = useState<Cobro | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Driver del chat (María): /cobros?buscar=<cliente> filtra los cobros de ese cliente.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const q = searchParams.get('buscar');
+    if (!q) return;
+    setSearch(q);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   // form de registro de pago
   const [metodoPago, setMetodoPago] = useState('');
@@ -511,7 +522,7 @@ export default function CobrosMRR() {
           <p className="text-sm text-muted-foreground">Ningún cliente coincide.</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div data-tour="tabla-cobros" className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40">

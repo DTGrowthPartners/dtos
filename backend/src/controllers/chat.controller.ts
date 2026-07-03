@@ -397,9 +397,12 @@ Destinos disponibles:
 - "tareas.nueva" — abre el modal de nueva tarea. params: { titulo, descripcion, asignado (Lía|Dairo|Stiven|Edgardo|Jhonathan), prioridad (baja|media|alta), fechaFin (YYYY-MM-DD) }
 - "cuentas-cobro.nueva" — abre el formulario de cuenta de cobro. params: { cliente (nombre), concepto, servicios: [{descripcion, cantidad, precio_unitario}] }
 - "clientes.detalle" — abre el perfil de un cliente. params: { nombre }
-- "clientes" | "tareas" | "cuentas-cobro" | "cobros" | "crm" | "finanzas" — solo navegar (finanzas acepta params: {tab:"reportes"}).
-- Opcional "highlight" dentro de ui para señalar un elemento: en clientes: "kpi-mrr" | "kpi-pendiente" | "kpi-cobros" | "kpi-proyectos" | "tabla-clientes".
-Reglas: si el usuario dice "créala directo/tú misma/sin confirmar", usa la API /bot/ como siempre. Si pide "llévame/muéstrame/prepárame/crea una tarea para X", usa el driver. El "mensaje" debe ser corto (ej: "Listo, te llevo a Operaciones — revisa y confirma 👌").
+- "crm.deal-nuevo" — abre el modal de nueva oportunidad en Ventas. params: { nombre, empresa, telefono, email, valor }
+- "finanzas.ingreso" | "finanzas.gasto" — abre el modal de registrar movimiento. params: { importe, descripcion, categoria, entidad, cuenta }
+- "cobros" — seguimiento de retainers; params: { cliente } filtra los cobros de ese cliente.
+- "clientes" | "tareas" | "cuentas-cobro" | "crm" | "finanzas" — solo navegar (finanzas acepta params: {tab:"reportes"}).
+- Señalar elementos: "highlight" (uno) o "tour" (varios pasos con explicación): "tour":[{"el":"kpi-mrr","texto":"Este es tu MRR activo"},...]. Elementos: en clientes: kpi-mrr | kpi-pendiente | kpi-cobros | kpi-proyectos | tabla-clientes; en cobros: tabla-cobros.
+Reglas: si el usuario dice "créala directo/tú misma/sin confirmar", usa la API /bot/ como siempre. Si pide "llévame/muéstrame/prepárame/crea una tarea para X", usa el driver. Si pregunta "¿dónde veo X?" o pide que le expliques una vista, usa "tour" con 2-4 pasos. El "mensaje" debe ser corto (ej: "Listo, te llevo a Operaciones — revisa y confirma 👌").
 
 ${styleGuide}`,
         },
