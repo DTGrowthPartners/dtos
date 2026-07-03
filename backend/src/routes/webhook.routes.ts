@@ -3472,7 +3472,31 @@ router.post('/bot/sheets/ingresos', verifyBotApiKey, async (req: Request, res: R
  */
 router.post('/bot/invoices/generate', verifyBotApiKey, async (req: Request, res: Response) => {
   try {
-    const invoiceData: CreateInvoiceDto = req.body;
+    // Normaliza alias de campos: el bot (María) u otros clientes suelen mandar el
+    // precio/cantidad/descripción con otro nombre. Aceptamos todas las variantes
+    // razonables para que NUNCA falle por el nombre del campo.
+    const b: any = req.body || {};
+    const num = (v: any): number | undefined => {
+      if (v == null || v === '') return undefined;
+      const n = typeof v === 'string' ? parseFloat(v.replace(/[^0-9.-]/g, '')) : Number(v);
+      return typeof n === 'number' && !isNaN(n) ? n : undefined;
+    };
+    b.nombre_cliente = b.nombre_cliente ?? b.cliente ?? b.nombre ?? b.clientName;
+    b.identificacion = b.identificacion ?? b.nit ?? b.documento ?? b.identification ?? b.clientNit;
+    b.fecha = b.fecha ?? b.date ?? b.fecha_emision;
+    if (Array.isArray(b.servicios) && b.servicios.length) {
+      b.servicios = b.servicios.map((s: any) => ({
+        descripcion: s.descripcion ?? s.description ?? s.concepto ?? s.nombre ?? s.item ?? b.concepto,
+        cantidad: num(s.cantidad ?? s.qty ?? s.quantity ?? s.cant) ?? 1,
+        precio_unitario: num(s.precio_unitario ?? s.precioUnitario ?? s.precio ?? s.valor_unitario ?? s.unitPrice ?? s.valor ?? s.price ?? s.monto ?? s.importe) ?? 0,
+      }));
+    } else {
+      // Forma corta: concepto + valor en el nivel superior => un solo ítem.
+      const valor = num(b.valor ?? b.precio ?? b.precio_unitario ?? b.monto ?? b.importe ?? b.total);
+      const desc = b.concepto ?? b.servicio_proyecto ?? b.descripcion ?? 'Servicio';
+      if (valor != null) b.servicios = [{ descripcion: desc, cantidad: 1, precio_unitario: valor }];
+    }
+    const invoiceData: CreateInvoiceDto = b;
 
     // Validaciones
     if (!invoiceData.nombre_cliente || !invoiceData.identificacion || !invoiceData.servicios || !invoiceData.fecha) {

@@ -56,7 +56,7 @@ ACCIONES (POST/PATCH):
 - POST /bot/sheets/gastos — registrar gasto. datos: { fecha (req), importe (req), categoria (req), entidad (req), descripcion (req), cuenta }
 - POST /bot/sheets/ingresos — registrar ingreso. datos: { fecha (req), importe (req), categoria, cuenta, entidad }
 - POST /bot/terceros — crear tercero
-- POST /bot/invoices/generate — generar cuenta de cobro. El sistema adjunta el PDF automáticamente; solo confirma al usuario los datos (cliente, número, total). No pegues links.
+- POST /bot/invoices/generate — generar cuenta de cobro. datos: { nombre_cliente (req), identificacion (req), fecha (req, "YYYY-MM-DD"), servicios: [{ descripcion (req), cantidad (req, número), precio_unitario (req, número) }], concepto?, servicio_proyecto?, observaciones? }. El campo del valor se llama EXACTAMENTE "precio_unitario" (número, sin puntos ni "$"). El sistema adjunta el PDF automáticamente; solo confirma los datos (cliente, número, total). No pegues links.
 
 CONTEXTO ACTUAL DEL SISTEMA (jul 2026):
 - Cada cliente puede tener SEDES (sucursales físicas: nombre, dirección, ciudad, teléfono) y varios CONTACTOS (terceros con cargo: gerencia, contador, etc.).
