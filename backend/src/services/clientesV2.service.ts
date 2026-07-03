@@ -86,6 +86,7 @@ export const getClientesV2 = async () => {
   const allInvoices = await prisma.invoice.findMany({ orderBy: { fecha: 'desc' } });
   const invNorm = allInvoices.map((i) => ({
     norm: normName(i.clientName || ''),
+    clientId: i.clientId || '',
     total: i.totalAmount, paid: i.paidAmount || 0, status: i.status,
     numero: i.invoiceNumber, fecha: i.fecha,
   }));
@@ -125,10 +126,12 @@ export const getClientesV2 = async () => {
     const svc = svcByClient.get(cl.id);
     const norm = normName(cl.name);
 
-    // Facturas de este cliente (cruce por nombre normalizado, agrupa variantes: ACBFIT/ACB Fit/ACBFIT SAS)
-    const myInv = norm.length >= 4
-      ? invNorm.filter((i) => i.norm.length >= 4 && (norm.includes(i.norm) || i.norm.includes(norm)))
-      : [];
+    // Facturas de este cliente: por clientId (vínculo directo) o por nombre normalizado
+    // (agrupa variantes: ACBFIT/ACB Fit/ACBFIT SAS).
+    const myInv = invNorm.filter((i) =>
+      i.clientId === cl.id ||
+      (norm.length >= 4 && i.norm.length >= 4 && (norm.includes(i.norm) || i.norm.includes(norm)))
+    );
     const facturado = myInv.reduce((a, i) => a + i.total, 0);
     const pagado = myInv.reduce((a, i) => a + i.paid, 0);
     const openInv = myInv.filter((i) => i.status !== 'pagada').sort((a, b) => a.fecha.getTime() - b.fecha.getTime());
@@ -211,8 +214,10 @@ export const getClientesV2 = async () => {
   // IPP = Ingreso Por Proyecto: suma de servicios de pago único (proyectos).
   const ipp = active.reduce((a, c) => a + c.projectValue, 0);
   const conProyecto = active.filter((c) => c.projectValue > 0).length;
-  const porCobrar = active.reduce((a, c) => a + c.outstandingBalance, 0);
-  const clientesConSaldo = active.filter((c) => c.outstandingBalance > 0).length;
+  // Cartera total: TODOS los clientes con saldo (activos e inactivos), igual que el
+  // reporte de Estado de Cartera del correo. Deuda es deuda aunque el cliente esté inactivo.
+  const porCobrar = out.reduce((a, c) => a + c.outstandingBalance, 0);
+  const clientesConSaldo = out.filter((c) => c.outstandingBalance > 0).length;
   // Cobrado este mes: pagos reales de Sheets con fecha en el mes en curso (cuadra con Finanzas).
   const cobradoMes = sheetPayments.filter((p) => ymOf(p.fecha) === period).reduce((a, p) => a + p.importe, 0);
   // "N de M al día": clientes recurrentes activos sin saldo pendiente.

@@ -187,7 +187,9 @@ function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
         ) : <span className="text-xs text-muted-foreground">Sin servicios</span>}
       </td>
       <td className="px-4 py-4">
-        <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${cc.cls}`}>{cc.label}</span>
+        {c.servicesCount > 0
+          ? <span className={`px-2 py-0.5 rounded-md text-[11px] font-medium ${cc.cls}`}>{cc.label}</span>
+          : <span className="text-xs text-muted-foreground">—</span>}
       </td>
       <td className="px-4 py-4">
         <p className={`font-semibold tabular-nums ${balanceColor(c)}`}>{fmtFull(c.outstandingBalance)}</p>
