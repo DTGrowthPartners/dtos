@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MessageCircle, Send, X, Users, Minimize2, Maximize2, ArrowLeft, Plus, Search, Sparkles, Trash2, ImagePlus, FileText, Download } from 'lucide-react';
 import { driveTo, type UiAction } from '@/lib/uiDriver';
 import MicButton from '@/components/MicButton';
@@ -178,6 +178,7 @@ export default function LiveChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [view, setView] = useState<ChatView>('list');
   const [activeRoomId, setActiveRoomId] = useState<string>(GENERAL_ROOM_ID);
   const [activeRoomName, setActiveRoomName] = useState<string>('Chat General');
@@ -416,6 +417,24 @@ export default function LiveChat() {
       }
     }
   }, [isOpen, isMinimized, view, messages, user]);
+
+  // Deep-link desde una notificación push: /?chat=<roomId>&chatName=<nombre>
+  // abre el panel del chat directamente en esa sala (no hay que "adivinar").
+  useEffect(() => {
+    const roomId = searchParams.get('chat');
+    if (!roomId || !user) return;
+    const name = searchParams.get('chatName') || (roomId === 'general' ? 'Chat General' : 'Chat');
+    setActiveRoomId(roomId);
+    setActiveRoomName(name);
+    setView('chat');
+    setIsOpen(true);
+    setIsMinimized(false);
+    const next = new URLSearchParams(searchParams);
+    next.delete('chat');
+    next.delete('chatName');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();

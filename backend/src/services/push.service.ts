@@ -73,7 +73,8 @@ export const sendPushToUser = async (
     notification: { title: payload.title, body: payload.body },
     data: { url: payload.url || '/', ...(payload.tag ? { tag: payload.tag } : {}) },
     webpush: {
-      fcmOptions: { link: payload.url || '/' },
+      // link absoluto: algunos navegadores ignoran rutas relativas al hacer clic
+      fcmOptions: { link: payload.url?.startsWith('http') ? payload.url : `https://os.dtgrowthpartners.com${payload.url || '/'}` },
       notification: { icon: '/img/logo.png', badge: '/favicon-48x48.png' },
     },
   });
@@ -137,9 +138,12 @@ export const sendChatPush = async (
 
   const title = room.type === 'general' ? `${senderName} · Chat General` : senderName;
   const body = (text?.trim() || (hasImage ? '📷 Imagen' : 'Nuevo mensaje')).slice(0, 120);
+  // Deep-link: al tocar la notificación, la app abre directamente esta sala del chat.
+  const chatName = room.type === 'general' ? 'Chat General' : senderName;
+  const url = `/?chat=${encodeURIComponent(roomId)}&chatName=${encodeURIComponent(chatName)}`;
   const results = await Promise.all(
     targets.map((id) =>
-      sendPushToUser(id, { title, body, url: '/', tag: `chat-${roomId}` }).catch((e) => {
+      sendPushToUser(id, { title, body, url, tag: `chat-${roomId}` }).catch((e) => {
         console.error('[chat push] error a', id, (e as Error).message);
         return { sent: 0, failed: 1, tokens: 0 };
       })

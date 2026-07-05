@@ -371,8 +371,14 @@ router.get('/bot/projects/:projectId/brief', verifyBotApiKey, async (req: Reques
     const snap = await getFirestore().collection('briefs').where('projectId', '==', pid).where('isTemplate', '==', false).get();
     if (snap.empty) return res.json({ success: true, brief: null, mensaje: 'El proyecto no tiene brief todavía' });
     const briefs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    const b = briefs[0];
-    res.json({ success: true, briefId: b.id, titulo: b.title, proyectoId: pid, markdown: blocksToMarkdown(b.blocks || []) });
+    // ?titulo= para pedir un brief específico; sin él, devuelve el más reciente.
+    const qT = String(req.query.titulo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+    const b = (qT && briefs.find((x) => (x.title || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim() === qT)) || briefs[0];
+    res.json({
+      success: true, briefId: b.id, titulo: b.title, proyectoId: pid,
+      markdown: blocksToMarkdown(b.blocks || []),
+      briefs: briefs.map((x) => ({ briefId: x.id, titulo: x.title })), // todos los del proyecto
+    });
   } catch (error) {
     console.error('[Bot API] Error leyendo brief:', error);
     res.status(500).json({ success: false, error: 'Error al leer el brief' });
@@ -388,24 +394,44 @@ router.put('/bot/projects/:projectId/brief', verifyBotApiKey, async (req: Reques
   try {
     const pid = await resolveProjectId(req.params.projectId);
     if (!pid) return res.status(404).json({ success: false, error: 'Proyecto no encontrado' });
-    const { titulo, markdown } = req.body || {};
+    const { titulo, markdown, briefId } = req.body || {};
     if (markdown === undefined) return res.status(400).json({ success: false, error: 'Falta el campo markdown' });
     const blocks = markdownToBlocks(markdown);
-    const snap = await getFirestore().collection('briefs').where('projectId', '==', pid).where('isTemplate', '==', false).get();
     const now = Date.now();
-    if (!snap.empty) {
-      const docId = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0].id;
+    const col = getFirestore().collection('briefs');
+    const snap = await col.where('projectId', '==', pid).where('isTemplate', '==', false).get();
+    const existentes = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+    const normT = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+
+    // Un proyecto puede tener VARIOS briefs. Solo se actualiza uno existente si:
+    //  - viene briefId explícito, o
+    //  - viene un título que coincide con un brief existente.
+    // Si el título es nuevo (o no hay briefs), se CREA otro brief — no se pisa nada.
+    let target: { id: string } | undefined;
+    if (briefId) target = existentes.find((b) => b.id === briefId);
+    else if (titulo) target = existentes.find((b) => normT(b.title) === normT(titulo));
+    else if (existentes.length === 1) target = existentes[0]; // sin título y hay uno solo: actualizarlo
+    else if (existentes.length > 1) {
+      return res.status(400).json({
+        success: false,
+        error: 'El proyecto tiene varios briefs. Indica "titulo" (para crear/actualizar por nombre) o "briefId".',
+        briefs: existentes.map((b) => ({ briefId: b.id, titulo: b.title })),
+      });
+    }
+
+    if (target) {
       const upd: any = { blocks, updatedAt: now };
       if (titulo) upd.title = titulo;
-      await getFirestore().collection('briefs').doc(docId).update(upd);
-      return res.json({ success: true, briefId: docId, mensaje: 'Brief actualizado' });
+      await col.doc(target.id).update(upd);
+      return res.json({ success: true, briefId: target.id, mensaje: `Brief actualizado ("${titulo || 'sin título'}")` });
     }
+
     const sysUser = await prisma.user.findFirst({ orderBy: { createdAt: 'asc' }, select: { id: true } });
-    const ref = await getFirestore().collection('briefs').add({
+    const ref = await col.add({
       title: titulo || 'Brief', projectId: pid, blocks, isTemplate: false,
       createdBy: sysUser?.id || 'bot', createdAt: now, updatedAt: now,
     });
-    res.json({ success: true, briefId: ref.id, mensaje: 'Brief creado' });
+    res.json({ success: true, briefId: ref.id, mensaje: `Brief creado ("${titulo || 'Brief'}") — el proyecto ahora tiene ${existentes.length + 1}` });
   } catch (error) {
     console.error('[Bot API] Error escribiendo brief:', error);
     res.status(500).json({ success: false, error: 'Error al escribir el brief' });
