@@ -4,7 +4,7 @@ import { exportIncomeStatementPDF, exportIncomeStatementExcel } from '@/lib/fina
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
-import { isExcludedCategory } from '@/lib/financeFilters';
+import { isExcludedExpenseReportCategory, isExcludedIncomeReportCategory } from '@/lib/financeFilters';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DateRange } from 'react-day-picker';
@@ -61,10 +61,6 @@ const DEFAULT_MONTH_TOTALS = { proyectado: 0, real: 0 };
 const MONTH_NAMES_SHORT = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-// Filtro de categorías excluidas — compartido con el Dashboard para que las
-// cifras de Ingresos/Gastos coincidan (ver src/lib/financeFilters.ts).
-const isExcluded = isExcludedCategory;
-
 // Normalize date helper
 const normalizeDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -120,8 +116,11 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   }, []);
 
   // Filter transactions by period
-  const filterByPeriod = (transactions: Transaction[]): Transaction[] => {
-    const filtered = transactions.filter(t => !isExcluded(t.categoria));
+  const filterByPeriod = (
+    transactions: Transaction[],
+    isExcluded: (categoria: string | undefined | null, descripcion?: string | null) => boolean
+  ): Transaction[] => {
+    const filtered = transactions.filter(t => !isExcluded(t.categoria, t.descripcion));
 
     if (selectedPeriod === '2025') {
       return filtered.filter(t => normalizeDate(t.fecha).startsWith('2025-'));
@@ -148,8 +147,8 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
     return filtered;
   };
 
-  const filteredIngresos = useMemo(() => filterByPeriod(ingresos), [ingresos, selectedPeriod, dateRange]);
-  const filteredGastos = useMemo(() => filterByPeriod(gastos), [gastos, selectedPeriod, dateRange]);
+  const filteredIngresos = useMemo(() => filterByPeriod(ingresos, isExcludedIncomeReportCategory), [ingresos, selectedPeriod, dateRange]);
+  const filteredGastos = useMemo(() => filterByPeriod(gastos, isExcludedExpenseReportCategory), [gastos, selectedPeriod, dateRange]);
 
   // Calculate real values
   const totalIngresos = useMemo(() => filteredIngresos.reduce((sum, t) => sum + t.importe, 0), [filteredIngresos]);

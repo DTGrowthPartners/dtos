@@ -24,7 +24,7 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { authService, useAuthStore } from '@/lib/auth';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { apiClient } from '@/lib/api';
-import { isExcludedCategory } from '@/lib/financeFilters';
+import { isExcludedExpenseReportCategory, isExcludedIncomeReportCategory } from '@/lib/financeFilters';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { TEAM_MEMBERS, type Task, type TeamMemberName } from '@/types/taskTypes';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -453,13 +453,13 @@ export default function Dashboard() {
           setCurrentMonthName(monthNames[now.getMonth()]);
 
           // Filter transactions for current month only
-          // Mismo filtro que el Estado de Resultados: excluye traslados, reembolsos,
-          // reservas y ajustes de saldo, para que las cifras coincidan.
+          // Mismo filtro que el Estado de Resultados / Reportes → Gastos-Entradas,
+          // para que las cifras coincidan.
           const monthlyIngresos = (financeData.ingresos || []).filter(t => {
-            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedCategory(t.categoria);
+            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedIncomeReportCategory(t.categoria);
           });
           const monthlyGastos = (financeData.gastos || []).filter(t => {
-            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedCategory(t.categoria);
+            return t.fecha?.startsWith(currentMonthPrefix) && !isExcludedExpenseReportCategory(t.categoria, t.descripcion);
           });
 
           // Calculate current month totals
@@ -542,10 +542,10 @@ export default function Dashboard() {
           const shortMonths = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
           const ymPrefix = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
           const monthIncome = (prefix: string) => (financeData.ingresos || [])
-            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
+            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedIncomeReportCategory(t.categoria))
             .reduce((sum, t) => sum + (t.importe || 0), 0);
           const monthExpenses = (prefix: string) => (financeData.gastos || [])
-            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedCategory(t.categoria))
+            .filter(t => t.fecha?.startsWith(prefix) && !isExcludedExpenseReportCategory(t.categoria, t.descripcion))
             .reduce((sum, t) => sum + (t.importe || 0), 0);
 
           // Histórico de meses COMPLETOS (el mes en curso va parcial -> fuera del ajuste).

@@ -14,6 +14,7 @@ import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarDays } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
+import { isExcludedIncomeReportCategory, isExcludedExpenseReportCategory } from '@/lib/financeFilters';
 
 interface Tx {
   importe: number;
@@ -44,12 +45,6 @@ const fmtCompact = (n: number) =>
 const startsWithLocalDate = (fecha: string) => fecha; // las fechas vienen "YYYY-MM-DD..."
 
 const isPagoCliente = (tx: Tx) => (tx.categoria || '').trim().toUpperCase() === 'PAGO DE CLIENTE';
-
-// Excluye traslados entre cuentas propias y ajustes contables: no son venta ni gasto real.
-const isRealMovement = (tx: Tx) => {
-  const c = (tx.categoria || '').trim().toUpperCase();
-  return !c.startsWith('TRASLADO') && c !== 'AJUSTE SALDO';
-};
 
 const dateParts = (fecha: string) => {
   const [date] = (fecha || '').split('T');
@@ -161,7 +156,12 @@ export default function SalesDashboard() {
     const fetchFinance = () => {
       apiClient
         .get<FinanceData>('/api/finance/data')
-        .then((d) => { if (alive) { setIngresos((d.ingresos || []).filter(isRealMovement)); setGastos((d.gastos || []).filter(isRealMovement)); } })
+        .then((d) => {
+          if (alive) {
+            setIngresos((d.ingresos || []).filter((t) => !isExcludedIncomeReportCategory(t.categoria)));
+            setGastos((d.gastos || []).filter((t) => !isExcludedExpenseReportCategory(t.categoria, t.descripcion)));
+          }
+        })
         .catch(() => {})
         .finally(() => { if (alive) setLoading(false); });
     };

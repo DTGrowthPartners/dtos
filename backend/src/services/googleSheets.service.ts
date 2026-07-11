@@ -194,16 +194,17 @@ export class GoogleSheetsService {
     // If it's a number, it's a Google Sheets serial date number
     // Google Sheets uses December 30, 1899 as day 0 (Excel compatibility)
     if (typeof value === 'number') {
-      // Google Sheets serial date to JavaScript Date
-      // Serial number 1 = January 1, 1900
-      // But there's a bug in Excel/Sheets where they think 1900 was a leap year
-      // So we need to account for that
-      const baseDate = new Date(1899, 11, 30); // December 30, 1899
-      const resultDate = new Date(baseDate.getTime() + value * 24 * 60 * 60 * 1000);
+      // Google Sheets serial date to calendar date, computed entirely in UTC
+      // (Date.UTC) instead of the local Date constructor. Pre-1900 Bogotá used
+      // LMT (UTC-4:56:16), not a clean UTC-5, so building the epoch with the
+      // local constructor and reading it back with modern-offset local getters
+      // rolled exact-midnight (date-only, no time-of-day) serials back a day.
+      const epochMs = Date.UTC(1899, 11, 30) + Math.round(value * 24 * 60 * 60 * 1000);
+      const resultDate = new Date(epochMs);
 
-      const year = resultDate.getFullYear();
-      const month = String(resultDate.getMonth() + 1).padStart(2, '0');
-      const day = String(resultDate.getDate()).padStart(2, '0');
+      const year = resultDate.getUTCFullYear();
+      const month = String(resultDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(resultDate.getUTCDate()).padStart(2, '0');
 
       return `${year}-${month}-${day}`;
     }
@@ -312,15 +313,17 @@ export class GoogleSheetsService {
 
   // Convert JavaScript Date to Excel/Google Sheets serial number
   private dateToSerialNumber(date: Date): number {
-    // Excel/Google Sheets uses December 30, 1899 as day 0
-    // JavaScript Date epoch is January 1, 1970
-    const excelEpoch = new Date(1899, 11, 30);
+    // Mirrors parseDate(): treat date's wall-clock components as UTC (Date.UTC)
+    // so the round-trip write→read is exact and doesn't depend on the local
+    // timezone's (historical or modern) offset from UTC.
+    const excelEpochMs = Date.UTC(1899, 11, 30);
+    const dateMs = Date.UTC(
+      date.getFullYear(), date.getMonth(), date.getDate(),
+      date.getHours(), date.getMinutes(), date.getSeconds()
+    );
     const msPerDay = 24 * 60 * 60 * 1000;
 
-    // Calculate days since Excel epoch, including fractional part for time
-    const days = (date.getTime() - excelEpoch.getTime()) / msPerDay;
-
-    return days;
+    return (dateMs - excelEpochMs) / msPerDay;
   }
 
   /**
@@ -995,17 +998,17 @@ export class GoogleSheetsService {
     monthlyBudget: { categorias: Record<string, number>; total: number };
   }> {
     try {
-      // Read from "Presupuesto Q1" sheet - Full data
+      // Read from "Presupuesto Q1-Q2" sheet - Full data
       // Structure: A=Categoria, B=Enero Proy, C=Enero Real, D=Feb Proy, E=Feb Real, F=Mar Proy, G=Mar Real, H=Total
       const response = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: "'Presupuesto Q1'!A1:H70",
+        range: "'Presupuesto Q1-Q2'!A1:H70",
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       const rows = response.data.values || [];
       console.log('Budget Q1 rows count:', rows.length);
-      console.log('First 10 rows from Presupuesto Q1:', JSON.stringify(rows.slice(0, 10), null, 2));
+      console.log('First 10 rows from Presupuesto Q1-Q2:', JSON.stringify(rows.slice(0, 10), null, 2));
 
       // Initialize result structure
       const result = {

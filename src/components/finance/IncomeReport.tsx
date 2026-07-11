@@ -3,6 +3,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pi
 import { TrendingUp, DollarSign, Users, Tag, ArrowUpRight, Calendar as CalendarIcon, Target, CalendarRange, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
+import { isExcludedIncomeReportCategory } from '@/lib/financeFilters';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DateRange } from 'react-day-picker';
@@ -38,12 +39,6 @@ interface BudgetQ1Data {
     };
   };
 }
-
-const isExcluded = (categoria: string | undefined | null): boolean => {
-  if (!categoria) return false;
-  const upper = categoria.trim().toUpperCase();
-  return upper === 'AJUSTE SALDO' || upper === 'RESERVAS' || upper.startsWith('TRASLADO') || upper.startsWith('REEMBOLSO');
-};
 
 const normalizeDate = (dateStr: string): string => {
   if (!dateStr) return '';
@@ -116,7 +111,7 @@ export default function IncomeReport({ ingresos }: IncomeReportProps) {
   }, []);
 
   const realIncome = useMemo(() => {
-    return ingresos.filter(t => !isExcluded(t.categoria));
+    return ingresos.filter(t => !isExcludedIncomeReportCategory(t.categoria));
   }, [ingresos]);
 
   const availableMonths = useMemo(() => {
