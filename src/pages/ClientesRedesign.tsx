@@ -207,6 +207,13 @@ function ClientRow({ c, onClick }: { c: ClientV2; onClick: () => void }) {
         <p className={`font-semibold tabular-nums ${balanceColor(c)}`}>{fmtFull(c.outstandingBalance)}</p>
         <p className="text-xs text-muted-foreground mt-0.5">{c.balanceLabel}</p>
       </td>
+      <td className="px-4 py-4 whitespace-nowrap">
+        {c.diasVencido ? (
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-red-500/15 text-red-400 tabular-nums">
+            {c.diasVencido} día{c.diasVencido === 1 ? '' : 's'}
+          </span>
+        ) : <span className="text-xs text-muted-foreground">—</span>}
+      </td>
       <td className="px-4 py-4 whitespace-nowrap"><ProximoCobro c={c} /></td>
     </tr>
   );
@@ -223,6 +230,7 @@ function ClientesTable({ rows, onSelect }: { rows: ClientV2[]; onSelect: (c: Cli
             <th className="text-left font-medium px-4 py-3">Servicios activos</th>
             <th className="text-left font-medium px-4 py-3">Tipo</th>
             <th className="text-left font-medium px-4 py-3">Saldo pendiente</th>
+            <th className="text-left font-medium px-4 py-3">Días vencido</th>
             <th className="text-left font-medium px-4 py-3">Próximo cobro</th>
           </tr>
         </thead>
@@ -477,7 +485,14 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
                   <span className={`h-2 w-2 rounded-full shrink-0 ${invoiceDot[inv.status]}`} />
                   <span className="text-xs font-mono text-muted-foreground truncate">#{inv.id}</span>
                 </span>
-                <span className="text-sm tabular-nums shrink-0">{fmtFull(inv.amount)}</span>
+                <span className="flex items-center gap-2 shrink-0">
+                  {!!inv.diasVencido && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400 tabular-nums">
+                      {inv.diasVencido}d
+                    </span>
+                  )}
+                  <span className="text-sm tabular-nums">{fmtFull(inv.amount)}</span>
+                </span>
               </div>
             ))}
           </div>

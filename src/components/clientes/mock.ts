@@ -5,7 +5,7 @@ export type ContractType = 'mrr' | 'project' | 'retainer';
 export type Urgency = 'overdue' | 'due_today' | 'due_soon' | 'ok';
 
 export interface CService { name: string; status: 'activo' | 'pausado'; monthlyPrice: number; frecuencia?: string; recurring?: boolean }
-export interface CInvoice { id: string; amount: number; status: 'pagada' | 'pendiente' | 'vencida' }
+export interface CInvoice { id: string; amount: number; status: 'pagada' | 'pendiente' | 'vencida'; diasVencido?: number }
 export interface CAds { metaSpend: number; waConversations: number; waDelta: number; costPerConv: number; mainCampaign: string }
 export interface CActivity { label: string; date: string; positive?: boolean }
 
@@ -30,6 +30,7 @@ export interface ClientV2 {
   nextBilling: string;          // "10 jul"
   urgency: Urgency;
   urgencyLabel: string;         // "Vencido hace 2 días", "Vence hoy", "Cobra en 3 días", "Próximo: 10 jul"
+  diasVencido?: number;         // días desde la factura pendiente más antigua (0 si no hay mora)
   sedes?: number;
   invoices: CInvoice[];
   payments?: { fecha: string; importe: number; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }[];
