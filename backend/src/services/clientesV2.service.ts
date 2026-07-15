@@ -45,8 +45,8 @@ export interface ClienteV2 {
   servicesSummary: string; servicesCount: number;
   services: { name: string; status: string; monthlyPrice: number; frecuencia: string; recurring: boolean }[];
   outstandingBalance: number; balanceLabel: string;
-  nextBilling: string; urgency: Urgency; urgencyLabel: string;
-  invoices: { id: string; amount: number; status: string }[];
+  nextBilling: string; urgency: Urgency; urgencyLabel: string; diasVencido: number;
+  invoices: { id: string; amount: number; status: string; diasVencido: number }[];
   // Pagos reales desde la hoja Entradas de Google Sheets (fuente de Dairo)
   payments: { fecha: string; importe: number; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }[];
   paidSheets: number;
@@ -154,10 +154,12 @@ export const getClientesV2 = async () => {
     let urgency: Urgency = 'ok';
     let urgencyLabel = '';
     let nextBilling = '';
+    let diasVencido = 0;
     if (outstanding > 0 && openInv.length) {
       const oldest = openInv[0].fecha;
       const days = Math.floor((Date.now() - oldest.getTime()) / DAY);
       nextBilling = oldest.toISOString();
+      diasVencido = Math.max(0, days);
       if (days > 5) { urgency = 'overdue'; urgencyLabel = `Vencido hace ${days} días`; }
       else if (days >= 0) { urgency = 'due_today'; urgencyLabel = openInv.length === 1 ? '1 factura pendiente' : `${openInv.length} facturas pendientes`; }
       else { urgency = 'due_soon'; urgencyLabel = 'Por cobrar'; }
@@ -201,7 +203,11 @@ export const getClientesV2 = async () => {
       nextBilling,
       urgency,
       urgencyLabel,
-      invoices: myInv.slice(0, 8).map((i) => ({ id: i.numero, amount: Math.round(i.total), status: invStatus(i.status) })),
+      diasVencido,
+      invoices: myInv.slice(0, 8).map((i) => ({
+        id: i.numero, amount: Math.round(i.total), status: invStatus(i.status),
+        diasVencido: i.status !== 'pagada' ? Math.max(0, Math.floor((Date.now() - i.fecha.getTime()) / DAY)) : 0,
+      })),
       payments: cp
         .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''))
         .slice(0, 20)
