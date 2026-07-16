@@ -19,29 +19,35 @@ const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
+/** Formatea un rango de fechas en español, sin repetir mes/año cuando coinciden. */
+const formatRango = (s: Date, e: Date): string => {
+  const [sd, sm, sy] = [s.getDate(), s.getMonth(), s.getFullYear()];
+  const [ed, em, ey] = [e.getDate(), e.getMonth(), e.getFullYear()];
+  if (sy !== ey) return `del ${sd} de ${MESES[sm]} de ${sy} al ${ed} de ${MESES[em]} de ${ey}`;
+  if (sm !== em) return `del ${sd} de ${MESES[sm]} al ${ed} de ${MESES[em]} de ${ey}`;
+  return `del ${sd} al ${ed} de ${MESES[em]} de ${ey}`;
+};
+
 /**
- * Si las notas del servicio incluyen una etiqueta "PERIODO=Ds-De" (días de inicio y
- * fin del periodo de cobro), arma el texto del periodo terminando en la fecha de
- * cobro. Si Ds > De, el inicio cae en el mes anterior. Ej: PERIODO=5-20 con cobro
- * el 20 de junio -> "del 5 al 20 de junio de 2026".
+ * Texto del periodo facturado, terminando en la fecha de cobro.
+ * - Si las notas del servicio traen la etiqueta "PERIODO=Ds-De" (días de inicio y
+ *   fin), se respeta: PERIODO=5-20 con cobro el 20 de junio -> "del 5 al 20 de junio".
+ * - Sin etiqueta, el periodo natural es desde el cobro anterior según la frecuencia:
+ *   mensual con cobro el 15 de julio -> "del 15 de junio al 15 de julio de 2026".
  */
-const buildPeriodo = (notas: string | null | undefined, dueDate: Date): string | null => {
+const buildPeriodo = (notas: string | null | undefined, dueDate: Date, frecuencia: string): string => {
   const m = (notas || '').match(/PERIODO=(\d{1,2})-(\d{1,2})/i);
-  if (!m) return null;
-  const startDay = parseInt(m[1], 10);
-  const endDay = parseInt(m[2], 10);
-  const endMonth = dueDate.getMonth();
-  const endYear = dueDate.getFullYear();
-  let startMonth = endMonth;
-  let startYear = endYear;
-  if (startDay > endDay) {
-    startMonth = endMonth - 1;
-    if (startMonth < 0) { startMonth = 11; startYear = endYear - 1; }
+  if (m) {
+    const startDay = parseInt(m[1], 10);
+    const endDay = parseInt(m[2], 10);
+    const end = new Date(dueDate.getFullYear(), dueDate.getMonth(), endDay);
+    const start = new Date(dueDate.getFullYear(), dueDate.getMonth() - (startDay > endDay ? 1 : 0), startDay);
+    return formatRango(start, end);
   }
-  if (startMonth === endMonth) {
-    return `del ${startDay} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
-  }
-  return `del ${startDay} de ${MESES[startMonth]} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
+  const start = DAYS_BY_FREQ[frecuencia]
+    ? addDays(dueDate, -DAYS_BY_FREQ[frecuencia])
+    : addMonths(dueDate, -(MONTHS_BY_FREQ[frecuencia] || 1));
+  return formatRango(start, dueDate);
 };
 
 /** Avanza una fecha N meses preservando el dia (clamp a fin de mes). */
@@ -116,17 +122,20 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
 
       const servicioNombre = cs.service?.name || 'Servicio mensual';
       const fechaStr = toYMD(now);
-      // Periodo en el concepto (si el servicio tiene etiqueta PERIODO=Ds-De en notas).
-      const periodo = buildPeriodo(cs.notas, (cs.fechaProximoCobro as Date) || now);
-      const descripcion = periodo ? `${servicioNombre} ${periodo}` : servicioNombre;
-      const concepto = periodo ? `${servicioNombre} ${periodo}` : `Servicio ${cs.frecuencia} — ${servicioNombre}`;
+      // El concepto siempre lleva el periodo facturado (etiqueta PERIODO=Ds-De en
+      // notas si existe; si no, el periodo natural según la frecuencia).
+      const periodo = buildPeriodo(cs.notas, (cs.fechaProximoCobro as Date) || now, cs.frecuencia);
+      const descripcion = `${servicioNombre} ${periodo}`;
+      const concepto = descripcion;
 
       // 1. Generar PDF + registrar Invoice como borrador (status 'pendiente').
+      // Observaciones vacías: el PDF imprime la nota estándar de régimen (el texto
+      // "generada automáticamente / borrador" no debe llegarle al cliente).
       const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
         nombre_cliente: clienteNombre,
         identificacion: nit,
         servicios: [{ descripcion, cantidad: 1, precio_unitario: precio }],
-        observaciones: 'Generada automáticamente (servicio recurrente). Borrador para revisión.',
+        observaciones: '',
         concepto,
         fecha: fechaStr,
         servicio_proyecto: servicioNombre,
@@ -143,7 +152,8 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
           fecha: new Date(fechaStr),
           concepto,
           servicio: servicioNombre,
-          observaciones: 'Generada automáticamente (servicio recurrente).',
+          // Sin nota de "generada automáticamente": createdBy ya marca el origen
+          observaciones: null,
           filePath: generatedPath,
           status: 'pendiente',
           createdBy: 'sistema-recurrente',
