@@ -3,7 +3,7 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import admin from 'firebase-admin';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
-import { invoiceService, getPublicInvoiceUrl, cleanText } from '../services/invoice.service';
+import { invoiceService, getPublicInvoiceUrl, cleanText, cxcFilename } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
 import { sendPushToMemberName } from '../services/push.service';
@@ -3703,8 +3703,8 @@ router.get('/bot/invoices/:id/download', verifyBotApiKey, async (req: Request, r
       });
     }
 
-    // Nombre con la nomenclatura AAAAMMDDHHMMSS (número de cuenta) para el bot de WhatsApp.
-    const sanitizedFilename = `cuenta_cobro_${invoice.invoiceNumber}.pdf`;
+    // Nomenclatura estándar para el bot de WhatsApp: cxc_<cliente>_<AAAAMMDDHHMMSS>.pdf
+    const sanitizedFilename = cxcFilename(invoice.clientName, invoice.invoiceNumber);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
     res.sendFile(absolutePath);
