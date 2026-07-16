@@ -206,6 +206,7 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
   const dueServices = await prisma.clientService.findMany({
     where: {
       estado: 'activo',
+      client: { status: 'active' }, // cliente desactivado = no se le auto-factura
       frecuencia: { not: 'unico' },
       esComision: false, // comisión = valor variable, no se auto-factura con precio fijo
       fechaProximoCobro: { not: null, lte: endOfToday },

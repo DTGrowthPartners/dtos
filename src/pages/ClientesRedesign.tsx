@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
 import ClientSedesManager from '@/components/clients/ClientSedesManager';
@@ -359,11 +360,13 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mgmtTab, setMgmtTab] = useState<'servicios' | 'sedes' | 'contactos'>('servicios');
-  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
+  const [toggling, setToggling] = useState(false);
   const waPhone = (c.phone || '').replace(/[^0-9]/g, '');
+  const activo = c.status === 'active';
 
   const openEdit = () => {
-    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
     setEditOpen(true);
   };
   const save = async () => {
@@ -373,6 +376,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
       await apiClient.put(`/api/clients/${c.id}`, {
         name: form.name.trim(), email: form.email.trim(), nit: form.nit.trim() || undefined,
         phone: form.phone.trim() || undefined, address: form.address.trim() || undefined,
+        status: form.status,
       });
       setEditOpen(false);
       toast({ title: 'Cliente actualizado' });
@@ -381,6 +385,22 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
       toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Activar/desactivar directamente desde el badge del perfil
+  const toggleEstado = async () => {
+    const nuevo = activo ? 'inactive' : 'active';
+    if (!confirm(activo ? `¿Marcar a ${c.name} como INACTIVO? Saldrá de los filtros de clientes activos.` : `¿Reactivar a ${c.name}?`)) return;
+    setToggling(true);
+    try {
+      await apiClient.put(`/api/clients/${c.id}`, { status: nuevo });
+      toast({ title: nuevo === 'active' ? 'Cliente reactivado' : 'Cliente desactivado' });
+      onUpdated();
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo cambiar el estado', variant: 'destructive' });
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -398,9 +418,19 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
             <div className="min-w-0">
               <h2 className="text-lg font-medium leading-tight">{c.name}</h2>
               <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium">
-                  <CheckCircle2 className="h-3 w-3" /> {c.status === 'active' ? 'Activo' : 'Inactivo'}
-                </span>
+                {/* Badge clickeable: activa/desactiva el cliente */}
+                <button
+                  onClick={toggleEstado}
+                  disabled={toggling}
+                  title={activo ? 'Clic para desactivar' : 'Clic para reactivar'}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium transition-colors cursor-pointer disabled:opacity-50 ${
+                    activo
+                      ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                      : 'bg-gray-500/15 text-gray-400 hover:bg-gray-500/25'
+                  }`}
+                >
+                  <CheckCircle2 className="h-3 w-3" /> {activo ? 'Activo' : 'Inactivo'}
+                </button>
                 {c.monthlyValue > 0 && (
                   <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 font-medium">MRR · {fmtM(c.monthlyValue)}/mes</span>
                 )}
@@ -594,6 +624,15 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
             </div>
             <div className="space-y-1"><Label className="text-xs">Dirección</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">Estado</Label>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">🟢 Activo</SelectItem>
+                  <SelectItem value="inactive">⚪ Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Un cliente inactivo sale de los filtros de activos y NO se le generan cuentas recurrentes; su historial y deudas se conservan.</p></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>Cancelar</Button>
