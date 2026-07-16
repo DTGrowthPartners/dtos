@@ -78,6 +78,116 @@ export interface RecurringRunResult {
   errors: { cliente: string; error: string }[];
 }
 
+export interface CuentaGenerada {
+  invoiceId: string;
+  invoiceNumber: string;
+  pdfUrl: string;
+  cliente: string;
+  servicio: string;
+  monto: number;
+  concepto: string;
+}
+
+// Error de validación "esperado" (el cron lo reporta como omitido, no como error)
+const skipError = (msg: string) => Object.assign(new Error(msg), { status: 400, skip: true });
+
+/**
+ * Genera la cuenta de cobro (borrador) de UN servicio contratado y avanza su
+ * próximo cobro (único → sin más cobros; recurrente → siguiente periodo futuro).
+ * La usan el cron de recurrentes y el botón "Generar cuenta" del perfil del cliente.
+ */
+export const generarCuentaDeServicio = async (
+  clientServiceId: string,
+  createdBy = 'sistema-recurrente'
+): Promise<CuentaGenerada> => {
+  const cs = await prisma.clientService.findUnique({
+    where: { id: clientServiceId },
+    include: {
+      client: { select: { id: true, name: true, nit: true } },
+      service: { select: { name: true, price: true } },
+    },
+  });
+  if (!cs) throw Object.assign(new Error('Servicio del cliente no encontrado'), { status: 404 });
+
+  const clienteNombre = cs.client?.name || 'Cliente';
+  const nit = cs.client?.nit?.trim();
+  if (!nit || nit === '0') throw skipError('Cliente sin NIT/identificación válida');
+  const precio = cs.precioCliente ?? cs.service?.price ?? 0;
+  if (precio <= 0) throw skipError('Servicio sin precio');
+
+  const now = new Date();
+  const servicioNombre = cs.service?.name || 'Servicio';
+  const esUnico = cs.frecuencia === 'unico';
+  const dueDate = (cs.fechaProximoCobro as Date) || now;
+  // Pago único: sin periodo (es un proyecto). Recurrente: siempre con el periodo facturado.
+  const concepto = esUnico ? servicioNombre : `${servicioNombre} ${buildPeriodo(cs.notas, dueDate, cs.frecuencia)}`;
+  const fechaStr = toYMD(now);
+
+  // Observaciones vacías: el PDF imprime la nota estándar de régimen.
+  // El número de cuenta es un timestamp por SEGUNDO (viene del nombre del PDF y va
+  // impreso dentro): dos generaciones en el mismo segundo chocan y el segundo PDF
+  // pisa el archivo del primero. Si el número ya existe, esperar y regenerar.
+  let generatedPath = '';
+  let invoiceNumber = '';
+  for (let intento = 0; intento < 3; intento++) {
+    ({ generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
+      nombre_cliente: clienteNombre,
+      identificacion: nit,
+      servicios: [{ descripcion: concepto, cantidad: 1, precio_unitario: precio }],
+      observaciones: '',
+      concepto,
+      fecha: fechaStr,
+      servicio_proyecto: servicioNombre,
+      cliente_id: cs.client?.id,
+    }));
+    const dup = await prisma.invoice.findUnique({ where: { invoiceNumber } });
+    if (!dup) break;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+
+  const createdInvoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber,
+      clientId: cs.client?.id || '',
+      clientName: clienteNombre,
+      clientNit: nit,
+      totalAmount: precio,
+      fecha: new Date(fechaStr),
+      concepto,
+      servicio: servicioNombre,
+      serviceId: cs.serviceId || null,
+      observaciones: null,
+      filePath: generatedPath,
+      status: 'pendiente',
+      createdBy,
+    },
+  });
+
+  // Avanzar fechaProximoCobro (evita que el cron duplique el cobro mañana).
+  if (esUnico) {
+    await prisma.clientService.update({ where: { id: cs.id }, data: { fechaProximoCobro: null } });
+  } else if (cs.fechaProximoCobro) {
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let next = advance(cs.fechaProximoCobro as Date, cs.frecuencia);
+    let guard = 0;
+    while (next.getTime() <= endOfToday.getTime() && guard < 60) {
+      next = advance(next, cs.frecuencia);
+      guard++;
+    }
+    await prisma.clientService.update({ where: { id: cs.id }, data: { fechaProximoCobro: next } });
+  }
+
+  return {
+    invoiceId: createdInvoice.id,
+    invoiceNumber,
+    pdfUrl: getPublicInvoiceUrl(createdInvoice.id),
+    cliente: clienteNombre,
+    servicio: servicioNombre,
+    monto: precio,
+    concepto,
+  };
+};
+
 /**
  * Genera las cuentas de cobro (borrador) de los servicios recurrentes cuya
  * fechaProximoCobro ya llego. Por cada una:
@@ -109,59 +219,9 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
   for (const cs of dueServices) {
     const clienteNombre = cs.client?.name || 'Cliente';
     try {
-      const nit = cs.client?.nit?.trim();
-      if (!nit || nit === '0') {
-        result.skipped.push({ cliente: clienteNombre, motivo: 'Cliente sin NIT/identificación válida' });
-        continue;
-      }
-      const precio = cs.precioCliente ?? cs.service?.price ?? 0;
-      if (precio <= 0) {
-        result.skipped.push({ cliente: clienteNombre, motivo: 'Servicio sin precio' });
-        continue;
-      }
-
-      const servicioNombre = cs.service?.name || 'Servicio mensual';
-      const fechaStr = toYMD(now);
-      // El concepto siempre lleva el periodo facturado (etiqueta PERIODO=Ds-De en
-      // notas si existe; si no, el periodo natural según la frecuencia).
-      const periodo = buildPeriodo(cs.notas, (cs.fechaProximoCobro as Date) || now, cs.frecuencia);
-      const descripcion = `${servicioNombre} ${periodo}`;
-      const concepto = descripcion;
-
-      // 1. Generar PDF + registrar Invoice como borrador (status 'pendiente').
-      // Observaciones vacías: el PDF imprime la nota estándar de régimen (el texto
-      // "generada automáticamente / borrador" no debe llegarle al cliente).
-      const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
-        nombre_cliente: clienteNombre,
-        identificacion: nit,
-        servicios: [{ descripcion, cantidad: 1, precio_unitario: precio }],
-        observaciones: '',
-        concepto,
-        fecha: fechaStr,
-        servicio_proyecto: servicioNombre,
-        cliente_id: cs.client?.id,
-      });
-
-      const createdInvoice = await prisma.invoice.create({
-        data: {
-          invoiceNumber,
-          clientId: cs.client?.id || '',
-          clientName: clienteNombre,
-          clientNit: nit,
-          totalAmount: precio,
-          fecha: new Date(fechaStr),
-          concepto,
-          servicio: servicioNombre,
-          // Sin nota de "generada automáticamente": createdBy ya marca el origen
-          observaciones: null,
-          filePath: generatedPath,
-          status: 'pendiente',
-          createdBy: 'sistema-recurrente',
-        },
-      });
-
-      // Link público firmado para descargar/enviar el PDF directamente.
-      const pdfUrl = getPublicInvoiceUrl(createdInvoice.id);
+      // 1. Generar PDF + Invoice borrador + avanzar próximo cobro (helper compartido).
+      const gen = await generarCuentaDeServicio(cs.id);
+      const { invoiceNumber, pdfUrl, servicio: servicioNombre, monto: precio } = gen;
 
       // 2. Crear tarea de ALTA prioridad para Dairo en Firestore.
       const taskTitle = `Revisar y enviar cuenta de cobro — ${clienteNombre}`;
@@ -203,24 +263,16 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
         }
       }
 
-      // 4. Avanzar fechaProximoCobro al siguiente periodo futuro (evita duplicados).
-      let next = advance(cs.fechaProximoCobro as Date, cs.frecuencia);
-      // Si sigue en el pasado (servicio muy atrasado), saltar hasta futuro sin generar de mas.
-      let guard = 0;
-      while (next.getTime() <= endOfToday.getTime() && guard < 60) {
-        next = advance(next, cs.frecuencia);
-        guard++;
-      }
-      await prisma.clientService.update({
-        where: { id: cs.id },
-        data: { fechaProximoCobro: next },
-      });
-
+      // (El helper ya avanzó fechaProximoCobro al siguiente periodo futuro.)
       result.generated.push({ cliente: clienteNombre, servicio: servicioNombre, monto: precio, invoiceNumber });
       console.log(`[recurring] cuenta generada: ${clienteNombre} #${invoiceNumber} (${precio})`);
     } catch (e) {
-      console.error(`[recurring] error con ${clienteNombre}:`, (e as Error).message);
-      result.errors.push({ cliente: clienteNombre, error: (e as Error).message });
+      if ((e as any)?.skip) {
+        result.skipped.push({ cliente: clienteNombre, motivo: (e as Error).message });
+      } else {
+        console.error(`[recurring] error con ${clienteNombre}:`, (e as Error).message);
+        result.errors.push({ cliente: clienteNombre, error: (e as Error).message });
+      }
     }
   }
 
