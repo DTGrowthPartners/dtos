@@ -126,7 +126,9 @@ export class GoogleSheetsService {
           cuenta: String(row[4] || ''),
           entidad: String(row[5] || ''),
           terceroId: row[6] ? String(row[6]) : undefined,
-        }));
+        }))
+        // Descartar filas de encabezado o basura: fecha inválida (ej. "Fecha") o importe no numérico
+        .filter((t: TransactionRow & { rowIndex: number }) => /^\d{4}-\d{2}-\d{2}/.test(t.fecha) && Number.isFinite(t.importe));
 
       // Parsear gastos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
@@ -142,7 +144,8 @@ export class GoogleSheetsService {
           cuenta: String(row[4] || ''),
           entidad: String(row[5] || ''),
           terceroId: row[6] ? String(row[6]) : undefined,
-        }));
+        }))
+        .filter((t: TransactionRow & { rowIndex: number }) => /^\d{4}-\d{2}-\d{2}/.test(t.fecha) && Number.isFinite(t.importe));
 
       // Excluir "AJUSTE SALDO" de los totales (es solo un ajuste contable)
       const totalIncome = ingresos

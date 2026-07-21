@@ -322,7 +322,7 @@ export default function LiveChat() {
     if (isOpen && !isMinimized && view === 'chat') {
       scrollToBottom();
     }
-  }, [messages, isOpen, isMinimized, view]);
+  }, [messages, isOpen, isMinimized, view, isLoading]); // isLoading: seguir la burbuja "está analizando…"
 
   // Request notification permission on mount
   useEffect(() => {
@@ -1175,6 +1175,22 @@ export default function LiveChat() {
                         </div>
                       );
                     })
+                  )}
+                  {/* María pensando: burbuja con puntos animados mientras responde */}
+                  {isLoading && activeRoomId.startsWith('ai_') && (
+                    <div className="flex items-end gap-2">
+                      <div className="h-7 w-7 rounded-full bg-violet-500/20 text-violet-400 text-xs font-semibold flex items-center justify-center shrink-0">
+                        M
+                      </div>
+                      <div className="rounded-2xl rounded-bl-sm bg-muted px-3.5 py-2.5 flex items-center gap-2">
+                        <span className="flex gap-1">
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:0ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:150ms]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 animate-bounce [animation-delay:300ms]" />
+                        </span>
+                        <span className="text-xs text-muted-foreground">María está analizando…</span>
+                      </div>
+                    </div>
                   )}
                   <div ref={messagesEndRef} />
                 </div>
