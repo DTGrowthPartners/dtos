@@ -201,6 +201,8 @@ export default function LiveChat() {
   const [aiRooms, setAiRooms] = useState<ChatRoom[]>([]);
   // Imágenes adjuntas (data URLs) para enviar a María (visión)
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
+  // PDFs adjuntos (RUT, cámara de comercio, cotizaciones…) para que María los lea
+  const [attachedDocs, setAttachedDocs] = useState<{ name: string; dataUrl: string }[]>([]);
 
   // iOS/móvil: cuando se abre el teclado, iOS lo superpone (no encoge el layout),
   // así que ajustamos el panel al área realmente visible vía visualViewport.
@@ -251,34 +253,63 @@ export default function LiveChat() {
       reader.readAsDataURL(file);
     });
 
-  // Lee archivos de imagen y los agrega a los adjuntos (reducidos).
-  const addImageFiles = async (files: FileList | File[]) => {
-    const arr = Array.from(files).filter((f) => f.type.startsWith('image/'));
+  // Lee un PDF tal cual (sin reducir) a data URL para mandarlo a María.
+  const readAsDataURL = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  // 6MB por PDF → ~8MB en base64. Con el tope de 2 PDFs cabe en el límite de
+  // body del backend (25mb) y en el del request a la API de Anthropic (32MB).
+  const MAX_PDF_BYTES = 6 * 1024 * 1024;
+  const MAX_DOCS = 2;
+
+  // Lee los adjuntos: las imágenes se reducen, los PDF van completos.
+  const addFiles = async (files: FileList | File[]) => {
+    const arr = Array.from(files).filter(
+      (f) => f.type.startsWith('image/') || f.type === 'application/pdf'
+    );
     if (!arr.length) return;
     for (const file of arr.slice(0, 5)) {
       try {
-        const url = await downscaleToDataURL(file);
-        setAttachedImages((prev) => (prev.length >= 5 ? prev : [...prev, url]));
+        if (file.type === 'application/pdf') {
+          if (file.size > MAX_PDF_BYTES) {
+            toast({
+              title: 'PDF muy pesado',
+              description: `${file.name} pesa más de 6 MB. Comprímelo o mándalo por partes.`,
+              variant: 'destructive',
+            });
+            continue;
+          }
+          const dataUrl = await readAsDataURL(file);
+          setAttachedDocs((prev) => (prev.length >= MAX_DOCS ? prev : [...prev, { name: file.name, dataUrl }]));
+        } else {
+          const url = await downscaleToDataURL(file);
+          setAttachedImages((prev) => (prev.length >= 5 ? prev : [...prev, url]));
+        }
       } catch {
         toast({ title: 'Error', description: `No se pudo procesar ${file.name}`, variant: 'destructive' });
       }
     }
   };
 
-  // Pegar imágenes desde el portapapeles (pantallazos, fotos copiadas).
+  // Pegar imágenes o PDFs desde el portapapeles (pantallazos, archivos copiados).
   const handlePaste = (e: React.ClipboardEvent) => {
     const items = e.clipboardData?.items;
     if (!items) return;
     const files: File[] = [];
     for (const it of Array.from(items)) {
-      if (it.kind === 'file' && it.type.startsWith('image/')) {
+      if (it.kind === 'file' && (it.type.startsWith('image/') || it.type === 'application/pdf')) {
         const f = it.getAsFile();
         if (f) files.push(f);
       }
     }
     if (files.length) {
       e.preventDefault();
-      addImageFiles(files);
+      addFiles(files);
     }
   };
 
@@ -438,7 +469,8 @@ export default function LiveChat() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!newMessage.trim() && attachedImages.length === 0) || !user || isLoading) return;
+    if ((!newMessage.trim() && attachedImages.length === 0 && attachedDocs.length === 0) || !user || isLoading)
+      return;
 
     setIsLoading(true);
     try {
@@ -450,9 +482,19 @@ export default function LiveChat() {
 
       if (isAIRoom) {
         const imgs = attachedImages;
+        const docs = attachedDocs;
         const messageText = newMessage.trim();
         // Se guardan el texto y las imágenes (se ven en el historial del chat).
-        await sendMessage(activeRoomId, messageText || '', user.id, userName, currentUser?.photoUrl, imgs);
+        // De los PDF solo el nombre: el base64 no cabe en un doc de Firestore.
+        await sendMessage(
+          activeRoomId,
+          messageText || '',
+          user.id,
+          userName,
+          currentUser?.photoUrl,
+          imgs,
+          docs.map((d) => ({ name: d.name }))
+        );
         // Auto-título: si la conversación aún no tiene nombre propio, usa el primer mensaje.
         const room = aiRooms.find((r) => r.id === activeRoomId);
         if (messageText && room && (room.name === 'Nuevo chat' || room.name === 'Chat con IA' || !room.name)) {
@@ -462,6 +504,7 @@ export default function LiveChat() {
         }
         setNewMessage('');
         setAttachedImages([]);
+        setAttachedDocs([]);
 
         // Build conversation history (last 20 messages for context)
         const conversationHistory = messages.slice(-20).map((m) => ({
@@ -481,6 +524,7 @@ export default function LiveChat() {
             message: messageText,
             conversationHistory,
             images: imgs,
+            docs: docs.map((d) => ({ name: d.name, dataUrl: d.dataUrl })),
           }),
         });
 
@@ -1098,6 +1142,21 @@ export default function LiveChat() {
                                     ))}
                                   </div>
                                 )}
+                                {message.docs && message.docs.length > 0 && (
+                                  <div className="flex flex-wrap gap-1.5 mb-1.5">
+                                    {message.docs.map((d, i) => (
+                                      <span
+                                        key={i}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border max-w-[200px] ${
+                                          isMe ? 'border-primary-foreground/30' : 'border-border'
+                                        }`}
+                                      >
+                                        <FileText className="h-3 w-3 flex-shrink-0" />
+                                        <span className="truncate" title={d.name}>{d.name}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
                                 {message.text && (
                                   message.senderId === 'ai_assistant' ? (
                                     <FormattedMessage text={message.text} />
@@ -1121,9 +1180,26 @@ export default function LiveChat() {
                 </div>
               </div>
 
-              {/* Miniaturas de imágenes adjuntas (solo chat de María) */}
-              {activeRoomId.startsWith('ai_') && attachedImages.length > 0 && (
+              {/* Adjuntos pendientes: miniaturas de imágenes y chips de PDF (chat de María) */}
+              {activeRoomId.startsWith('ai_') && (attachedImages.length > 0 || attachedDocs.length > 0) && (
                 <div className="px-3 pt-2 flex gap-2 flex-wrap border-t">
+                  {attachedDocs.map((d, i) => (
+                    <div
+                      key={`doc-${i}`}
+                      className="relative flex items-center gap-1.5 h-14 px-2.5 rounded-md border border-border bg-muted/50 max-w-[180px]"
+                    >
+                      <FileText className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                      <span className="text-xs truncate" title={d.name}>{d.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => setAttachedDocs((prev) => prev.filter((_, idx) => idx !== i))}
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-background border border-border flex items-center justify-center hover:bg-muted"
+                        title="Quitar"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
                   {attachedImages.map((src, i) => (
                     <div key={i} className="relative">
                       <img src={src} alt="adjunto" className="h-14 w-14 object-cover rounded-md border border-border" />
@@ -1141,24 +1217,24 @@ export default function LiveChat() {
               )}
 
               {/* Input */}
-              <form onSubmit={handleSendMessage} style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId.startsWith('ai_') && attachedImages.length > 0 ? '' : 'border-t'}`}>
+              <form onSubmit={handleSendMessage} style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }} className={`p-3 flex gap-2 flex-shrink-0 bg-background ${activeRoomId.startsWith('ai_') && (attachedImages.length > 0 || attachedDocs.length > 0) ? '' : 'border-t'}`}>
                 {activeRoomId.startsWith('ai_') && (
                   <>
                     <input
                       ref={imageInputRef}
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf"
                       multiple
                       className="hidden"
-                      onChange={(e) => { if (e.target.files) addImageFiles(e.target.files); e.target.value = ''; }}
+                      onChange={(e) => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }}
                     />
                     <Button
                       type="button"
                       size="icon"
                       variant="outline"
                       onClick={() => imageInputRef.current?.click()}
-                      disabled={isLoading || attachedImages.length >= 5}
-                      title="Adjuntar imagen (o pega con Ctrl+V)"
+                      disabled={isLoading || (attachedImages.length >= 5 && attachedDocs.length >= MAX_DOCS)}
+                      title="Adjuntar imagen o PDF (o pega con Ctrl+V)"
                     >
                       <ImagePlus className="h-4 w-4" />
                     </Button>
@@ -1169,7 +1245,7 @@ export default function LiveChat() {
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
                   onPaste={activeRoomId.startsWith('ai_') ? handlePaste : undefined}
-                  placeholder={activeRoomId.startsWith('ai_') ? 'Escribe, dicta 🎙 o pega una imagen…' : 'Escribe un mensaje...'}
+                  placeholder={activeRoomId.startsWith('ai_') ? 'Escribe, dicta 🎙 o adjunta imagen/PDF…' : 'Escribe un mensaje...'}
                   className="flex-1"
                   disabled={isLoading}
                   autoFocus
@@ -1180,7 +1256,7 @@ export default function LiveChat() {
                   disabled={isLoading}
                   title="Dictar mensaje"
                 />
-                <Button type="submit" size="icon" disabled={(!newMessage.trim() && attachedImages.length === 0) || isLoading}>
+                <Button type="submit" size="icon" disabled={(!newMessage.trim() && attachedImages.length === 0 && attachedDocs.length === 0) || isLoading}>
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
