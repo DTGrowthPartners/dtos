@@ -223,9 +223,17 @@ export class ChatController {
       // Build messages array with conversation history
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
-      // Add conversation history if provided
+      // Historial saneado: mensajes que fueron solo-adjunto llegan con content
+      // vacío y la API de IA rechaza todo el request (400 non-empty content).
       if (conversationHistory && Array.isArray(conversationHistory)) {
-        messages.push(...conversationHistory);
+        messages.push(
+          ...conversationHistory
+            .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+            .map((m: any) => ({
+              role: m.role,
+              content: typeof m.content === 'string' && m.content.trim() ? m.content : '[adjunto sin texto]',
+            }))
+        );
       }
 
       // Add current user message
@@ -328,6 +336,17 @@ export class ChatController {
         }
       }
 
+      // Un mensaje que fue SOLO adjunto (foto/PDF sin texto) queda con content vacío
+      // en el historial y la API de IA rechaza TODO el request ("user messages must
+      // have non-empty content"), rompiendo la sala para siempre. Se sanea aquí.
+      const history: OpenAI.Chat.ChatCompletionMessageParam[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
+        .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+        .map((m: any) => ({
+          role: m.role,
+          content: typeof m.content === 'string' && m.content.trim() ? m.content : '[adjunto sin texto]',
+        }));
+      if (!effectiveMessage.trim()) effectiveMessage = '(el usuario envió un adjunto que no se pudo leer; pídele los datos en texto)';
+
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
 
       const aiToolsService = new AIToolsService();
@@ -347,7 +366,7 @@ export class ChatController {
             content: `Eres María, la asistente de DT Growth Partners. Responde de forma conversacional. No tienes acceso directo a los datos del sistema; si piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.\n\n${styleGuide}`,
           },
         ];
-        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push(...history);
         messages.push({ role: 'user', content: effectiveMessage });
         const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.7, max_tokens: 2000 });
         return res.json({ success: true, response: cleanResponse(completion.choices[0].message.content || ''), usage: completion.usage });
@@ -361,7 +380,7 @@ export class ChatController {
             content: `Eres María, la asistente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.\n\n${styleGuide}`,
           },
         ];
-        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push(...history);
         messages.push({ role: 'user', content: effectiveMessage });
 
         const MAX_ITERATIONS = 6;
@@ -430,7 +449,7 @@ Reglas: si el usuario dice "créala directo/tú misma/sin confirmar", usa la API
 ${styleGuide}`,
         },
       ];
-      if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+      messages.push(...history);
       messages.push({ role: 'user', content: effectiveMessage });
 
       // Cuentas de cobro vistas en los resultados: guardamos su link público (PDF)
