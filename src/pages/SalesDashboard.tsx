@@ -578,8 +578,11 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Gráfica acumulada (oculta en año, mes anterior y rango personalizado) */}
-      {period !== 'ano' && period !== 'mesant' && period !== 'custom' && <Card>
+      {/* Gráfica acumulada: TODAS las vistas la muestran con la misma lógica
+          (pedido de Dairo: mes anterior y año se veían solo día a día y no
+          coincidían con la vista Mes). El rango personalizado no tiene serie
+          acumulada, sigue solo con su detalle. */}
+      {period !== 'custom' && <Card>
         <CardContent className="pt-5">
           <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
           <div className="h-[400px] sm:h-[440px]">
@@ -596,7 +599,7 @@ export default function SalesDashboard() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
-                {period === 'mes' && (model as any).monthMeta && (
+                {(period === 'mes' || period === 'mesant') && (model as any).monthMeta && (
                   <ReferenceLine y={(model as any).monthMeta} stroke="#3b82f6" strokeDasharray="4 3" strokeWidth={1.5} label={{ value: `Meta ${fmtCompact((model as any).monthMeta)}`, fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
                 )}
                 {(model.payments || []).map((pm, i) => (
