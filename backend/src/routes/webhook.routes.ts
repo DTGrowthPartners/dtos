@@ -12,6 +12,7 @@ import { generateDueRecurringInvoices } from '../services/recurringInvoices.serv
 import { runCobranza } from '../services/cobranza.service';
 import { runDailyDigest } from '../services/dailyDigest.service';
 import { runConciliacion } from '../services/conciliacion.service';
+import { sendEmail } from '../services/email.service';
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
@@ -1938,6 +1939,92 @@ router.post('/bot/crm/contacto', verifyBotApiKey, async (req: Request, res: Resp
   }
 });
 
+// Colores de marca DTGP (los mismos del PDF de propuestas y del bot).
+const PIPE_AZUL = '#1B4D6E';
+const PIPE_BANNER = '#17639C';
+const PIPE_ROJO = '#DC3545';
+const PIPE_TEXTO = '#333333';
+const PIPE_GRIS = '#7A8794';
+const PIPE_BORDE = '#E4EAEF';
+
+const esc = (v: unknown) =>
+  String(v ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * HTML del correo de seguimientos del pipeline. A diferencia del mensaje de
+ * WhatsApp (que corta a 12 por responsable para no reventar el chat), aquí va
+ * la lista COMPLETA — es el punto de recibirlo por correo.
+ *
+ * Email HTML: tablas + estilos inline. Nada de flex/grid ni CSS externo, que
+ * Gmail y Outlook descartan.
+ */
+function htmlSeguimientosPipeline(
+  grupos: [string, { name: string; valor: number; etapa: string; motivo: string }[]][],
+  total: number,
+  hoy: string
+): string {
+  const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
+
+  const cuerpo = total === 0
+    ? `<tr><td style="padding:24px;">
+         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                style="background:#F2FBF4;border:1px solid #CBEBD4;border-radius:8px;">
+           <tr><td align="center" style="padding:26px;font:600 15px Helvetica,Arial,sans-serif;color:#28A745;">
+             Nada vencido. Pipeline al día.</td></tr></table></td></tr>`
+    : grupos.map(([owner, items]) => {
+        const filas = items.map((it, i) => {
+          const bg = i % 2 === 0 ? '#FFFFFF' : '#F7FAFC';
+          const vencido = it.motivo === 'seguimiento vencido';
+          return `<tr style="background:${bg};">
+            <td style="padding:9px 14px;border-bottom:1px solid ${PIPE_BORDE};
+                       font:400 14px/1.4 Helvetica,Arial,sans-serif;color:${PIPE_TEXTO};">
+              ${esc(it.name)}
+              <div style="font:400 12px/1.4 Helvetica,Arial,sans-serif;color:${PIPE_GRIS};padding-top:2px;">
+                ${esc(it.etapa)}</div>
+            </td>
+            <td align="right" style="padding:9px 14px;border-bottom:1px solid ${PIPE_BORDE};white-space:nowrap;">
+              <div style="font:700 14px/1.4 Helvetica,Arial,sans-serif;color:${PIPE_TEXTO};">${fmt(it.valor)}</div>
+              <div style="font:${vencido ? '700' : '400'} 12px/1.4 Helvetica,Arial,sans-serif;
+                          color:${vencido ? PIPE_ROJO : PIPE_GRIS};padding-top:2px;">${esc(it.motivo)}</div>
+            </td></tr>`;
+        }).join('');
+        return `<tr><td style="padding:18px 24px 0 24px;">
+            <div style="font:700 13px Helvetica,Arial,sans-serif;color:${PIPE_AZUL};padding-bottom:8px;">
+              ${esc(owner)}
+              <span style="font:400 12px Helvetica,Arial,sans-serif;color:${PIPE_GRIS};">
+                · ${items.length} por contactar</span></div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+                   style="border:1px solid ${PIPE_BORDE};border-radius:8px;border-collapse:separate;overflow:hidden;">
+              ${filas}</table></td></tr>`;
+      }).join('');
+
+  return `<!doctype html><html><body style="margin:0;padding:0;background:#EEF2F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#EEF2F6;">
+<tr><td align="center" style="padding:28px 12px;">
+  <table role="presentation" width="640" cellpadding="0" cellspacing="0"
+         style="width:640px;max-width:100%;background:#FFFFFF;border-radius:12px;overflow:hidden;
+                box-shadow:0 1px 4px rgba(20,40,60,.10);">
+    <tr><td style="background:${PIPE_AZUL};padding:20px 24px;">
+      <div style="font:700 17px/1.3 Helvetica,Arial,sans-serif;color:#FFFFFF;letter-spacing:2px;">
+        DT GROWTH PARTNERS</div>
+      <div style="font:400 12px/1.4 Helvetica,Arial,sans-serif;color:#A9CBE3;padding-top:3px;">
+        Seguimientos del pipeline</div></td></tr>
+    <tr><td style="height:3px;background:${PIPE_BANNER};font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td style="padding:24px 24px 0 24px;">
+      <div style="font:700 20px/1.3 Helvetica,Arial,sans-serif;color:${PIPE_AZUL};">
+        ${total} negocio${total === 1 ? '' : 's'} por contactar</div>
+      <div style="font:400 13px/1.4 Helvetica,Arial,sans-serif;color:${PIPE_GRIS};padding-top:4px;">
+        ${esc(hoy)}</div></td></tr>
+    ${cuerpo}
+    <tr><td style="padding:22px 24px 24px 24px;">
+      <div style="border-top:1px solid ${PIPE_BORDE};padding-top:14px;
+                  font:400 12px/1.6 Helvetica,Arial,sans-serif;color:${PIPE_GRIS};">
+        Alerta interna del pipeline. Al prospecto no se le escribe desde aquí.
+      </div></td></tr>
+  </table></td></tr></table></body></html>`;
+}
+
 /**
  * POST /api/webhook/bot/crm/seguimientos-run
  *
@@ -2020,7 +2107,35 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
       }
     }
 
-    res.json({ success: true, total: pendientes.length, enviado, destinoConfigurado: !!destino, mensaje });
+    // Correo: canal principal desde jul 2026. Va SIEMPRE, también cuando no hay
+    // nada vencido — un "pipeline al día" confirma que el cron corrió; el
+    // silencio no distingue entre eso y un cron caído.
+    const emailDest = (process.env.PIPELINE_FOLLOWUP_EMAIL || '')
+      .split(',').map((x) => x.trim()).filter(Boolean);
+    let emailEnviado = false;
+    if (emailDest.length) {
+      try {
+        const gruposParaHtml = [...byOwner.entries()].sort(
+          (a, b) => b[1].reduce((s, x) => s + x.score, 0) - a[1].reduce((s, x) => s + x.score, 0)
+        );
+        await sendEmail({
+          to: emailDest.join(', '),
+          subject: pendientes.length
+            ? `[Pipeline] ${pendientes.length} negocios por contactar — ${hoy}`
+            : `[Pipeline] Al día — ${hoy}`,
+          html: htmlSeguimientosPipeline(gruposParaHtml, pendientes.length, hoy),
+          text: mensaje.replace(/\*/g, ''),
+        });
+        emailEnviado = true;
+      } catch (e) {
+        console.error('[pipeline-cron] email falló:', (e as Error).message);
+      }
+    }
+
+    res.json({
+      success: true, total: pendientes.length, enviado, emailEnviado,
+      destinoConfigurado: !!destino, emailConfigurado: emailDest.length > 0, mensaje,
+    });
   } catch (error) {
     console.error('[Bot API] Error en seguimientos-run:', error);
     res.status(500).json({ success: false, error: 'Error generando seguimientos' });
