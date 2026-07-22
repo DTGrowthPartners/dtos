@@ -2379,6 +2379,7 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
         prioridad: deal.priority,
         fuente: deal.source,
         proximoSeguimiento: deal.nextFollowUp?.toISOString().split('T')[0],
+        ultimaInteraccion: deal.lastInteractionAt?.toISOString() ?? null,
         fechaCierreEsperada: deal.expectedCloseDate?.toISOString().split('T')[0],
         notas: deal.notes,
         tags: deal.tags,
@@ -2564,6 +2565,10 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
       notes,
       propietario,
       owner,
+      proximoSeguimiento,
+      nextFollowUp,
+      ultimaInteraccion,
+      lastInteractionAt,
     } = req.body;
 
     // Resolver valores
@@ -2676,6 +2681,16 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
       }
     }
 
+    // Fechas de seguimiento. El bot las manda al agendar: sin nextFollowUp el
+    // deal nace sin fecha y el reporte diario nunca lo marca vencido.
+    const parseFecha = (v: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const d = new Date(String(v));
+      return isNaN(d.getTime()) ? undefined : d;
+    };
+    const dealFollowUpNew = parseFecha(proximoSeguimiento || nextFollowUp);
+    const dealLastIntNew = parseFecha(ultimaInteraccion || lastInteractionAt);
+
     // Crear el deal
     const deal = await prisma.deal.create({
       data: {
@@ -2693,6 +2708,8 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
         serviceId: resolvedServiceId,
         ownerId: resolvedOwnerId,
         createdBy: defaultUserId,
+        ...(dealFollowUpNew ? { nextFollowUp: dealFollowUpNew } : {}),
+        ...(dealLastIntNew ? { lastInteractionAt: dealLastIntNew } : {}),
       },
     });
 
@@ -2756,6 +2773,8 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
       nextFollowUp,
       probabilidad,
       probability,
+      ultimaInteraccion,
+      lastInteractionAt,
     } = req.body;
 
     // Verificar que el deal existe
@@ -2807,6 +2826,15 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
 
     const dealProbability = probabilidad || probability;
     if (dealProbability !== undefined) updateData.probability = Number(dealProbability);
+
+    // Última interacción: la manda el bot cada vez que el prospecto escribe.
+    // Sin esto el pipeline cree que un deal lleva semanas frío aunque el bot
+    // haya conversado hoy, y el reporte de seguimientos avisa en falso.
+    const dealLastInt = ultimaInteraccion || lastInteractionAt;
+    if (dealLastInt) {
+      const li = new Date(dealLastInt);
+      if (!isNaN(li.getTime())) updateData.lastInteractionAt = li;
+    }
 
     const dealFollowUp = proximoSeguimiento || nextFollowUp;
     if (dealFollowUp) {
