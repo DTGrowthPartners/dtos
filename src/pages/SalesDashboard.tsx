@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  ComposedChart, Area, Line, ReferenceDot, ReferenceLine, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Area, Line, ReferenceDot, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { Table, TableHeader, TableBody, TableFooter, TableHead, TableRow, TableCell } from '@/components/ui/table';
 import { Gauge, TrendingUp, Target, Receipt, Users, FileText, Flag, ArrowRight, Pencil, ChevronDown } from 'lucide-react';
@@ -266,33 +266,34 @@ export default function SalesDashboard() {
         expByDay[dateParts(t.fecha).day] += t.importe || 0;
       });
 
-      let cumI = 0, cumE = 0;
       const mtdIngresos = incByDay.slice(0, elapsed + 1).reduce((a, b) => a + b, 0);
       const mtdGastos = expByDay.slice(0, elapsed + 1).reduce((a, b) => a + b, 0);
       const avgPerDay = mtdIngresos / Math.max(1, elapsed);
 
+      // Serie del gráfico: VALOR REAL POR DÍA (no acumulado) — pedido de Dairo:
+      // todas las vistas con la misma lectura día a día, como Mes anterior.
       const data = [];
       for (let d = 1; d <= daysInMonth; d++) {
-        cumI += incByDay[d]; cumE += expByDay[d];
         const p: Record<string, any> = { x: d };
-        p.ingresos = d <= elapsed ? cumI : null;
-        p.gastos = d <= elapsed ? cumE : null;
-        p.proyeccion = isCurrent && d >= elapsed ? mtdIngresos + avgPerDay * (d - elapsed) : null;
+        p.ingresos = d <= elapsed ? incByDay[d] : null;
+        p.gastos = d <= elapsed ? expByDay[d] : null;
+        p.proyeccion = null;
         p.dayPayments = payments.filter((pm) => pm.x === d);
         data.push(p);
       }
       const monthMeta = metaByMonth[mn] ?? meta;
       const proyeccion = isCurrent ? mtdIngresos + avgPerDay * (daysInMonth - elapsed) : mtdIngresos;
       const neededPerDay = isCurrent ? Math.max(0, monthMeta - mtdIngresos) / Math.max(1, daysInMonth - elapsed) : 0;
-      const daily = !isCurrent ? Array.from({ length: daysInMonth }, (_, i) => {
+      // Tabla día a día disponible también para el mes en curso (hasta hoy)
+      const daily = Array.from({ length: isCurrent ? elapsed : daysInMonth }, (_, i) => {
         const d = i + 1;
         const ing = incByDay[d] || 0;
         const gas = expByDay[d] || 0;
         return { day: d, label: String(d), ingresos: ing, gastos: gas, neto: ing - gas };
-      }) : undefined;
+      });
       return {
         titulo: (isCurrent ? 'Mes en curso · ' : '') + MONTHS[mn].charAt(0).toUpperCase() + MONTHS[mn].slice(1) + ' ' + yy,
-        chartTitle: `Acumulado · ${MONTHS[mn]}`,
+        chartTitle: `Detalle día a día · ${MONTHS[mn].charAt(0).toUpperCase() + MONTHS[mn].slice(1)} ${yy}`,
         xLabel: (v: number) => String(v),
         isCurrent, elapsed, total: daysInMonth, xDomain: [1, daysInMonth] as [number, number], xTicks: data.map((p) => p.x), mtdIngresos, mtdGastos, avgPerDay, neededPerDay, proyeccion, data, payments,
         unidad: 'día', daily, monthMeta, monthIdx: mn,
@@ -578,13 +579,16 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Gráfica acumulada: TODAS las vistas la muestran con la misma lógica
-          (pedido de Dairo: mes anterior y año se veían solo día a día y no
-          coincidían con la vista Mes). El rango personalizado no tiene serie
-          acumulada, sigue solo con su detalle. */}
-      {period !== 'custom' && <Card>
+      {/* Gráfica principal: DÍA A DÍA (valor real, no acumulado) en todas las
+          vistas — pedido de Dairo. El Año usa su detalle mes a mes (real +
+          proyección) y el rango personalizado su propio detalle. */}
+      {period !== 'ano' && period !== 'custom' && <Card>
         <CardContent className="pt-5">
-          <h3 className="font-semibold mb-3">{model.chartTitle}</h3>
+          <h3 className="font-semibold">{model.chartTitle}</h3>
+          {(period === 'mes' || period === 'mesant') && (
+            <p className="text-xs text-muted-foreground mb-3">Valor real por día (no acumulado)</p>
+          )}
+          {period !== 'mes' && period !== 'mesant' && <div className="mb-3" />}
           <div className="h-[400px] sm:h-[440px]">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={model.data} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -599,9 +603,7 @@ export default function SalesDashboard() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gI)" connectNulls />
                 <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gG)" connectNulls />
-                {(period === 'mes' || period === 'mesant') && (model as any).monthMeta && (
-                  <ReferenceLine y={(model as any).monthMeta} stroke="#3b82f6" strokeDasharray="4 3" strokeWidth={1.5} label={{ value: `Meta ${fmtCompact((model as any).monthMeta)}`, fill: '#3b82f6', fontSize: 10, position: 'insideTopRight' }} />
-                )}
+                {/* (la línea de meta mensual no aplica sobre valores diarios) */}
                 {(model.payments || []).map((pm, i) => (
                   <ReferenceDot key={i} x={pm.x} y={pm.monto} r={5} fill="#22c55e" stroke="#fff" strokeWidth={1.5} isFront />
                 ))}
@@ -714,33 +716,13 @@ export default function SalesDashboard() {
         </Card>
       )}
 
-      {/* Detalle día a día (vista Mes anterior) */}
-      {period === 'mesant' && model.daily && (
+      {/* Tabla detalle por día (Mes y Mes anterior) — la gráfica día a día ya es la principal */}
+      {(period === 'mes' || period === 'mesant') && model.daily && (
         <Card>
-          <CardContent className="pt-5">
-            <h3 className="font-semibold">Detalle día a día · {model.titulo}</h3>
-            <p className="text-xs text-muted-foreground mb-3">Valor real por día (no acumulado)</p>
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={model.daily} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="gDI" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.35} /><stop offset="95%" stopColor="#22c55e" stopOpacity={0.03} /></linearGradient>
-                    <linearGradient id="gDG" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f59e0b" stopOpacity={0.30} /><stop offset="95%" stopColor="#f59e0b" stopOpacity={0.03} /></linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.4} vertical={false} />
-                  <XAxis dataKey="label" interval={4} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                  <YAxis tickFormatter={fmtCompact} tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} width={52} />
-                  <Tooltip content={<MonthlyTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Area type="monotone" dataKey="ingresos" name="Ingresos" stroke="#22c55e" strokeWidth={2.5} fill="url(#gDI)" />
-                  <Area type="monotone" dataKey="gastos" name="Gastos" stroke="#f59e0b" strokeWidth={2} fill="url(#gDG)" />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-
+          <CardContent className="pt-4">
             <button
               onClick={() => setTableOpen((o) => !o)}
-              className="mt-4 flex w-full items-center justify-between rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
+              className="flex w-full items-center justify-between rounded-lg border border-border px-4 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
             >
               <span>Tabla detalle por día</span>
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${tableOpen ? 'rotate-180' : ''}`} />
