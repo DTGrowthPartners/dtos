@@ -534,10 +534,13 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
         <Panel title={`Rendimiento de pauta (${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][new Date().getMonth()]})`} icon={TrendingUp}>
           {c.ads ? (
             <div className="space-y-2.5 text-sm">
-              <Row label="Inversión Meta Ads" value={fmtM(c.ads.metaSpend)} />
-              <Row label="Conversaciones WA" value={`${c.ads.waConversations}`} extra={`↑${c.ads.waDelta}%`} />
-              <Row label="Costo por conversación" value={fmtFull(c.ads.costPerConv)} />
-              <Row label="Campaña principal" value={c.ads.mainCampaign} />
+              <Row label="Inversión Meta Ads (mes)" value={fmtM(c.ads.metaSpend)} />
+              <Row
+                label={c.ads.mainCampaign || 'Resultados'}
+                value={`${c.ads.waConversations}`}
+                extra={c.ads.waDelta ? `${c.ads.waDelta > 0 ? '↑' : '↓'}${Math.abs(c.ads.waDelta)}% vs sem. ant.` : undefined}
+              />
+              <Row label="Costo por resultado" value={fmtFull(c.ads.costPerConv)} />
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Sin pauta activa este mes.</p>

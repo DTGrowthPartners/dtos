@@ -50,7 +50,9 @@ export interface ClienteV2 {
   // Pagos reales desde la hoja Entradas de Google Sheets (fuente de Dairo)
   payments: { fecha: string; importe: number; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }[];
   paidSheets: number;
-  ads: null;
+  // Pauta Meta del mes en curso (snapshot del reporte diario) — null si el
+  // cliente no tiene metaAdAccountId o el snapshot no está disponible.
+  ads: { metaSpend: number; waConversations: number; waDelta: number; costPerConv: number; mainCampaign: string } | null;
   activity: { label: string; date: string; positive?: boolean }[];
   totals: { facturado: number; pagado: number; pendiente: number; ltvMonths: number };
 }
@@ -60,8 +62,18 @@ export const getClientesV2 = async () => {
   const period = currentPeriod();
 
   const clients = await prisma.client.findMany({
-    select: { id: true, name: true, nit: true, status: true, createdAt: true, email: true, phone: true, address: true },
+    select: { id: true, name: true, nit: true, status: true, createdAt: true, email: true, phone: true, address: true, metaAdAccountId: true },
   });
+
+  // Gasto en pauta del mes por cuenta (snapshot del reporte diario, no bloquea)
+  let gastoCuentas: Map<string, import('./metaGasto.service').GastoCuenta> = new Map();
+  try {
+    const { metaGastoService } = await import('./metaGasto.service');
+    const det = await metaGastoService.getDetalle();
+    gastoCuentas = new Map(det.clientes.map((c) => [c.ad_account_id, c]));
+  } catch (e) {
+    console.warn('[clientes-v2] gasto-mes no disponible:', (e as Error).message);
+  }
   const clientServices = await prisma.clientService.findMany({
     where: { estado: 'activo' },
     include: { service: { select: { name: true, price: true } } },
@@ -213,7 +225,19 @@ export const getClientesV2 = async () => {
         .slice(0, 20)
         .map((p) => ({ fecha: p.fecha, importe: Math.round(p.importe), descripcion: p.descripcion, cuenta: p.cuenta, cuentaCobro: p.cuentaCobro, tipoPago: p.tipoPago })),
       paidSheets: Math.round(paidSheets),
-      ads: null,
+      ads: (() => {
+        const g = cl.metaAdAccountId ? gastoCuentas.get(cl.metaAdAccountId) : undefined;
+        if (!g || !(g.gasto_mes > 0)) return null;
+        const semAct = g.resultados_sem_actual || 0;
+        const semAnt = g.resultados_sem_anterior || 0;
+        return {
+          metaSpend: Math.round(g.gasto_mes),
+          waConversations: Math.round(g.resultados_mes || 0),
+          waDelta: semAnt > 0 ? Math.round(((semAct - semAnt) / semAnt) * 100) : 0,
+          costPerConv: Math.round(g.cpr_mes || 0),
+          mainCampaign: g.tipo_resultado || 'Resultados',
+        };
+      })(),
       activity: myInv.slice(0, 6).map((i) => ({ label: i.status === 'pagada' ? 'Pago recibido' : 'Factura generada', date: fmtDayMon(i.fecha), positive: i.status === 'pagada' })),
       totals: { facturado: Math.round(facturado), pagado: Math.round(pagado), pendiente: Math.round(outstanding), ltvMonths },
     };

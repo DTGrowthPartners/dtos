@@ -248,7 +248,27 @@ export class ClientService {
     let inversion: number | null = null;
     let fuente: 'meta' | 'manual' = 'manual';
     let detalle: { name: string; spend: number }[] = [];
-    if (client.metaAdAccountId) {
+    if (client.metaAdAccountId && (periodo === 'this_month' || periodo === 'last_month')) {
+      // Fuente primaria: snapshots del reporte diario (api gasto-mes, localhost).
+      // Más confiable que metasuite y sin latencia de la Graph API.
+      try {
+        const { metaGastoService } = await import('./metaGasto.service');
+        const now = new Date();
+        const mes =
+          periodo === 'last_month'
+            ? `${new Date(now.getFullYear(), now.getMonth() - 1, 1).getFullYear()}-${String(((now.getMonth() + 11) % 12) + 1).padStart(2, '0')}`
+            : undefined;
+        const r = await metaGastoService.gastoDeCuenta(client.metaAdAccountId, mes);
+        if (r && r.gasto > 0) {
+          inversion = r.gasto;
+          fuente = 'meta';
+          detalle = [{ name: `Total cuenta (snapshot al ${r.detalle.periodo.hasta})`, spend: r.gasto }];
+        }
+      } catch (e) {
+        console.error('[comision] snapshot gasto-mes no disponible:', (e as Error).message);
+      }
+    }
+    if (inversion == null && client.metaAdAccountId) {
       try {
         const { metaAdsService } = await import('./metaAds.service');
         const campaigns = await metaAdsService.getCampaigns(client.metaAdAccountId, periodo);

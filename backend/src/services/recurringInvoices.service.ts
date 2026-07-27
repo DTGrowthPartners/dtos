@@ -98,7 +98,9 @@ const skipError = (msg: string) => Object.assign(new Error(msg), { status: 400, 
  */
 export const generarCuentaDeServicio = async (
   clientServiceId: string,
-  createdBy = 'sistema-recurrente'
+  createdBy = 'sistema-recurrente',
+  // Comisión: monto calculado (spend × %) y concepto con el periodo de la pauta
+  opts?: { monto?: number; concepto?: string }
 ): Promise<CuentaGenerada> => {
   const cs = await prisma.clientService.findUnique({
     where: { id: clientServiceId },
@@ -112,7 +114,7 @@ export const generarCuentaDeServicio = async (
   const clienteNombre = cs.client?.name || 'Cliente';
   const nit = cs.client?.nit?.trim();
   if (!nit || nit === '0') throw skipError('Cliente sin NIT/identificación válida');
-  const precio = cs.precioCliente ?? cs.service?.price ?? 0;
+  const precio = opts?.monto ?? cs.precioCliente ?? cs.service?.price ?? 0;
   if (precio <= 0) throw skipError('Servicio sin precio');
 
   const now = new Date();
@@ -120,7 +122,8 @@ export const generarCuentaDeServicio = async (
   const esUnico = cs.frecuencia === 'unico';
   const dueDate = (cs.fechaProximoCobro as Date) || now;
   // Pago único: sin periodo (es un proyecto). Recurrente: siempre con el periodo facturado.
-  const concepto = esUnico ? servicioNombre : `${servicioNombre} ${buildPeriodo(cs.notas, dueDate, cs.frecuencia)}`;
+  const concepto =
+    opts?.concepto || (esUnico ? servicioNombre : `${servicioNombre} ${buildPeriodo(cs.notas, dueDate, cs.frecuencia)}`);
   const fechaStr = toYMD(now);
 
   // Observaciones vacías: el PDF imprime la nota estándar de régimen.
@@ -208,11 +211,10 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
       estado: 'activo',
       client: { status: 'active' }, // cliente desactivado = no se le auto-factura
       frecuencia: { not: 'unico' },
-      esComision: false, // comisión = valor variable, no se auto-factura con precio fijo
       fechaProximoCobro: { not: null, lte: endOfToday },
     },
     include: {
-      client: { select: { id: true, name: true, nit: true } },
+      client: { select: { id: true, name: true, nit: true, metaAdAccountId: true } },
       service: { select: { name: true, price: true } },
     },
   });
@@ -220,8 +222,58 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
   for (const cs of dueServices) {
     const clienteNombre = cs.client?.name || 'Cliente';
     try {
+      // Comisión (% sobre inversión en pauta): el monto sale del gasto Meta del
+      // MES ANTERIOR CERRADO (snapshot del reporte diario). Si el mes aún no
+      // cierra en el snapshot, se deja pendiente y se reintenta mañana (el cron
+      // no avanza fechaProximoCobro hasta generar).
+      let comisionOpts: { monto: number; concepto: string } | undefined;
+      if (cs.esComision) {
+        if (cs.frecuencia !== 'mensual') {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión ${cs.frecuencia}: solo la mensual se automatiza` });
+          continue;
+        }
+        const pct = cs.porcentajeComision;
+        if (!pct || pct <= 0) {
+          result.skipped.push({ cliente: clienteNombre, motivo: 'Comisión sin porcentaje configurado' });
+          continue;
+        }
+        if (!cs.client?.metaAdAccountId) {
+          result.skipped.push({ cliente: clienteNombre, motivo: 'Comisión sin cuenta de Meta vinculada (metaAdAccountId)' });
+          continue;
+        }
+        const due = cs.fechaProximoCobro as Date;
+        const prev = new Date(due.getFullYear(), due.getMonth() - 1, 1);
+        const mes = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+        const { metaGastoService } = await import('./metaGasto.service');
+        let r: Awaited<ReturnType<typeof metaGastoService.gastoDeCuenta>>;
+        try {
+          r = await metaGastoService.gastoDeCuenta(cs.client.metaAdAccountId, mes);
+        } catch (e) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: snapshot de ${mes} no disponible (${(e as Error).message})` });
+          continue;
+        }
+        if (!r) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: la cuenta ${cs.client.metaAdAccountId} no está en el snapshot de ${mes}` });
+          continue;
+        }
+        if (!r.detalle.periodo.mes_cerrado) {
+          // Mes aún incompleto en el snapshot: reintentar mañana sin ruido.
+          console.log(`[recurring] comisión ${clienteNombre}: ${mes} aún no cierra en el snapshot, se reintenta mañana`);
+          continue;
+        }
+        if (r.gasto <= 0) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: sin gasto en pauta en ${mes}` });
+          continue;
+        }
+        // Ej: "Comisión 10% sobre inversión en pauta de julio de 2026 — inversión $25.928.896"
+        comisionOpts = {
+          monto: Math.round((r.gasto * pct) / 100),
+          concepto: `Comisión ${pct}% sobre inversión en pauta de ${MESES[prev.getMonth()]} de ${prev.getFullYear()} — inversión $${Math.round(r.gasto).toLocaleString('es-CO')}`,
+        };
+      }
+
       // 1. Generar PDF + Invoice borrador + avanzar próximo cobro (helper compartido).
-      const gen = await generarCuentaDeServicio(cs.id);
+      const gen = await generarCuentaDeServicio(cs.id, 'sistema-recurrente', comisionOpts);
       const { invoiceNumber, pdfUrl, servicio: servicioNombre, monto: precio } = gen;
 
       // 2. Crear tarea de ALTA prioridad para Dairo en Firestore.

@@ -151,6 +151,13 @@ export default function SalesDashboard() {
       .catch(() => {});
   }, []);
 
+  // Inversión en pauta Meta del mes (snapshot del reporte diario, corte = ayer)
+  interface GastoMeta { ok: boolean; total_gasto_mes: number; periodo: { hasta: string; mes_cerrado: boolean }; cuentas: { incluidas: number }; snapshot: { dias_de_atraso: number } }
+  const [gastoMeta, setGastoMeta] = useState<GastoMeta | null>(null);
+  useEffect(() => {
+    apiClient.get<GastoMeta>('/api/meta-gasto/mes').then((d) => { if (d.ok) setGastoMeta(d); }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     let alive = true;
     const fetchFinance = () => {
@@ -574,6 +581,22 @@ export default function SalesDashboard() {
             <span className="text-muted-foreground">
               de presup. {fmtCompact(presupuesto)} <button onClick={editPresupuesto} className="inline-flex items-center text-primary hover:underline"><Pencil className="h-3 w-3" /></button> ·{' '}
               <span className={presupPct <= 100 ? 'text-emerald-500' : 'text-destructive'}>{presupPct}% — {presupPct <= 100 ? 'bajo control' : 'excedido'}</span>
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Inversión en pauta Meta de los clientes (para la comisión del 10%) */}
+      {showMetaCards && gastoMeta && (
+        <Card>
+          <CardContent className="py-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="flex items-center gap-1.5 text-muted-foreground"><TrendingUp className="h-4 w-4" /> Inversión en pauta (Meta)</span>
+            <span className="font-bold text-sky-400 tabular-nums">{fmt(gastoMeta.total_gasto_mes)}</span>
+            <span className="text-muted-foreground">
+              {gastoMeta.cuentas.incluidas} cuentas · corte al {gastoMeta.periodo.hasta.slice(8, 10)}/{gastoMeta.periodo.hasta.slice(5, 7)}
+              {gastoMeta.snapshot.dias_de_atraso > 0 && (
+                <span className="text-amber-500"> · ⚠ dato con {gastoMeta.snapshot.dias_de_atraso} día(s) de atraso</span>
+              )}
             </span>
           </CardContent>
         </Card>
