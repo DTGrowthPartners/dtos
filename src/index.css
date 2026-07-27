@@ -760,3 +760,17 @@ html.liquid header {
     background-color: rgba(16, 20, 28, 0.96) !important;
   }
 }
+
+/* ── Colapso animado de la columna Completado (Tareas) ──────────────
+   max-width SÍ es animable con flex-1 (width:auto no lo es): el resto
+   de columnas se reacomoda suavemente durante la transición. */
+@keyframes col-collapse {
+  from { width: 420px; opacity: 0.85; }
+  to { width: 44px; opacity: 1; }
+}
+@keyframes col-expand {
+  from { max-width: 48px; min-width: 48px; opacity: 0.6; }
+  to { max-width: 960px; min-width: 280px; opacity: 1; }
+}
+.animate-col-collapse { animation: col-collapse 0.28s ease-out; overflow: hidden; }
+.animate-col-expand { animation: col-expand 0.3s ease-out; overflow: hidden; }

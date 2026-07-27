@@ -4371,7 +4371,7 @@ export default function Tareas() {
                       onClick={() => toggleDoneCollapsed(false)}
                       onDragOver={(e) => handleDragOver(e, column.status)}
                       onDrop={(e) => handleDrop(e, column.status)}
-                      className="flex flex-col items-center bg-muted/50 rounded-lg py-3 px-1.5 w-11 md:w-12 flex-none cursor-pointer hover:bg-muted transition-colors select-none"
+                      className="animate-col-collapse flex flex-col items-center bg-muted/50 rounded-lg py-3 px-1.5 w-11 md:w-12 flex-none cursor-pointer hover:bg-muted transition-colors select-none"
                       title="Mostrar completadas"
                     >
                       <StatusIcon className={`h-4 w-4 md:h-5 md:w-5 ${column.color} mb-2 shrink-0`} />
@@ -4390,7 +4390,7 @@ export default function Tareas() {
                   <div
                     key={column.id}
                     data-column={column.status}
-                    className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'flex-1 min-w-[280px]'}`}
+                    className={`flex flex-col bg-muted/50 rounded-lg p-3 md:p-4 ${viewMode === 'compact' ? 'flex-1 min-w-[200px]' : 'flex-1 min-w-[280px]'} ${isDoneCol ? 'animate-col-expand' : ''}`}
                     onDragOver={(e) => handleDragOver(e, column.status)}
                     onDrop={(e) => handleDrop(e, column.status)}
                   >
