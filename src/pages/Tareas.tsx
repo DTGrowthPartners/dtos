@@ -157,7 +157,7 @@ import NoteColumn from '@/components/notes/NoteColumn';
 import NoteColumnModal from '@/components/notes/NoteColumnModal';
 import NoteItemModal from '@/components/notes/NoteItemModal';
 import AITaskDialog, { type ParsedTask as AIParsedTask } from '@/components/tasks/AITaskDialog';
-import { Sparkles, BarChart3 } from 'lucide-react';
+import { Sparkles, BarChart3, ChevronsRight, ChevronsLeft } from 'lucide-react';
 import TaskMetrics from '@/components/tasks/TaskMetrics';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
 import MicButton from '@/components/MicButton';
@@ -484,6 +484,12 @@ export default function Tareas() {
   const [selectionMode, setSelectionMode] = useState(false);
   // Panel de métricas de productividad (hechas por semana/mes, por persona)
   const [showMetrics, setShowMetrics] = useState(false);
+  // Columna Completado colapsada: más espacio para Pendiente/En Progreso
+  const [doneCollapsed, setDoneCollapsed] = useState(() => localStorage.getItem('tareas.doneCollapsed') === '1');
+  const toggleDoneCollapsed = (v: boolean) => {
+    setDoneCollapsed(v);
+    localStorage.setItem('tareas.doneCollapsed', v ? '1' : '0');
+  };
 
   const [formData, setFormData] = useState({
     title: '',
@@ -4353,6 +4359,32 @@ export default function Tareas() {
               {DEFAULT_COLUMNS.map((column) => {
                 const columnTasks = getTasksByColumn(column.status);
                 const StatusIcon = STATUS_ICONS[column.status as keyof typeof STATUS_ICONS] || Circle;
+                const isDoneCol = column.status === TaskStatus.DONE;
+
+                // Completado colapsado: franja delgada (sigue aceptando drops para
+                // completar arrastrando); clic para expandir.
+                if (isDoneCol && doneCollapsed) {
+                  return (
+                    <div
+                      key={column.id}
+                      data-column={column.status}
+                      onClick={() => toggleDoneCollapsed(false)}
+                      onDragOver={(e) => handleDragOver(e, column.status)}
+                      onDrop={(e) => handleDrop(e, column.status)}
+                      className="flex flex-col items-center bg-muted/50 rounded-lg py-3 px-1.5 w-11 md:w-12 flex-none cursor-pointer hover:bg-muted transition-colors select-none"
+                      title="Mostrar completadas"
+                    >
+                      <StatusIcon className={`h-4 w-4 md:h-5 md:w-5 ${column.color} mb-2 shrink-0`} />
+                      <span className="text-[11px] font-semibold bg-background/70 border rounded-full px-1.5 py-0.5 mb-3 shrink-0">
+                        {columnTasks.length}
+                      </span>
+                      <span className="text-[11px] font-semibold text-muted-foreground tracking-wider [writing-mode:vertical-rl] rotate-180">
+                        {column.name}
+                      </span>
+                      <ChevronsLeft className="h-4 w-4 text-muted-foreground mt-auto shrink-0" />
+                    </div>
+                  );
+                }
 
                 return (
                   <div
@@ -4371,6 +4403,15 @@ export default function Tareas() {
                           ({columnTasks.length})
                         </span>
                       </h2>
+                      {isDoneCol && (
+                        <button
+                          onClick={() => toggleDoneCollapsed(true)}
+                          className="ml-auto p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                          title="Colapsar completadas (más espacio para pendientes y en curso)"
+                        >
+                          <ChevronsRight className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
 
                     {/* Tasks */}
