@@ -534,7 +534,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
         <Panel title={`Rendimiento de pauta (${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][new Date().getMonth()]})`} icon={TrendingUp}>
           {c.ads ? (
             <div className="space-y-2.5 text-sm">
-              <Row label="Inversión Meta Ads (mes)" value={fmtM(c.ads.metaSpend)} />
+              <Row label="Inversión Meta Ads (mes)" value={fmtFull(c.ads.metaSpend)} />
               <Row
                 label={c.ads.mainCampaign || 'Resultados'}
                 value={`${c.ads.waConversations}`}
@@ -652,7 +652,9 @@ function Row({ label, value, extra }: { label: string; value: string; extra?: st
     <div className="flex items-center justify-between gap-3">
       <span className="text-muted-foreground">{label}</span>
       <span className="tabular-nums font-medium">
-        {value} {extra && <span className="text-emerald-400 text-xs ml-1">{extra}</span>}
+        {value} {extra && (
+          <span className={`text-xs ml-1 ${extra.startsWith('↓') ? 'text-amber-400' : 'text-emerald-400'}`}>{extra}</span>
+        )}
       </span>
     </div>
   );

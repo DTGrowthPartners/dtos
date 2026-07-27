@@ -233,7 +233,8 @@ export const getClientesV2 = async () => {
         return {
           metaSpend: Math.round(g.gasto_mes),
           waConversations: Math.round(g.resultados_mes || 0),
-          waDelta: semAnt > 0 ? Math.round(((semAct - semAnt) / semAnt) * 100) : 0,
+          // Sin datos de la semana en curso (recién empieza) no hay delta que mostrar
+          waDelta: semAnt > 0 && semAct > 0 ? Math.round(((semAct - semAnt) / semAnt) * 100) : 0,
           costPerConv: Math.round(g.cpr_mes || 0),
           mainCampaign: g.tipo_resultado || 'Resultados',
         };
