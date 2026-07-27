@@ -388,6 +388,39 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
     }
   };
 
+  // Comisión (% sobre inversión en pauta): cuenta de cobro directa desde el panel
+  const tieneComision = c.services.some((s) => s.frecuencia === 'comision');
+  const [generandoComision, setGenerandoComision] = useState(false);
+  const crearCuentaComision = async () => {
+    setGenerandoComision(true);
+    try {
+      // Preview con los números reales antes de confirmar
+      const info = await apiClient.get<{ porcentaje: number | null; inversion: number | null; comision: number | null }>(
+        `/api/clients/${c.id}/comision?periodo=this_month`
+      );
+      if (!info?.comision || !info.inversion) {
+        toast({ title: 'Sin datos de pauta', description: 'No hay inversión registrada este mes para calcular la comisión.', variant: 'destructive' });
+        return;
+      }
+      if (!confirm(
+        `¿Generar la cuenta de cobro de la comisión de ${c.name}?\n\n` +
+        `${info.porcentaje}% sobre $${info.inversion.toLocaleString('es-CO')} invertidos este mes\n` +
+        `Total a cobrar: $${info.comision.toLocaleString('es-CO')}`
+      )) return;
+      const r = await apiClient.post<{ invoiceNumber: string; pdfUrl: string; concepto: string }>(
+        `/api/clients/${c.id}/comision/generar-cuenta`,
+        { periodo: 'this_month' }
+      );
+      toast({ title: `Cuenta #${r.invoiceNumber} generada`, description: r.concepto });
+      window.open(r.pdfUrl, '_blank');
+      onUpdated();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'No se pudo generar la cuenta', variant: 'destructive' });
+    } finally {
+      setGenerandoComision(false);
+    }
+  };
+
   // Activar/desactivar directamente desde el badge del perfil
   const toggleEstado = async () => {
     const nuevo = activo ? 'inactive' : 'active';
@@ -541,6 +574,17 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
                 extra={c.ads.waDelta ? `${c.ads.waDelta > 0 ? '↑' : '↓'}${Math.abs(c.ads.waDelta)}% vs sem. ant.` : undefined}
               />
               <Row label="Costo por resultado" value={fmtFull(c.ads.costPerConv)} />
+              {/* Comisión: genera la cuenta de cobro con el gasto mostrado (mes en curso) */}
+              {tieneComision && (
+                <button
+                  onClick={crearCuentaComision}
+                  disabled={generandoComision}
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-violet-500/40 text-violet-400 text-sm hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                >
+                  <FileText className="h-4 w-4" />
+                  {generandoComision ? 'Generando…' : 'Crear cuenta de cobro (comisión)'}
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Sin pauta activa este mes.</p>

@@ -192,6 +192,46 @@ export const generarCuentaDeServicio = async (
 };
 
 /**
+ * Genera la cuenta de cobro de la COMISIÓN de un cliente bajo demanda (botón
+ * "Crear cuenta de cobro" del panel de pauta). Usa el gasto Meta del snapshot:
+ * mes en curso (corte = ayer) o mes anterior. Pasa por el mismo helper que el
+ * cron, así que también avanza fechaProximoCobro (el cron no duplicará el mes).
+ */
+export const generarCuentaComision = async (
+  clientId: string,
+  periodo: 'this_month' | 'last_month',
+  createdBy: string
+): Promise<CuentaGenerada & { inversion: number; porcentaje: number }> => {
+  const cs = await prisma.clientService.findFirst({
+    where: { clientId, esComision: true, estado: 'activo' },
+    include: { client: { select: { id: true, name: true, metaAdAccountId: true } } },
+  });
+  if (!cs) throw Object.assign(new Error('El cliente no tiene un servicio de comisión activo'), { status: 400 });
+  const pct = cs.porcentajeComision;
+  if (!pct || pct <= 0) throw Object.assign(new Error('El servicio de comisión no tiene porcentaje configurado'), { status: 400 });
+  if (!cs.client?.metaAdAccountId) throw Object.assign(new Error('El cliente no tiene cuenta de Meta vinculada (metaAdAccountId)'), { status: 400 });
+
+  const { metaGastoService } = await import('./metaGasto.service');
+  const now = new Date();
+  const ref = periodo === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1) : now;
+  const mes = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
+  const r = await metaGastoService.gastoDeCuenta(cs.client.metaAdAccountId, periodo === 'last_month' ? mes : undefined);
+  if (!r || r.gasto <= 0) {
+    throw Object.assign(new Error(`Sin gasto en pauta registrado para ${mes}`), { status: 400 });
+  }
+
+  const corte = !r.detalle.periodo.mes_cerrado
+    ? ` (corte al ${r.detalle.periodo.hasta.slice(8, 10)}/${r.detalle.periodo.hasta.slice(5, 7)})`
+    : '';
+  const concepto = `Comisión ${pct}% sobre inversión en pauta de ${MESES[ref.getMonth()]} de ${ref.getFullYear()}${corte} — inversión $${Math.round(r.gasto).toLocaleString('es-CO')}`;
+  const gen = await generarCuentaDeServicio(cs.id, createdBy, {
+    monto: Math.round((r.gasto * pct) / 100),
+    concepto,
+  });
+  return { ...gen, inversion: Math.round(r.gasto), porcentaje: pct };
+};
+
+/**
  * Genera las cuentas de cobro (borrador) de los servicios recurrentes cuya
  * fechaProximoCobro ya llego. Por cada una:
  *  1. Genera el PDF + registra Invoice (status 'pendiente' = borrador).
