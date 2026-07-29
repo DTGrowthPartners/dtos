@@ -28,10 +28,19 @@ interface RegistrosSheetProps {
 
 type SortOrder = 'asc' | 'desc';
 
+type ImporteOperator = 'mayor' | 'menor' | 'igual' | 'contiene';
+
+const IMPORTE_OPERATORS: { value: ImporteOperator; label: string }[] = [
+  { value: 'mayor', label: 'Mayor que' },
+  { value: 'menor', label: 'Menor que' },
+  { value: 'igual', label: 'Igual a' },
+  { value: 'contiene', label: 'Contiene' },
+];
+
 interface ColumnFilters {
   month: string;
-  importeMin: string;
-  importeMax: string;
+  importeOperator: ImporteOperator;
+  importeValue: string;
   descripcion: string;
   categoria: string;
   cuenta: string;
@@ -41,8 +50,8 @@ interface ColumnFilters {
 
 const EMPTY_FILTERS: ColumnFilters = {
   month: 'todos',
-  importeMin: '',
-  importeMax: '',
+  importeOperator: 'mayor',
+  importeValue: '',
   descripcion: '',
   categoria: 'todas',
   cuenta: 'todas',
@@ -90,8 +99,7 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
   const hasActiveFilters = useMemo(() => {
     return (
       filters.month !== 'todos' ||
-      filters.importeMin !== '' ||
-      filters.importeMax !== '' ||
+      filters.importeValue !== '' ||
       filters.descripcion !== '' ||
       filters.categoria !== 'todas' ||
       filters.cuenta !== 'todas' ||
@@ -149,8 +157,8 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
     const term = searchTerm.trim().toLowerCase();
     const descTerm = filters.descripcion.trim().toLowerCase();
     const cuentaCobroTerm = filters.noCuentaCobro.trim().toLowerCase();
-    const min = filters.importeMin !== '' ? Number(filters.importeMin) : null;
-    const max = filters.importeMax !== '' ? Number(filters.importeMax) : null;
+    const importeValue = filters.importeValue.trim();
+    const importeNum = importeValue !== '' ? Number(importeValue) : null;
 
     return sorted.filter((t) => {
       if (term) {
@@ -160,8 +168,15 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
         if (!matchesSearch) return false;
       }
       if (filters.month !== 'todos' && toDateInputValue(t.fecha).slice(0, 7) !== filters.month) return false;
-      if (min !== null && !Number.isNaN(min) && t.importe < min) return false;
-      if (max !== null && !Number.isNaN(max) && t.importe > max) return false;
+      if (importeValue !== '') {
+        if (filters.importeOperator === 'contiene') {
+          if (!String(t.importe).includes(importeValue)) return false;
+        } else if (importeNum !== null && !Number.isNaN(importeNum)) {
+          if (filters.importeOperator === 'mayor' && !(t.importe > importeNum)) return false;
+          if (filters.importeOperator === 'menor' && !(t.importe < importeNum)) return false;
+          if (filters.importeOperator === 'igual' && t.importe !== importeNum) return false;
+        }
+      }
       if (descTerm && !t.descripcion?.toLowerCase().includes(descTerm)) return false;
       if (filters.categoria !== 'todas' && t.categoria !== filters.categoria) return false;
       if (filters.cuenta !== 'todas' && t.cuenta !== filters.cuenta) return false;
@@ -309,19 +324,22 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
               </th>
               <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
                 <div className="flex items-center gap-0.5">
+                  <select
+                    value={filters.importeOperator}
+                    onChange={(e) => setFilter('importeOperator', e.target.value as ImporteOperator)}
+                    className="h-7 rounded border border-input bg-background px-0.5 text-[11px] w-[78px]"
+                    title="Condición del filtro de importe"
+                  >
+                    {IMPORTE_OPERATORS.map((op) => (
+                      <option key={op.value} value={op.value}>{op.label}</option>
+                    ))}
+                  </select>
                   <Input
-                    type="number"
-                    placeholder="Min"
-                    value={filters.importeMin}
-                    onChange={(e) => setFilter('importeMin', e.target.value)}
-                    className="h-7 text-[11px] px-1 w-[52px]"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Max"
-                    value={filters.importeMax}
-                    onChange={(e) => setFilter('importeMax', e.target.value)}
-                    className="h-7 text-[11px] px-1 w-[52px]"
+                    type={filters.importeOperator === 'contiene' ? 'text' : 'number'}
+                    placeholder="Valor"
+                    value={filters.importeValue}
+                    onChange={(e) => setFilter('importeValue', e.target.value)}
+                    className="h-7 text-[11px] px-1 w-[60px]"
                   />
                 </div>
               </th>
