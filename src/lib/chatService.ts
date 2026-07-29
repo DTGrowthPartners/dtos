@@ -134,7 +134,8 @@ export const sendMessage = async (
   senderId: string,
   senderName: string,
   senderPhoto?: string,
-  images?: string[]
+  images?: string[],
+  docs?: { name: string }[]
 ): Promise<string> => {
   const messageData = {
     text,
@@ -142,6 +143,7 @@ export const sendMessage = async (
     senderName,
     senderPhoto: senderPhoto || null,
     images: images && images.length ? images : null,
+    docs: docs && docs.length ? docs : null,
     createdAt: Date.now(),
     readBy: [senderId],
     roomId,

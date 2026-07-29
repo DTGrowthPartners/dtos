@@ -124,29 +124,50 @@ function cleanResponse(text: string): string {
 }
 
 // DARIO no acepta imágenes por la capa OpenAI (image_url); sí por la API nativa
-// Anthropic (/v1/messages con bloques 'image'). Esta función hace una pasada de
-// visión: extrae a TEXTO los datos útiles de las imágenes para que luego el bucle
-// de acciones (texto) pueda crear registros (clientes, prospectos, cuentas, etc.).
-async function extractFromImages(images: string[], userMsg: string): Promise<string> {
-  const blocks: any[] = [
-    {
-      type: 'text',
-      text:
-        `Analiza la(s) imagen(es) y extrae TODA la información útil para registrar datos en DTOS ` +
-        `(p. ej. datos de cliente/prospecto: nombre/empresa, NIT o cédula, teléfono, email, dirección, ciudad; ` +
-        `o datos de una cuenta de cobro/factura: cliente, concepto, montos, fechas, NIT; o cualquier dato relevante). ` +
-        `Transcribe el texto visible y resume los datos de forma clara y estructurada. ` +
-        (userMsg ? `Contexto del usuario: "${userMsg}". ` : '') +
-        `Responde solo con la información extraída, sin preámbulos.`,
-    },
-  ];
-  for (const img of images.slice(0, 5)) {
+// Anthropic (/v1/messages con bloques 'image' y 'document'). Esta función hace una
+// pasada de lectura: extrae a TEXTO los datos útiles de las imágenes y PDFs para que
+// luego el bucle de acciones (texto) pueda crear registros (clientes, prospectos,
+// cuentas, etc.).
+async function extractFromAttachments(
+  images: string[],
+  docs: { name?: string; dataUrl?: string }[],
+  userMsg: string
+): Promise<string> {
+  const blocks: any[] = [];
+
+  // Los bloques 'document' van ANTES del texto (requisito de la API).
+  for (const doc of (docs || []).slice(0, 2)) {
+    const m = /^data:application\/pdf;base64,(.+)$/.exec(doc?.dataUrl || '');
+    if (!m) continue;
+    if (m[1].length > 30_000_000) continue; // ~22MB; el request completo tope 32MB
+    blocks.push({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: m[1] },
+      ...(doc.name ? { title: doc.name } : {}),
+    });
+  }
+  const conDocs = blocks.length > 0;
+
+  blocks.push({
+    type: 'text',
+    text:
+      `Analiza el/los archivo(s) adjunto(s) y extrae TODA la información útil para registrar datos en DTOS ` +
+      `(p. ej. datos de cliente/prospecto: nombre/empresa, NIT o cédula, teléfono, email, dirección, ciudad; ` +
+      `o datos de una cuenta de cobro/factura: cliente, concepto, montos, fechas, NIT; o cualquier dato relevante). ` +
+      `Transcribe el texto visible y resume los datos de forma clara y estructurada. ` +
+      (userMsg ? `Contexto del usuario: "${userMsg}". ` : '') +
+      `Responde solo con la información extraída, sin preámbulos.`,
+  });
+
+  let conImgs = false;
+  for (const img of (images || []).slice(0, 5)) {
     const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(img || '');
     if (!m) continue;
     if (m[2].length > 9_000_000) continue; // ~6.7MB por imagen, salta las enormes
     blocks.push({ type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } });
+    conImgs = true;
   }
-  if (blocks.length === 1) return ''; // no había imágenes válidas
+  if (!conDocs && !conImgs) return ''; // no había adjuntos válidos
 
   const resp = await axios.post(
     `${AI_BASE_URL}/messages`,
@@ -202,9 +223,17 @@ export class ChatController {
       // Build messages array with conversation history
       const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
-      // Add conversation history if provided
+      // Historial saneado: mensajes que fueron solo-adjunto llegan con content
+      // vacío y la API de IA rechaza todo el request (400 non-empty content).
       if (conversationHistory && Array.isArray(conversationHistory)) {
-        messages.push(...conversationHistory);
+        messages.push(
+          ...conversationHistory
+            .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+            .map((m: any) => ({
+              role: m.role,
+              content: typeof m.content === 'string' && m.content.trim() ? m.content : '[adjunto sin texto]',
+            }))
+        );
       }
 
       // Add current user message
@@ -278,32 +307,45 @@ export class ChatController {
   // Send a message to AI with Function Calling (tools) support
   async sendMessageWithTools(req: Request, res: Response) {
     try {
-      const { message, conversationHistory, images } = req.body;
+      const { message, conversationHistory, images, docs } = req.body;
       const userId = (req as any).user.userId;
 
       const hasImages = Array.isArray(images) && images.length > 0;
-      if ((!message || typeof message !== 'string') && !hasImages) {
+      const hasDocs = Array.isArray(docs) && docs.length > 0;
+      if ((!message || typeof message !== 'string') && !hasImages && !hasDocs) {
         return res.status(400).json({
           success: false,
           error: 'Message is required and must be a string'
         });
       }
 
-      // Si hay imágenes adjuntas, primero se extrae su contenido a texto (visión)
+      // Si hay adjuntos (imágenes o PDFs), primero se extrae su contenido a texto
       // y se antepone al mensaje para que el bucle de acciones pueda usarlo.
       let effectiveMessage = typeof message === 'string' ? message : '';
-      if (hasImages) {
+      if (hasImages || hasDocs) {
+        const que = hasDocs && hasImages ? 'archivo(s)' : hasDocs ? 'PDF(s)' : 'imagen(es)';
         try {
-          const extracted = await extractFromImages(images, effectiveMessage);
+          const extracted = await extractFromAttachments(images || [], docs || [], effectiveMessage);
           if (extracted) {
             effectiveMessage =
-              `[Contenido extraído de imagen(es) adjuntas]:\n${extracted}\n\n` +
-              (effectiveMessage ? `Mensaje del usuario: ${effectiveMessage}` : 'El usuario adjuntó la(s) imagen(es) anterior(es). Actúa según corresponda (crear registro, responder, etc.).');
+              `[Contenido extraído de ${que} adjunto(s)]:\n${extracted}\n\n` +
+              (effectiveMessage ? `Mensaje del usuario: ${effectiveMessage}` : `El usuario adjuntó el/los ${que} anterior(es). Actúa según corresponda (crear registro, responder, etc.).`);
           }
         } catch (e: any) {
-          console.error('[Chat] Error procesando imágenes:', e?.message || e);
+          console.error('[Chat] Error procesando adjuntos:', e?.message || e);
         }
       }
+
+      // Un mensaje que fue SOLO adjunto (foto/PDF sin texto) queda con content vacío
+      // en el historial y la API de IA rechaza TODO el request ("user messages must
+      // have non-empty content"), rompiendo la sala para siempre. Se sanea aquí.
+      const history: OpenAI.Chat.ChatCompletionMessageParam[] = (Array.isArray(conversationHistory) ? conversationHistory : [])
+        .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+        .map((m: any) => ({
+          role: m.role,
+          content: typeof m.content === 'string' && m.content.trim() ? m.content : '[adjunto sin texto]',
+        }));
+      if (!effectiveMessage.trim()) effectiveMessage = '(el usuario envió un adjunto que no se pudo leer; pídele los datos en texto)';
 
       console.log('[Chat] Processing message with tools:', message, 'for user:', userId);
 
@@ -324,7 +366,7 @@ export class ChatController {
             content: `Eres María, la asistente de DT Growth Partners. Responde de forma conversacional. No tienes acceso directo a los datos del sistema; si piden cifras exactas, acláralo y sugiere dónde verlas en DTOS.\n\n${styleGuide}`,
           },
         ];
-        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push(...history);
         messages.push({ role: 'user', content: effectiveMessage });
         const completion = await aiClient.chat.completions.create({ model: AI_MODEL, messages, temperature: 0.7, max_tokens: 2000 });
         return res.json({ success: true, response: cleanResponse(completion.choices[0].message.content || ''), usage: completion.usage });
@@ -338,7 +380,7 @@ export class ChatController {
             content: `Eres María, la asistente de DT Growth Partners. Tienes acceso a datos del sistema mediante herramientas.\n\n${styleGuide}`,
           },
         ];
-        if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+        messages.push(...history);
         messages.push({ role: 'user', content: effectiveMessage });
 
         const MAX_ITERATIONS = 6;
@@ -407,7 +449,7 @@ Reglas: si el usuario dice "créala directo/tú misma/sin confirmar", usa la API
 ${styleGuide}`,
         },
       ];
-      if (conversationHistory && Array.isArray(conversationHistory)) messages.push(...conversationHistory);
+      messages.push(...history);
       messages.push({ role: 'user', content: effectiveMessage });
 
       // Cuentas de cobro vistas en los resultados: guardamos su link público (PDF)

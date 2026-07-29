@@ -1,9 +1,10 @@
+// ⚠️ dotenv DEBE cargarse antes que cualquier otro import: varios módulos leen
+// process.env al inicializarse (config/jwt, chat.controller, …). Con el orden
+// anterior, JWT_SECRET aún no existía al cargar config/jwt y el backend firmaba
+// las sesiones con el fallback público 'your-secret-key' (forjable).
+import 'dotenv/config';
 import app from './app';
 import { PrismaClient } from '@prisma/client';
-import dotenv from 'dotenv';
-
-// Load environment variables
-dotenv.config();
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle, Percent, Calculator, Loader2 } from 'lucide-react';
+import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle, Percent, Calculator, Loader2, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -142,6 +142,9 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
   const [calcData, setCalcData] = useState<ComisionCalc | null>(null);
   const [calcInversion, setCalcInversion] = useState('');
 
+  // Servicio cuya cuenta de cobro se está generando (deshabilita su botón)
+  const [generating, setGenerating] = useState<string | null>(null);
+
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -273,6 +276,28 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     setEditingService(null);
     setCreatingNew(false);
     setNewServiceName('');
+  };
+
+  // Genera la cuenta de cobro de este servicio (queda amarrada al cliente/servicio
+  // y avanza el próximo cobro; pago único queda sin más cobros pendientes).
+  const generarCuenta = async (cs: ClientService) => {
+    const precio = cs.precioCliente ?? cs.service.price;
+    if (!confirm(`¿Generar la cuenta de cobro de "${cs.service.name}" por ${formatCurrency(precio, cs.moneda || 'COP')}?`)) return;
+    setGenerating(cs.id);
+    try {
+      const r = await apiClient.post<{ invoiceNumber: string; pdfUrl: string; concepto: string }>(
+        `/api/clients/${client.id}/services/${cs.id}/generar-cuenta`,
+        {}
+      );
+      toast({ title: `Cuenta #${r.invoiceNumber} generada`, description: r.concepto });
+      window.open(r.pdfUrl, '_blank');
+      fetchClientServices();
+      onUpdate?.();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'No se pudo generar la cuenta', variant: 'destructive' });
+    } finally {
+      setGenerating(null);
+    }
   };
 
   // --- Calculadora de comisión ---
@@ -433,6 +458,19 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                       {cs.esComision && (
                         <Button variant="outline" size="sm" className="gap-1.5 text-violet-400 border-violet-500/40 hover:bg-violet-500/10" onClick={() => openCalc(cs)}>
                           <Calculator className="h-4 w-4" /> Calcular
+                        </Button>
+                      )}
+                      {!cs.esComision && cs.estado === 'activo' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5"
+                          title="Generar la cuenta de cobro de este servicio"
+                          onClick={() => generarCuenta(cs)}
+                          disabled={generating === cs.id}
+                        >
+                          {generating === cs.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+                          Generar cuenta
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(cs)}>

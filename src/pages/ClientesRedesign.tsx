@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
 import ClientSedesManager from '@/components/clients/ClientSedesManager';
@@ -359,11 +360,13 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [mgmtTab, setMgmtTab] = useState<'servicios' | 'sedes' | 'contactos'>('servicios');
-  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
+  const [toggling, setToggling] = useState(false);
   const waPhone = (c.phone || '').replace(/[^0-9]/g, '');
+  const activo = c.status === 'active';
 
   const openEdit = () => {
-    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '' });
+    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
     setEditOpen(true);
   };
   const save = async () => {
@@ -373,6 +376,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
       await apiClient.put(`/api/clients/${c.id}`, {
         name: form.name.trim(), email: form.email.trim(), nit: form.nit.trim() || undefined,
         phone: form.phone.trim() || undefined, address: form.address.trim() || undefined,
+        status: form.status,
       });
       setEditOpen(false);
       toast({ title: 'Cliente actualizado' });
@@ -381,6 +385,55 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
       toast({ title: 'Error', description: 'No se pudo actualizar', variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Comisión (% sobre inversión en pauta): cuenta de cobro directa desde el panel
+  const tieneComision = c.services.some((s) => s.frecuencia === 'comision');
+  const [generandoComision, setGenerandoComision] = useState(false);
+  const crearCuentaComision = async () => {
+    setGenerandoComision(true);
+    try {
+      // Preview con los números reales antes de confirmar
+      const info = await apiClient.get<{ porcentaje: number | null; inversion: number | null; comision: number | null }>(
+        `/api/clients/${c.id}/comision?periodo=this_month`
+      );
+      if (!info?.comision || !info.inversion) {
+        toast({ title: 'Sin datos de pauta', description: 'No hay inversión registrada este mes para calcular la comisión.', variant: 'destructive' });
+        return;
+      }
+      if (!confirm(
+        `¿Generar la cuenta de cobro de la comisión de ${c.name}?\n\n` +
+        `${info.porcentaje}% sobre $${info.inversion.toLocaleString('es-CO')} invertidos este mes\n` +
+        `Total a cobrar: $${info.comision.toLocaleString('es-CO')}`
+      )) return;
+      const r = await apiClient.post<{ invoiceNumber: string; pdfUrl: string; concepto: string }>(
+        `/api/clients/${c.id}/comision/generar-cuenta`,
+        { periodo: 'this_month' }
+      );
+      toast({ title: `Cuenta #${r.invoiceNumber} generada`, description: r.concepto });
+      window.open(r.pdfUrl, '_blank');
+      onUpdated();
+    } catch (e: any) {
+      toast({ title: 'Error', description: e?.message || 'No se pudo generar la cuenta', variant: 'destructive' });
+    } finally {
+      setGenerandoComision(false);
+    }
+  };
+
+  // Activar/desactivar directamente desde el badge del perfil
+  const toggleEstado = async () => {
+    const nuevo = activo ? 'inactive' : 'active';
+    if (!confirm(activo ? `¿Marcar a ${c.name} como INACTIVO? Saldrá de los filtros de clientes activos.` : `¿Reactivar a ${c.name}?`)) return;
+    setToggling(true);
+    try {
+      await apiClient.put(`/api/clients/${c.id}`, { status: nuevo });
+      toast({ title: nuevo === 'active' ? 'Cliente reactivado' : 'Cliente desactivado' });
+      onUpdated();
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo cambiar el estado', variant: 'destructive' });
+    } finally {
+      setToggling(false);
     }
   };
 
@@ -398,9 +451,19 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
             <div className="min-w-0">
               <h2 className="text-lg font-medium leading-tight">{c.name}</h2>
               <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 font-medium">
-                  <CheckCircle2 className="h-3 w-3" /> {c.status === 'active' ? 'Activo' : 'Inactivo'}
-                </span>
+                {/* Badge clickeable: activa/desactiva el cliente */}
+                <button
+                  onClick={toggleEstado}
+                  disabled={toggling}
+                  title={activo ? 'Clic para desactivar' : 'Clic para reactivar'}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium transition-colors cursor-pointer disabled:opacity-50 ${
+                    activo
+                      ? 'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25'
+                      : 'bg-gray-500/15 text-gray-400 hover:bg-gray-500/25'
+                  }`}
+                >
+                  <CheckCircle2 className="h-3 w-3" /> {activo ? 'Activo' : 'Inactivo'}
+                </button>
                 {c.monthlyValue > 0 && (
                   <span className="px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-400 font-medium">MRR · {fmtM(c.monthlyValue)}/mes</span>
                 )}
@@ -504,10 +567,24 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
         <Panel title={`Rendimiento de pauta (${['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'][new Date().getMonth()]})`} icon={TrendingUp}>
           {c.ads ? (
             <div className="space-y-2.5 text-sm">
-              <Row label="Inversión Meta Ads" value={fmtM(c.ads.metaSpend)} />
-              <Row label="Conversaciones WA" value={`${c.ads.waConversations}`} extra={`↑${c.ads.waDelta}%`} />
-              <Row label="Costo por conversación" value={fmtFull(c.ads.costPerConv)} />
-              <Row label="Campaña principal" value={c.ads.mainCampaign} />
+              <Row label="Inversión Meta Ads (mes)" value={fmtFull(c.ads.metaSpend)} />
+              <Row
+                label={c.ads.mainCampaign || 'Resultados'}
+                value={`${c.ads.waConversations}`}
+                extra={c.ads.waDelta ? `${c.ads.waDelta > 0 ? '↑' : '↓'}${Math.abs(c.ads.waDelta)}% vs sem. ant.` : undefined}
+              />
+              <Row label="Costo por resultado" value={fmtFull(c.ads.costPerConv)} />
+              {/* Comisión: genera la cuenta de cobro con el gasto mostrado (mes en curso) */}
+              {tieneComision && (
+                <button
+                  onClick={crearCuentaComision}
+                  disabled={generandoComision}
+                  className="mt-2 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-violet-500/40 text-violet-400 text-sm hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                >
+                  <FileText className="h-4 w-4" />
+                  {generandoComision ? 'Generando…' : 'Crear cuenta de cobro (comisión)'}
+                </button>
+              )}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">Sin pauta activa este mes.</p>
@@ -594,6 +671,15 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
             </div>
             <div className="space-y-1"><Label className="text-xs">Dirección</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">Estado</Label>
+              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">🟢 Activo</SelectItem>
+                  <SelectItem value="inactive">⚪ Inactivo</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Un cliente inactivo sale de los filtros de activos y NO se le generan cuentas recurrentes; su historial y deudas se conservan.</p></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditOpen(false)} disabled={saving}>Cancelar</Button>
@@ -610,7 +696,9 @@ function Row({ label, value, extra }: { label: string; value: string; extra?: st
     <div className="flex items-center justify-between gap-3">
       <span className="text-muted-foreground">{label}</span>
       <span className="tabular-nums font-medium">
-        {value} {extra && <span className="text-emerald-400 text-xs ml-1">{extra}</span>}
+        {value} {extra && (
+          <span className={`text-xs ml-1 ${extra.startsWith('↓') ? 'text-amber-400' : 'text-emerald-400'}`}>{extra}</span>
+        )}
       </span>
     </div>
   );

@@ -13,6 +13,21 @@ export const cleanText = (v: any): string => {
 };
 const clean = cleanText;
 
+/**
+ * Nombre estándar del PDF de una cuenta de cobro: cxc_<cliente>_<AAAAMMDDHHMMSS>.pdf
+ * (mismo saneo del nombre que hace generador.py para el archivo en disco).
+ */
+export const cxcFilename = (clientName: string, invoiceNumber: string): string => {
+  const cliente =
+    (clientName || '')
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9 ]/g, '')
+      .trim()
+      .replace(/\s+/g, '_') || 'cliente';
+  return `cxc_${cliente}_${invoiceNumber}.pdf`;
+};
+
 class InvoiceService {
   public async generateInvoicePdf(invoiceData: CreateInvoiceDto): Promise<{ generatedPath: string; invoiceNumber: string }> {
     return new Promise((resolve, reject) => {
@@ -66,7 +81,8 @@ class InvoiceService {
           console.log(`PDF generated successfully at: ${pdfPath}`);
           // Extract invoice number from filename
           const filename = path.basename(pdfPath);
-          const invoiceNumber = filename.match(/cuenta_cobro_.*?_(\d+)\.pdf/)?.[1] || Date.now().toString();
+          // Acepta la nomenclatura nueva (cxc_) y la vieja (cuenta_cobro_)
+          const invoiceNumber = filename.match(/(?:cxc|cuenta_cobro)_.*?_(\d+)\.pdf/)?.[1] || Date.now().toString();
           resolve({ generatedPath: pdfPath, invoiceNumber });
         } else {
           console.error(`Python script exited with code ${code}`);

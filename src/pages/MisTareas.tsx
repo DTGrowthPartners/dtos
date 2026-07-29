@@ -114,11 +114,38 @@ export default function MisTareas() {
     return TEAM_MEMBERS.find((m) => m.name === name);
   };
 
-  // Filter tasks by selected user
-  const userTasks = tasks.filter((task) => task.assignee === userName);
+  // Mismo orden que el tablero de Tareas: position (orden arrastrado) y, para
+  // tareas sin position, vencidas primero → fecha más próxima → prioridad.
+  // Antes salían en orden crudo de Firestore (más reciente primero = "al revés").
+  const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
+  const STATUS_ORDER: Record<string, number> = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
+  const compareTasks = (a: Task, b: Task) => {
+    const aPos = (a as any).position;
+    const bPos = (b as any).position;
+    if (typeof aPos === 'number' && typeof bPos === 'number') return aPos - bPos;
+    if (typeof aPos === 'number') return -1;
+    if (typeof bPos === 'number') return 1;
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const ts = hoy.getTime();
+    const aVencida = !!(a.dueDate && a.dueDate < ts);
+    const bVencida = !!(b.dueDate && b.dueDate < ts);
+    if (aVencida !== bVencida) return aVencida ? -1 : 1;
+    if (a.dueDate && b.dueDate) return a.dueDate - b.dueDate;
+    if (a.dueDate) return -1;
+    if (b.dueDate) return 1;
+    return (PRIORITY_ORDER[a.priority] ?? 2) - (PRIORITY_ORDER[b.priority] ?? 2);
+  };
+
+  // Filter tasks by selected user (en la vista simple, pendientes antes que completadas)
+  const userTasks = tasks
+    .filter((task) => task.assignee === userName)
+    .sort((a, b) => {
+      const s = (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0);
+      return s !== 0 ? s : compareTasks(a, b);
+    });
 
   const getTasksByStatus = (status: string) => {
-    return userTasks.filter((task) => task.status === status);
+    return userTasks.filter((task) => task.status === status).sort(compareTasks);
   };
 
   // Drag and Drop handlers

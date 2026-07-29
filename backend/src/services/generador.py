@@ -96,7 +96,7 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
     # Ensure it's not empty
     if not nombre_cliente_sanitizado:
         nombre_cliente_sanitizado = 'cliente'
-    nombre_archivo = f"cuenta_cobro_{nombre_cliente_sanitizado}_{numero_cuenta}.pdf"
+    nombre_archivo = f"cxc_{nombre_cliente_sanitizado}_{numero_cuenta}.pdf"
     os.makedirs(os.path.join(script_dir, 'creadas'), exist_ok=True)
     ruta_salida = os.path.join(script_dir, 'creadas', nombre_archivo)
 

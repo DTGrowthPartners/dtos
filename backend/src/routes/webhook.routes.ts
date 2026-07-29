@@ -3,7 +3,7 @@ import { authMiddleware } from '../middlewares/auth.middleware';
 import admin from 'firebase-admin';
 import { PrismaClient } from '@prisma/client';
 import { googleSheetsService } from '../services/googleSheets.service';
-import { invoiceService, getPublicInvoiceUrl, cleanText } from '../services/invoice.service';
+import { invoiceService, getPublicInvoiceUrl, cleanText, cxcFilename } from '../services/invoice.service';
 import { CreateInvoiceDto } from '../dtos/invoice.dto';
 import { agentSendMessage } from '../services/agents.service';
 import { sendPushToMemberName } from '../services/push.service';
@@ -12,6 +12,7 @@ import { generateDueRecurringInvoices } from '../services/recurringInvoices.serv
 import { runCobranza } from '../services/cobranza.service';
 import { runDailyDigest } from '../services/dailyDigest.service';
 import { runConciliacion } from '../services/conciliacion.service';
+import { sendEmail } from '../services/email.service';
 import { DOMAINS, ALERT_THRESHOLDS, REGISTRAR_PANEL, daysUntil } from '../config/domains';
 import path from 'path';
 import fs from 'fs';
@@ -1938,6 +1939,195 @@ router.post('/bot/crm/contacto', verifyBotApiKey, async (req: Request, res: Resp
   }
 });
 
+// Colores de marca DTGP (los mismos del PDF de propuestas y del bot).
+const PIPE_AZUL = '#1B4D6E';
+const PIPE_BANNER = '#17639C';
+const PIPE_ROJO = '#DC3545';
+const PIPE_TEXTO = '#333333';
+const PIPE_GRIS = '#7A8794';
+const PIPE_BORDE = '#E4EAEF';
+
+const esc = (v: unknown) =>
+  String(v ?? '—').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+interface PipeRow {
+  name: string; company: string; servicio: string; etapa: string;
+  owner: string | null; dias: number; vencido: boolean; valor: number;
+  prob: number; prioridadAlta: boolean; nota: string; chatUrl: string | null;
+}
+interface EtapaResumen { etapa: string; count: number; valor: number; top: PipeRow[] }
+
+const fmtCop = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
+const fmtAbrev = (n: number) => {
+  if (n >= 1_000_000) return '$' + (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1_000) return '$' + Math.round(n / 1_000) + 'k';
+  return fmtCop(n);
+};
+
+// Una fila de la tabla de prospectos (Actúa hoy / No dejes enfriar).
+function filaPipe(r: PipeRow, borde: string, botonFill: boolean): string {
+  const diasTxt = r.vencido
+    ? `${r.dias}d<br><span style="font-size:9px;font-weight:normal;">vencido</span>`
+    : `${r.dias}d`;
+  const respHtml = r.owner
+    ? `<span style="color:#5B6B7A;">${esc(r.owner)}</span>`
+    : `<span style="color:${PIPE_ROJO};font-weight:bold;">⚠️ Sin asignar</span>`;
+  const etapaHtml = r.prioridadAlta
+    ? `${esc(r.etapa)}<br><span style="font-size:10px;color:#B8860B;">Prioridad alta</span>`
+    : r.prob
+      ? `${esc(r.etapa)}<br><span style="font-size:10px;color:#8A97A4;">${r.prob}%</span>`
+      : esc(r.etapa);
+  const boton = r.chatUrl
+    ? `<a href="${r.chatUrl}" style="display:inline-block;background-color:${
+        botonFill ? PIPE_BANNER + ';color:#FFFFFF' : '#FFFFFF;color:' + PIPE_BANNER + ';border:1px solid #C3D5E4'
+      };font-size:11px;font-weight:bold;text-decoration:none;padding:6px 12px;border-radius:4px;">Chat →</a>`
+    : `<span style="font-size:11px;color:#B8C4CE;">sin chat</span>`;
+  const notaHtml = r.nota
+    ? `<tr><td colspan="7" style="padding:0 14px 10px 17px;border-left:3px solid ${borde};
+         border-bottom:1px solid #EEF2F6;font-size:11px;color:#8A6D3B;">💡 ${esc(r.nota)}</td></tr>`
+    : '';
+  return `<tr>
+    <td style="padding:12px 8px 12px 14px;border-left:3px solid ${borde};border-bottom:1px solid #EEF2F6;font-size:13px;color:${PIPE_TEXTO};">
+      <strong>${esc(r.name)}</strong>${r.company ? `<br><span style="font-size:11px;color:#8A97A4;">${esc(r.company)}</span>` : ''}</td>
+    <td style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:12px;color:#5B6B7A;">${esc(r.servicio)}</td>
+    <td style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:12px;color:#5B6B7A;">${etapaHtml}</td>
+    <td style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:12px;">${respHtml}</td>
+    <td align="center" style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:12px;color:${r.vencido || r.dias >= 14 ? PIPE_ROJO : '#B8860B'};font-weight:bold;">${diasTxt}</td>
+    <td align="right" style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:14px;color:${PIPE_BANNER};font-weight:bold;white-space:nowrap;">${fmtCop(r.valor)}</td>
+    <td align="center" style="padding:12px 14px 12px 8px;border-bottom:1px solid #EEF2F6;">${boton}</td>
+  </tr>${notaHtml}`;
+}
+
+const HEAD_COLS =
+  `<tr>
+    <td style="padding:9px 8px 9px 14px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Prospecto</td>
+    <td width="150" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Servicio</td>
+    <td width="115" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Etapa</td>
+    <td width="85" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Resp.</td>
+    <td width="60" align="center" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Días</td>
+    <td width="105" align="right" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Valor</td>
+    <td width="70" align="center" style="padding:9px 14px 9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Acción</td>
+  </tr>`;
+
+function seccionTabla(
+  emoji: string, titulo: string, color: string, resumen: string,
+  rows: PipeRow[], borde: string, botonFill: boolean
+): string {
+  if (!rows.length) return '';
+  const filas = rows.map((r) => filaPipe(r, borde, botonFill)).join('');
+  return `<tr><td style="padding:24px 28px 10px 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="font-size:15px;font-weight:bold;color:${color};">${emoji} ${titulo}</td>
+        <td align="right" style="font-size:12px;color:#7A8A99;">${esc(resumen)}</td>
+      </tr></table></td></tr>
+    <tr><td style="padding:0 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="border:1px solid ${PIPE_BORDE};border-radius:6px;border-collapse:separate;">
+        ${HEAD_COLS}${filas}</table></td></tr>`;
+}
+
+/**
+ * Correo diario del pipeline (plantilla v3 de Dairo). Va la lista COMPLETA:
+ * el mensaje de WhatsApp corta a 12 por responsable; aquí no.
+ * Email HTML: tablas + estilos inline (lo único que Gmail y Outlook renderizan).
+ */
+function htmlPipelineDiario(data: {
+  hoy: string; horaHeader: string;
+  kpiPipeline: number; kpiDeals: number; kpiVencidos: number; kpiNegociacion: number;
+  actuaHoy: PipeRow[]; enfriar: PipeRow[]; resumenEtapas: EtapaResumen[];
+  tresCosas: string[];
+}): string {
+  const {
+    hoy, horaHeader, kpiPipeline, kpiDeals, kpiVencidos, kpiNegociacion,
+    actuaHoy, enfriar, resumenEtapas, tresCosas,
+  } = data;
+
+  const sumV = (rs: PipeRow[]) => rs.reduce((s, r) => s + r.valor, 0);
+  const kpi = (valor: string, label: string, color: string, borde: boolean) =>
+    `<td width="25%" align="center" style="padding:18px 8px;${borde ? `border-right:1px solid ${PIPE_BORDE};` : ''}">
+       <div style="font-size:23px;font-weight:bold;color:${color};">${valor}</div>
+       <div style="font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;padding-top:4px;">${label}</div></td>`;
+
+  const secActua = seccionTabla('🔥', 'ACTÚA HOY', PIPE_ROJO,
+    `${actuaHoy.length} prospecto${actuaHoy.length === 1 ? '' : 's'} · ${fmtAbrev(sumV(actuaHoy))} en juego`,
+    actuaHoy, PIPE_ROJO, true);
+  const secEnfriar = seccionTabla('🟡', 'NO DEJES ENFRIAR', '#B8860B',
+    `${enfriar.length} prospecto${enfriar.length === 1 ? '' : 's'} · ${fmtAbrev(sumV(enfriar))}`,
+    enfriar, '#E0A800', false);
+
+  const filasEtapa = resumenEtapas.map((e) => {
+    const top = e.top.map((t) => `${esc(t.name)} ${fmtCop(t.valor)}`).join(' · ');
+    const rest = e.count - e.top.length;
+    return `<tr>
+      <td style="padding:12px 8px 12px 14px;border-bottom:1px solid #EEF2F6;font-size:13px;color:${PIPE_TEXTO};"><strong>${esc(e.etapa)}</strong></td>
+      <td align="center" style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:13px;color:${PIPE_TEXTO};font-weight:bold;">${e.count}</td>
+      <td align="right" style="padding:12px 8px;border-bottom:1px solid #EEF2F6;font-size:13px;color:${PIPE_BANNER};font-weight:bold;">${fmtCop(e.valor)}</td>
+      <td style="padding:12px 14px 12px 12px;border-bottom:1px solid #EEF2F6;font-size:11px;color:#5B6B7A;line-height:1.6;">
+        ${top || '<span style="color:#8A97A4;">sin valor asignado</span>'}${rest > 0 ? `<br><span style="color:#8A97A4;">+${rest} más</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+  const secResumen = resumenEtapas.length ? `<tr><td style="padding:24px 28px 10px 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td style="font-size:15px;font-weight:bold;color:${PIPE_TEXTO};">📊 RESTO DEL PIPELINE</td>
+        <td align="right" style="font-size:12px;color:#7A8A99;">sin acción urgente hoy</td></tr></table></td></tr>
+    <tr><td style="padding:0 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="border:1px solid ${PIPE_BORDE};border-radius:6px;border-collapse:separate;">
+        <tr>
+          <td style="padding:9px 8px 9px 14px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Etapa</td>
+          <td width="70" align="center" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Deals</td>
+          <td width="115" align="right" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Valor</td>
+          <td width="330" style="padding:9px 14px 9px 12px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Los de mayor valor</td>
+        </tr>${filasEtapa}</table></td></tr>` : '';
+
+  const cierre = tresCosas.length ? `<tr><td style="padding:24px 28px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${PIPE_BANNER};border-radius:8px;">
+        <tr><td style="padding:18px 22px;">
+          <div style="color:#FFFFFF;font-size:14px;font-weight:bold;padding-bottom:10px;">✅ Si solo haces ${tresCosas.length} cosa${tresCosas.length === 1 ? '' : 's'} hoy</div>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            ${tresCosas.map((c, i) => `<tr>
+              <td width="22" style="color:#A9CBE3;font-size:13px;font-weight:bold;padding:4px 0;vertical-align:top;">${i + 1}.</td>
+              <td style="color:#FFFFFF;font-size:13px;padding:4px 0;">${c}</td></tr>`).join('')}
+          </table></td></tr></table></td></tr>` : '';
+
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background-color:#EDF1F5;font-family:Arial,Helvetica,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#EDF1F5;">
+<tr><td align="center" style="padding:20px 10px;">
+<table role="presentation" width="900" cellpadding="0" cellspacing="0" style="max-width:900px;width:100%;background-color:#FFFFFF;border-radius:10px;overflow:hidden;border:1px solid #D9E2EA;">
+
+  <tr><td style="background-color:${PIPE_BANNER};padding:22px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      <td><div style="color:#FFFFFF;font-size:17px;font-weight:bold;letter-spacing:1.2px;">DT GROWTH PARTNERS</div>
+        <div style="color:#A9CBE3;font-size:13px;padding-top:5px;">Reporte diario de pipeline</div></td>
+      <td align="right" style="vertical-align:top;">
+        <div style="color:#FFFFFF;font-size:14px;font-weight:bold;">${esc(hoy)}</div>
+        <div style="color:#A9CBE3;font-size:12px;padding-top:5px;">${esc(horaHeader)}</div></td>
+    </tr></table></td></tr>
+
+  <tr><td style="border-bottom:1px solid #E4EAF0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+      ${kpi(fmtAbrev(kpiPipeline), 'Pipeline activo', PIPE_BANNER, true)}
+      ${kpi(String(kpiDeals), 'Deals activos', '#2C3E50', true)}
+      ${kpi(String(kpiVencidos), 'Seguimientos vencidos', kpiVencidos > 0 ? '#C0392B' : '#2C3E50', true)}
+      ${kpi(fmtAbrev(kpiNegociacion), 'En negociación', '#2C3E50', false)}
+    </tr></table></td></tr>
+
+  ${secActua || secEnfriar ? '' : `<tr><td style="padding:28px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F2FBF4;border:1px solid #CBEBD4;border-radius:8px;"><tr><td align="center" style="padding:26px;font-size:15px;font-weight:bold;color:#28A745;">Nada vencido ni frío. Pipeline al día.</td></tr></table></td></tr>`}
+  ${secActua}
+  ${secEnfriar}
+  ${secResumen}
+  ${cierre}
+
+  <tr><td align="center" style="padding:16px 28px 24px 28px;border-top:1px solid #E4EAF0;">
+    <a href="https://os.dtgrowthpartners.com/crm" style="font-size:13px;color:${PIPE_BANNER};text-decoration:none;font-weight:bold;">Abrir pipeline completo en DT-OS →</a>
+    <div style="font-size:11px;color:#A5B2BF;padding-top:8px;">Alerta interna del pipeline. Al prospecto no se le escribe desde aquí.</div></td></tr>
+
+</table></td></tr></table></body></html>`;
+}
+
 /**
  * POST /api/webhook/bot/crm/seguimientos-run
  *
@@ -1954,64 +2144,129 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
 
     const deals = await prisma.deal.findMany({
       where: { deletedAt: null, stageId: { in: openStageIds } },
-      include: { owner: { select: { firstName: true } }, stage: true },
+      include: {
+        owner: { select: { firstName: true } },
+        stage: true,
+        service: { select: { name: true } },
+      },
     });
 
-    // Umbral de días sin contacto por etapa (slug). Default 5.
-    const thresholds: Record<string, number> = { negociacion: 2, propuesta: 3, reunion: 1, contactado: 4 };
     const now = Date.now();
+    const DIA = 86400000;
+    // Umbral urgente por etapa avanzada; el resto entra por días sin contacto.
+    const valorDe = (d: (typeof deals)[number]) =>
+      d.estimatedValue || d.monthlyRecurring || 0;
+    const chatUrlDe = (d: (typeof deals)[number]): string | null => {
+      const raw = (d.phone || '').replace(/\D/g, '');
+      if (!raw) return null;
+      const num = raw.startsWith('57') ? raw : raw.length === 10 ? '57' + raw : raw;
+      return `https://david.dtgrowthpartners.com/admin/chats/${num}`;
+    };
 
-    type Pend = { name: string; owner: string; valor: number; etapa: string; score: number; motivo: string };
-    const pendientes: Pend[] = [];
-    for (const d of deals) {
+    // KPIs sobre TODO el pipeline abierto.
+    const kpiPipeline = deals.reduce((s, d) => s + valorDe(d), 0);
+    const kpiDeals = deals.length;
+    const kpiNegociacion = deals
+      .filter((d) => (d.stage?.slug || '').toLowerCase().includes('negociac'))
+      .reduce((s, d) => s + valorDe(d), 0);
+
+    // Fila normalizada por deal.
+    const rows: (PipeRow & { score: number; slug: string })[] = deals.map((d) => {
       const last = d.lastInteractionAt || d.createdAt;
-      const diasSinContacto = Math.floor((now - new Date(last).getTime()) / 86400000);
-      const slug = (d.stage?.slug || '').toLowerCase();
-      const umbral = thresholds[slug] ?? 5;
-      const seguimientoVencido = !!d.nextFollowUp && new Date(d.nextFollowUp).getTime() <= now;
-      if (seguimientoVencido || diasSinContacto >= umbral) {
-        const valor = d.estimatedValue || 0;
-        const prob = (d.probability ?? 50) / 100;
-        pendientes.push({
-          name: d.name,
-          owner: d.owner?.firstName || 'Sin responsable',
-          valor,
-          etapa: d.stage?.name || '',
-          score: valor * prob,
-          motivo: seguimientoVencido ? 'seguimiento vencido' : `${diasSinContacto}d sin contacto`,
-        });
-      }
+      const dias = Math.floor((now - new Date(last).getTime()) / DIA);
+      const vencido = !!d.nextFollowUp && new Date(d.nextFollowUp).getTime() <= now;
+      const valor = valorDe(d);
+      const prio = (d.priority || '').toLowerCase();
+      const nota = (d.source || '').toLowerCase() === 'referido'
+        ? 'Es referido — retomar por llamada, no por WhatsApp.' : '';
+      return {
+        name: d.name, company: d.company || '', servicio: d.service?.name || '—',
+        etapa: d.stage?.name || '', owner: d.owner?.firstName || null,
+        dias, vencido, valor, prob: d.probability ?? 0,
+        prioridadAlta: prio === 'alta' || prio === 'urgente', nota,
+        chatUrl: chatUrlDe(d),
+        score: valor * ((d.probability ?? 50) / 100),
+        slug: (d.stage?.slug || '').toLowerCase(),
+      };
+    });
+
+    const kpiVencidos = rows.filter((r) => r.vencido).length;
+
+    // Segmentación: urgente (vencido o >=14d), tibio (7-13d), resto (resumen).
+    const esAvanzada = (slug: string) =>
+      ['negociac', 'propuesta'].some((k) => slug.includes(k));
+    const actuaHoy = rows
+      .filter((r) => r.vencido || r.dias >= 14 || (esAvanzada(r.slug) && r.dias >= 10))
+      .sort((a, b) => b.score - a.score).slice(0, 10);
+    const idsActua = new Set(actuaHoy);
+    const enfriar = rows
+      .filter((r) => !idsActua.has(r) && r.dias >= 7 && r.dias < 14)
+      .sort((a, b) => b.score - a.score).slice(0, 10);
+    const idsListados = new Set([...actuaHoy, ...enfriar]);
+
+    // Resto: todo lo no listado individualmente, agrupado por etapa.
+    const porEtapa = new Map<string, (PipeRow & { score: number })[]>();
+    for (const r of rows) {
+      if (idsListados.has(r)) continue;
+      const k = r.etapa || 'Sin etapa';
+      if (!porEtapa.has(k)) porEtapa.set(k, []);
+      porEtapa.get(k)!.push(r);
+    }
+    const resumenEtapas: EtapaResumen[] = [...porEtapa.entries()]
+      .map(([etapa, items]) => ({
+        etapa, count: items.length,
+        valor: items.reduce((s, r) => s + r.valor, 0),
+        top: [...items].sort((a, b) => b.valor - a.valor).filter((r) => r.valor > 0).slice(0, 3),
+      }))
+      .sort((a, b) => b.valor - a.valor);
+
+    // "3 cosas hoy": derivadas de lo más urgente.
+    const tresCosas: string[] = [];
+    const topActua = actuaHoy[0];
+    if (topActua) tresCosas.push(
+      `Contactar a <strong>${esc(topActua.name)}</strong> — ${fmtAbrev(topActua.valor)} lleva ${topActua.dias} días ${topActua.vencido ? 'vencido' : 'sin contacto'}`);
+    const propVencida = actuaHoy.find((r) => r.vencido && r.slug.includes('propuesta') && r !== topActua);
+    if (propVencida) tresCosas.push(
+      `Reactivar a <strong>${esc(propVencida.name)}</strong>${propVencida.company ? ` (${esc(propVencida.company)})` : ''} — propuesta vencida`);
+    const sinResp = actuaHoy.concat(enfriar).filter((r) => !r.owner).slice(0, 2);
+    if (sinResp.length) tresCosas.push(
+      `Asignar responsable a <strong>${sinResp.map((r) => esc(r.name)).join('</strong> y <strong>')}</strong>`);
+    // Rellenar hasta 3 con los siguientes urgentes.
+    for (const r of actuaHoy.slice(1)) {
+      if (tresCosas.length >= 3) break;
+      if (r === propVencida) continue;
+      tresCosas.push(`Retomar a <strong>${esc(r.name)}</strong> — ${fmtAbrev(r.valor)}, ${r.dias}d`);
     }
 
-    pendientes.sort((a, b) => b.score - a.score);
-    const byOwner = new Map<string, Pend[]>();
-    for (const p of pendientes) {
-      if (!byOwner.has(p.owner)) byOwner.set(p.owner, []);
-      byOwner.get(p.owner)!.push(p);
-    }
+    const totalPendientes = actuaHoy.length + enfriar.length;
+    const hoy = new Date().toLocaleDateString('es-CO', {
+      weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Bogota',
+    });
+    const hoyCap = hoy.charAt(0).toUpperCase() + hoy.slice(1);
 
+    // Mensaje corto de WhatsApp (Dairo lo sigue recibiendo en el grupo).
     const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
-    const hoy = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long' });
-    const partes: string[] = [`📊 *Seguimientos de hoy — Pipeline* (${hoy})`];
-    if (!pendientes.length) {
-      partes.push('', '✅ Nada vencido. Pipeline al día.');
+    const partes: string[] = [`📊 *Seguimientos de hoy — Pipeline* (${hoyCap})`];
+    if (!totalPendientes) {
+      partes.push('', '✅ Nada vencido ni frío. Pipeline al día.');
     } else {
-      const grupos = [...byOwner.entries()].sort(
-        (a, b) => b[1].reduce((s, x) => s + x.score, 0) - a[1].reduce((s, x) => s + x.score, 0)
-      );
-      for (const [owner, items] of grupos) {
-        partes.push('', `*${owner}* (${items.length})`);
-        for (const it of items.slice(0, 12)) {
-          partes.push(`• ${it.name} — ${fmt(it.valor)} · ${it.etapa} · ${it.motivo}`);
-        }
+      if (actuaHoy.length) {
+        partes.push('', `🔥 *Actúa hoy* (${actuaHoy.length})`);
+        for (const r of actuaHoy.slice(0, 12))
+          partes.push(`• ${r.name} — ${fmt(r.valor)} · ${r.etapa} · ${r.vencido ? 'vencido' : r.dias + 'd'}`);
       }
-      partes.push('', `Total: ${pendientes.length} por contactar. ⚠️ Alerta interna — NO se le escribe al prospecto desde aquí.`);
+      if (enfriar.length) {
+        partes.push('', `🟡 *No dejes enfriar* (${enfriar.length})`);
+        for (const r of enfriar.slice(0, 12))
+          partes.push(`• ${r.name} — ${fmt(r.valor)} · ${r.etapa} · ${r.dias}d`);
+      }
+      partes.push('', `Total: ${totalPendientes} por contactar. Detalle completo en el correo. ⚠️ NO se le escribe al prospecto desde aquí.`);
     }
     const mensaje = partes.join('\n');
 
     const destino = process.env.PIPELINE_FOLLOWUP_DEST;
     let enviado = false;
-    if (destino && pendientes.length) {
+    if (destino && totalPendientes) {
       try {
         await agentSendMessage('dairo', { destino, mensaje, origen: 'dtos_pipeline_seguimientos' });
         enviado = true;
@@ -2020,7 +2275,35 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
       }
     }
 
-    res.json({ success: true, total: pendientes.length, enviado, destinoConfigurado: !!destino, mensaje });
+    // Correo: va SIEMPRE, también con el pipeline al día — confirma que el cron
+    // corrió; el silencio no distingue eso de un cron caído.
+    const emailDest = (process.env.PIPELINE_FOLLOWUP_EMAIL || '')
+      .split(',').map((x) => x.trim()).filter(Boolean);
+    let emailEnviado = false;
+    if (emailDest.length) {
+      try {
+        await sendEmail({
+          to: emailDest.join(', '),
+          subject: totalPendientes
+            ? `[Pipeline] ${totalPendientes} por contactar${kpiVencidos ? `, ${kpiVencidos} vencidos` : ''} — ${hoyCap}`
+            : `[Pipeline] Al día — ${hoyCap}`,
+          html: htmlPipelineDiario({
+            hoy: hoyCap, horaHeader: '7:57 AM · DT-OS',
+            kpiPipeline, kpiDeals, kpiVencidos, kpiNegociacion,
+            actuaHoy, enfriar, resumenEtapas, tresCosas,
+          }),
+          text: mensaje.replace(/\*/g, ''),
+        });
+        emailEnviado = true;
+      } catch (e) {
+        console.error('[pipeline-cron] email falló:', (e as Error).message);
+      }
+    }
+
+    res.json({
+      success: true, total: totalPendientes, enviado, emailEnviado,
+      destinoConfigurado: !!destino, emailConfigurado: emailDest.length > 0, mensaje,
+    });
   } catch (error) {
     console.error('[Bot API] Error en seguimientos-run:', error);
     res.status(500).json({ success: false, error: 'Error generando seguimientos' });
@@ -2096,6 +2379,7 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
         prioridad: deal.priority,
         fuente: deal.source,
         proximoSeguimiento: deal.nextFollowUp?.toISOString().split('T')[0],
+        ultimaInteraccion: deal.lastInteractionAt?.toISOString() ?? null,
         fechaCierreEsperada: deal.expectedCloseDate?.toISOString().split('T')[0],
         notas: deal.notes,
         tags: deal.tags,
@@ -2281,6 +2565,10 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
       notes,
       propietario,
       owner,
+      proximoSeguimiento,
+      nextFollowUp,
+      ultimaInteraccion,
+      lastInteractionAt,
     } = req.body;
 
     // Resolver valores
@@ -2393,6 +2681,16 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
       }
     }
 
+    // Fechas de seguimiento. El bot las manda al agendar: sin nextFollowUp el
+    // deal nace sin fecha y el reporte diario nunca lo marca vencido.
+    const parseFecha = (v: unknown): Date | undefined => {
+      if (!v) return undefined;
+      const d = new Date(String(v));
+      return isNaN(d.getTime()) ? undefined : d;
+    };
+    const dealFollowUpNew = parseFecha(proximoSeguimiento || nextFollowUp);
+    const dealLastIntNew = parseFecha(ultimaInteraccion || lastInteractionAt);
+
     // Crear el deal
     const deal = await prisma.deal.create({
       data: {
@@ -2410,6 +2708,8 @@ router.post('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Respons
         serviceId: resolvedServiceId,
         ownerId: resolvedOwnerId,
         createdBy: defaultUserId,
+        ...(dealFollowUpNew ? { nextFollowUp: dealFollowUpNew } : {}),
+        ...(dealLastIntNew ? { lastInteractionAt: dealLastIntNew } : {}),
       },
     });
 
@@ -2473,6 +2773,8 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
       nextFollowUp,
       probabilidad,
       probability,
+      ultimaInteraccion,
+      lastInteractionAt,
     } = req.body;
 
     // Verificar que el deal existe
@@ -2524,6 +2826,15 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
 
     const dealProbability = probabilidad || probability;
     if (dealProbability !== undefined) updateData.probability = Number(dealProbability);
+
+    // Última interacción: la manda el bot cada vez que el prospecto escribe.
+    // Sin esto el pipeline cree que un deal lleva semanas frío aunque el bot
+    // haya conversado hoy, y el reporte de seguimientos avisa en falso.
+    const dealLastInt = ultimaInteraccion || lastInteractionAt;
+    if (dealLastInt) {
+      const li = new Date(dealLastInt);
+      if (!isNaN(li.getTime())) updateData.lastInteractionAt = li;
+    }
 
     const dealFollowUp = proximoSeguimiento || nextFollowUp;
     if (dealFollowUp) {
@@ -3703,8 +4014,8 @@ router.get('/bot/invoices/:id/download', verifyBotApiKey, async (req: Request, r
       });
     }
 
-    // Nombre con la nomenclatura AAAAMMDDHHMMSS (número de cuenta) para el bot de WhatsApp.
-    const sanitizedFilename = `cuenta_cobro_${invoice.invoiceNumber}.pdf`;
+    // Nomenclatura estándar para el bot de WhatsApp: cxc_<cliente>_<AAAAMMDDHHMMSS>.pdf
+    const sanitizedFilename = cxcFilename(invoice.clientName, invoice.invoiceNumber);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${sanitizedFilename}"`);
     res.sendFile(absolutePath);

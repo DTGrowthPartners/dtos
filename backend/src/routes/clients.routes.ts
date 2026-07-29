@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ClientController } from '../controllers/client.controller';
 import clientServiceController from '../controllers/clientService.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
+import { generarCuentaDeServicio, generarCuentaComision } from '../services/recurringInvoices.service';
 
 const router = Router();
 const clientController = new ClientController();
@@ -30,5 +31,31 @@ router.get('/:clientId/services', clientServiceController.getClientServices);
 router.post('/:clientId/services', clientServiceController.assignServiceToClient);
 router.put('/:clientId/services/:serviceId', clientServiceController.updateClientService);
 router.delete('/:clientId/services/:serviceId', clientServiceController.removeServiceFromClient);
+
+// Generar la cuenta de cobro de UN servicio contratado desde el perfil del cliente
+// (botón "Generar cuenta"). Crea el PDF + Invoice borrador amarrada al servicio y
+// avanza el próximo cobro (único → sin más cobros).
+router.post('/:clientId/services/:clientServiceId/generar-cuenta', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const cuenta = await generarCuentaDeServicio(req.params.clientServiceId, user?.email || 'perfil-cliente');
+    res.json({ success: true, ...cuenta });
+  } catch (e: any) {
+    res.status(Number.isInteger(e?.status) ? e.status : 500).json({ success: false, error: e?.message || 'No se pudo generar la cuenta' });
+  }
+});
+
+// Generar la cuenta de cobro de la COMISIÓN (% sobre inversión en pauta Meta)
+// desde el panel de pauta del perfil. body: { periodo?: 'this_month'|'last_month' }
+router.post('/:clientId/comision/generar-cuenta', async (req, res) => {
+  try {
+    const periodo = req.body?.periodo === 'last_month' ? 'last_month' : 'this_month';
+    const user = (req as any).user;
+    const cuenta = await generarCuentaComision(req.params.clientId, periodo, user?.email || 'perfil-cliente');
+    res.json({ success: true, ...cuenta });
+  } catch (e: any) {
+    res.status(Number.isInteger(e?.status) ? e.status : 500).json({ success: false, error: e?.message || 'No se pudo generar la cuenta' });
+  }
+});
 
 export default router;

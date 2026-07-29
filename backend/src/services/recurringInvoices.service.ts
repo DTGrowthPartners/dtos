@@ -19,29 +19,35 @@ const toYMD = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
+/** Formatea un rango de fechas en español, sin repetir mes/año cuando coinciden. */
+const formatRango = (s: Date, e: Date): string => {
+  const [sd, sm, sy] = [s.getDate(), s.getMonth(), s.getFullYear()];
+  const [ed, em, ey] = [e.getDate(), e.getMonth(), e.getFullYear()];
+  if (sy !== ey) return `del ${sd} de ${MESES[sm]} de ${sy} al ${ed} de ${MESES[em]} de ${ey}`;
+  if (sm !== em) return `del ${sd} de ${MESES[sm]} al ${ed} de ${MESES[em]} de ${ey}`;
+  return `del ${sd} al ${ed} de ${MESES[em]} de ${ey}`;
+};
+
 /**
- * Si las notas del servicio incluyen una etiqueta "PERIODO=Ds-De" (días de inicio y
- * fin del periodo de cobro), arma el texto del periodo terminando en la fecha de
- * cobro. Si Ds > De, el inicio cae en el mes anterior. Ej: PERIODO=5-20 con cobro
- * el 20 de junio -> "del 5 al 20 de junio de 2026".
+ * Texto del periodo facturado, terminando en la fecha de cobro.
+ * - Si las notas del servicio traen la etiqueta "PERIODO=Ds-De" (días de inicio y
+ *   fin), se respeta: PERIODO=5-20 con cobro el 20 de junio -> "del 5 al 20 de junio".
+ * - Sin etiqueta, el periodo natural es desde el cobro anterior según la frecuencia:
+ *   mensual con cobro el 15 de julio -> "del 15 de junio al 15 de julio de 2026".
  */
-const buildPeriodo = (notas: string | null | undefined, dueDate: Date): string | null => {
+const buildPeriodo = (notas: string | null | undefined, dueDate: Date, frecuencia: string): string => {
   const m = (notas || '').match(/PERIODO=(\d{1,2})-(\d{1,2})/i);
-  if (!m) return null;
-  const startDay = parseInt(m[1], 10);
-  const endDay = parseInt(m[2], 10);
-  const endMonth = dueDate.getMonth();
-  const endYear = dueDate.getFullYear();
-  let startMonth = endMonth;
-  let startYear = endYear;
-  if (startDay > endDay) {
-    startMonth = endMonth - 1;
-    if (startMonth < 0) { startMonth = 11; startYear = endYear - 1; }
+  if (m) {
+    const startDay = parseInt(m[1], 10);
+    const endDay = parseInt(m[2], 10);
+    const end = new Date(dueDate.getFullYear(), dueDate.getMonth(), endDay);
+    const start = new Date(dueDate.getFullYear(), dueDate.getMonth() - (startDay > endDay ? 1 : 0), startDay);
+    return formatRango(start, end);
   }
-  if (startMonth === endMonth) {
-    return `del ${startDay} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
-  }
-  return `del ${startDay} de ${MESES[startMonth]} al ${endDay} de ${MESES[endMonth]} de ${endYear}`;
+  const start = DAYS_BY_FREQ[frecuencia]
+    ? addDays(dueDate, -DAYS_BY_FREQ[frecuencia])
+    : addMonths(dueDate, -(MONTHS_BY_FREQ[frecuencia] || 1));
+  return formatRango(start, dueDate);
 };
 
 /** Avanza una fecha N meses preservando el dia (clamp a fin de mes). */
@@ -72,6 +78,159 @@ export interface RecurringRunResult {
   errors: { cliente: string; error: string }[];
 }
 
+export interface CuentaGenerada {
+  invoiceId: string;
+  invoiceNumber: string;
+  pdfUrl: string;
+  cliente: string;
+  servicio: string;
+  monto: number;
+  concepto: string;
+}
+
+// Error de validación "esperado" (el cron lo reporta como omitido, no como error)
+const skipError = (msg: string) => Object.assign(new Error(msg), { status: 400, skip: true });
+
+/**
+ * Genera la cuenta de cobro (borrador) de UN servicio contratado y avanza su
+ * próximo cobro (único → sin más cobros; recurrente → siguiente periodo futuro).
+ * La usan el cron de recurrentes y el botón "Generar cuenta" del perfil del cliente.
+ */
+export const generarCuentaDeServicio = async (
+  clientServiceId: string,
+  createdBy = 'sistema-recurrente',
+  // Comisión: monto calculado (spend × %) y concepto con el periodo de la pauta
+  opts?: { monto?: number; concepto?: string }
+): Promise<CuentaGenerada> => {
+  const cs = await prisma.clientService.findUnique({
+    where: { id: clientServiceId },
+    include: {
+      client: { select: { id: true, name: true, nit: true } },
+      service: { select: { name: true, price: true } },
+    },
+  });
+  if (!cs) throw Object.assign(new Error('Servicio del cliente no encontrado'), { status: 404 });
+
+  const clienteNombre = cs.client?.name || 'Cliente';
+  const nit = cs.client?.nit?.trim();
+  if (!nit || nit === '0') throw skipError('Cliente sin NIT/identificación válida');
+  const precio = opts?.monto ?? cs.precioCliente ?? cs.service?.price ?? 0;
+  if (precio <= 0) throw skipError('Servicio sin precio');
+
+  const now = new Date();
+  const servicioNombre = cs.service?.name || 'Servicio';
+  const esUnico = cs.frecuencia === 'unico';
+  const dueDate = (cs.fechaProximoCobro as Date) || now;
+  // Pago único: sin periodo (es un proyecto). Recurrente: siempre con el periodo facturado.
+  const concepto =
+    opts?.concepto || (esUnico ? servicioNombre : `${servicioNombre} ${buildPeriodo(cs.notas, dueDate, cs.frecuencia)}`);
+  const fechaStr = toYMD(now);
+
+  // Observaciones vacías: el PDF imprime la nota estándar de régimen.
+  // El número de cuenta es un timestamp por SEGUNDO (viene del nombre del PDF y va
+  // impreso dentro): dos generaciones en el mismo segundo chocan y el segundo PDF
+  // pisa el archivo del primero. Si el número ya existe, esperar y regenerar.
+  let generatedPath = '';
+  let invoiceNumber = '';
+  for (let intento = 0; intento < 3; intento++) {
+    ({ generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
+      nombre_cliente: clienteNombre,
+      identificacion: nit,
+      servicios: [{ descripcion: concepto, cantidad: 1, precio_unitario: precio }],
+      observaciones: '',
+      concepto,
+      fecha: fechaStr,
+      servicio_proyecto: servicioNombre,
+      cliente_id: cs.client?.id,
+    }));
+    const dup = await prisma.invoice.findUnique({ where: { invoiceNumber } });
+    if (!dup) break;
+    await new Promise((r) => setTimeout(r, 1200));
+  }
+
+  const createdInvoice = await prisma.invoice.create({
+    data: {
+      invoiceNumber,
+      clientId: cs.client?.id || '',
+      clientName: clienteNombre,
+      clientNit: nit,
+      totalAmount: precio,
+      fecha: new Date(fechaStr),
+      concepto,
+      servicio: servicioNombre,
+      serviceId: cs.serviceId || null,
+      observaciones: null,
+      filePath: generatedPath,
+      status: 'pendiente',
+      createdBy,
+    },
+  });
+
+  // Avanzar fechaProximoCobro (evita que el cron duplique el cobro mañana).
+  if (esUnico) {
+    await prisma.clientService.update({ where: { id: cs.id }, data: { fechaProximoCobro: null } });
+  } else if (cs.fechaProximoCobro) {
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+    let next = advance(cs.fechaProximoCobro as Date, cs.frecuencia);
+    let guard = 0;
+    while (next.getTime() <= endOfToday.getTime() && guard < 60) {
+      next = advance(next, cs.frecuencia);
+      guard++;
+    }
+    await prisma.clientService.update({ where: { id: cs.id }, data: { fechaProximoCobro: next } });
+  }
+
+  return {
+    invoiceId: createdInvoice.id,
+    invoiceNumber,
+    pdfUrl: getPublicInvoiceUrl(createdInvoice.id),
+    cliente: clienteNombre,
+    servicio: servicioNombre,
+    monto: precio,
+    concepto,
+  };
+};
+
+/**
+ * Genera la cuenta de cobro de la COMISIÓN de un cliente bajo demanda (botón
+ * "Crear cuenta de cobro" del panel de pauta). Usa el gasto Meta del snapshot:
+ * mes en curso (corte = ayer) o mes anterior. Pasa por el mismo helper que el
+ * cron, así que también avanza fechaProximoCobro (el cron no duplicará el mes).
+ */
+export const generarCuentaComision = async (
+  clientId: string,
+  periodo: 'this_month' | 'last_month',
+  createdBy: string
+): Promise<CuentaGenerada & { inversion: number; porcentaje: number }> => {
+  const cs = await prisma.clientService.findFirst({
+    where: { clientId, esComision: true, estado: 'activo' },
+    include: { client: { select: { id: true, name: true, metaAdAccountId: true } } },
+  });
+  if (!cs) throw Object.assign(new Error('El cliente no tiene un servicio de comisión activo'), { status: 400 });
+  const pct = cs.porcentajeComision;
+  if (!pct || pct <= 0) throw Object.assign(new Error('El servicio de comisión no tiene porcentaje configurado'), { status: 400 });
+  if (!cs.client?.metaAdAccountId) throw Object.assign(new Error('El cliente no tiene cuenta de Meta vinculada (metaAdAccountId)'), { status: 400 });
+
+  const { metaGastoService } = await import('./metaGasto.service');
+  const now = new Date();
+  const ref = periodo === 'last_month' ? new Date(now.getFullYear(), now.getMonth() - 1, 1) : now;
+  const mes = `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, '0')}`;
+  const r = await metaGastoService.gastoDeCuenta(cs.client.metaAdAccountId, periodo === 'last_month' ? mes : undefined);
+  if (!r || r.gasto <= 0) {
+    throw Object.assign(new Error(`Sin gasto en pauta registrado para ${mes}`), { status: 400 });
+  }
+
+  const corte = !r.detalle.periodo.mes_cerrado
+    ? ` (corte al ${r.detalle.periodo.hasta.slice(8, 10)}/${r.detalle.periodo.hasta.slice(5, 7)})`
+    : '';
+  const concepto = `Comisión ${pct}% sobre inversión en pauta de ${MESES[ref.getMonth()]} de ${ref.getFullYear()}${corte} — inversión $${Math.round(r.gasto).toLocaleString('es-CO')}`;
+  const gen = await generarCuentaDeServicio(cs.id, createdBy, {
+    monto: Math.round((r.gasto * pct) / 100),
+    concepto,
+  });
+  return { ...gen, inversion: Math.round(r.gasto), porcentaje: pct };
+};
+
 /**
  * Genera las cuentas de cobro (borrador) de los servicios recurrentes cuya
  * fechaProximoCobro ya llego. Por cada una:
@@ -90,12 +249,12 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
   const dueServices = await prisma.clientService.findMany({
     where: {
       estado: 'activo',
+      client: { status: 'active' }, // cliente desactivado = no se le auto-factura
       frecuencia: { not: 'unico' },
-      esComision: false, // comisión = valor variable, no se auto-factura con precio fijo
       fechaProximoCobro: { not: null, lte: endOfToday },
     },
     include: {
-      client: { select: { id: true, name: true, nit: true } },
+      client: { select: { id: true, name: true, nit: true, metaAdAccountId: true } },
       service: { select: { name: true, price: true } },
     },
   });
@@ -103,55 +262,59 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
   for (const cs of dueServices) {
     const clienteNombre = cs.client?.name || 'Cliente';
     try {
-      const nit = cs.client?.nit?.trim();
-      if (!nit || nit === '0') {
-        result.skipped.push({ cliente: clienteNombre, motivo: 'Cliente sin NIT/identificación válida' });
-        continue;
+      // Comisión (% sobre inversión en pauta): el monto sale del gasto Meta del
+      // MES ANTERIOR CERRADO (snapshot del reporte diario). Si el mes aún no
+      // cierra en el snapshot, se deja pendiente y se reintenta mañana (el cron
+      // no avanza fechaProximoCobro hasta generar).
+      let comisionOpts: { monto: number; concepto: string } | undefined;
+      if (cs.esComision) {
+        if (cs.frecuencia !== 'mensual') {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión ${cs.frecuencia}: solo la mensual se automatiza` });
+          continue;
+        }
+        const pct = cs.porcentajeComision;
+        if (!pct || pct <= 0) {
+          result.skipped.push({ cliente: clienteNombre, motivo: 'Comisión sin porcentaje configurado' });
+          continue;
+        }
+        if (!cs.client?.metaAdAccountId) {
+          result.skipped.push({ cliente: clienteNombre, motivo: 'Comisión sin cuenta de Meta vinculada (metaAdAccountId)' });
+          continue;
+        }
+        const due = cs.fechaProximoCobro as Date;
+        const prev = new Date(due.getFullYear(), due.getMonth() - 1, 1);
+        const mes = `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`;
+        const { metaGastoService } = await import('./metaGasto.service');
+        let r: Awaited<ReturnType<typeof metaGastoService.gastoDeCuenta>>;
+        try {
+          r = await metaGastoService.gastoDeCuenta(cs.client.metaAdAccountId, mes);
+        } catch (e) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: snapshot de ${mes} no disponible (${(e as Error).message})` });
+          continue;
+        }
+        if (!r) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: la cuenta ${cs.client.metaAdAccountId} no está en el snapshot de ${mes}` });
+          continue;
+        }
+        if (!r.detalle.periodo.mes_cerrado) {
+          // Mes aún incompleto en el snapshot: reintentar mañana sin ruido.
+          console.log(`[recurring] comisión ${clienteNombre}: ${mes} aún no cierra en el snapshot, se reintenta mañana`);
+          continue;
+        }
+        if (r.gasto <= 0) {
+          result.skipped.push({ cliente: clienteNombre, motivo: `Comisión: sin gasto en pauta en ${mes}` });
+          continue;
+        }
+        // Ej: "Comisión 10% sobre inversión en pauta de julio de 2026 — inversión $25.928.896"
+        comisionOpts = {
+          monto: Math.round((r.gasto * pct) / 100),
+          concepto: `Comisión ${pct}% sobre inversión en pauta de ${MESES[prev.getMonth()]} de ${prev.getFullYear()} — inversión $${Math.round(r.gasto).toLocaleString('es-CO')}`,
+        };
       }
-      const precio = cs.precioCliente ?? cs.service?.price ?? 0;
-      if (precio <= 0) {
-        result.skipped.push({ cliente: clienteNombre, motivo: 'Servicio sin precio' });
-        continue;
-      }
 
-      const servicioNombre = cs.service?.name || 'Servicio mensual';
-      const fechaStr = toYMD(now);
-      // Periodo en el concepto (si el servicio tiene etiqueta PERIODO=Ds-De en notas).
-      const periodo = buildPeriodo(cs.notas, (cs.fechaProximoCobro as Date) || now);
-      const descripcion = periodo ? `${servicioNombre} ${periodo}` : servicioNombre;
-      const concepto = periodo ? `${servicioNombre} ${periodo}` : `Servicio ${cs.frecuencia} — ${servicioNombre}`;
-
-      // 1. Generar PDF + registrar Invoice como borrador (status 'pendiente').
-      const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf({
-        nombre_cliente: clienteNombre,
-        identificacion: nit,
-        servicios: [{ descripcion, cantidad: 1, precio_unitario: precio }],
-        observaciones: 'Generada automáticamente (servicio recurrente). Borrador para revisión.',
-        concepto,
-        fecha: fechaStr,
-        servicio_proyecto: servicioNombre,
-        cliente_id: cs.client?.id,
-      });
-
-      const createdInvoice = await prisma.invoice.create({
-        data: {
-          invoiceNumber,
-          clientId: cs.client?.id || '',
-          clientName: clienteNombre,
-          clientNit: nit,
-          totalAmount: precio,
-          fecha: new Date(fechaStr),
-          concepto,
-          servicio: servicioNombre,
-          observaciones: 'Generada automáticamente (servicio recurrente).',
-          filePath: generatedPath,
-          status: 'pendiente',
-          createdBy: 'sistema-recurrente',
-        },
-      });
-
-      // Link público firmado para descargar/enviar el PDF directamente.
-      const pdfUrl = getPublicInvoiceUrl(createdInvoice.id);
+      // 1. Generar PDF + Invoice borrador + avanzar próximo cobro (helper compartido).
+      const gen = await generarCuentaDeServicio(cs.id, 'sistema-recurrente', comisionOpts);
+      const { invoiceNumber, pdfUrl, servicio: servicioNombre, monto: precio } = gen;
 
       // 2. Crear tarea de ALTA prioridad para Dairo en Firestore.
       const taskTitle = `Revisar y enviar cuenta de cobro — ${clienteNombre}`;
@@ -193,24 +356,16 @@ export const generateDueRecurringInvoices = async (): Promise<RecurringRunResult
         }
       }
 
-      // 4. Avanzar fechaProximoCobro al siguiente periodo futuro (evita duplicados).
-      let next = advance(cs.fechaProximoCobro as Date, cs.frecuencia);
-      // Si sigue en el pasado (servicio muy atrasado), saltar hasta futuro sin generar de mas.
-      let guard = 0;
-      while (next.getTime() <= endOfToday.getTime() && guard < 60) {
-        next = advance(next, cs.frecuencia);
-        guard++;
-      }
-      await prisma.clientService.update({
-        where: { id: cs.id },
-        data: { fechaProximoCobro: next },
-      });
-
+      // (El helper ya avanzó fechaProximoCobro al siguiente periodo futuro.)
       result.generated.push({ cliente: clienteNombre, servicio: servicioNombre, monto: precio, invoiceNumber });
       console.log(`[recurring] cuenta generada: ${clienteNombre} #${invoiceNumber} (${precio})`);
     } catch (e) {
-      console.error(`[recurring] error con ${clienteNombre}:`, (e as Error).message);
-      result.errors.push({ cliente: clienteNombre, error: (e as Error).message });
+      if ((e as any)?.skip) {
+        result.skipped.push({ cliente: clienteNombre, motivo: (e as Error).message });
+      } else {
+        console.error(`[recurring] error con ${clienteNombre}:`, (e as Error).message);
+        result.errors.push({ cliente: clienteNombre, error: (e as Error).message });
+      }
     }
   }
 
