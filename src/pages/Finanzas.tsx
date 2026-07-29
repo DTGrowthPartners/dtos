@@ -27,6 +27,7 @@ import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport'
 import IncomeReport from '@/components/finance/IncomeReport';
 import IncomeStatement from '@/components/finance/IncomeStatement';
 import BalanceSheet from '@/components/finance/BalanceSheet';import ClientGoalsPanel from '@/components/finance/ClientGoalsPanel';
+import RegistrosSheet from '@/components/finance/RegistrosSheet';
 
 // Categorías predefinidas
 const EXPENSE_CATEGORIES = [
@@ -1272,7 +1273,7 @@ export default function Finanzas() {
         </div>
 
         {/* Main Tabs */}
-        <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (tab === 'resumen') fetchFinanceData(true); }} className="w-full">
+        <Tabs value={activeTab} onValueChange={(tab) => { setActiveTab(tab); if (tab === 'resumen' || tab === 'registros-ingresos' || tab === 'registros-gastos') fetchFinanceData(true); }} className="w-full">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
               <TabsList className="inline-flex w-max sm:w-auto gap-1">
@@ -1299,6 +1300,14 @@ export default function Finanzas() {
                 <TabsTrigger value="ppe" className="flex items-center gap-2 whitespace-nowrap">
                   <Building2 className="h-4 w-4" />
                   Propiedad, Planta y Equipo
+                </TabsTrigger>
+                <TabsTrigger value="registros-ingresos" className="flex items-center gap-2 whitespace-nowrap">
+                  <TrendingUp className="h-4 w-4" />
+                  Registros Ingresos
+                </TabsTrigger>
+                <TabsTrigger value="registros-gastos" className="flex items-center gap-2 whitespace-nowrap">
+                  <TrendingDown className="h-4 w-4" />
+                  Registros Gastos
                 </TabsTrigger>
                 <TabsTrigger value="reportes" className="flex items-center gap-2 whitespace-nowrap">
                   <TrendingUp className="h-4 w-4" />
@@ -1335,6 +1344,28 @@ export default function Finanzas() {
               </div>
             )}
           </div>
+
+          <TabsContent value="registros-ingresos" className="mt-6">
+            <RegistrosSheet
+              type="ingreso"
+              data={ingresos}
+              categories={INCOME_CATEGORIES}
+              accounts={AVAILABLE_ACCOUNTS}
+              onRefresh={() => fetchFinanceData(true)}
+              onAddNew={() => setShowAddIncomeModal(true)}
+            />
+          </TabsContent>
+
+          <TabsContent value="registros-gastos" className="mt-6">
+            <RegistrosSheet
+              type="gasto"
+              data={gastos}
+              categories={EXPENSE_CATEGORIES}
+              accounts={AVAILABLE_ACCOUNTS}
+              onRefresh={() => fetchFinanceData(true)}
+              onAddNew={() => setShowAddExpenseModal(true)}
+            />
+          </TabsContent>
 
           <TabsContent value="cuentas" className="mt-6">
             <AccountsPanel />
