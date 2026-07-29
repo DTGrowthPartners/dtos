@@ -47,6 +47,7 @@ export interface CreatePaymentDto {
   dueDate?: Date;
   status?: string;
   paymentMethod?: string;
+  cuenta?: string;
   receiptUrl?: string;
   reference?: string;
   notes?: string;
@@ -241,6 +242,7 @@ export const accountService = {
           const fecha = (data.paidAt || new Date()).toISOString().split('T')[0];
           const entityName = account.client?.name || account.entityName;
 
+          const cuenta = data.cuenta || 'Bancolombia';
           if (account.type === 'receivable') {
             // It's a collection (income) - add to Entradas
             await googleSheetsService.addIncome({
@@ -248,7 +250,7 @@ export const accountService = {
               importe: data.amount,
               descripcion: `Cobro: ${account.concept}`,
               categoria: 'PAGO DE CLIENTE',
-              cuenta: 'Principal',
+              cuenta,
               entidad: entityName,
             });
           } else {
@@ -258,7 +260,7 @@ export const accountService = {
               importe: data.amount,
               descripcion: `Pago: ${account.concept}`,
               categoria: account.category || 'Otros',
-              cuenta: 'Principal',
+              cuenta,
               entidad: entityName,
             });
           }

@@ -13,6 +13,9 @@ interface TransactionRow {
   cuenta: string;
   entidad: string;
   terceroId?: string;
+  clasificacionIngreso?: string;
+  noCuentaCobro?: string;
+  tipoTransaccion?: string;
 }
 
 interface FinanceData {
@@ -85,12 +88,13 @@ export class GoogleSheetsService {
   }> {
     try {
 
-      // Leer hoja de Entradas (Ingresos) - Columnas A:G (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, TerceroId)
+      // Leer hoja de Entradas (Ingresos) - Columnas A:J (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad,
+      // TerceroId, ClasificacionIngreso, NoCuentaCobro, TipoTransaccion)
       // Usamos UNFORMATTED_VALUE para obtener fechas como números seriales y valores sin formato
       // La fila 1 es encabezado (Fecha, Importe, ...); los datos empiezan en A2.
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A2:G',
+        range: 'Entradas!A2:J',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
@@ -112,7 +116,8 @@ export class GoogleSheetsService {
       console.log('Total expenses rows:', expensesRows.length);
 
       // Parsear ingresos (con rowIndex para edición)
-      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
+      // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId,
+      // H=ClasificacionIngreso, I=NoCuentaCobro, J=TipoTransaccion
       // rowIndex = original array index + 2 (fila 1 es encabezado, los datos empiezan en A2)
       const ingresos: Array<TransactionRow & { rowIndex: number }> = incomeRows
         .map((row: any[], index: number) => ({ row, originalIndex: index }))
@@ -126,6 +131,9 @@ export class GoogleSheetsService {
           cuenta: String(row[4] || ''),
           entidad: String(row[5] || ''),
           terceroId: row[6] ? String(row[6]) : undefined,
+          clasificacionIngreso: row[7] ? String(row[7]) : undefined,
+          noCuentaCobro: row[8] ? String(row[8]) : undefined,
+          tipoTransaccion: row[9] ? String(row[9]) : undefined,
         }));
 
       // Parsear gastos (con rowIndex para edición)
