@@ -262,11 +262,10 @@ export function AccountsPanel() {
   const [selectedInvoiceForAbono, setSelectedInvoiceForAbono] = useState<UnpaidInvoice | null>(null);
   const [abonoForm, setAbonoForm] = useState({
     amount: '',
-    paymentMethod: 'transferencia',
     reference: '',
     notes: '',
     registerInSheets: true,
-    cuenta: 'Principal',
+    cuenta: 'Bancolombia',
   });
   const [isSubmittingAbono, setIsSubmittingAbono] = useState(false);
   const { toast } = useToast();
@@ -291,7 +290,7 @@ export function AccountsPanel() {
   const [paymentForm, setPaymentForm] = useState({
     amount: '',
     paidAt: new Date().toISOString().split('T')[0],
-    paymentMethod: 'transferencia',
+    cuenta: 'Bancolombia',
     reference: '',
     notes: '',
     registerInSheets: true,
@@ -547,7 +546,8 @@ export function AccountsPanel() {
       await apiClient.post(`/api/accounts/${selectedAccountForPayment.id}/payments`, {
         amount: parseAmount(paymentForm.amount),
         paidAt: paymentForm.paidAt,
-        paymentMethod: paymentForm.paymentMethod,
+        paymentMethod: paymentForm.cuenta,
+        cuenta: paymentForm.cuenta,
         reference: paymentForm.reference || undefined,
         notes: paymentForm.notes || undefined,
         registerInSheets: paymentForm.registerInSheets,
@@ -646,7 +646,7 @@ export function AccountsPanel() {
     setPaymentForm({
       amount: String(account.amount),
       paidAt: new Date().toISOString().split('T')[0],
-      paymentMethod: 'transferencia',
+      cuenta: 'Bancolombia',
       reference: '',
       notes: '',
       registerInSheets: true,
@@ -679,7 +679,7 @@ export function AccountsPanel() {
     setPaymentForm({
       amount: '',
       paidAt: new Date().toISOString().split('T')[0],
-      paymentMethod: 'transferencia',
+      cuenta: 'Bancolombia',
       reference: '',
       notes: '',
       registerInSheets: true,
@@ -692,11 +692,10 @@ export function AccountsPanel() {
     setSelectedInvoiceForAbono(invoice);
     setAbonoForm({
       amount: '',
-      paymentMethod: 'transferencia',
       reference: '',
       notes: '',
       registerInSheets: true,
-      cuenta: 'Principal',
+      cuenta: 'Bancolombia',
     });
     setAbonoDialogOpen(true);
   };
@@ -719,7 +718,7 @@ export function AccountsPanel() {
     try {
       await apiClient.post(`/api/invoices/${selectedInvoiceForAbono.id}/payments`, {
         amount,
-        paymentMethod: abonoForm.paymentMethod,
+        paymentMethod: abonoForm.cuenta,
         reference: abonoForm.reference || undefined,
         notes: abonoForm.notes || undefined,
         registerInSheets: abonoForm.registerInSheets,
@@ -1267,20 +1266,23 @@ export function AccountsPanel() {
               </div>
 
               <div className="space-y-2">
-                <Label>Método de Pago</Label>
+                <Label>Cuenta</Label>
                 <Select
-                  value={paymentForm.paymentMethod}
-                  onValueChange={(v) => setPaymentForm({ ...paymentForm, paymentMethod: v })}
+                  value={paymentForm.cuenta}
+                  onValueChange={(v) => setPaymentForm({ ...paymentForm, cuenta: v })}
                 >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="transferencia">Transferencia</SelectItem>
-                    <SelectItem value="efectivo">Efectivo</SelectItem>
-                    <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                    <SelectItem value="nequi">Nequi</SelectItem>
-                    <SelectItem value="daviplata">Daviplata</SelectItem>
+                    <SelectItem value="Bancolombia">Bancolombia</SelectItem>
+                    <SelectItem value="Daviplata">Daviplata</SelectItem>
+                    <SelectItem value="Nequi">Nequi</SelectItem>
+                    <SelectItem value="Efectivo">Efectivo</SelectItem>
+                    <SelectItem value="Por definir">Por definir</SelectItem>
+                    <SelectItem value="Cuentas por Pagar a Clientes">Cuentas por Pagar a Clientes</SelectItem>
+                    <SelectItem value="Retenciones en la fuente por Renta">Retenciones en la fuente por Renta</SelectItem>
+                    <SelectItem value="Retenciones en la fuente por ICAT">Retenciones en la fuente por ICAT</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1299,8 +1301,8 @@ export function AccountsPanel() {
                   <p className="font-medium text-sm">Registrar en Google Sheets</p>
                   <p className="text-xs text-muted-foreground">
                     {selectedAccountForPayment?.type === 'receivable'
-                      ? 'Se agregará como entrada en Finanzas'
-                      : 'Se agregará como salida en Finanzas'}
+                      ? 'Se agregará como entrada en Finanzas, en la cuenta seleccionada arriba'
+                      : 'Se agregará como salida en Finanzas, en la cuenta seleccionada arriba'}
                   </p>
                 </div>
                 <Switch
@@ -1524,17 +1526,20 @@ export function AccountsPanel() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Método de Pago</Label>
-              <Select value={abonoForm.paymentMethod} onValueChange={(v) => setAbonoForm({ ...abonoForm, paymentMethod: v })}>
+              <Label>Cuenta</Label>
+              <Select value={abonoForm.cuenta} onValueChange={(v) => setAbonoForm({ ...abonoForm, cuenta: v })}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="transferencia">Transferencia</SelectItem>
-                  <SelectItem value="efectivo">Efectivo</SelectItem>
-                  <SelectItem value="tarjeta">Tarjeta</SelectItem>
-                  <SelectItem value="nequi">Nequi</SelectItem>
-                  <SelectItem value="daviplata">Daviplata</SelectItem>
+                  <SelectItem value="Bancolombia">Bancolombia</SelectItem>
+                  <SelectItem value="Daviplata">Daviplata</SelectItem>
+                  <SelectItem value="Nequi">Nequi</SelectItem>
+                  <SelectItem value="Efectivo">Efectivo</SelectItem>
+                  <SelectItem value="Por definir">Por definir</SelectItem>
+                  <SelectItem value="Cuentas por Pagar a Clientes">Cuentas por Pagar a Clientes</SelectItem>
+                  <SelectItem value="Retenciones en la fuente por Renta">Retenciones en la fuente por Renta</SelectItem>
+                  <SelectItem value="Retenciones en la fuente por ICAT">Retenciones en la fuente por ICAT</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -1558,27 +1563,13 @@ export function AccountsPanel() {
             <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
               <div>
                 <p className="font-medium text-sm">Registrar en Google Sheets</p>
-                <p className="text-xs text-muted-foreground">Se agregará como ingreso en la hoja de Finanzas</p>
+                <p className="text-xs text-muted-foreground">Se agregará como ingreso en la hoja de Finanzas, en la cuenta seleccionada arriba</p>
               </div>
               <Switch
                 checked={abonoForm.registerInSheets}
                 onCheckedChange={(checked) => setAbonoForm({ ...abonoForm, registerInSheets: checked === true })}
               />
             </div>
-            {abonoForm.registerInSheets && (
-              <div className="space-y-2">
-                <Label>Cuenta de destino</Label>
-                <Select value={abonoForm.cuenta} onValueChange={(v) => setAbonoForm({ ...abonoForm, cuenta: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Principal">Principal</SelectItem>
-                    <SelectItem value="Ahorros">Ahorros</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
 
           <DialogFooter>

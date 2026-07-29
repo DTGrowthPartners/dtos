@@ -19,7 +19,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
-import InvoicesPanel from '@/components/finance/InvoicesPanel';
 import EmployeeLoansPanel from '@/components/finance/EmployeeLoansPanel';
 import PayablesPanel from '@/components/finance/PayablesPanel';
 import FixedAssetsPanel from '@/components/finance/FixedAssetsPanel';
@@ -80,10 +79,13 @@ const TRANSFER_CATEGORIES = [
 // Cuentas disponibles
 const AVAILABLE_ACCOUNTS = [
   'Bancolombia',
-  'Nequi',
   'Daviplata',
+  'Nequi',
   'Efectivo',
+  'Por definir',
   'Cuentas por Pagar a Clientes',
+  'Retenciones en la fuente por Renta',
+  'Retenciones en la fuente por ICAT',
 ];
 
 // Bancos preestablecidos para entradas (alias para compatibilidad)
@@ -110,6 +112,7 @@ interface Transaction {
   cuenta: string;
   entidad: string;
   terceroId?: string;
+  noCuentaCobro?: string;
 }
 
 interface FinanceResponse {
@@ -1285,10 +1288,6 @@ export default function Finanzas() {
                   <Receipt className="h-4 w-4" />
                   Cuentas
                 </TabsTrigger>
-                <TabsTrigger value="cuentas-cobro" className="flex items-center gap-2 whitespace-nowrap">
-                  <FileText className="h-4 w-4" />
-                  Facturas
-                </TabsTrigger>
                 <TabsTrigger value="empleados" className="flex items-center gap-2 whitespace-nowrap">
                   <Users className="h-4 w-4" />
                   Cobrar a Empleados
@@ -1369,10 +1368,6 @@ export default function Finanzas() {
 
           <TabsContent value="cuentas" className="mt-6">
             <AccountsPanel />
-          </TabsContent>
-
-          <TabsContent value="cuentas-cobro" className="mt-6">
-            <InvoicesPanel />
           </TabsContent>
 
           <TabsContent value="empleados" className="mt-6">

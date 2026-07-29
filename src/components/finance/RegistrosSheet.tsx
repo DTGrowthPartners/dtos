@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Search, Pencil, Trash2, Check, X, Plus, ArrowUpDown } from 'lucide-react';
+import { Search, Pencil, Trash2, Check, X, Plus, ArrowUpDown, FilterX } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api';
@@ -14,6 +14,7 @@ interface Transaction {
   cuenta: string;
   entidad: string;
   terceroId?: string;
+  noCuentaCobro?: string;
 }
 
 interface RegistrosSheetProps {
@@ -27,6 +28,37 @@ interface RegistrosSheetProps {
 
 type SortOrder = 'asc' | 'desc';
 
+type ImporteOperator = 'mayor' | 'menor' | 'igual' | 'contiene';
+
+const IMPORTE_OPERATORS: { value: ImporteOperator; label: string }[] = [
+  { value: 'mayor', label: 'Mayor que' },
+  { value: 'menor', label: 'Menor que' },
+  { value: 'igual', label: 'Igual a' },
+  { value: 'contiene', label: 'Contiene' },
+];
+
+interface ColumnFilters {
+  month: string;
+  importeOperator: ImporteOperator;
+  importeValue: string;
+  descripcion: string;
+  categoria: string;
+  cuenta: string;
+  entidad: string;
+  noCuentaCobro: string;
+}
+
+const EMPTY_FILTERS: ColumnFilters = {
+  month: 'todos',
+  importeOperator: 'mayor',
+  importeValue: '',
+  descripcion: '',
+  categoria: 'todas',
+  cuenta: 'todas',
+  entidad: 'todas',
+  noCuentaCobro: '',
+};
+
 // Normaliza cualquier formato de fecha entrante (DD/MM/YYYY, YYYY-MM-DD, con hora) a YYYY-MM-DD para el <input type="date">
 function toDateInputValue(fecha: string): string {
   if (!fecha) return '';
@@ -39,8 +71,17 @@ function toDateInputValue(fecha: string): string {
   return fecha;
 }
 
+function monthLabel(yyyyMm: string): string {
+  const [year, month] = yyyyMm.split('-').map(Number);
+  if (!year || !month) return yyyyMm;
+  const date = new Date(year, month - 1, 1);
+  const label = date.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export default function RegistrosSheet({ type, data, categories, accounts, onRefresh, onAddNew }: RegistrosSheetProps) {
   const [searchTerm, setSearchTerm] = useState('');
+  const [filters, setFilters] = useState<ColumnFilters>(EMPTY_FILTERS);
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const [saving, setSaving] = useState(false);
@@ -49,6 +90,56 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
 
   const endpoint = type === 'ingreso' ? 'income' : 'expense';
   const amountColorClass = type === 'ingreso' ? 'text-success' : 'text-destructive';
+  const showCuentaCobro = type === 'ingreso';
+
+  const setFilter = <K extends keyof ColumnFilters>(key: K, value: ColumnFilters[K]) => {
+    setFilters((f) => ({ ...f, [key]: value }));
+  };
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      filters.month !== 'todos' ||
+      filters.importeValue !== '' ||
+      filters.descripcion !== '' ||
+      filters.categoria !== 'todas' ||
+      filters.cuenta !== 'todas' ||
+      filters.entidad !== 'todas' ||
+      filters.noCuentaCobro !== '' ||
+      searchTerm !== ''
+    );
+  }, [filters, searchTerm]);
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS);
+    setSearchTerm('');
+  };
+
+  const months = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((t) => {
+      const d = toDateInputValue(t.fecha);
+      if (d.length >= 7) set.add(d.slice(0, 7));
+    });
+    return Array.from(set).sort((a, b) => b.localeCompare(a));
+  }, [data]);
+
+  const uniqueCategorias = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((t) => t.categoria && set.add(t.categoria));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  const uniqueCuentas = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((t) => t.cuenta && set.add(t.cuenta));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  const uniqueEntidades = useMemo(() => {
+    const set = new Set<string>();
+    data.forEach((t) => t.entidad && set.add(t.entidad));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [data]);
 
   const sorted = useMemo(() => {
     return [...data].sort((a, b) => {
@@ -64,13 +155,36 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
 
   const filtered = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return sorted;
-    return sorted.filter((t) =>
-      [t.fecha, t.descripcion, t.categoria, t.cuenta, t.entidad]
-        .filter(Boolean)
-        .some((field) => field.toString().toLowerCase().includes(term))
-    );
-  }, [sorted, searchTerm]);
+    const descTerm = filters.descripcion.trim().toLowerCase();
+    const cuentaCobroTerm = filters.noCuentaCobro.trim().toLowerCase();
+    const importeValue = filters.importeValue.trim();
+    const importeNum = importeValue !== '' ? Number(importeValue) : null;
+
+    return sorted.filter((t) => {
+      if (term) {
+        const matchesSearch = [t.fecha, t.descripcion, t.categoria, t.cuenta, t.entidad, t.noCuentaCobro]
+          .filter(Boolean)
+          .some((field) => field!.toString().toLowerCase().includes(term));
+        if (!matchesSearch) return false;
+      }
+      if (filters.month !== 'todos' && toDateInputValue(t.fecha).slice(0, 7) !== filters.month) return false;
+      if (importeValue !== '') {
+        if (filters.importeOperator === 'contiene') {
+          if (!String(t.importe).includes(importeValue)) return false;
+        } else if (importeNum !== null && !Number.isNaN(importeNum)) {
+          if (filters.importeOperator === 'mayor' && !(t.importe > importeNum)) return false;
+          if (filters.importeOperator === 'menor' && !(t.importe < importeNum)) return false;
+          if (filters.importeOperator === 'igual' && t.importe !== importeNum) return false;
+        }
+      }
+      if (descTerm && !t.descripcion?.toLowerCase().includes(descTerm)) return false;
+      if (filters.categoria !== 'todas' && t.categoria !== filters.categoria) return false;
+      if (filters.cuenta !== 'todas' && t.cuenta !== filters.cuenta) return false;
+      if (filters.entidad !== 'todas' && t.entidad !== filters.entidad) return false;
+      if (cuentaCobroTerm && !t.noCuentaCobro?.toLowerCase().includes(cuentaCobroTerm)) return false;
+      return true;
+    });
+  }, [sorted, searchTerm, filters]);
 
   const total = useMemo(() => filtered.reduce((sum, t) => sum + (t.importe || 0), 0), [filtered]);
 
@@ -88,14 +202,16 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
     if (editingRowIndex === null) return;
     setSaving(true);
     try {
-      await apiClient.put(`/api/finance/${endpoint}/${editingRowIndex}`, {
+      const body: Record<string, unknown> = {
         fecha: editForm.fecha,
         importe: editForm.importe,
         descripcion: editForm.descripcion,
         categoria: editForm.categoria,
         cuenta: editForm.cuenta,
         entidad: editForm.entidad,
-      });
+      };
+      if (showCuentaCobro) body.noCuentaCobro = editForm.noCuentaCobro;
+      await apiClient.put(`/api/finance/${endpoint}/${editingRowIndex}`, body);
       toast({ title: 'Actualizado', description: 'Registro actualizado correctamente' });
       setEditingRowIndex(null);
       setEditForm({});
@@ -128,6 +244,8 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
     }
   };
 
+  const colCount = showCuentaCobro ? 9 : 8;
+
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden">
       <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border">
@@ -144,12 +262,18 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Buscar por descripción, categoría, entidad o fecha..."
+              placeholder="Buscar en todos los campos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
             />
           </div>
+          {hasActiveFilters && (
+            <Button variant="outline" size="sm" onClick={clearFilters} title="Limpiar filtros">
+              <FilterX className="h-4 w-4 mr-1" />
+              Limpiar
+            </Button>
+          )}
           <Button size="sm" onClick={onAddNew}>
             <Plus className="h-4 w-4 mr-1" />
             Nuevo
@@ -178,7 +302,104 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
               <th className="sticky top-0 z-10 bg-muted border-b border-r border-border py-2 px-2 font-medium text-foreground text-left">Categoría</th>
               <th className="sticky top-0 z-10 bg-muted border-b border-r border-border py-2 px-2 font-medium text-foreground text-left">Cuenta</th>
               <th className="sticky top-0 z-10 bg-muted border-b border-r border-border py-2 px-2 font-medium text-foreground text-left">Entidad</th>
+              {showCuentaCobro && (
+                <th className="sticky top-0 z-10 bg-muted border-b border-r border-border py-2 px-2 font-medium text-foreground text-left whitespace-nowrap">Cuenta de Cobro</th>
+              )}
               <th className="sticky top-0 z-10 bg-muted border-b border-border py-2 px-2 font-medium text-foreground text-center w-[90px]">Acciones</th>
+            </tr>
+            {/* Fila de filtros por columna */}
+            <tr className="bg-muted/70">
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1"></th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <select
+                  value={filters.month}
+                  onChange={(e) => setFilter('month', e.target.value)}
+                  className="h-7 w-full rounded border border-input bg-background px-1 text-[11px]"
+                >
+                  <option value="todos">Todos los meses</option>
+                  {months.map((m) => (
+                    <option key={m} value={m}>{monthLabel(m)}</option>
+                  ))}
+                </select>
+              </th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <div className="flex items-center gap-0.5">
+                  <select
+                    value={filters.importeOperator}
+                    onChange={(e) => setFilter('importeOperator', e.target.value as ImporteOperator)}
+                    className="h-7 rounded border border-input bg-background px-0.5 text-[11px] w-[78px]"
+                    title="Condición del filtro de importe"
+                  >
+                    {IMPORTE_OPERATORS.map((op) => (
+                      <option key={op.value} value={op.value}>{op.label}</option>
+                    ))}
+                  </select>
+                  <Input
+                    type={filters.importeOperator === 'contiene' ? 'text' : 'number'}
+                    placeholder="Valor"
+                    value={filters.importeValue}
+                    onChange={(e) => setFilter('importeValue', e.target.value)}
+                    className="h-7 text-[11px] px-1 w-[60px]"
+                  />
+                </div>
+              </th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <Input
+                  type="text"
+                  placeholder="Filtrar..."
+                  value={filters.descripcion}
+                  onChange={(e) => setFilter('descripcion', e.target.value)}
+                  className="h-7 text-[11px] px-1"
+                />
+              </th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <select
+                  value={filters.categoria}
+                  onChange={(e) => setFilter('categoria', e.target.value)}
+                  className="h-7 w-full rounded border border-input bg-background px-1 text-[11px]"
+                >
+                  <option value="todas">Todas</option>
+                  {uniqueCategorias.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <select
+                  value={filters.cuenta}
+                  onChange={(e) => setFilter('cuenta', e.target.value)}
+                  className="h-7 w-full rounded border border-input bg-background px-1 text-[11px]"
+                >
+                  <option value="todas">Todas</option>
+                  {uniqueCuentas.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </th>
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                <select
+                  value={filters.entidad}
+                  onChange={(e) => setFilter('entidad', e.target.value)}
+                  className="h-7 w-full rounded border border-input bg-background px-1 text-[11px]"
+                >
+                  <option value="todas">Todas</option>
+                  {uniqueEntidades.map((e) => (
+                    <option key={e} value={e}>{e}</option>
+                  ))}
+                </select>
+              </th>
+              {showCuentaCobro && (
+                <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-r border-border p-1">
+                  <Input
+                    type="text"
+                    placeholder="Filtrar..."
+                    value={filters.noCuentaCobro}
+                    onChange={(e) => setFilter('noCuentaCobro', e.target.value)}
+                    className="h-7 text-[11px] px-1"
+                  />
+                </th>
+              )}
+              <th className="sticky top-[33px] z-10 bg-muted/70 border-b border-border p-1"></th>
             </tr>
           </thead>
           <tbody>
@@ -250,6 +471,15 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
                             className="h-8 text-xs"
                           />
                         </td>
+                        {showCuentaCobro && (
+                          <td className="border border-border p-1">
+                            <Input
+                              value={editForm.noCuentaCobro || ''}
+                              onChange={(e) => setEditForm({ ...editForm, noCuentaCobro: e.target.value })}
+                              className="h-8 text-xs"
+                            />
+                          </td>
+                        )}
                         <td className="border border-border p-1">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={saveEdit} disabled={saving} className="p-1 rounded hover:bg-success/20 text-success" title="Guardar">
@@ -271,6 +501,9 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
                         <td className="border border-border py-1.5 px-2 text-muted-foreground max-w-[160px] truncate" title={t.categoria}>{t.categoria}</td>
                         <td className="border border-border py-1.5 px-2 text-muted-foreground whitespace-nowrap">{t.cuenta}</td>
                         <td className="border border-border py-1.5 px-2 text-muted-foreground max-w-[150px] truncate" title={t.entidad}>{t.entidad}</td>
+                        {showCuentaCobro && (
+                          <td className="border border-border py-1.5 px-2 text-muted-foreground whitespace-nowrap max-w-[150px] truncate" title={t.noCuentaCobro}>{t.noCuentaCobro || '—'}</td>
+                        )}
                         <td className="border border-border py-1.5 px-2">
                           <div className="flex items-center justify-center gap-1">
                             <button onClick={() => startEditing(t)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar">
@@ -288,8 +521,8 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
               })
             ) : (
               <tr>
-                <td colSpan={8} className="border border-border py-8 text-center text-muted-foreground">
-                  {searchTerm ? 'No hay registros que coincidan con la búsqueda' : 'No hay registros'}
+                <td colSpan={colCount} className="border border-border py-8 text-center text-muted-foreground">
+                  {hasActiveFilters ? 'No hay registros que coincidan con los filtros' : 'No hay registros'}
                 </td>
               </tr>
             )}
