@@ -87,17 +87,17 @@ export class GoogleSheetsService {
 
       // Leer hoja de Entradas (Ingresos) - Columnas A:G (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, TerceroId)
       // Usamos UNFORMATTED_VALUE para obtener fechas como números seriales y valores sin formato
-      // Nota: Las hojas NO tienen encabezados, empiezan desde A1
+      // La fila 1 es encabezado (Fecha, Importe, ...); los datos empiezan en A2.
       const incomeResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Entradas!A1:G',
+        range: 'Entradas!A2:G',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
       // Leer hoja de Salidas (Gastos) - Columnas A:G (Fecha, Importe, Descripción, Categoría, Cuenta, Entidad, TerceroId)
       const expensesResponse = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Salidas!A1:G',
+        range: 'Salidas!A2:G',
         valueRenderOption: 'UNFORMATTED_VALUE',
       });
 
@@ -113,12 +113,12 @@ export class GoogleSheetsService {
 
       // Parsear ingresos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
-      // rowIndex = original array index + 1 (sheet row, A1-based)
+      // rowIndex = original array index + 2 (fila 1 es encabezado, los datos empiezan en A2)
       const ingresos: Array<TransactionRow & { rowIndex: number }> = incomeRows
         .map((row: any[], index: number) => ({ row, originalIndex: index }))
         .filter(({ row }: { row: any[]; originalIndex: number }) => row[1])
         .map(({ row, originalIndex }: { row: any[]; originalIndex: number }) => ({
-          rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
+          rowIndex: originalIndex + 2, // Sheet row (A2 = primer dato)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
@@ -130,11 +130,12 @@ export class GoogleSheetsService {
 
       // Parsear gastos (con rowIndex para edición)
       // Columnas: A=Fecha, B=Importe, C=Descripción, D=Categoría, E=Cuenta, F=Entidad, G=TerceroId
+      // rowIndex = original array index + 2 (fila 1 es encabezado, los datos empiezan en A2)
       const gastos: Array<TransactionRow & { rowIndex: number }> = expensesRows
         .map((row: any[], index: number) => ({ row, originalIndex: index }))
         .filter(({ row }: { row: any[]; originalIndex: number }) => row[1])
         .map(({ row, originalIndex }: { row: any[]; originalIndex: number }) => ({
-          rowIndex: originalIndex + 1, // Sheet row (A1 = row 1)
+          rowIndex: originalIndex + 2, // Sheet row (A2 = primer dato)
           fecha: this.parseDate(row[0]),
           importe: this.parseAmount(row[1]),
           descripcion: String(row[2] || ''),
