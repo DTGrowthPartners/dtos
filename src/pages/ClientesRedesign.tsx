@@ -15,6 +15,8 @@ import { useToast } from '@/hooks/use-toast';
 import ClientServicesManager from '@/components/clients/ClientServicesManager';
 import ClientSedesManager from '@/components/clients/ClientSedesManager';
 import ClientContactsManager from '@/components/clients/ClientContactsManager';
+import ClientStrategy from '@/components/clients/ClientStrategy';
+import ClientReports from '@/components/clients/ClientReports';
 import {
   fmtFull, fmtM, requiereAccion,
   type ClientV2, type ContractType,
@@ -359,7 +361,9 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [mgmtTab, setMgmtTab] = useState<'servicios' | 'sedes' | 'contactos'>('servicios');
+  // Pestañas del perfil bajo el encabezado (pedido de Dairo: la navegación
+  // estaba demasiado abajo y la ficha crecía verticalmente sin fin)
+  const [mgmtTab, setMgmtTab] = useState<'resumen' | 'estrategia' | 'reportes' | 'servicios' | 'sedes' | 'contactos'>('resumen');
   const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
   const [toggling, setToggling] = useState(false);
   const waPhone = (c.phone || '').replace(/[^0-9]/g, '');
@@ -503,6 +507,49 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
         </div>
       </div>
 
+      {/* Navegación del perfil: arriba, bajo el encabezado (antes estaba al fondo) */}
+      <div className="rounded-xl bg-card border border-border px-2 overflow-x-auto">
+        <div className="flex items-center gap-1 min-w-max">
+          {([
+            { key: 'resumen', label: 'Resumen', Icon: Activity },
+            { key: 'estrategia', label: 'Estrategia y metas', Icon: TrendingUp },
+            { key: 'reportes', label: 'Reportes', Icon: FileText },
+            { key: 'servicios', label: 'Servicios', Icon: Briefcase },
+            { key: 'sedes', label: 'Sedes', Icon: MapPin },
+            { key: 'contactos', label: 'Contactos', Icon: Users },
+          ] as const).map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              onClick={() => setMgmtTab(key)}
+              className={`inline-flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                mgmtTab === key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {mgmtTab === 'estrategia' && <ClientStrategy clientId={c.id} clientName={c.name} />}
+      {mgmtTab === 'reportes' && <ClientReports clientId={c.id} clientName={c.name} />}
+      {mgmtTab === 'servicios' && (
+        <div className="rounded-xl bg-card border border-border p-4">
+          <ClientServicesManager client={{ id: c.id, name: c.name }} onUpdate={onUpdated} />
+        </div>
+      )}
+      {mgmtTab === 'sedes' && (
+        <div className="rounded-xl bg-card border border-border p-4">
+          <ClientSedesManager client={{ id: c.id, name: c.name }} />
+        </div>
+      )}
+      {mgmtTab === 'contactos' && (
+        <div className="rounded-xl bg-card border border-border p-4">
+          <ClientContactsManager client={{ id: c.id, name: c.name }} />
+        </div>
+      )}
+
+      {mgmtTab === 'resumen' && (<>
       {/* Grid 1: Servicios + Facturación */}
       <div className="grid lg:grid-cols-2 gap-4">
         <Panel title="Servicios activos" icon={Briefcase}>
@@ -629,30 +676,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
           <p className="text-sm text-muted-foreground">Sin pagos registrados en Google Sheets (hoja Entradas) para este cliente.</p>
         )}
       </Panel>
-
-      {/* Gestión del cliente: servicios, sedes y contactos */}
-      <div className="rounded-xl bg-card border border-border p-4">
-        <div className="flex items-center gap-1.5 mb-4 border-b border-border">
-          {([
-            { key: 'servicios', label: 'Servicios', Icon: Briefcase },
-            { key: 'sedes', label: 'Sedes', Icon: MapPin },
-            { key: 'contactos', label: 'Contactos', Icon: Users },
-          ] as const).map(({ key, label, Icon }) => (
-            <button
-              key={key}
-              onClick={() => setMgmtTab(key)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                mgmtTab === key ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Icon className="h-4 w-4" /> {label}
-            </button>
-          ))}
-        </div>
-        {mgmtTab === 'servicios' && <ClientServicesManager client={{ id: c.id, name: c.name }} onUpdate={onUpdated} />}
-        {mgmtTab === 'sedes' && <ClientSedesManager client={{ id: c.id, name: c.name }} />}
-        {mgmtTab === 'contactos' && <ClientContactsManager client={{ id: c.id, name: c.name }} />}
-      </div>
+      </>)}
 
       {/* Editar cliente */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
