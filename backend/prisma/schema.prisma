@@ -248,6 +248,12 @@ model Invoice {
   // Cobranza automática: último recordatorio enviado al cliente y cuántos van
   lastReminderAt  DateTime?
   remindersSent   Int      @default(0)
+  // Factura electrónica DIAN emitida vía Factus (null = no emitida)
+  factusReference   String?
+  factusNumber      String?
+  factusCufe        String?
+  factusStatus      String?   // validada, pendiente
+  factusValidatedAt DateTime?
   payments        InvoicePayment[]
   createdBy       String
   createdAt       DateTime @default(now())

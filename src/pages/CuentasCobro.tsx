@@ -6,7 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, FileText, CheckSquare, Square, Search, Check, ChevronsUpDown, Send, CircleCheck, Clock } from 'lucide-react';
+import { PlusCircle, Trash2, FileText, CheckSquare, Square, Search, Check, ChevronsUpDown, Send, CircleCheck, Clock, ShieldCheck, Loader2 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import {
@@ -78,6 +85,20 @@ interface Invoice {
   status: 'pendiente' | 'enviada' | 'pagada';
   paidAt: string | null;
   createdAt: string;
+  // Factura electrónica DIAN (Factus)
+  factusNumber?: string | null;
+  factusCufe?: string | null;
+  factusStatus?: string | null;
+}
+
+interface FactusResult {
+  ok: boolean;
+  sandbox: boolean;
+  number: string;
+  cufe: string | null;
+  total: string | number;
+  validated: boolean;
+  notificaciones: string[];
 }
 
 const INVOICE_STATUS = {
@@ -333,6 +354,56 @@ const CuentasCobro = () => {
         description: 'No se pudo abrir la cuenta de cobro.',
         variant: 'destructive',
       });
+    }
+  };
+
+  // --- Facturación electrónica DIAN (Factus, sandbox de pruebas) ---
+  const [factusInvoice, setFactusInvoice] = useState<Invoice | null>(null);
+  const [factusIva, setFactusIva] = useState<'0' | '19'>('0');
+  const [factusPersona, setFactusPersona] = useState<'auto' | 'juridica' | 'natural'>('auto');
+  const [factusLoading, setFactusLoading] = useState(false);
+  const [factusResult, setFactusResult] = useState<FactusResult | null>(null);
+  const [factusError, setFactusError] = useState<string | null>(null);
+
+  const openFactus = (invoice: Invoice) => {
+    setFactusInvoice(invoice);
+    setFactusIva('0');
+    setFactusPersona('auto');
+    setFactusResult(null);
+    setFactusError(null);
+  };
+
+  const handleFactusEmitir = async () => {
+    if (!factusInvoice) return;
+    setFactusLoading(true);
+    setFactusError(null);
+    try {
+      const result = await apiClient.post<FactusResult>(`/api/factus/emitir/${factusInvoice.id}`, {
+        ivaPct: Number(factusIva),
+        ...(factusPersona !== 'auto' ? { tipoPersona: factusPersona } : {}),
+      });
+      setFactusResult(result);
+      toast({ title: 'Factura electrónica emitida', description: `${result.number} — validada ante la DIAN (sandbox)` });
+      fetchData();
+    } catch (error) {
+      setFactusError(error instanceof Error ? error.message : 'No se pudo emitir la factura');
+    } finally {
+      setFactusLoading(false);
+    }
+  };
+
+  const handleFactusPdf = async (invoiceId: string) => {
+    try {
+      const token = await (await import('@/lib/auth')).authService.getToken();
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${API_URL}/api/factus/pdf/${invoiceId}`, {
+        headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+      });
+      if (!response.ok) throw new Error('No se pudo descargar el PDF');
+      const blob = await response.blob();
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo abrir el PDF de la factura electrónica.', variant: 'destructive' });
     }
   };
 
@@ -664,6 +735,12 @@ const CuentasCobro = () => {
                       </TableCell>
                       <TableCell className="font-medium">
                         <span className="break-words">#{invoice.invoiceNumber.substring(0, 12)}...</span>
+                        {invoice.factusNumber && (
+                          <Badge variant="outline" className="mt-1 flex w-fit items-center gap-1 border-emerald-300 text-emerald-700">
+                            <ShieldCheck className="h-3 w-3" />
+                            {invoice.factusNumber}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className="whitespace-nowrap">{new Date(invoice.fecha).toLocaleDateString('es-CO')}</span>
@@ -726,6 +803,15 @@ const CuentasCobro = () => {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => openFactus(invoice)}
+                            title={invoice.factusNumber ? `Factura electrónica ${invoice.factusNumber}` : 'Emitir factura electrónica DIAN (pruebas)'}
+                            className={invoice.factusNumber ? 'text-emerald-600 hover:text-emerald-700' : ''}
+                          >
+                            <ShieldCheck className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleDelete(invoice.id)}
                             className="text-destructive hover:text-destructive"
                             title="Eliminar"
@@ -742,6 +828,110 @@ const CuentasCobro = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Factura electrónica DIAN (Factus) */}
+      <Dialog open={!!factusInvoice} onOpenChange={(open) => { if (!open) setFactusInvoice(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5 text-emerald-600" />
+              Factura electrónica DIAN
+            </DialogTitle>
+            <DialogDescription>
+              Emite esta cuenta de cobro como factura electrónica vía Factus.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Modo <strong>sandbox de pruebas</strong>: las facturas emitidas aquí no tienen validez fiscal
+            y no se envían por correo al cliente.
+          </div>
+
+          {factusInvoice && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-2 gap-2 rounded-md bg-muted/50 p-3">
+                <div className="text-muted-foreground">Cliente</div>
+                <div className="font-medium">{factusInvoice.clientName}</div>
+                <div className="text-muted-foreground">NIT / ID</div>
+                <div>{factusInvoice.clientNit || '—'}</div>
+                <div className="text-muted-foreground">Valor</div>
+                <div className="font-medium">
+                  {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(factusInvoice.totalAmount)}
+                </div>
+                <div className="text-muted-foreground">Concepto</div>
+                <div className="line-clamp-2">{factusInvoice.concepto || factusInvoice.servicio || '—'}</div>
+              </div>
+
+              {!factusResult && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">IVA</Label>
+                    <Select value={factusIva} onValueChange={(v) => setFactusIva(v as '0' | '19')}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Sin IVA (no responsable)</SelectItem>
+                        <SelectItem value="19">IVA 19%</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Tipo de cliente</Label>
+                    <Select value={factusPersona} onValueChange={(v) => setFactusPersona(v as typeof factusPersona)}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Detectar por NIT</SelectItem>
+                        <SelectItem value="juridica">Persona jurídica</SelectItem>
+                        <SelectItem value="natural">Persona natural</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {factusError && (
+                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700 break-words">
+                  {factusError}
+                </div>
+              )}
+
+              {factusResult && (
+                <div className="space-y-2 rounded-md border border-emerald-300 bg-emerald-50 p-3">
+                  <div className="flex items-center gap-2 font-medium text-emerald-800">
+                    <CircleCheck className="h-4 w-4" />
+                    {factusResult.number} — {factusResult.validated ? 'validada ante la DIAN' : 'registrada (pendiente)'}
+                  </div>
+                  {factusResult.cufe && (
+                    <div className="break-all text-[11px] text-emerald-700">CUFE: {factusResult.cufe}</div>
+                  )}
+                  {factusResult.notificaciones.length > 0 && (
+                    <div className="space-y-1 text-[11px] text-amber-700">
+                      {factusResult.notificaciones.map((n, i) => (
+                        <div key={i}>⚠ {n}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                {(factusInvoice.factusNumber || factusResult) && (
+                  <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id)}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    PDF DIAN
+                  </Button>
+                )}
+                {!factusResult && (
+                  <Button onClick={handleFactusEmitir} disabled={factusLoading}>
+                    {factusLoading
+                      ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Emitiendo…</>)
+                      : (<><ShieldCheck className="mr-2 h-4 w-4" />{factusInvoice.factusNumber ? 'Re-consultar emisión' : 'Emitir en sandbox'}</>)}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
