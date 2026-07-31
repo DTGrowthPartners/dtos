@@ -4143,14 +4143,15 @@ export default function Tareas() {
               </div>
         ) : (
           /* ==================== DEFAULT HEADER (All projects / Archived / Deleted) ==================== */
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-base md:text-lg font-semibold text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* El título no se encoge: si los botones no caben, bajan a una segunda línea */}
+            <div className="flex-shrink-0">
+              <h1 className="whitespace-nowrap text-base md:text-lg font-semibold text-muted-foreground">
                 {taskView === 'active' && 'Mis Tareas'}
                 {taskView === 'archived' && 'Tareas Archivadas'}
                 {taskView === 'deleted' && 'Tareas Eliminadas'}
               </h1>
-              <p className="text-sm md:text-base font-medium text-foreground">
+              <p className="whitespace-nowrap text-sm md:text-base font-medium text-foreground">
                 {taskView === 'active' && (
                   <>
                     Todos los proyectos
