@@ -1,11 +1,43 @@
 import { Router } from 'express';
 import { PrismaClient } from '@prisma/client';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import crypto from 'crypto';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 /** Documentaciones: wiki interna — proyectos con sus documentos (fichas técnicas, guías, APIs). */
 const router = Router();
 const prisma = new PrismaClient();
+
+// Imágenes adjuntas a documentos. Viven fuera de dist para sobrevivir los builds.
+const UPLOADS_DIR = path.join(__dirname, '../../uploads/docs');
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// GET público ANTES del auth: las etiquetas <img> no mandan Authorization.
+// El nombre es aleatorio (12 bytes hex) → no adivinable.
+router.get('/files/:name', (req, res) => {
+  const name = req.params.name;
+  if (!/^[a-f0-9]{24}\.(png|jpe?g|gif|webp)$/i.test(name)) return res.status(400).json({ message: 'Nombre inválido' });
+  const file = path.join(UPLOADS_DIR, name);
+  if (!fs.existsSync(file)) return res.status(404).json({ message: 'No existe' });
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(file);
+});
+
 router.use(authMiddleware);
+
+// POST /api/docs/upload — sube una imagen y devuelve su URL para el markdown
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+router.post('/upload', upload.single('file'), (req, res) => {
+  const f = req.file;
+  if (!f) return res.status(400).json({ message: 'Archivo requerido (campo "file")' });
+  const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' } as Record<string, string>)[f.mimetype];
+  if (!ext) return res.status(400).json({ message: 'Solo imágenes png, jpg, gif o webp' });
+  const name = crypto.randomBytes(12).toString('hex') + '.' + ext;
+  fs.writeFileSync(path.join(UPLOADS_DIR, name), f.buffer);
+  res.json({ url: `/api/docs/files/${name}`, name });
+});
 
 // GET /api/docs/projects — proyectos con resumen de sus documentos (sin contenido)
 router.get('/projects', async (_req, res) => {

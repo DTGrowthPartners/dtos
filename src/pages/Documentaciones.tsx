@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
-  BookOpen, Plus, Search, FileText, Pencil, Trash2, ChevronLeft, Save, X, Loader2, FolderOpen,
+  BookOpen, Plus, Search, FileText, Pencil, Trash2, ChevronLeft, Save, X, Loader2, FolderOpen, ImagePlus,
 } from 'lucide-react';
 
 // ==================== Tipos ====================
@@ -61,7 +61,10 @@ const inlineMd = (s: string) =>
     .replace(/`([^`]+)`/g, '<code class="rounded bg-muted px-1 py-0.5 text-[0.85em] font-mono">$1</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>')
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="text-primary underline underline-offset-2">$1</a>');
+    // imágenes primero (su sintaxis contiene la de los enlaces)
+    .replace(/!\[([^\]]*)\]\(((?:https?:\/\/|\/api\/docs\/files\/)[^\s)]+)\)/g,
+      '<img src="$2" alt="$1" loading="lazy" class="my-2 max-w-full rounded-md border border-border" />')
+    .replace(/\[([^\]]+)\]\(((?:https?:\/\/|\/)[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" class="text-primary underline underline-offset-2">$1</a>');
 
 function mdToHtml(md: string): string {
   const lines = md.replace(/\r\n/g, '\n').split('\n');
@@ -134,6 +137,36 @@ const Documentaciones = () => {
   const [editTipo, setEditTipo] = useState('doc');
   const [editContenido, setEditContenido] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingImg, setUploadingImg] = useState(false);
+
+  // Sube una imagen y la inserta como markdown al final del contenido
+  const subirImagen = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Solo imágenes', description: 'png, jpg, gif o webp', variant: 'destructive' });
+      return;
+    }
+    setUploadingImg(true);
+    try {
+      const token = await (await import('@/lib/auth')).authService.getToken();
+      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+      const form = new FormData();
+      form.append('file', file);
+      const r = await fetch(`${API_URL}/api/docs/upload`, {
+        method: 'POST',
+        headers: { 'Authorization': token ? `Bearer ${token}` : '' },
+        body: form,
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({})) as any).message || 'No se pudo subir');
+      const { url } = await r.json();
+      const nombre = file.name.replace(/\.[^.]+$/, '') || 'imagen';
+      setEditContenido((prev) => `${prev.trimEnd()}\n\n![${nombre}](${url})\n`);
+      toast({ title: 'Imagen insertada' });
+    } catch (e) {
+      toast({ title: 'Error subiendo imagen', description: e instanceof Error ? e.message : '', variant: 'destructive' });
+    } finally {
+      setUploadingImg(false);
+    }
+  };
 
   // Diálogos de creación
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -482,15 +515,43 @@ const Documentaciones = () => {
                     <Button size="sm" variant="outline" onClick={() => setEditing(false)}>
                       <X className="mr-1.5 h-4 w-4" /> Cancelar
                     </Button>
+                    <label className="inline-flex cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/gif,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) subirImagen(f);
+                          e.target.value = '';
+                        }}
+                      />
+                      <span className={cn(
+                        'inline-flex h-9 items-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent',
+                        uploadingImg && 'pointer-events-none opacity-60'
+                      )}>
+                        {uploadingImg ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <ImagePlus className="mr-1.5 h-4 w-4" />}
+                        Imagen
+                      </span>
+                    </label>
                   </div>
                   <Textarea
                     value={editContenido}
                     onChange={(e) => setEditContenido(e.target.value)}
-                    placeholder={'Escribe en markdown…\n\n# Título\n## Subtítulo\n- lista\n**negrita**, `código`, [enlace](https://...)\n```\nbloque de código\n```'}
+                    onPaste={(e) => {
+                      const item = Array.from(e.clipboardData.items).find((i) => i.type.startsWith('image/'));
+                      if (item) {
+                        e.preventDefault();
+                        const f = item.getAsFile();
+                        if (f) subirImagen(f);
+                      }
+                    }}
+                    placeholder={'Escribe en markdown…\n\n# Título\n## Subtítulo\n- lista\n**negrita**, `código`, [enlace](https://...)\n```\nbloque de código\n```\n\nPega una imagen (Ctrl+V) o usa el botón Imagen.'}
                     className="min-h-[420px] font-mono text-sm"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Soporta markdown: # títulos, **negrita**, *cursiva*, `código`, ```bloques```, listas, enlaces, &gt; citas y --- separadores.
+                    Soporta markdown: # títulos, **negrita**, *cursiva*, `código`, ```bloques```, listas, [enlaces](url),
+                    imágenes (botón o pegar con Ctrl+V), &gt; citas y --- separadores.
                   </p>
                 </div>
               ) : (
