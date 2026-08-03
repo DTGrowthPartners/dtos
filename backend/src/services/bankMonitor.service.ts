@@ -279,11 +279,62 @@ const MAPEO_KEYWORDS: Record<string, string[]> = {
   cliente: ['pago de cliente'],
 };
 
+/** "Compra en TIENDAS ARA" → "TIENDAS ARA"; null si la descripción no es de comercio */
+const extraerComercio = (descripcion: string): string | null => {
+  const m = descripcion.match(/^(?:Compra|Pago|Transacción)(?:\s+\w+)?\s+en\s+(.+)$/i);
+  if (!m) return null;
+  const c = m[1].trim().toUpperCase().replace(/\*.*$/, '').trim();
+  return c.length >= 3 ? c : null;
+};
+
+/** Aprende del historial del Sheets: cómo clasificó el equipo este comercio antes.
+ *  Gana la categoría no-"Otros" más frecuente (≥2 veces, o 1 sin votos en contra). */
+const histCache: Record<string, { map: Map<string, string>; at: number }> = {};
+
+async function categoriaHistorial(tipo: 'entrante' | 'saliente', comercio: string): Promise<string | null> {
+  const hoja = tipo === 'entrante' ? 'Entradas' : 'Salidas';
+  const hit = histCache[hoja];
+  if (!hit || Date.now() - hit.at > 600_000) {
+    const map = new Map<string, string>();
+    try {
+      const r = await sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: `${hoja}!C2:D800` });
+      const conteo = new Map<string, Map<string, number>>();
+      for (const row of r.data.values || []) {
+        const com = extraerComercio(String(row[0] || ''));
+        const cat = String(row[1] || '').trim();
+        if (!com || !cat) continue;
+        if (!conteo.has(com)) conteo.set(com, new Map());
+        const c = conteo.get(com)!;
+        c.set(cat, (c.get(cat) || 0) + 1);
+      }
+      for (const [com, cats] of conteo) {
+        const noOtros = [...cats.entries()].filter(([c]) => !/^otros?$/i.test(c)).sort((a, b) => b[1] - a[1]);
+        if (!noOtros.length) continue;
+        const [mejor, votos] = noOtros[0];
+        const votosOtros = [...cats.entries()].filter(([c]) => /^otros?$/i.test(c)).reduce((a, [, n]) => a + n, 0);
+        if (votos >= 2 || (votos === 1 && noOtros.length === 1 && votosOtros === 0)) map.set(com, mejor);
+      }
+    } catch (e: any) {
+      log(`error leyendo historial de categorías: ${e?.message}`);
+    }
+    histCache[hoja] = { map, at: Date.now() };
+  }
+  return histCache[hoja].map.get(comercio) || null;
+}
+
 export async function clasificarCategoria(descripcion: string, tipo: 'entrante' | 'saliente'): Promise<string> {
   const desc = descripcion.toLowerCase();
   const validas = await categoriasValidas(tipo === 'entrante' ? 'entradas' : 'salidas');
   const porLower = new Map(validas.map((c) => [c.toLowerCase(), c]));
 
+  // 1) Historial: cómo clasificó el equipo este comercio antes (la señal más confiable)
+  const comercio = extraerComercio(descripcion);
+  if (comercio) {
+    const aprendida = await categoriaHistorial(tipo, comercio);
+    if (aprendida) return aprendida;
+  }
+
+  // 2) Mapa de palabras clave
   for (const [keyword, candidatas] of Object.entries(MAPEO_KEYWORDS)) {
     if (desc.includes(keyword)) {
       for (const cand of candidatas) {
