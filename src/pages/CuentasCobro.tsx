@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { MUNICIPIOS_DANE } from '@/lib/municipiosDane';
 
 // --- Data Interfaces ---
 interface Client {
@@ -50,6 +51,7 @@ interface Client {
   address?: string;
   logo: string;
   status: string;
+  municipio?: string | null; // código DANE para facturación electrónica
   createdAt: string;
 }
 
@@ -76,6 +78,7 @@ interface ServiceItem {
 interface Invoice {
   id: string;
   invoiceNumber: string;
+  clientId: string;
   clientName: string;
   clientNit: string;
   totalAmount: number;
@@ -389,6 +392,21 @@ const CuentasCobro = () => {
   const [factusResult, setFactusResult] = useState<FactusResult | null>(null);
   const [factusError, setFactusError] = useState<string | null>(null);
   const [factusEstado, setFactusEstado] = useState<FactusEstado | null>(null);
+  const [factusMunicipio, setFactusMunicipio] = useState('08001');
+  const [factusMuniOpen, setFactusMuniOpen] = useState(false);
+  const [factusMuniQuery, setFactusMuniQuery] = useState('');
+
+  const muniLabel = (code: string) => {
+    const m = MUNICIPIOS_DANE.find((x) => x.c === code);
+    return m ? `${m.n} (${m.d})` : code;
+  };
+  const munisFiltrados = useMemo(() => {
+    const q = factusMuniQuery.trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    if (!q) return MUNICIPIOS_DANE.slice(0, 30);
+    return MUNICIPIOS_DANE.filter((m) =>
+      `${m.n} ${m.d}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q)
+    ).slice(0, 30);
+  }, [factusMuniQuery]);
 
   // Producción sin rango de numeración activo para facturas → no se puede emitir todavía
   const factusSinRango = factusEstado?.ok === true && !factusEstado.sandbox &&
@@ -400,6 +418,10 @@ const CuentasCobro = () => {
     setFactusPersona('auto');
     setFactusResult(null);
     setFactusError(null);
+    setFactusMuniQuery('');
+    // Municipio guardado en la ficha del cliente; si no tiene, Barranquilla
+    const cl = clients.find((c) => c.id === invoice.clientId);
+    setFactusMunicipio(cl?.municipio || '08001');
     apiClient.get<FactusEstado>('/api/factus/estado').then(setFactusEstado).catch(() => setFactusEstado(null));
   };
 
@@ -416,6 +438,7 @@ const CuentasCobro = () => {
     try {
       const result = await apiClient.post<FactusResult>(`/api/factus/emitir/${factusInvoice.id}`, {
         ivaPct: Number(factusIva),
+        municipio: factusMunicipio,
         ...(factusPersona !== 'auto' ? { tipoPersona: factusPersona } : {}),
       });
       setFactusResult(result);
@@ -937,6 +960,44 @@ const CuentasCobro = () => {
                         <SelectItem value="natural">Persona natural</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs">Municipio del cliente</Label>
+                    <Popover open={factusMuniOpen} onOpenChange={setFactusMuniOpen}>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" role="combobox" className="h-9 w-full justify-between font-normal">
+                          {muniLabel(factusMunicipio)}
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                        <Command shouldFilter={false}>
+                          <CommandInput
+                            placeholder="Buscar municipio..."
+                            value={factusMuniQuery}
+                            onValueChange={setFactusMuniQuery}
+                          />
+                          <CommandList>
+                            <CommandEmpty>Sin resultados</CommandEmpty>
+                            <CommandGroup>
+                              {munisFiltrados.map((m) => (
+                                <CommandItem
+                                  key={m.c}
+                                  value={m.c}
+                                  onSelect={() => { setFactusMunicipio(m.c); setFactusMuniOpen(false); }}
+                                >
+                                  <Check className={cn('mr-2 h-4 w-4', factusMunicipio === m.c ? 'opacity-100' : 'opacity-0')} />
+                                  {m.n} <span className="ml-1 text-muted-foreground">({m.d})</span>
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Queda guardado en la ficha del cliente para las próximas facturas.
+                    </p>
                   </div>
                 </div>
               )}

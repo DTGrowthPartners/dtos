@@ -91,6 +91,8 @@ model Client {
   // Meta Ads Integration
   metaAdAccountId  String?   // ID de cuenta publicitaria de Meta (ej: act_123456789)
   metaBusinessId   String?   // ID del Business Manager de Meta
+  // Facturación electrónica: municipio del cliente (código DANE, ej: 08001 Barranquilla)
+  municipio        String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }

@@ -102,6 +102,8 @@ export const factusService = {
       (identificacion.length >= 9 && /^[89]/.test(identificacion) ? 'juridica' : 'natural');
     const esJuridica = tipoPersona === 'juridica';
     const ivaPct = typeof opts.ivaPct === 'number' && opts.ivaPct > 0 ? opts.ivaPct : 0;
+    // Prioridad: municipio elegido en el diálogo → el guardado en la ficha → Barranquilla
+    const municipio = opts.municipio || (client as any)?.municipio || '08001';
 
     const total = Math.round(invoice.totalAmount * 100) / 100;
     // Con IVA el precio del ítem va sin impuestos; sin IVA (no responsable) va excluido
@@ -124,7 +126,7 @@ export const factusService = {
         address: client?.address || 'No registrada',
         email: client?.email || undefined,
         phone: client?.phone || undefined,
-        municipality_code: opts.municipio || '08001',
+        municipality_code: municipio,
       },
       payment_details: [
         { payment_form: '1', payment_method_code: '47', amount: totalConIva.toFixed(2) },
@@ -173,6 +175,11 @@ export const factusService = {
         factusValidatedAt: bill.is_validated ? new Date() : null,
       },
     });
+
+    // El municipio elegido explícitamente queda en la ficha del cliente para las próximas
+    if (client && opts.municipio && opts.municipio !== (client as any).municipio) {
+      await prisma.client.update({ where: { id: client.id }, data: { municipio } as any }).catch(() => {});
+    }
 
     // Las "notificaciones" DIAN (p. ej. FAJ44b) son advertencias, no rechazos
     const notificaciones = bill.errors && typeof bill.errors === 'object'
