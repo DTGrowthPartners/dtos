@@ -205,6 +205,24 @@ router.post('/bot/invoices/run-recurring', verifyBotApiKey, async (_req: Request
 });
 
 /**
+ * POST /api/webhook/bot/reports/daily[?dry=1]
+ *
+ * Reportes diarios por correo (Estado de Resultados + Cartera) a Dairo/Jhon.
+ * Port del antiguo run_daily_reports.sh de api-cuentas-de-cobro; lo dispara
+ * el cron del VPS a las 7:00 AM Bogotá. Con dry=1 genera sin enviar.
+ */
+router.post('/bot/reports/daily', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { enviarReportesDiarios } = await import('../services/dailyReports.service');
+    const result = await enviarReportesDiarios({ dryRun: req.query.dry === '1' });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Bot API] Error en reportes diarios:', error);
+    res.status(500).json({ success: false, error: 'Error generando reportes diarios' });
+  }
+});
+
+/**
  * POST /api/webhook/bot/cobranza/run
  *
  * Cobranza automática diaria: recordatorios de facturas vencidas por WhatsApp.

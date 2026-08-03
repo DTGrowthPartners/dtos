@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import app from './app';
 import { PrismaClient } from '@prisma/client';
+import { startBankMonitor } from './services/bankMonitor.service';
 
 const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
@@ -13,10 +14,12 @@ const PORT = process.env.PORT || 3001;
 prisma.$connect()
   .then(() => {
     console.log('Connected to database');
-    
+
     // Start server
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      // Monitor de movimientos bancarios (solo si BANK_MONITOR=on)
+      startBankMonitor();
     });
   })
   .catch((error) => {

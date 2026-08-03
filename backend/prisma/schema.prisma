@@ -262,6 +262,23 @@ model Invoice {
   updatedAt       DateTime @updatedAt
 }
 
+// Movimientos bancarios detectados por el monitor de correos (Bancolombia).
+// Auditoría de lo que se insertó en el Sheets + cola de notificación WhatsApp.
+model BankTransaction {
+  id          String   @id @default(cuid())
+  emailUid    Int?     // UID IMAP del correo origen
+  tipo        String   // entrante | saliente
+  monto       Float
+  descripcion String
+  categoria   String
+  cuenta      String   @default("Bancolombia")
+  entidad     String
+  fecha       String   // como quedó en el Sheets (DD/MM/YYYY HH:mm:ss)
+  sheetOk     Boolean  @default(false)
+  notificado  Boolean  @default(false) // aviso enviado al grupo de WhatsApp
+  createdAt   DateTime @default(now())
+}
+
 // ==================== Documentaciones (wiki interna por proyecto) ====================
 
 model DocProject {
