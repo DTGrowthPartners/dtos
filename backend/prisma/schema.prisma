@@ -262,6 +262,33 @@ model Invoice {
   updatedAt       DateTime @updatedAt
 }
 
+// ==================== Documentaciones (wiki interna por proyecto) ====================
+
+model DocProject {
+  id          String     @id @default(cuid())
+  nombre      String
+  descripcion String?
+  color       String     @default("#7c3aed")
+  orden       Int        @default(0)
+  docs        DocEntry[]
+  createdBy   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model DocEntry {
+  id        String     @id @default(cuid())
+  projectId String
+  project   DocProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  titulo    String
+  tipo      String     @default("doc") // ficha-tecnica, guia, api, proceso, doc
+  contenido String     @default("")    // markdown
+  orden     Int        @default(0)
+  updatedBy String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
 // Registro idempotente de la conciliación pagos (Sheets) ↔ facturas.
 // Un pago de la hoja Entradas se procesa una sola vez (sheetKey único).
 model PagoConciliado {

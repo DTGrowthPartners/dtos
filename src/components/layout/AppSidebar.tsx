@@ -13,6 +13,7 @@ import {
   X,
   TrendingUp,
   BookUser,
+  BookOpen,
   LayoutGrid,
   Bot,
   Clock,
@@ -67,6 +68,7 @@ const navGroups: NavGroup[] = [
       { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
       { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },
       { title: 'Reportes', path: '/reportes', icon: FileBarChart, permission: 'reportes' },
+      { title: 'Documentaciones', path: '/documentaciones', icon: BookOpen, permission: 'documentaciones', badge: 'nuevo' },
     ],
   },
   {

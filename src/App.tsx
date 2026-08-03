@@ -36,6 +36,7 @@ const Vps = lazy(() => import("@/pages/Vps"));
 const Logs = lazy(() => import("@/pages/Logs"));
 const CobrosMRR = lazy(() => import("@/pages/CobrosMRR"));
 const Propuestas = lazy(() => import("@/pages/Propuestas"));
+const Documentaciones = lazy(() => import("@/pages/Documentaciones"));
 const Dominios = lazy(() => import("@/pages/Dominios"));
 const Webs = lazy(() => import("@/pages/Webs"));
 const Profile = lazy(() => import("@/pages/Profile"));
@@ -107,6 +108,7 @@ const App = () => (
                 <Route path="/logs" element={<ProtectedRoute requiredPermission="logs"><Logs /></ProtectedRoute>} />
                 <Route path="/cobros" element={<ProtectedRoute requiredPermission="cobros"><CobrosMRR /></ProtectedRoute>} />
                 <Route path="/propuestas" element={<ProtectedRoute requiredPermission="propuestas"><Propuestas /></ProtectedRoute>} />
+                <Route path="/documentaciones" element={<ProtectedRoute requiredPermission="documentaciones"><Documentaciones /></ProtectedRoute>} />
                 <Route path="/dominios" element={<ProtectedRoute requiredPermission="dominios"><Dominios /></ProtectedRoute>} />
                 <Route path="/webs" element={<ProtectedRoute requiredPermission="webs"><Webs /></ProtectedRoute>} />
                 <Route path="/perfil" element={<Profile />} />
