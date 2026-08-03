@@ -178,11 +178,14 @@ export async function extraerTransaccion(emailBody: string): Promise<TxData | nu
     let descripcion = '';
     let remitente: string | null = null;
     if (tipo === 'entrante') {
-      // "... por $X de FULANO en tu cuenta ..." → el remitente es el pagador
+      // Plantillas: "... por $X de FULANO en tu cuenta ..." y las variantes
+      // "recibiste una transferencia de FULANO por $X en tu cuenta" (llaves Bre-B)
+      // y "Recibiste un pago PROVEEDOR de FULANO por $X en tu cuenta".
       const rem = text.match(/\bde\s+(.{2,60}?)\s+en\s+tu\s+cuenta/i);
       if (rem) {
-        remitente = rem[1].replace(/\s+/g, ' ').trim();
-        descripcion = `Transferencia recibida de ${remitente}`;
+        // si el nombre capturó el monto ("FULANO por $150,000.00"), recortarlo
+        remitente = rem[1].replace(/\s+por\s+\$[\d.,]+.*$/i, '').replace(/\s+/g, ' ').trim();
+        if (remitente) descripcion = `Transferencia recibida de ${remitente}`;
       }
     }
     if (!descripcion) {
@@ -191,9 +194,10 @@ export async function extraerTransaccion(emailBody: string): Promise<TxData | nu
       else descripcion = tipoDesc;
     }
 
-    const fechaMatch = text.match(/el\s+(\d{2}\/\d{2}\/\d{4})\s+a\s+las\s+(\d{2}:\d{2})/);
+    // Año de 4 o 2 dígitos: la plantilla de llaves (Bre-B) usa "27/07/26"
+    const fechaMatch = text.match(/el\s+(\d{2})\/(\d{2})\/(\d{2,4})\s+a\s+las\s+(\d{2}:\d{2})/);
     const fecha = fechaMatch
-      ? `${fechaMatch[1]} ${fechaMatch[2]}:00`
+      ? `${fechaMatch[1]}/${fechaMatch[2]}/${fechaMatch[3].length === 2 ? '20' + fechaMatch[3] : fechaMatch[3]} ${fechaMatch[4]}:00`
       : formatearAhora();
 
     const esPagoCliente = tipo === 'entrante' && !!remitente &&
@@ -358,7 +362,26 @@ async function enviarPendientesWhatsApp() {
 
 let procesando = false;
 
-export async function procesarCorreos(dryRun = false, incluirLeidos = false): Promise<TxData[]> {
+/** Cursor persistente: último UID procesado. Se procesa por UID (no por "no leído")
+ *  para que un humano leyendo el buzón no haga perder transacciones — así se
+ *  perdieron pagos con el monitor viejo. */
+const CURSOR_KEY = 'bank_monitor_last_uid';
+
+async function getCursor(): Promise<number | null> {
+  const row = await prisma.appConfig.findUnique({ where: { key: CURSOR_KEY } });
+  const n = row ? parseInt(row.value, 10) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+async function setCursor(uid: number) {
+  await prisma.appConfig.upsert({
+    where: { key: CURSOR_KEY },
+    update: { value: String(uid) },
+    create: { key: CURSOR_KEY, value: String(uid) },
+  });
+}
+
+export async function procesarCorreos(dryRun = false): Promise<TxData[]> {
   const resultados: TxData[] = [];
   const client = new ImapFlow({
     host: IMAP_HOST,
@@ -372,16 +395,28 @@ export async function procesarCorreos(dryRun = false, incluirLeidos = false): Pr
   try {
     const lock = await client.getMailboxLock('INBOX');
     try {
-      const criterio: any = { subject: 'Alertas y Notificaciones' };
-      if (!incluirLeidos) criterio.seen = false;
-      const uids = await client.search(criterio, { uid: true });
-      if (!uids || !uids.length) return resultados;
-      log(`procesando ${uids.length} correo(s)${dryRun ? ' [dry-run]' : ''}`);
+      const todos = await client.search({ subject: 'Alertas y Notificaciones' }, { uid: true });
+      if (!todos || !todos.length) return resultados;
+      let cursor = await getCursor();
+      if (cursor === null) {
+        // primera vez: arrancar desde el correo más reciente sin reprocesar el histórico
+        cursor = Math.max(...todos);
+        await setCursor(cursor);
+        log(`cursor inicializado en uid ${cursor}`);
+        return resultados;
+      }
+      const uids = todos.filter((u) => u > cursor!).sort((a, b) => a - b);
+      if (!uids.length) return resultados;
+      log(`procesando ${uids.length} correo(s) nuevos (uid > ${cursor})${dryRun ? ' [dry-run]' : ''}`);
 
       for (const uid of uids) {
         try {
+          // dedupe defensivo: si ya se registró este correo, solo avanzar el cursor
+          const ya = await prisma.bankTransaction.findFirst({ where: { emailUid: uid } });
+          if (ya) { await setCursor(uid); continue; }
+
           const msg = await client.fetchOne(String(uid), { source: true }, { uid: true });
-          if (!msg || !msg.source) continue;
+          if (!msg || !msg.source) { await setCursor(uid); continue; }
           const parsed = await simpleParser(msg.source);
           const body = parsed.text || parsed.html || '';
           const data = await extraerTransaccion(String(body));
@@ -418,19 +453,21 @@ export async function procesarCorreos(dryRun = false, incluirLeidos = false): Pr
                 },
               });
               await notificarSlack(data);
-              await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
+              await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true }).catch(() => {});
+              await setCursor(uid);
               log(`✅ registrado: ${data.descripcion} $${data.monto}`);
               resultados.push(data);
             } else {
-              log(`❌ falló Sheets para uid ${uid}; queda NO leído para reintentar`);
+              log(`❌ falló Sheets para uid ${uid}; se reintenta en el próximo ciclo`);
+              break; // no avanzar el cursor: reintentar este correo
             }
           } else {
-            // no parseable: marcar leído para no reintentar eternamente (igual que el viejo)
-            await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true });
-            log(`⚠ correo uid ${uid} sin datos extraíbles; marcado leído`);
+            await setCursor(uid); // no parseable: avanzar para no reintentar eternamente
+            log(`⚠ correo uid ${uid} sin datos extraíbles; omitido`);
           }
         } catch (e: any) {
           log(`error con correo uid ${uid}: ${e?.message}`);
+          break; // conservar el cursor para reintentar
         }
       }
     } finally {
