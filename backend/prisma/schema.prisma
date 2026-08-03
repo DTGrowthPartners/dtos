@@ -286,6 +286,7 @@ model DocProject {
   nombre      String
   descripcion String?
   color       String     @default("#7c3aed")
+  estado      String     @default("activo") // activo | inactivo
   orden       Int        @default(0)
   docs        DocEntry[]
   createdBy   String

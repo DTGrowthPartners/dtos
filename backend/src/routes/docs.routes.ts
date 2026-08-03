@@ -73,7 +73,7 @@ router.post('/projects', async (req, res) => {
 // PUT /api/docs/projects/:id
 router.put('/projects/:id', async (req, res) => {
   try {
-    const { nombre, descripcion, color, orden } = req.body || {};
+    const { nombre, descripcion, color, orden, estado } = req.body || {};
     const project = await prisma.docProject.update({
       where: { id: req.params.id },
       data: {
@@ -81,6 +81,7 @@ router.put('/projects/:id', async (req, res) => {
         descripcion: descripcion !== undefined ? (descripcion?.trim() || null) : undefined,
         color: typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color) ? color : undefined,
         orden: typeof orden === 'number' ? orden : undefined,
+        estado: estado === 'activo' || estado === 'inactivo' ? estado : undefined,
       },
     });
     res.json(project);

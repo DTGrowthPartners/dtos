@@ -30,6 +30,7 @@ interface DocProject {
   nombre: string;
   descripcion: string | null;
   color: string;
+  estado?: string; // activo | inactivo
   docs: DocSummary[];
 }
 
@@ -176,6 +177,38 @@ const Documentaciones = () => {
   const [newDocOpen, setNewDocOpen] = useState(false);
   const [ndTitulo, setNdTitulo] = useState('');
   const [ndTipo, setNdTipo] = useState('doc');
+
+  // Edición de proyecto (nombre, descripción, color, estado)
+  const [editProject, setEditProject] = useState<DocProject | null>(null);
+  const [epNombre, setEpNombre] = useState('');
+  const [epDescripcion, setEpDescripcion] = useState('');
+  const [epColor, setEpColor] = useState(COLORES[0]);
+  const [epEstado, setEpEstado] = useState<'activo' | 'inactivo'>('activo');
+
+  const openEditProject = (p: DocProject) => {
+    setEditProject(p);
+    setEpNombre(p.nombre);
+    setEpDescripcion(p.descripcion || '');
+    setEpColor(p.color);
+    setEpEstado(p.estado === 'inactivo' ? 'inactivo' : 'activo');
+  };
+
+  const saveProject = async () => {
+    if (!editProject) return;
+    try {
+      await apiClient.put(`/api/docs/projects/${editProject.id}`, {
+        nombre: epNombre,
+        descripcion: epDescripcion,
+        color: epColor,
+        estado: epEstado,
+      });
+      setEditProject(null);
+      fetchProjects();
+      toast({ title: 'Proyecto actualizado' });
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'No se pudo guardar', variant: 'destructive' });
+    }
+  };
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null;
 
@@ -378,49 +411,82 @@ const Documentaciones = () => {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((p) => (
-              <Card
-                key={p.id}
-                className="group cursor-pointer transition-shadow hover:shadow-md"
-                onClick={() => { setSelectedProjectId(p.id); setSelectedDoc(null); }}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span
-                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white"
-                        style={{ background: p.color }}
-                      >
-                        <BookOpen className="h-5 w-5" />
-                      </span>
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold">{p.nombre}</div>
-                        <div className="truncate text-xs text-muted-foreground">
-                          {p.descripcion || 'Sin descripción'}
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 opacity-0 transition-opacity group-hover:opacity-100 text-destructive"
-                      onClick={(e) => { e.stopPropagation(); deleteProject(p); }}
-                      title="Eliminar proyecto"
+          <>
+            {[
+              { titulo: null, lista: projects.filter((p) => p.estado !== 'inactivo') },
+              { titulo: 'Inactivos', lista: projects.filter((p) => p.estado === 'inactivo') },
+            ].map(({ titulo, lista }) => lista.length > 0 && (
+              <div key={titulo || 'activos'}>
+                {titulo && (
+                  <div className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {titulo}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {lista.map((p) => (
+                    <Card
+                      key={p.id}
+                      className={cn(
+                        'group cursor-pointer transition-shadow hover:shadow-md',
+                        p.estado === 'inactivo' && 'opacity-55 saturate-50'
+                      )}
+                      onClick={() => { setSelectedProjectId(p.id); setSelectedDoc(null); }}
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{p.docs.length} documento(s)</span>
-                    {p.docs.length > 0 && (
-                      <span>últ. act. {fmtFecha(p.docs.reduce((a, d) => (d.updatedAt > a ? d.updatedAt : a), p.docs[0].updatedAt))}</span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span
+                              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-white"
+                              style={{ background: p.color }}
+                            >
+                              <BookOpen className="h-5 w-5" />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="truncate font-semibold">{p.nombre}</span>
+                                {p.estado === 'inactivo' && (
+                                  <Badge variant="outline" className="flex-shrink-0 text-[9px] text-muted-foreground">Inactivo</Badge>
+                                )}
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                {p.descripcion || 'Sin descripción'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0"
+                              onClick={(e) => { e.stopPropagation(); openEditProject(p); }}
+                              title="Editar proyecto"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive"
+                              onClick={(e) => { e.stopPropagation(); deleteProject(p); }}
+                              title="Eliminar proyecto"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                          <span>{p.docs.length} documento(s)</span>
+                          {p.docs.length > 0 && (
+                            <span>últ. act. {fmtFecha(p.docs.reduce((a, d) => (d.updatedAt > a ? d.updatedAt : a), p.docs[0].updatedAt))}</span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </div>
             ))}
-          </div>
+          </>
         )
       ) : (
         /* ==================== Proyecto: lista + visor ==================== */
@@ -437,9 +503,14 @@ const Documentaciones = () => {
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: selectedProject.color }} />
                   {selectedProject.nombre}
                 </button>
-                <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setNewDocOpen(true)}>
-                  <Plus className="h-3.5 w-3.5" />
-                </Button>
+                <div className="flex gap-1">
+                  <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => openEditProject(selectedProject)} title="Editar proyecto">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => setNewDocOpen(true)} title="Nuevo documento">
+                    <Plus className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
               {selectedProject.descripcion && (
                 <p className="mb-2 text-xs text-muted-foreground">{selectedProject.descripcion}</p>
@@ -616,6 +687,55 @@ const Documentaciones = () => {
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="outline" onClick={() => setNewProjectOpen(false)}>Cancelar</Button>
               <Button onClick={createProject} disabled={!npNombre.trim()}>Crear</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: editar proyecto */}
+      <Dialog open={!!editProject} onOpenChange={(o) => { if (!o) setEditProject(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar proyecto</DialogTitle>
+            <DialogDescription>Nombre, descripción, color y estado.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Nombre</Label>
+              <Input value={epNombre} onChange={(e) => setEpNombre(e.target.value)} />
+            </div>
+            <div>
+              <Label>Descripción</Label>
+              <Input value={epDescripcion} onChange={(e) => setEpDescripcion(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Color</Label>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {COLORES.map((c) => (
+                    <button
+                      key={c}
+                      className={cn('h-7 w-7 rounded-full border-2', epColor === c ? 'border-foreground' : 'border-transparent')}
+                      style={{ background: c }}
+                      onClick={() => setEpColor(c)}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <Select value={epEstado} onValueChange={(v) => setEpEstado(v as 'activo' | 'inactivo')}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="activo">Activo</SelectItem>
+                    <SelectItem value="inactivo">Inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setEditProject(null)}>Cancelar</Button>
+              <Button onClick={saveProject} disabled={!epNombre.trim()}>Guardar</Button>
             </div>
           </div>
         </DialogContent>
