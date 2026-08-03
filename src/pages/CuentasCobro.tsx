@@ -284,9 +284,25 @@ const CuentasCobro = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
 
     const usados = serviceItems.filter(item => item.descripcion.trim() !== '');
+
+    // Validación con mensajes claros antes de llamar al backend
+    const faltantes: string[] = [];
+    if (!invoiceData.nombre_cliente) faltantes.push('selecciona el cliente');
+    if (!invoiceData.identificacion.trim()) faltantes.push('escribe el NIT o cédula del cliente (no la tiene registrada en su ficha)');
+    if (usados.length === 0) faltantes.push('agrega al menos un servicio con descripción');
+    if (!invoiceData.fecha) faltantes.push('elige la fecha');
+    if (faltantes.length > 0) {
+      toast({
+        title: 'Faltan datos para generar la cuenta',
+        description: faltantes.join(' · '),
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsLoading(true);
     const submissionData = {
       ...invoiceData,
       // Amarra la factura al servicio facturado (el primer ítem con servicio del catálogo).
