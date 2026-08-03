@@ -101,6 +101,14 @@ interface FactusResult {
   notificaciones: string[];
 }
 
+interface FactusEstado {
+  ok: boolean;
+  configurado: boolean;
+  sandbox: boolean;
+  mensaje?: string;
+  rangos?: { id: number; documento: string; prefijo: string; actual: number; resolucion: string | null }[];
+}
+
 const INVOICE_STATUS = {
   pendiente: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800', icon: Clock },
   parcial: { label: 'Parcial', color: 'bg-orange-100 text-orange-800', icon: Clock },
@@ -364,6 +372,11 @@ const CuentasCobro = () => {
   const [factusLoading, setFactusLoading] = useState(false);
   const [factusResult, setFactusResult] = useState<FactusResult | null>(null);
   const [factusError, setFactusError] = useState<string | null>(null);
+  const [factusEstado, setFactusEstado] = useState<FactusEstado | null>(null);
+
+  // Producción sin rango de numeración activo para facturas → no se puede emitir todavía
+  const factusSinRango = factusEstado?.ok === true && !factusEstado.sandbox &&
+    !(factusEstado.rangos || []).some((r) => /factura/i.test(r.documento));
 
   const openFactus = (invoice: Invoice) => {
     setFactusInvoice(invoice);
@@ -371,10 +384,17 @@ const CuentasCobro = () => {
     setFactusPersona('auto');
     setFactusResult(null);
     setFactusError(null);
+    apiClient.get<FactusEstado>('/api/factus/estado').then(setFactusEstado).catch(() => setFactusEstado(null));
   };
 
   const handleFactusEmitir = async () => {
     if (!factusInvoice) return;
+    if (factusEstado && !factusEstado.sandbox) {
+      const okConfirm = confirm(
+        `Vas a emitir una factura electrónica REAL ante la DIAN por ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(factusInvoice.totalAmount)} a nombre de ${factusInvoice.clientName}. ¿Continuar?`
+      );
+      if (!okConfirm) return;
+    }
     setFactusLoading(true);
     setFactusError(null);
     try {
@@ -383,7 +403,10 @@ const CuentasCobro = () => {
         ...(factusPersona !== 'auto' ? { tipoPersona: factusPersona } : {}),
       });
       setFactusResult(result);
-      toast({ title: 'Factura electrónica emitida', description: `${result.number} — validada ante la DIAN (sandbox)` });
+      toast({
+        title: 'Factura electrónica emitida',
+        description: `${result.number} — validada ante la DIAN${result.sandbox ? ' (sandbox)' : ''}`,
+      });
       fetchData();
     } catch (error) {
       setFactusError(error instanceof Error ? error.message : 'No se pudo emitir la factura');
@@ -842,10 +865,24 @@ const CuentasCobro = () => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Modo <strong>sandbox de pruebas</strong>: las facturas emitidas aquí no tienen validez fiscal
-            y no se envían por correo al cliente.
-          </div>
+          {(!factusEstado || factusEstado.sandbox) ? (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Modo <strong>sandbox de pruebas</strong>: las facturas emitidas aquí no tienen validez fiscal
+              y no se envían por correo al cliente.
+            </div>
+          ) : (
+            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+              Modo <strong>PRODUCCIÓN</strong>: la factura se emite de verdad ante la DIAN y tiene
+              validez fiscal. No se envía correo al cliente (el envío es manual por ahora).
+            </div>
+          )}
+          {factusSinRango && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <strong>Falta el rango de numeración:</strong> la DIAN aún no tiene autorizada la numeración
+              de facturación electrónica para este software. Hay que solicitarla en el portal DIAN y
+              registrarla en Factus antes de poder emitir.
+            </div>
+          )}
 
           {factusInvoice && (
             <div className="space-y-3 text-sm">
@@ -921,10 +958,14 @@ const CuentasCobro = () => {
                   </Button>
                 )}
                 {!factusResult && (
-                  <Button onClick={handleFactusEmitir} disabled={factusLoading}>
+                  <Button onClick={handleFactusEmitir} disabled={factusLoading || factusSinRango}>
                     {factusLoading
                       ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Emitiendo…</>)
-                      : (<><ShieldCheck className="mr-2 h-4 w-4" />{factusInvoice.factusNumber ? 'Re-consultar emisión' : 'Emitir en sandbox'}</>)}
+                      : (<><ShieldCheck className="mr-2 h-4 w-4" />
+                          {factusInvoice.factusNumber
+                            ? 'Re-consultar emisión'
+                            : (!factusEstado || factusEstado.sandbox) ? 'Emitir en sandbox' : 'Emitir factura DIAN'}
+                        </>)}
                   </Button>
                 )}
               </div>
