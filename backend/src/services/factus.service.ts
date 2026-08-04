@@ -83,6 +83,19 @@ const CUENTAS_PROPIAS: Record<string, { code: string; ref: string }> = {
   efectivo: { code: '10', ref: 'Efectivo' },
 };
 
+// Bloque de datos de pago que va SIEMPRE en las Observaciones de la factura
+// (la plantilla de Factus lo muestra tal cual — igual que en las cuentas de cobro).
+const INFO_PAGO =
+  'Pagos: Nombre: Dairo Traslaviña - Cédula: 1143397563 - Cuenta de ahorros Bancolombia: 78841707710 - Nequi/Daviplata: 3007189383 - Bre-B 1143397563';
+
+/** Observación final: el bloque de pagos completo + lo que quepa de las observaciones propias */
+const armarObservacion = (obsCuenta?: string | null): string => {
+  const extra = (obsCuenta || '').trim();
+  if (!extra) return INFO_PAGO;
+  const espacio = 250 - INFO_PAGO.length - 3;
+  return `${extra.slice(0, Math.max(espacio, 0))} | ${INFO_PAGO}`.slice(0, 250);
+};
+
 export const factusService = {
   isConfigured,
   esSandbox,
@@ -125,7 +138,7 @@ export const factusService = {
     const referenceCode = `dtos-${invoice.invoiceNumber}`;
     const payload: any = {
       reference_code: referenceCode,
-      observation: (invoice.observaciones || '').slice(0, 250) || undefined,
+      observation: armarObservacion(invoice.observaciones),
       send_email: opts.sendEmail === true,
       customer: {
         identification_document_code: esJuridica ? '31' : '13',
