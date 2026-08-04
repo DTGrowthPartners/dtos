@@ -148,8 +148,9 @@ export const factusService = {
           payment_method_code: (opts.medioPago && CUENTAS_PROPIAS[opts.medioPago]?.code) ||
             (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47'),
           // Referencia con TODAS las cuentas: la factura puede emitirse antes de
-          // que el cliente pague y debe ver a dónde puede hacerlo.
-          reference_code: 'Bancolombia ahorros 78841707710 - Nequi/Daviplata 3007189383 - Bre-B 1143397563',
+          // que el cliente pague y debe ver a dónde puede hacerlo. Saltos de
+          // línea para que cada cuenta quede en su propio renglón.
+          reference_code: 'Bancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
           amount: totalConIva.toFixed(2),
         },
       ],
