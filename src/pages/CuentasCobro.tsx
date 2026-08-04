@@ -936,7 +936,7 @@ const CuentasCobro = () => {
             </DialogDescription>
           </DialogHeader>
 
-          {(!factusEstado || factusEstado.sandbox) ? (
+          {!factusInvoice?.factusNumber && ((!factusEstado || factusEstado.sandbox) ? (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               Modo <strong>sandbox de pruebas</strong>: las facturas emitidas aquí no tienen validez fiscal
               y no se envían por correo al cliente.
@@ -946,8 +946,8 @@ const CuentasCobro = () => {
               Modo <strong>PRODUCCIÓN</strong>: la factura se emite de verdad ante la DIAN y tiene
               validez fiscal. No se envía correo al cliente (el envío es manual por ahora).
             </div>
-          )}
-          {factusSinRango && (
+          ))}
+          {factusSinRango && !factusInvoice?.factusNumber && (
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               <strong>Falta el rango de numeración:</strong> la DIAN aún no tiene autorizada la numeración
               de facturación electrónica para este software. Hay que solicitarla en el portal DIAN y
@@ -970,7 +970,20 @@ const CuentasCobro = () => {
                 <div className="line-clamp-2">{factusInvoice.concepto || factusInvoice.servicio || '—'}</div>
               </div>
 
-              {!factusResult && (
+              {/* Ya emitida: resumen limpio en vez del formulario */}
+              {factusInvoice.factusNumber && !factusResult && factusInvoice.factusStatus !== 'anulada' && (
+                <div className="space-y-1.5 rounded-md border border-emerald-300 bg-emerald-50 p-3">
+                  <div className="flex items-center gap-2 font-medium text-emerald-800">
+                    <CircleCheck className="h-4 w-4" />
+                    {factusInvoice.factusNumber} — emitida y validada ante la DIAN
+                  </div>
+                  {factusInvoice.factusCufe && (
+                    <div className="break-all text-[11px] text-emerald-700">CUFE: {factusInvoice.factusCufe}</div>
+                  )}
+                </div>
+              )}
+
+              {!factusResult && !factusInvoice.factusNumber && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">IVA</Label>
@@ -1097,14 +1110,12 @@ const CuentasCobro = () => {
                     PDF DIAN
                   </Button>
                 )}
-                {!factusResult && factusInvoice.factusStatus !== 'anulada' && (
+                {!factusResult && !factusInvoice.factusNumber && (
                   <Button onClick={handleFactusEmitir} disabled={factusLoading || factusSinRango}>
                     {factusLoading
                       ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Emitiendo…</>)
                       : (<><ShieldCheck className="mr-2 h-4 w-4" />
-                          {factusInvoice.factusNumber
-                            ? 'Re-consultar emisión'
-                            : (!factusEstado || factusEstado.sandbox) ? 'Emitir en sandbox' : 'Emitir factura DIAN'}
+                          {(!factusEstado || factusEstado.sandbox) ? 'Emitir en sandbox' : 'Emitir factura DIAN'}
                         </>)}
                   </Button>
                 )}
