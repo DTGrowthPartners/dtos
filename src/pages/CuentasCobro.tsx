@@ -394,16 +394,14 @@ const CuentasCobro = () => {
   const [factusError, setFactusError] = useState<string | null>(null);
   const [factusEstado, setFactusEstado] = useState<FactusEstado | null>(null);
   const [factusMunicipio, setFactusMunicipio] = useState('08001');
-  const [factusMedioPago, setFactusMedioPago] = useState('47');
+  const [factusMedioPago, setFactusMedioPago] = useState('bancolombia');
 
+  // Cuentas propias de DT Growth (el backend las traduce al código DIAN)
   const MEDIOS_PAGO_FACTUS = [
-    { c: '47', n: 'Transferencia' },
-    { c: '10', n: 'Efectivo' },
-    { c: '42', n: 'Consignación' },
-    { c: '48', n: 'Tarjeta Crédito' },
-    { c: '49', n: 'Tarjeta Débito' },
-    { c: '20', n: 'Cheque' },
-    { c: '1', n: 'No definido' },
+    { c: 'bancolombia', n: 'Cuenta de ahorros Bancolombia: 78841707710' },
+    { c: 'nequi', n: 'Nequi: 3007189383' },
+    { c: 'daviplata', n: 'Daviplata: 3007189383' },
+    { c: 'efectivo', n: 'Efectivo' },
   ];
   const [factusMuniOpen, setFactusMuniOpen] = useState(false);
   const [factusMuniQuery, setFactusMuniQuery] = useState('');
@@ -431,7 +429,7 @@ const CuentasCobro = () => {
     setFactusResult(null);
     setFactusError(null);
     setFactusMuniQuery('');
-    setFactusMedioPago('47');
+    setFactusMedioPago('bancolombia');
     // Municipio guardado en la ficha del cliente; si no tiene, Barranquilla
     const cl = clients.find((c) => c.id === invoice.clientId);
     setFactusMunicipio(cl?.municipio || '08001');

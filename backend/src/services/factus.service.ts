@@ -75,6 +75,14 @@ export interface EmitirOpts {
 // Medios de pago válidos (tabla de referencia Factus)
 export const MEDIOS_PAGO = ['10', '42', '20', '47', '71', '72', '1', '49', '48', 'ZZZ'];
 
+// Cuentas propias de DT Growth: alias de la UI → código DIAN + referencia visible
+const CUENTAS_PROPIAS: Record<string, { code: string; ref: string }> = {
+  bancolombia: { code: '47', ref: 'Cuenta de ahorros Bancolombia 78841707710' },
+  nequi: { code: '47', ref: 'Nequi 3007189383' },
+  daviplata: { code: '47', ref: 'Daviplata 3007189383' },
+  efectivo: { code: '10', ref: 'Efectivo' },
+};
+
 export const factusService = {
   isConfigured,
   esSandbox,
@@ -133,11 +141,16 @@ export const factusService = {
         municipality_code: municipio,
       },
       payment_details: [
-        {
-          payment_form: '1', // contado
-          payment_method_code: opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47',
-          amount: totalConIva.toFixed(2),
-        },
+        (() => {
+          const propia = opts.medioPago ? CUENTAS_PROPIAS[opts.medioPago] : undefined;
+          const code = propia?.code || (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47');
+          return {
+            payment_form: '1', // contado
+            payment_method_code: code,
+            ...(propia ? { reference_code: propia.ref } : {}),
+            amount: totalConIva.toFixed(2),
+          };
+        })(),
       ],
       items: [{
         code_reference: invoice.invoiceNumber.slice(0, 20),
