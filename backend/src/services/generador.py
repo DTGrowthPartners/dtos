@@ -39,7 +39,7 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
     observaciones = _clean(observaciones)
 
     # --- DATOS DEL EMISOR ---
-    emisor_nombre = "Dairo Tralasviña"
+    emisor_nombre = "Dairo Traslaviña"
     emisor_cedula = "1143397563"
     emisor_telefono = "+57 3007189383"
     emisor_email = "Dairo@dtgrowthpartners.com"
@@ -270,12 +270,14 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
     c.drawString(margen_izquierdo, y, f"Cuenta de ahorros Bancolombia: {cuenta_bancolombia}")
     y -= 12
     c.drawString(margen_izquierdo, y, f"Nequi / Daviplata: {nequi}")
+    y -= 12
+    c.drawString(margen_izquierdo, y, f"Bre-B {emisor_cedula}")
 
     y -= 24
     c.setFont(font_normal, 9)
     c.drawString(margen_izquierdo, y, "Atentamente,")
     y -= 15
-    c.drawString(margen_izquierdo, y, "Dairo Tralasviña,")
+    c.drawString(margen_izquierdo, y, "Dairo Traslaviña,")
 
     c.save()
     return ruta_salida
