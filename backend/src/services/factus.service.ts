@@ -80,6 +80,7 @@ const CUENTAS_PROPIAS: Record<string, { code: string; ref: string }> = {
   bancolombia: { code: '47', ref: 'Cuenta de ahorros Bancolombia 78841707710' },
   nequi: { code: '47', ref: 'Nequi 3007189383' },
   daviplata: { code: '47', ref: 'Daviplata 3007189383' },
+  breb: { code: '47', ref: 'Bre-B 1143397563' },
   efectivo: { code: '10', ref: 'Efectivo' },
 };
 

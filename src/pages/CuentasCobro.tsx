@@ -401,6 +401,7 @@ const CuentasCobro = () => {
     { c: 'bancolombia', n: 'Cuenta de ahorros Bancolombia: 78841707710' },
     { c: 'nequi', n: 'Nequi: 3007189383' },
     { c: 'daviplata', n: 'Daviplata: 3007189383' },
+    { c: 'breb', n: 'Bre-B: 1143397563' },
     { c: 'efectivo', n: 'Efectivo' },
   ];
   const [factusMuniOpen, setFactusMuniOpen] = useState(false);
