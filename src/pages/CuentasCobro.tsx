@@ -487,6 +487,36 @@ const CuentasCobro = () => {
     }
   };
 
+  const handleFactusNotaDebito = async () => {
+    if (!factusInvoice?.factusNumber) return;
+    const valorStr = prompt(
+      `Nota débito sobre ${factusInvoice.factusNumber}: cobra un valor ADICIONAL al cliente (intereses de mora, gastos, valor facturado de menos).\n\nValor a cobrar (solo números):`
+    );
+    if (valorStr === null) return;
+    const valor = Number(valorStr.replace(/[^\d.]/g, ''));
+    if (!valor || valor <= 0) {
+      toast({ title: 'Valor inválido', variant: 'destructive' });
+      return;
+    }
+    const motivo = prompt('Motivo del cobro (sale como concepto en la nota débito):');
+    if (!motivo?.trim()) return;
+    setFactusLoading(true);
+    setFactusError(null);
+    try {
+      const r = await apiClient.post<{ ndNumber: string; valor: number }>(`/api/factus/nota-debito/${factusInvoice.id}`, { valor, motivo });
+      toast({
+        title: 'Nota débito emitida',
+        description: `${r.ndNumber} por ${new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(r.valor)} — validada ante la DIAN`,
+      });
+      setFactusInvoice(null);
+      fetchData();
+    } catch (error) {
+      setFactusError(error instanceof Error ? error.message : 'No se pudo emitir la nota débito');
+    } finally {
+      setFactusLoading(false);
+    }
+  };
+
   const handleFactusPdf = async (invoiceId: string) => {
     try {
       const token = await (await import('@/lib/auth')).authService.getToken();
@@ -1095,15 +1125,27 @@ const CuentasCobro = () => {
 
               <div className="flex justify-end gap-2 pt-1">
                 {factusInvoice.factusNumber && factusInvoice.factusStatus !== 'anulada' && !factusResult && (
-                  <Button
-                    variant="outline"
-                    className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
-                    onClick={handleFactusAnular}
-                    disabled={factusLoading}
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Anular (nota crédito)
-                  </Button>
+                  <>
+                    <Button
+                      variant="outline"
+                      className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={handleFactusAnular}
+                      disabled={factusLoading}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Anular (nota crédito)
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-amber-300 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                      onClick={handleFactusNotaDebito}
+                      disabled={factusLoading}
+                      title="Cobrar un valor adicional sobre esta factura (intereses, gastos, diferencia)"
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Nota débito
+                    </Button>
+                  </>
                 )}
                 {(factusInvoice.factusNumber || factusResult) && (
                   <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id)}>

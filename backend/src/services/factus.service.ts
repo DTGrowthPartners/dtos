@@ -308,6 +308,93 @@ export const factusService = {
     };
   },
 
+  /** Nota débito: cobra un valor ADICIONAL sobre una factura emitida
+   *  (intereses de mora, gastos por cobrar, valor facturado de menos). */
+  async notaDebito(invoiceId: string, valor: number, motivo: string, ivaPct = 0) {
+    if (!isConfigured()) throw new Error('Factus no está configurado');
+    if (!Number.isFinite(valor) || valor <= 0) throw new Error('El valor de la nota débito debe ser mayor a 0');
+    if (!motivo?.trim()) throw new Error('El motivo es obligatorio');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    if (invoice.factusStatus === 'anulada') throw new Error('La factura está anulada; no admite notas débito');
+    const client = await prisma.client.findUnique({ where: { id: invoice.clientId } });
+
+    const cli = await api();
+    // Rango ND: se crea si no existe (documento 23, sin resolución DIAN)
+    const rangosResp = await cli.get('/v2/numbering-ranges');
+    const rangos: any[] = rangosResp.data?.data?.data || [];
+    let rangoND = rangos.find((x) => x.is_active && /nota d[eé]bito/i.test(x.document || ''));
+    if (!rangoND) {
+      const creado = await cli.post('/v2/numbering-ranges', { document: '23', prefix: 'ND', current: 1 });
+      rangoND = creado.data?.data;
+      if (!rangoND?.id) throw new Error(`No se pudo crear el rango de notas débito: ${creado.data?.message || ''}`);
+    }
+
+    const { id: identificacion, dv } = parseNit(invoice.clientNit || client?.nit || '');
+    const esJuridica = identificacion.length >= 9 && /^[89]/.test(identificacion);
+    const monto = Math.round(valor * 100) / 100;
+    const base = ivaPct > 0 ? Math.round((monto / (1 + ivaPct / 100)) * 100) / 100 : monto;
+    // Concepto DIAN: 1 intereses, 2 gastos por cobrar, 3 cambio del valor
+    const conceptCode = /inter[eé]s|mora/i.test(motivo) ? '1' : /gasto/i.test(motivo) ? '2' : '3';
+
+    // Cada nota débito es un documento nuevo: referencia única por emisión
+    const referenceCode = `dtos-nd-${invoice.invoiceNumber}-${Date.now()}`;
+
+    const payload: any = {
+      reference_code: referenceCode,
+      bill_number: invoice.factusNumber,
+      correction_concept_code: conceptCode,
+      numbering_range_id: rangoND.id,
+      observation: motivo.slice(0, 250),
+      send_email: false,
+      customer: {
+        identification_document_code: esJuridica ? '31' : '13',
+        identification: identificacion,
+        ...(dv && esJuridica ? { dv } : {}),
+        legal_organization_code: esJuridica ? '1' : '2',
+        tribute_code: 'ZZ',
+        ...(esJuridica ? { company: invoice.clientName } : {}),
+        names: invoice.clientName,
+        address: client?.address || 'No registrada',
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+        municipality_code: (client as any)?.municipio || '08001',
+      },
+      items: [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: motivo.slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94',
+        standard_code: '1',
+        taxes: ivaPct > 0
+          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+          : [{ code: '01', rate: '0.00', is_excluded: true }],
+        withholding_taxes: [],
+      }],
+    };
+
+    const r = await cli.post('/v2/debit-notes/validate', payload);
+    const d = r.data?.data;
+    const nd = d?.debit_note || (d?.number ? d : null);
+    if (!nd) {
+      const errores = r.data?.data?.errors || r.data?.errors;
+      throw new Error(`Factus rechazó la nota débito: ${errores ? JSON.stringify(errores) : (r.data?.message || `HTTP ${r.status}`)}`);
+    }
+
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { factusNdNumber: nd.number } });
+
+    return {
+      ok: true,
+      sandbox: esSandbox(),
+      ndNumber: nd.number,
+      cude: nd.cude || nd.cufe || null,
+      valor: monto,
+      factura: invoice.factusNumber,
+      validated: Boolean(nd.is_validated),
+    };
+  },
+
   /** PDF oficial DIAN de la factura emitida (Buffer + nombre de archivo) */
   async descargarPdf(invoiceId: string) {
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });

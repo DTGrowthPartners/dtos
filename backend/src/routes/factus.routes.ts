@@ -47,6 +47,22 @@ router.post('/anular/:invoiceId', async (req, res) => {
   }
 });
 
+// POST /api/factus/nota-debito/:invoiceId — cobro adicional. body: { valor, motivo, ivaPct? }
+router.post('/nota-debito/:invoiceId', async (req, res) => {
+  try {
+    const { valor, motivo, ivaPct } = req.body || {};
+    const result = await factusService.notaDebito(
+      req.params.invoiceId,
+      Number(valor),
+      typeof motivo === 'string' ? motivo : '',
+      typeof ivaPct === 'number' ? ivaPct : 0
+    );
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ ok: false, message: e?.message || 'No se pudo emitir la nota débito' });
+  }
+});
+
 // GET /api/factus/pdf/:invoiceId — PDF oficial DIAN de la factura emitida
 router.get('/pdf/:invoiceId', async (req, res) => {
   try {

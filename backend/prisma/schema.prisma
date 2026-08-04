@@ -257,6 +257,7 @@ model Invoice {
   factusStatus      String?   // validada, pendiente, anulada
   factusValidatedAt DateTime?
   factusNcNumber    String?   // nota crédito que la anuló (ej NC1)
+  factusNdNumber    String?   // última nota débito emitida sobre esta factura (ej ND1)
   payments        InvoicePayment[]
   createdBy       String
   createdAt       DateTime @default(now())
