@@ -150,7 +150,7 @@ export const factusService = {
           // Referencia con titular y TODAS las cuentas: el cliente necesita el
           // nombre y la cédula para inscribir la cuenta en su banco. Saltos de
           // línea para que cada dato quede en su propio renglón.
-          reference_code: 'Titular: Dairo Traslaviña\nCC 1143397563\nBancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
+          reference_code: 'Dairo Traslaviña\nCC 1143397563\nBancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
           amount: totalConIva.toFixed(2),
         },
       ],
