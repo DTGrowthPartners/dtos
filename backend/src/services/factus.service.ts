@@ -147,10 +147,10 @@ export const factusService = {
           payment_form: '1', // contado
           payment_method_code: (opts.medioPago && CUENTAS_PROPIAS[opts.medioPago]?.code) ||
             (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47'),
-          // Referencia con TODAS las cuentas: la factura puede emitirse antes de
-          // que el cliente pague y debe ver a dónde puede hacerlo. Saltos de
-          // línea para que cada cuenta quede en su propio renglón.
-          reference_code: 'Bancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
+          // Referencia con titular y TODAS las cuentas: el cliente necesita el
+          // nombre y la cédula para inscribir la cuenta en su banco. Saltos de
+          // línea para que cada dato quede en su propio renglón.
+          reference_code: 'Titular: Dairo Traslaviña\nCC 1143397563\nBancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
           amount: totalConIva.toFixed(2),
         },
       ],
