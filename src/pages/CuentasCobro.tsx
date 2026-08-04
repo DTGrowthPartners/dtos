@@ -394,6 +394,17 @@ const CuentasCobro = () => {
   const [factusError, setFactusError] = useState<string | null>(null);
   const [factusEstado, setFactusEstado] = useState<FactusEstado | null>(null);
   const [factusMunicipio, setFactusMunicipio] = useState('08001');
+  const [factusMedioPago, setFactusMedioPago] = useState('47');
+
+  const MEDIOS_PAGO_FACTUS = [
+    { c: '47', n: 'Transferencia' },
+    { c: '10', n: 'Efectivo' },
+    { c: '42', n: 'Consignación' },
+    { c: '48', n: 'Tarjeta Crédito' },
+    { c: '49', n: 'Tarjeta Débito' },
+    { c: '20', n: 'Cheque' },
+    { c: '1', n: 'No definido' },
+  ];
   const [factusMuniOpen, setFactusMuniOpen] = useState(false);
   const [factusMuniQuery, setFactusMuniQuery] = useState('');
 
@@ -420,6 +431,7 @@ const CuentasCobro = () => {
     setFactusResult(null);
     setFactusError(null);
     setFactusMuniQuery('');
+    setFactusMedioPago('47');
     // Municipio guardado en la ficha del cliente; si no tiene, Barranquilla
     const cl = clients.find((c) => c.id === invoice.clientId);
     setFactusMunicipio(cl?.municipio || '08001');
@@ -440,6 +452,7 @@ const CuentasCobro = () => {
       const result = await apiClient.post<FactusResult>(`/api/factus/emitir/${factusInvoice.id}`, {
         ivaPct: Number(factusIva),
         municipio: factusMunicipio,
+        medioPago: factusMedioPago,
         ...(factusPersona !== 'auto' ? { tipoPersona: factusPersona } : {}),
       });
       setFactusResult(result);
@@ -981,6 +994,20 @@ const CuentasCobro = () => {
                         <SelectItem value="natural">Persona natural</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="col-span-2">
+                    <Label className="text-xs">Medio de pago</Label>
+                    <Select value={factusMedioPago} onValueChange={setFactusMedioPago}>
+                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MEDIOS_PAGO_FACTUS.map((m) => (
+                          <SelectItem key={m.c} value={m.c}>{m.n}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Cómo pagó (o pagará) el cliente — sale en la factura como "Detalles de pago".
+                    </p>
                   </div>
                   <div className="col-span-2">
                     <Label className="text-xs">Municipio del cliente</Label>

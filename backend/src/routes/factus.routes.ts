@@ -18,12 +18,13 @@ router.get('/estado', async (_req, res) => {
 // POST /api/factus/emitir/:invoiceId — body: { tipoPersona?, ivaPct?, municipio?, sendEmail? }
 router.post('/emitir/:invoiceId', async (req, res) => {
   try {
-    const { tipoPersona, ivaPct, municipio, sendEmail } = req.body || {};
+    const { tipoPersona, ivaPct, municipio, sendEmail, medioPago } = req.body || {};
     const result = await factusService.emitirCuenta(req.params.invoiceId, {
       tipoPersona: tipoPersona === 'natural' ? 'natural' : tipoPersona === 'juridica' ? 'juridica' : undefined,
       ivaPct: typeof ivaPct === 'number' ? ivaPct : undefined,
       municipio: typeof municipio === 'string' && /^\d{5}$/.test(municipio) ? municipio : undefined,
       sendEmail: sendEmail === true,
+      medioPago: typeof medioPago === 'string' ? medioPago : undefined,
     });
     res.json(result);
   } catch (e: any) {

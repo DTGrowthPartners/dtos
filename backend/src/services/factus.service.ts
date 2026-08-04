@@ -69,7 +69,11 @@ export interface EmitirOpts {
   ivaPct?: number;          // 0 (default, no responsable) o 19
   municipio?: string;       // código DANE, default 08001 (Barranquilla)
   sendEmail?: boolean;      // default false: en pruebas no se manda correo al cliente
+  medioPago?: string;       // código Factus del medio de pago, default 47 (transferencia)
 }
+
+// Medios de pago válidos (tabla de referencia Factus)
+export const MEDIOS_PAGO = ['10', '42', '20', '47', '71', '72', '1', '49', '48', 'ZZZ'];
 
 export const factusService = {
   isConfigured,
@@ -129,7 +133,11 @@ export const factusService = {
         municipality_code: municipio,
       },
       payment_details: [
-        { payment_form: '1', payment_method_code: '47', amount: totalConIva.toFixed(2) },
+        {
+          payment_form: '1', // contado
+          payment_method_code: opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47',
+          amount: totalConIva.toFixed(2),
+        },
       ],
       items: [{
         code_reference: invoice.invoiceNumber.slice(0, 20),
