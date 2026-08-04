@@ -92,6 +92,7 @@ interface Invoice {
   factusNumber?: string | null;
   factusCufe?: string | null;
   factusStatus?: string | null;
+  factusNcNumber?: string | null;
 }
 
 interface FactusResult {
@@ -449,6 +450,26 @@ const CuentasCobro = () => {
       fetchData();
     } catch (error) {
       setFactusError(error instanceof Error ? error.message : 'No se pudo emitir la factura');
+    } finally {
+      setFactusLoading(false);
+    }
+  };
+
+  const handleFactusAnular = async () => {
+    if (!factusInvoice?.factusNumber) return;
+    const motivo = prompt(
+      `Vas a ANULAR la factura ${factusInvoice.factusNumber} con una nota crédito (es el mecanismo legal — la factura no se puede borrar).\n\nMotivo de la anulación:`
+    );
+    if (motivo === null) return;
+    setFactusLoading(true);
+    setFactusError(null);
+    try {
+      const r = await apiClient.post<{ ncNumber: string }>(`/api/factus/anular/${factusInvoice.id}`, { motivo });
+      toast({ title: 'Factura anulada', description: `Nota crédito ${r.ncNumber} validada ante la DIAN` });
+      setFactusInvoice(null);
+      fetchData();
+    } catch (error) {
+      setFactusError(error instanceof Error ? error.message : 'No se pudo anular');
     } finally {
       setFactusLoading(false);
     }
@@ -1027,14 +1048,31 @@ const CuentasCobro = () => {
                 </div>
               )}
 
+              {factusInvoice.factusStatus === 'anulada' && (
+                <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  Factura <strong>anulada</strong> con la nota crédito {factusInvoice.factusNcNumber}.
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-1">
+                {factusInvoice.factusNumber && factusInvoice.factusStatus !== 'anulada' && !factusResult && (
+                  <Button
+                    variant="outline"
+                    className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                    onClick={handleFactusAnular}
+                    disabled={factusLoading}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Anular (nota crédito)
+                  </Button>
+                )}
                 {(factusInvoice.factusNumber || factusResult) && (
                   <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id)}>
                     <FileText className="mr-2 h-4 w-4" />
                     PDF DIAN
                   </Button>
                 )}
-                {!factusResult && (
+                {!factusResult && factusInvoice.factusStatus !== 'anulada' && (
                   <Button onClick={handleFactusEmitir} disabled={factusLoading || factusSinRango}>
                     {factusLoading
                       ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" />Emitiendo…</>)

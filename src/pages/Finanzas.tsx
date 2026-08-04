@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2, Pencil, Trash2, Check, MoreVertical } from 'lucide-react';
+import { Landmark, DollarSign, TrendingUp, TrendingDown, CreditCard, ArrowUpRight, ArrowDownRight, Calendar, RefreshCw, Filter, X, ChevronDown, ChevronUp, Search, Users, FileText, Receipt, Wallet, Building2, Pencil, Trash2, Check, MoreVertical } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, Legend, Area, AreaChart } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TercerosModal } from '@/components/modals/TercerosModal';
 import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
+import BankMovements from '@/components/finance/BankMovements';
 import EmployeeLoansPanel from '@/components/finance/EmployeeLoansPanel';
 import PayablesPanel from '@/components/finance/PayablesPanel';
 import FixedAssetsPanel from '@/components/finance/FixedAssetsPanel';
@@ -1288,6 +1289,10 @@ export default function Finanzas() {
                   <Receipt className="h-4 w-4" />
                   Cuentas
                 </TabsTrigger>
+                <TabsTrigger value="movimientos" className="flex items-center gap-2 whitespace-nowrap">
+                  <Landmark className="h-4 w-4" />
+                  Movimientos
+                </TabsTrigger>
                 <TabsTrigger value="empleados" className="flex items-center gap-2 whitespace-nowrap">
                   <Users className="h-4 w-4" />
                   Cobrar a Empleados
@@ -1368,6 +1373,10 @@ export default function Finanzas() {
 
           <TabsContent value="cuentas" className="mt-6">
             <AccountsPanel />
+          </TabsContent>
+
+          <TabsContent value="movimientos" className="mt-6">
+            <BankMovements />
           </TabsContent>
 
           <TabsContent value="empleados" className="mt-6">

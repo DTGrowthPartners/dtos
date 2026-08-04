@@ -198,6 +198,93 @@ export const factusService = {
     };
   },
 
+  /** Anula una factura emitida con una nota crédito (concepto 2: anulación).
+   *  La factura DIAN es inmutable; la NC es el mecanismo legal de corrección. */
+  async anularFactura(invoiceId: string, motivo?: string, ivaPct = 0) {
+    if (!isConfigured()) throw new Error('Factus no está configurado');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    if (invoice.factusStatus === 'anulada') throw new Error(`Ya fue anulada con la nota crédito ${invoice.factusNcNumber || ''}`);
+    const client = await prisma.client.findUnique({ where: { id: invoice.clientId } });
+
+    const cli = await api();
+    // Rango de numeración para notas crédito: si no existe, se crea (no requiere resolución DIAN)
+    const rangosResp = await cli.get('/v2/numbering-ranges');
+    const rangos: any[] = rangosResp.data?.data?.data || [];
+    let rangoNC = rangos.find((x) => x.is_active && /nota cr[eé]dito/i.test(x.document || ''));
+    if (!rangoNC) {
+      const creado = await cli.post('/v2/numbering-ranges', { document: '22', prefix: 'NC', current: 1 });
+      rangoNC = creado.data?.data;
+      if (!rangoNC?.id) throw new Error(`No se pudo crear el rango de notas crédito: ${creado.data?.message || ''}`);
+    }
+
+    const { id: identificacion, dv } = parseNit(invoice.clientNit || client?.nit || '');
+    const esJuridica = identificacion.length >= 9 && /^[89]/.test(identificacion);
+    const total = Math.round(invoice.totalAmount * 100) / 100;
+    const base = ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total;
+
+    const referenceCode = `dtos-nc-${invoice.invoiceNumber}`;
+    const payload: any = {
+      reference_code: referenceCode,
+      bill_number: invoice.factusNumber,
+      correction_concept_code: '2', // anulación de factura electrónica
+      numbering_range_id: rangoNC.id,
+      observation: (motivo || `Anulación de la factura ${invoice.factusNumber}`).slice(0, 250),
+      send_email: false,
+      customer: {
+        identification_document_code: esJuridica ? '31' : '13',
+        identification: identificacion,
+        ...(dv && esJuridica ? { dv } : {}),
+        legal_organization_code: esJuridica ? '1' : '2',
+        tribute_code: 'ZZ',
+        ...(esJuridica ? { company: invoice.clientName } : {}),
+        names: invoice.clientName,
+        address: client?.address || 'No registrada',
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+        municipality_code: (client as any)?.municipio || '08001',
+      },
+      items: [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: (invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales').slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94',
+        standard_code: '1',
+        taxes: ivaPct > 0
+          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+          : [{ code: '01', rate: '0.00', is_excluded: true }],
+        withholding_taxes: [],
+      }],
+    };
+
+    let r = await cli.post('/v2/credit-notes/validate', payload);
+    if (r.status === 409) {
+      await cli.delete(`/v2/credit-notes/destroy/reference/${encodeURIComponent(referenceCode)}`);
+      r = await cli.post('/v2/credit-notes/validate', payload);
+    }
+    const d = r.data?.data;
+    const nc = d?.credit_note || (d?.number ? d : null);
+    if (!nc) {
+      const errores = r.data?.data?.errors || r.data?.errors;
+      throw new Error(`Factus rechazó la nota crédito: ${errores ? JSON.stringify(errores) : (r.data?.message || `HTTP ${r.status}`)}`);
+    }
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { factusStatus: 'anulada', factusNcNumber: nc.number },
+    });
+
+    return {
+      ok: true,
+      sandbox: esSandbox(),
+      ncNumber: nc.number,
+      cufe: nc.cude || nc.cufe || null,
+      validated: Boolean(nc.is_validated),
+      facturaAnulada: invoice.factusNumber,
+    };
+  },
+
   /** PDF oficial DIAN de la factura emitida (Buffer + nombre de archivo) */
   async descargarPdf(invoiceId: string) {
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });

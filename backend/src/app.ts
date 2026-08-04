@@ -39,6 +39,7 @@ import configRoutes from './routes/config.routes';
 import metaGastoRoutes from './routes/metaGasto.routes';
 import factusRoutes from './routes/factus.routes';
 import docsRoutes from './routes/docs.routes';
+import bankRoutes from './routes/bank.routes';
 import { errorHandler } from './middlewares/error.middleware';
 import { corsOptions } from './config/cors';
 
@@ -73,6 +74,7 @@ app.use('/api/finance', financeRoutes);
 app.use('/api/meta-gasto', metaGastoRoutes);
 app.use('/api/factus', factusRoutes);
 app.use('/api/docs', docsRoutes);
+app.use('/api/bank', bankRoutes);
 app.use('/api/crm', crmRoutes);
 app.use('/api/terceros', tercerosRoutes);
 app.use('/api/notifications', notificationRoutes);

@@ -102,13 +102,16 @@ export class FinanceController {
         return res.status(400).json({ message: 'rowIndex inválido' });
       }
 
-      const updates = req.body;
+      const { expect: expectRaw, ...updates } = req.body;
       if (updates.importe !== undefined) updates.importe = Number(updates.importe);
 
-      await googleSheetsService.updateExpense(rowIndex, updates);
+      await googleSheetsService.updateExpense(rowIndex, updates, expectRaw);
       res.json({ message: 'Gasto actualizado correctamente' });
     } catch (error) {
       console.error('Error in updateExpense:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) {
+        return res.status(409).json({ message: error.message });
+      }
       res.status(500).json({
         message: 'Error al actualizar gasto',
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -123,13 +126,16 @@ export class FinanceController {
         return res.status(400).json({ message: 'rowIndex inválido' });
       }
 
-      const updates = req.body;
+      const { expect: expectRaw, ...updates } = req.body;
       if (updates.importe !== undefined) updates.importe = Number(updates.importe);
 
-      await googleSheetsService.updateIncome(rowIndex, updates);
+      await googleSheetsService.updateIncome(rowIndex, updates, expectRaw);
       res.json({ message: 'Ingreso actualizado correctamente' });
     } catch (error) {
       console.error('Error in updateIncome:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) {
+        return res.status(409).json({ message: error.message });
+      }
       res.status(500).json({
         message: 'Error al actualizar ingreso',
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -144,10 +150,17 @@ export class FinanceController {
         return res.status(400).json({ message: 'rowIndex inválido' });
       }
 
-      await googleSheetsService.deleteExpense(rowIndex);
+      const expectRaw = (req.query.expectImporte !== undefined || req.query.expectDescripcion !== undefined)
+        ? { importe: req.query.expectImporte !== undefined ? Number(req.query.expectImporte) : undefined,
+            descripcion: req.query.expectDescripcion !== undefined ? String(req.query.expectDescripcion) : undefined }
+        : undefined;
+      await googleSheetsService.deleteExpense(rowIndex, expectRaw);
       res.json({ message: 'Gasto eliminado correctamente' });
     } catch (error) {
       console.error('Error in deleteExpense:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) {
+        return res.status(409).json({ message: error.message });
+      }
       res.status(500).json({
         message: 'Error al eliminar gasto',
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -162,10 +175,17 @@ export class FinanceController {
         return res.status(400).json({ message: 'rowIndex inválido' });
       }
 
-      await googleSheetsService.deleteIncome(rowIndex);
+      const expectRaw = (req.query.expectImporte !== undefined || req.query.expectDescripcion !== undefined)
+        ? { importe: req.query.expectImporte !== undefined ? Number(req.query.expectImporte) : undefined,
+            descripcion: req.query.expectDescripcion !== undefined ? String(req.query.expectDescripcion) : undefined }
+        : undefined;
+      await googleSheetsService.deleteIncome(rowIndex, expectRaw);
       res.json({ message: 'Ingreso eliminado correctamente' });
     } catch (error) {
       console.error('Error in deleteIncome:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) {
+        return res.status(409).json({ message: error.message });
+      }
       res.status(500).json({
         message: 'Error al eliminar ingreso',
         error: error instanceof Error ? error.message : 'Unknown error',

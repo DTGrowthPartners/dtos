@@ -536,6 +536,28 @@ export class GoogleSheetsService {
 
   // ==================== UPDATE / DELETE MOVIMIENTOS ====================
 
+  /** Guard anti-corrimiento: verifica que la fila siga siendo la que el usuario
+   *  vio (el monitor bancario inserta en fila 2 y desplaza todo). Si el importe o
+   *  la descripción no coinciden, la edición/borrado se rechaza con CONFLICTO_FILA. */
+  private async verifyRowExpectation(
+    hoja: 'Entradas' | 'Salidas',
+    rowIndex: number,
+    expect?: { importe?: number; descripcion?: string }
+  ): Promise<void> {
+    if (!expect || (expect.importe === undefined && expect.descripcion === undefined)) return;
+    const r = await this.sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${hoja}!A${rowIndex}:C${rowIndex}`,
+      valueRenderOption: 'UNFORMATTED_VALUE',
+    });
+    const cur = r.data.values?.[0] || [];
+    const impOk = expect.importe === undefined || Math.abs(Number(cur[1]) - Number(expect.importe)) < 0.01;
+    const descOk = expect.descripcion === undefined || String(cur[2] ?? '').trim() === String(expect.descripcion).trim();
+    if (!impOk || !descOk) {
+      throw new Error('CONFLICTO_FILA: la fila cambió de posición (entró un registro nuevo mientras editabas). Refresca la lista y vuelve a intentarlo.');
+    }
+  }
+
   async updateExpense(rowIndex: number, updates: Partial<{
     fecha: string;
     importe: number;
@@ -544,8 +566,9 @@ export class GoogleSheetsService {
     cuenta: string;
     entidad: string;
     terceroId: string;
-  }>): Promise<void> {
+  }>, expect?: { importe?: number; descripcion?: string }): Promise<void> {
     try {
+      await this.verifyRowExpectation('Salidas', rowIndex, expect);
       // Get current row data
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
@@ -583,6 +606,7 @@ export class GoogleSheetsService {
       console.log('Expense updated at row:', rowIndex);
     } catch (error) {
       console.error('Error updating expense:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) throw error;
       throw new Error('No se pudo actualizar el gasto');
     }
   }
@@ -598,8 +622,9 @@ export class GoogleSheetsService {
     clasificacionIngreso: string;
     noCuentaCobro: string;
     tipoTransaccion: string;
-  }>): Promise<void> {
+  }>, expect?: { importe?: number; descripcion?: string }): Promise<void> {
     try {
+      await this.verifyRowExpectation('Entradas', rowIndex, expect);
       // Get current row data
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
@@ -639,12 +664,14 @@ export class GoogleSheetsService {
       console.log('Income updated at row:', rowIndex);
     } catch (error) {
       console.error('Error updating income:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) throw error;
       throw new Error('No se pudo actualizar el ingreso');
     }
   }
 
-  async deleteExpense(rowIndex: number): Promise<void> {
+  async deleteExpense(rowIndex: number, expect?: { importe?: number; descripcion?: string }): Promise<void> {
     try {
+      await this.verifyRowExpectation('Salidas', rowIndex, expect);
       const spreadsheet = await this.sheets.spreadsheets.get({
         spreadsheetId: SPREADSHEET_ID,
       });
@@ -677,12 +704,14 @@ export class GoogleSheetsService {
       console.log('Expense deleted at row:', rowIndex);
     } catch (error) {
       console.error('Error deleting expense:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) throw error;
       throw new Error('No se pudo eliminar el gasto');
     }
   }
 
-  async deleteIncome(rowIndex: number): Promise<void> {
+  async deleteIncome(rowIndex: number, expect?: { importe?: number; descripcion?: string }): Promise<void> {
     try {
+      await this.verifyRowExpectation('Entradas', rowIndex, expect);
       const spreadsheet = await this.sheets.spreadsheets.get({
         spreadsheetId: SPREADSHEET_ID,
       });
@@ -714,6 +743,7 @@ export class GoogleSheetsService {
       console.log('Income deleted at row:', rowIndex);
     } catch (error) {
       console.error('Error deleting income:', error);
+      if (error instanceof Error && error.message.startsWith('CONFLICTO_FILA')) throw error;
       throw new Error('No se pudo eliminar el ingreso');
     }
   }
@@ -901,7 +931,7 @@ export class GoogleSheetsService {
     cuenta: string;
     tipo: string;
     subcategoria: string;
-  }>): Promise<void> {
+  }>, expect?: { importe?: number; descripcion?: string }): Promise<void> {
     try {
       const currentRow = await this.sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,

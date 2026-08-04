@@ -31,6 +31,21 @@ router.post('/emitir/:invoiceId', async (req, res) => {
   }
 });
 
+// POST /api/factus/anular/:invoiceId — nota crédito de anulación. body: { motivo?, ivaPct? }
+router.post('/anular/:invoiceId', async (req, res) => {
+  try {
+    const { motivo, ivaPct } = req.body || {};
+    const result = await factusService.anularFactura(
+      req.params.invoiceId,
+      typeof motivo === 'string' ? motivo : undefined,
+      typeof ivaPct === 'number' ? ivaPct : 0
+    );
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ ok: false, message: e?.message || 'No se pudo anular la factura' });
+  }
+});
+
 // GET /api/factus/pdf/:invoiceId — PDF oficial DIAN de la factura emitida
 router.get('/pdf/:invoiceId', async (req, res) => {
   try {

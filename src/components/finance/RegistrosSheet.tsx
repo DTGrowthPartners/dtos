@@ -188,9 +188,14 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
 
   const total = useMemo(() => filtered.reduce((sum, t) => sum + (t.importe || 0), 0), [filtered]);
 
+  // Se guarda cómo era la fila al abrirla: el backend verifica que siga siendo esa
+  // (el monitor bancario inserta arriba y corre las filas) antes de escribir.
+  const [editOriginal, setEditOriginal] = useState<{ importe?: number; descripcion?: string }>({});
+
   const startEditing = (t: Transaction) => {
     setEditingRowIndex(t.rowIndex);
     setEditForm({ ...t, fecha: toDateInputValue(t.fecha) });
+    setEditOriginal({ importe: t.importe, descripcion: t.descripcion });
   };
 
   const cancelEditing = () => {
@@ -211,6 +216,7 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
         entidad: editForm.entidad,
       };
       if (showCuentaCobro) body.noCuentaCobro = editForm.noCuentaCobro;
+      body.expect = editOriginal;
       await apiClient.put(`/api/finance/${endpoint}/${editingRowIndex}`, body);
       toast({ title: 'Actualizado', description: 'Registro actualizado correctamente' });
       setEditingRowIndex(null);
@@ -228,10 +234,11 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
     }
   };
 
-  const handleDelete = async (rowIndex: number) => {
+  const handleDelete = async (t: Transaction) => {
     if (!confirm('¿Estás seguro de eliminar este registro? Esta acción no se puede deshacer.')) return;
     try {
-      await apiClient.delete(`/api/finance/${endpoint}/${rowIndex}`);
+      const q = new URLSearchParams({ expectImporte: String(t.importe ?? ''), expectDescripcion: t.descripcion || '' });
+      await apiClient.delete(`/api/finance/${endpoint}/${t.rowIndex}?${q.toString()}`);
       toast({ title: 'Eliminado', description: 'Registro eliminado correctamente' });
       await onRefresh();
     } catch (error) {
@@ -509,7 +516,7 @@ export default function RegistrosSheet({ type, data, categories, accounts, onRef
                             <button onClick={() => startEditing(t)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground" title="Editar">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
-                            <button onClick={() => handleDelete(t.rowIndex)} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar">
+                            <button onClick={() => handleDelete(t)} className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive" title="Eliminar">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
