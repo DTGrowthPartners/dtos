@@ -143,16 +143,15 @@ export const factusService = {
         municipality_code: municipio,
       },
       payment_details: [
-        (() => {
-          const propia = opts.medioPago ? CUENTAS_PROPIAS[opts.medioPago] : undefined;
-          const code = propia?.code || (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47');
-          return {
-            payment_form: '1', // contado
-            payment_method_code: code,
-            ...(propia ? { reference_code: propia.ref } : {}),
-            amount: totalConIva.toFixed(2),
-          };
-        })(),
+        {
+          payment_form: '1', // contado
+          payment_method_code: (opts.medioPago && CUENTAS_PROPIAS[opts.medioPago]?.code) ||
+            (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47'),
+          // Referencia con TODAS las cuentas: la factura puede emitirse antes de
+          // que el cliente pague y debe ver a dónde puede hacerlo.
+          reference_code: 'Bancolombia ahorros 78841707710 - Nequi/Daviplata 3007189383 - Bre-B 1143397563',
+          amount: totalConIva.toFixed(2),
+        },
       ],
       items: [{
         code_reference: invoice.invoiceNumber.slice(0, 20),
