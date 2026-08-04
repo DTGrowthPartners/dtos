@@ -885,14 +885,15 @@ export default function Tareas() {
           });
         }
 
-        // Send to WhatsApp webhook if high priority y el usuario dejó activado el aviso
-        if (taskData.priority === Priority.HIGH && formData.notifyWhatsApp) {
+        // Aviso por WhatsApp para TODA tarea nueva (cualquier prioridad) si el
+        // usuario dejó activado el check de avisar.
+        if (formData.notifyWhatsApp) {
           const project = projects.find(p => p.id === taskData.projectId);
           sendHighPriorityTaskToWhatsApp({
             id: newTaskId,
             titulo: taskData.title,
             descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
-            prioridad: 'Alta',
+            prioridad: taskData.priority === Priority.HIGH ? 'Alta' : taskData.priority === Priority.LOW ? 'Baja' : 'Media',
             asignado: taskData.assignee,
             creador: taskData.creator,
             proyecto: project?.name || 'Sin proyecto',

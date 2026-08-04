@@ -99,18 +99,10 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     });
   }
 
-  // 'actualizada' = aviso de edición (se envía sin importar la prioridad).
-  // 'creada' (o sin evento) = comportamiento original: solo tareas de alta prioridad.
+  // Toda tarea notifica por WhatsApp, sea urgente o no (cambio 2026-08-03).
+  // 'actualizada' = aviso de edición; el resto son creaciones.
   const isUpdate = evento === 'actualizada';
   const isHigh = prioridad === 'Alta' || prioridad === 'HIGH';
-
-  if (!isUpdate && !isHigh) {
-    return res.json({
-      success: true,
-      message: 'Tarea no es de alta prioridad, no se envía a WhatsApp',
-      sent: false,
-    });
-  }
 
   const prioridadTxt = isHigh ? 'Alta' : prioridad === 'Baja' || prioridad === 'LOW' ? 'Baja' : 'Media';
 
@@ -142,8 +134,10 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` [${task.proyecto}]` : '';
     const encabezado = isUpdate
       ? `✏️ *Tarea actualizada*${proyectoTxt}`
-      : `🔴 *Tarea urgente*${proyectoTxt}`;
-    const prioridadLinea = isUpdate ? `\n⚡ Prioridad: ${task.prioridad}` : '';
+      : isHigh
+        ? `🔴 *Tarea urgente*${proyectoTxt}`
+        : `🆕 *Nueva tarea*${proyectoTxt}`;
+    const prioridadLinea = isUpdate || !isHigh ? `\n⚡ Prioridad: ${task.prioridad}` : '';
     const mensaje =
       `${encabezado}\n` +
       `*${task.titulo}*\n` +
