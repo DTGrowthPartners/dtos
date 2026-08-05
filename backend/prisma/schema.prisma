@@ -281,6 +281,44 @@ model BankTransaction {
   createdAt   DateTime @default(now())
 }
 
+// ==================== NPS trimestral (spec de Dairo, plus/nps-spec-stiven.md) ====================
+
+model NpsContacto {
+  id        String     @id @default(cuid())
+  clienteId String
+  nombre    String
+  cargo     String?
+  whatsapp  String?
+  email     String?
+  activo    Boolean    @default(true)
+  envios    NpsEnvio[]
+  createdAt DateTime   @default(now())
+}
+
+model NpsEnvio {
+  id         String        @id @default(cuid())
+  contactoId String
+  contacto   NpsContacto   @relation(fields: [contactoId], references: [id], onDelete: Cascade)
+  clienteId  String
+  trimestre  String        // 2026-Q3
+  token      String        @unique
+  estado     String        @default("pendiente") // pendiente, respondido, vencido
+  enviadoAt  DateTime      @default(now())
+  venceAt    DateTime
+  respuesta  NpsRespuesta?
+}
+
+model NpsRespuesta {
+  id            String   @id @default(cuid())
+  envioId       String   @unique
+  envio         NpsEnvio @relation(fields: [envioId], references: [id], onDelete: Cascade)
+  puntaje       Int
+  comentario    String?
+  aspectos      String[] // ej. ["Comunicación","Reportes"]
+  quiereLlamada Boolean  @default(false)
+  respondidoAt  DateTime @default(now())
+}
+
 // ==================== Documentaciones (wiki interna por proyecto) ====================
 
 model DocProject {
