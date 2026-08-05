@@ -14,6 +14,7 @@ import {
   TrendingUp,
   BookUser,
   BookOpen,
+  Smile,
   LayoutGrid,
   Bot,
   Clock,
@@ -58,6 +59,7 @@ const navGroups: NavGroup[] = [
       { title: 'Clientes', path: '/clientes', icon: Users, permission: 'clientes' },
       { title: 'Servicios', path: '/servicios', icon: Briefcase, permission: 'servicios' },
       { title: 'Propuestas', path: '/propuestas', icon: FileText, permission: 'propuestas', badge: 'nuevo' },
+      { title: 'NPS Clientes', path: '/nps', icon: Smile, permission: 'reportes', badge: 'nuevo' },
     ],
   },
   {

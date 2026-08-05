@@ -135,6 +135,16 @@ router.get('/resumen', async (req, res) => {
     if (!porCuenta.has(r.envio.clienteId)) porCuenta.set(r.envio.clienteId, []);
     porCuenta.get(r.envio.clienteId)!.push(r.puntaje);
   }
+  // trimestre anterior para la tendencia
+  const [y, q] = trimestre.split('-Q').map(Number);
+  const prevTrim = q === 1 ? `${y - 1}-Q4` : `${y}-Q${q - 1}`;
+  const prevResp = await prisma.npsRespuesta.findMany({ where: { envio: { trimestre: prevTrim } }, include: { envio: true } });
+  const prevPorCuenta = new Map<string, number[]>();
+  for (const r of prevResp) {
+    if (!prevPorCuenta.has(r.envio.clienteId)) prevPorCuenta.set(r.envio.clienteId, []);
+    prevPorCuenta.get(r.envio.clienteId)!.push(r.puntaje);
+  }
+
   const cuentas: any[] = [];
   let promotoras = 0, detractoras = 0;
   for (const [clienteId, puntajes] of porCuenta) {
@@ -143,12 +153,25 @@ router.get('/resumen', async (req, res) => {
     if (clase === 'promotor') promotoras++;
     if (clase === 'detractor') detractoras++;
     const cliente = await prisma.client.findUnique({ where: { id: clienteId }, select: { name: true } });
-    cuentas.push({ cliente: cliente?.name, promedio: Math.round(prom * 10) / 10, clase, respuestas: puntajes });
+    const prevP = prevPorCuenta.get(clienteId);
+    const prevProm = prevP ? prevP.reduce((a, b) => a + b, 0) / prevP.length : null;
+    const detalle = respuestas
+      .filter((r) => r.envio.clienteId === clienteId)
+      .map((r) => ({
+        contacto: r.envio.contacto.nombre, puntaje: r.puntaje, comentario: r.comentario,
+        aspectos: r.aspectos, quiereLlamada: r.quiereLlamada, fecha: r.respondidoAt,
+      }));
+    cuentas.push({
+      cliente: cliente?.name, clienteId, promedio: Math.round(prom * 10) / 10, clase,
+      anterior: prevProm !== null ? Math.round(prevProm * 10) / 10 : null, detalle,
+    });
   }
   const n = porCuenta.size;
+  const envios = await prisma.npsEnvio.count({ where: { trimestre } });
   res.json({
-    trimestre, cuentasRespondieron: n,
+    trimestre, trimestreAnterior: prevTrim, enviados: envios, cuentasRespondieron: n,
     nps: n ? Math.round(((promotoras - detractoras) / n) * 100) : null,
+    promotoras, detractoras, pasivas: n - promotoras - detractoras,
     cuentas: cuentas.sort((a, b) => a.promedio - b.promedio),
   });
 });
