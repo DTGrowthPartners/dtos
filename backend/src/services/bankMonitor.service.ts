@@ -279,12 +279,19 @@ const MAPEO_KEYWORDS: Record<string, string[]> = {
   cliente: ['pago de cliente'],
 };
 
-/** "Compra en TIENDAS ARA" → "TIENDAS ARA"; null si la descripción no es de comercio */
+/** Clave de aprendizaje: comercio ("Compra en TIENDAS ARA" → "TIENDAS ARA") o
+ *  cuenta destino ("Transferencia ... a la cuenta *3005033093" → "CUENTA *3005033093").
+ *  La misma cuenta destino es siempre el mismo tercero (nómina de un empleado, etc.),
+ *  así que basta recategorizarla una vez en el Sheets para que aprenda. */
 const extraerComercio = (descripcion: string): string | null => {
   const m = descripcion.match(/^(?:Compra|Pago|Transacción)(?:\s+\w+)?\s+en\s+(.+)$/i);
-  if (!m) return null;
-  const c = m[1].trim().toUpperCase().replace(/\*.*$/, '').trim();
-  return c.length >= 3 ? c : null;
+  if (m) {
+    const c = m[1].trim().toUpperCase().replace(/\*.*$/, '').trim();
+    if (c.length >= 3) return c;
+  }
+  const t = descripcion.match(/a\s+la\s+cuenta\s+\*?(\d{6,})/i);
+  if (t) return 'CUENTA *' + t[1];
+  return null;
 };
 
 /** Aprende del historial del Sheets: cómo clasificó el equipo este comercio antes.
