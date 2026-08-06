@@ -286,10 +286,14 @@ const MAPEO_KEYWORDS: Record<string, string[]> = {
 const extraerComercio = (descripcion: string): string | null => {
   const m = descripcion.match(/^(?:Compra|Pago|Transacción)(?:\s+\w+)?\s+en\s+(.+)$/i);
   if (m) {
-    const c = m[1].trim().toUpperCase().replace(/\*.*$/, '').trim();
-    if (c.length >= 3) return c;
+    const c = m[1].trim().toUpperCase()
+      .replace(/\*.*$/, '')
+      .replace(/\s+DESDE\s+TU\s+PRODUCTO\s*\d*\s*$/i, '') // sufijo que ensucia la clave
+      .trim();
+    // descartar claves basura que deja el regex ("CON", "EN LA APP BANCOLOMBIA.")
+    if (c.length >= 4 && !/^(CON|EN)/.test(c)) return c;
   }
-  const t = descripcion.match(/a\s+la\s+cuenta\s+\*?(\d{6,})/i);
+  const t = descripcion.match(/a\s+la\s+cuenta\s+\*?\s*(\d{6,})/i); // tolera "* 787..."
   if (t) return 'CUENTA *' + t[1];
   return null;
 };
@@ -353,11 +357,9 @@ export async function clasificarCategoria(descripcion: string, tipo: 'entrante' 
       }
     }
   }
-  for (const [catLower, catOriginal] of porLower) {
-    for (const palabra of desc.split(/\s+/)) {
-      if (palabra.length > 3 && catLower.includes(palabra)) return catOriginal;
-    }
-  }
+  // (paso de subcadena eliminado 2026-08-06: hacía matches ciegos — p. ej. la
+  // palabra "cuenta" mandaba toda transferencia a "Cuentas por Cobrar a
+  // Empleados". Sin historial ni keyword, mejor caer honesto en Otros.)
   if (desc.includes('nequi') && porLower.has('traslado de nequi')) return porLower.get('traslado de nequi')!;
   if (desc.includes('daviplata') && porLower.has('traslado de daviplata')) return porLower.get('traslado de daviplata')!;
   if (desc.includes('bancolombia') && porLower.has('traslado de bancolombia')) return porLower.get('traslado de bancolombia')!;
