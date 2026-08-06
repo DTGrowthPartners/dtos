@@ -176,6 +176,35 @@ router.get('/resumen', async (req, res) => {
   });
 });
 
+// GET /api/nps/cliente/:clienteId — último NPS de la cuenta + tendencia (badge de la ficha)
+router.get('/cliente/:clienteId', async (req, res) => {
+  const respuestas = await prisma.npsRespuesta.findMany({
+    where: { envio: { clienteId: req.params.clienteId } },
+    include: { envio: true },
+  });
+  if (!respuestas.length) return res.json({ tiene: false });
+  const porTrim = new Map<string, number[]>();
+  for (const r of respuestas) {
+    if (!porTrim.has(r.envio.trimestre)) porTrim.set(r.envio.trimestre, []);
+    porTrim.get(r.envio.trimestre)!.push(r.puntaje);
+  }
+  const trims = [...porTrim.keys()].sort(); // "2026-Q3" ordena bien lexicográfico
+  const prom = (t: string) => {
+    const p = porTrim.get(t)!;
+    return Math.round((p.reduce((a, b) => a + b, 0) / p.length) * 10) / 10;
+  };
+  const actual = trims[trims.length - 1];
+  const anterior = trims.length > 1 ? trims[trims.length - 2] : null;
+  const promedio = prom(actual);
+  res.json({
+    tiene: true,
+    trimestre: actual,
+    promedio,
+    clase: promedio <= 6 ? 'detractor' : promedio <= 8 ? 'pasivo' : 'promotor',
+    anterior: anterior ? { trimestre: anterior, promedio: prom(anterior) } : null,
+  });
+});
+
 // GET /api/nps/contactos
 router.get('/contactos', async (_req, res) => {
   const contactos = await prisma.npsContacto.findMany({ orderBy: { createdAt: 'asc' } });
