@@ -319,7 +319,10 @@ async function categoriaHistorial(tipo: 'entrante' | 'saliente', comercio: strin
         if (!noOtros.length) continue;
         const [mejor, votos] = noOtros[0];
         const votosOtros = [...cats.entries()].filter(([c]) => /^otros?$/i.test(c)).reduce((a, [, n]) => a + n, 0);
-        if (votos >= 2 || (votos === 1 && noOtros.length === 1 && votosOtros === 0)) map.set(com, mejor);
+        // Una corrección humana (no-"Otros") le gana a los "Otros" de la máquina.
+        // Solo se exigen 2 votos cuando hay DOS categorías humanas compitiendo.
+        void votosOtros;
+        if (votos >= 2 || noOtros.length === 1) map.set(com, mejor);
       }
     } catch (e: any) {
       log(`error leyendo historial de categorías: ${e?.message}`);
