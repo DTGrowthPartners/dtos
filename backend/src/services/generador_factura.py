@@ -136,15 +136,40 @@ def generar(d):
         y -= 12
         c.drawString(mi, y, linea)
 
-    # pie legal: CUFE + resolución (obligatorios DIAN)
+    # --- pie legal (obligatorio DIAN) + cierre de marca ---
+    # La plantilla base trae eslogan y contactos en dos renglones; se cubren para
+    # armar aquí el bloque legal con aire y cerrar en una sola línea.
+    c.setFillColor(colors.white)
+    c.rect(0, 26, W, 112, fill=1, stroke=0)
+
+    c.setStrokeColor(colors.HexColor('#e4e4e4')); c.setLineWidth(0.6)
+    c.line(mi, 128, W - mi, 128)
+
     c.setFont(fn, 6.5); c.setFillColor(GRIS)
     cufe = f"CUFE: {d['cufe']}"
-    mitad = len(cufe) // 2 if c.stringWidth(cufe, fn, 6.5) > W - 2 * mi else len(cufe)
-    c.drawCentredString(W / 2, 132, cufe[:mitad])
-    if mitad < len(cufe):
-        c.drawCentredString(W / 2, 124, cufe[mitad:])
-    c.drawCentredString(W / 2, 114, d['resolucion'])
-    c.drawCentredString(W / 2, 105, 'Factura electrónica validada por la DIAN · Representación gráfica generada por DT-OS · Proveedor tecnológico: Factus')
+    if c.stringWidth(cufe, fn, 6.5) > W - 2 * mi:
+        mitad = len(cufe) // 2
+        c.drawCentredString(W / 2, 115, cufe[:mitad])
+        c.drawCentredString(W / 2, 107, cufe[mitad:])
+        y_leg = 96
+    else:
+        c.drawCentredString(W / 2, 115, cufe)
+        y_leg = 104
+    c.drawCentredString(W / 2, y_leg, d['resolucion'])
+    c.drawCentredString(W / 2, y_leg - 9,
+                        'Factura electrónica validada por la DIAN · Representación gráfica generada por DT-OS · Proveedor tecnológico: Factus')
+
+    # separador con el triángulo de la marca
+    c.setStrokeColor(AZUL); c.setLineWidth(0.8)
+    c.line(mi + 70, 62, W / 2 - 9, 62)
+    c.line(W / 2 + 9, 62, W - mi - 70, 62)
+    tri = c.beginPath(); tri.moveTo(W / 2 - 5, 65); tri.lineTo(W / 2 + 5, 65); tri.lineTo(W / 2, 58); tri.close()
+    c.setFillColor(AZUL); c.drawPath(tri, fill=1, stroke=0)
+
+    # cierre: eslogan y contacto en un solo renglón
+    c.setFont(fn, 8.5); c.setFillColor(GRIS)
+    c.drawCentredString(W / 2, 44,
+                        'Estrategia, tecnología y ejecución para crecer.   ·   dtgrowthpartners.com   ·   +57 300 718 9383')
 
     c.save()
     return ruta
