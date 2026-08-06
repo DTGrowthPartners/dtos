@@ -254,6 +254,9 @@ export const factusService = {
       numbering_range_id: rangoNC.id,
       observation: (motivo || `Anulación de la factura ${invoice.factusNumber}`).slice(0, 250),
       send_email: false,
+      payment_details: [
+        { payment_form: '1', payment_method_code: '47', amount: (typeof base !== 'undefined' ? (ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : base) : 0).toFixed(2) },
+      ],
       customer: {
         identification_document_code: esJuridica ? '31' : '13',
         identification: identificacion,
@@ -347,6 +350,9 @@ export const factusService = {
       numbering_range_id: rangoND.id,
       observation: motivo.slice(0, 250),
       send_email: false,
+      payment_details: [
+        { payment_form: '1', payment_method_code: '47', amount: (typeof base !== 'undefined' ? (ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : base) : 0).toFixed(2) },
+      ],
       customer: {
         identification_document_code: esJuridica ? '31' : '13',
         identification: identificacion,
