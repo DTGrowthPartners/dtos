@@ -1,4 +1,5 @@
 import axios from 'axios';
+import tls from 'tls';
 import { PrismaClient } from '@prisma/client';
 import { notificationService } from './notification.service';
 import { sendPushToUser } from './push.service';
@@ -70,6 +71,38 @@ const CHECKS: Check[] = [
       return r.status < 500
         ? { ok: true, detalle: `HTTP ${r.status}` }
         : { ok: false, detalle: `HTTP ${r.status}` };
+    },
+  },
+  {
+    id: 'ssl-certs',
+    nombre: 'Certificados SSL',
+    run: async () => {
+      // certbot renueva ~30 días antes de vencer: un cert con <10 días significa
+      // que la renovación está fallando (como el 5/ago con os.dtgrowthpartners).
+      const dominios = ['os.dtgrowthpartners.com', 'feedback.dtgrowthpartners.com',
+        'david.dtgrowthpartners.com', 'maria.dtgrowthpartners.com',
+        'mcp2.dtgrowthpartners.com', 'correo.dtgrowthpartners.com'];
+      const diasCert = (host: string) => new Promise<number>((resolve, reject) => {
+        const s = tls.connect({ host, port: 443, servername: host, timeout: 10_000 }, () => {
+          const cert: any = s.getPeerCertificate();
+          s.end();
+          resolve(Math.floor((new Date(cert.valid_to).getTime() - Date.now()) / 86_400_000));
+        });
+        s.on('error', reject);
+        s.setTimeout(10_000, () => { s.destroy(); reject(new Error('timeout')); });
+      });
+      const problemas: string[] = [];
+      for (const d of dominios) {
+        try {
+          const dias = await diasCert(d);
+          if (dias < 10) problemas.push(`${d} vence en ${dias} día(s) — la renovación automática está fallando`);
+        } catch (e: any) {
+          problemas.push(`${d}: ${e?.message || 'sin respuesta TLS'}`);
+        }
+      }
+      return problemas.length
+        ? { ok: false, detalle: problemas.join(' · ') }
+        : { ok: true, detalle: `${dominios.length} dominios con certificado sano` };
     },
   },
 ];
