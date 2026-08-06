@@ -63,6 +63,18 @@ router.post('/nota-debito/:invoiceId', async (req, res) => {
   }
 });
 
+// GET /api/factus/pdf-propio/:invoiceId — PDF con el diseño de DT Growth
+router.get('/pdf-propio/:invoiceId', async (req, res) => {
+  try {
+    const { buffer, fileName } = await factusService.pdfPropio(req.params.invoiceId);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (e: any) {
+    res.status(400).json({ ok: false, message: e?.message || 'No se pudo generar el PDF' });
+  }
+});
+
 // GET /api/factus/pdf/:invoiceId — PDF oficial DIAN de la factura emitida
 router.get('/pdf/:invoiceId', async (req, res) => {
   try {

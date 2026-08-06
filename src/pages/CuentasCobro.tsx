@@ -517,11 +517,11 @@ const CuentasCobro = () => {
     }
   };
 
-  const handleFactusPdf = async (invoiceId: string) => {
+  const handleFactusPdf = async (invoiceId: string, propio = false) => {
     try {
       const token = await (await import('@/lib/auth')).authService.getToken();
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-      const response = await fetch(`${API_URL}/api/factus/pdf/${invoiceId}`, {
+      const response = await fetch(`${API_URL}/api/factus/${propio ? 'pdf-propio' : 'pdf'}/${invoiceId}`, {
         headers: { 'Authorization': token ? `Bearer ${token}` : '' },
       });
       if (!response.ok) throw new Error('No se pudo descargar el PDF');
@@ -1148,10 +1148,16 @@ const CuentasCobro = () => {
                   </>
                 )}
                 {(factusInvoice.factusNumber || factusResult) && (
-                  <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id)}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    PDF DIAN
-                  </Button>
+                  <>
+                    <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id, true)}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      PDF DT Growth
+                    </Button>
+                    <Button variant="outline" onClick={() => handleFactusPdf(factusInvoice.id)}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      PDF DIAN
+                    </Button>
+                  </>
                 )}
                 {!factusResult && !factusInvoice.factusNumber && (
                   <Button onClick={handleFactusEmitir} disabled={factusLoading || factusSinRango}>

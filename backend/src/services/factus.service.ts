@@ -1,4 +1,9 @@
 import axios, { AxiosInstance } from 'axios';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { PrismaClient } from '@prisma/client';
 
 /**
@@ -399,6 +404,35 @@ export const factusService = {
       factura: invoice.factusNumber,
       validated: Boolean(nd.is_validated),
     };
+  },
+
+  /** PDF con el diseño de DT Growth (representación gráfica propia).
+   *  Todo sale de la BD: número, CUFE y QR DIAN estándar por documentkey. */
+  async pdfPropio(invoiceId: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber || !invoice.factusCufe) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    const data = {
+      numero: invoice.factusNumber,
+      cufe: invoice.factusCufe,
+      qr_url: `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${invoice.factusCufe}`,
+      cliente: invoice.clientName,
+      identificacion: invoice.clientNit || '',
+      fecha: invoice.fecha.toISOString().slice(0, 10).split('-').reverse().join('/'),
+      items: [{ descripcion: invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales', cantidad: 1, valor: invoice.totalAmount }],
+      total: invoice.totalAmount,
+      observaciones: invoice.observaciones || '',
+      resolucion: 'Resolución de Facturación Electrónica DIAN No. 18764113521092 · Prefijo DTGP del 101 al 200 · Vigencia 03-08-2026 a 03-08-2028',
+    };
+    const tmp = path.join(os.tmpdir(), `factura_${invoice.factusNumber}.json`);
+    fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
+    try {
+      const script = path.join(__dirname, 'generador_factura.py');
+      const { stdout } = await promisify(execFile)('python3', [script, tmp], { timeout: 60_000 });
+      const pdfPath = stdout.trim().split(/\r?\n/).pop()!;
+      return { buffer: fs.readFileSync(pdfPath), fileName: `factura_${invoice.factusNumber}_dtgrowth.pdf` };
+    } finally {
+      fs.unlinkSync(tmp);
+    }
   },
 
   /** PDF oficial DIAN de la factura emitida (Buffer + nombre de archivo) */

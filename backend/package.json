@@ -7,7 +7,7 @@
     "start": "node dist/server.js",
     "dev": "ts-node src/server.ts",
     "build": "tsc && npm run postbuild",
-    "postbuild": "cp -r src/services/generador.py src/services/base.jpg src/services/fuentes src/services/creadas dist/services/ 2>/dev/null || true",
+    "postbuild": "cp -r src/services/generador.py src/services/generador_factura.py src/services/base.jpg src/services/fuentes src/services/creadas dist/services/ 2>/dev/null || true",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
