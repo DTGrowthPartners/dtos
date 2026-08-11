@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   Users,
   Cog,
+  ListChecks,
   UserCog,
   DollarSign,
   ChevronLeft,
@@ -66,6 +67,7 @@ const navGroups: NavGroup[] = [
     label: 'Operación',
     dotColor: 'bg-violet-500',
     items: [
+      { title: 'Mis Tareas', path: '/mis-tareas', icon: ListChecks, permission: 'tareas' },
       { title: 'Operaciones', path: '/tareas', icon: Cog, permission: 'tareas' },
       { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
       { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },

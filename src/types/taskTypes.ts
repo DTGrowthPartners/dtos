@@ -58,6 +58,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Stiven', role: 'Dev', initials: 'ST', color: 'bg-blue-500' },
   { name: 'Edgardo', role: 'Dev', initials: 'EM', color: 'bg-blue-500' },
   { name: 'Jhonathan', role: 'Usuario', initials: 'JH', color: 'bg-amber-500' },
+  { name: 'Jose', role: 'Diseñador', initials: 'JD', color: 'bg-pink-500' },
 ];
 
 export interface ProjectFolder {
