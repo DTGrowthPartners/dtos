@@ -32,7 +32,7 @@ const SOURCES: LogSourceDef[] = [
   // Crons del negocio
   { id: 'cron-context-monitor', category: 'Crons', label: 'Context Monitor (Maria)', path: '/tmp/context_monitor.log', description: 'Monitor de contexto cada 10/18 UTC' },
   { id: 'cron-bot-health', category: 'Crons', label: 'Bot Health Monitor', path: '/home/ubuntu/.bot-monitor/cron.log', description: 'Status de bots cada 5 min' },
-  { id: 'cron-send-pending', category: 'Crons', label: 'Send Pending (cuentas de cobro)', path: '/home/ubuntu/api-cuentas-de-cobro/send_pending.log', description: 'Envío de cuentas pendientes' },
+  { id: 'cron-daily-reports', category: 'Crons', label: 'Reportes diarios (Resultados + Cartera)', path: '/tmp/daily-reports.log', description: 'Correos 7am a Dairo desde DTOS' },
   { id: 'cron-meta-daily', category: 'Crons', label: 'Meta Daily Report', path: '/home/ubuntu/meta-daily-report/logs/cron.log', description: 'Reporte diario Meta Ads' },
   { id: 'cron-monitor-bloqueos', category: 'Crons', label: 'Monitor Bloqueos Meta', path: '/home/ubuntu/meta-daily-report/logs/monitor-bloqueos.cron.log', description: 'Bloqueos/reactivaciones de cuentas Meta' },
   { id: 'cron-cartera', category: 'Crons', label: 'Cartera Daily Report', path: '/home/ubuntu/cartera-daily-report/logs/cron.log', description: 'Estado de cartera DT-OS' },
@@ -49,7 +49,6 @@ const SOURCES: LogSourceDef[] = [
 
 const SAFE_BASE_DIRS = [
   '/home/ubuntu/.pm2/logs',
-  '/home/ubuntu/api-cuentas-de-cobro',
   '/home/ubuntu/meta-daily-report/logs',
   '/home/ubuntu/cartera-daily-report/logs',
   '/home/ubuntu/beds24-price-sync',

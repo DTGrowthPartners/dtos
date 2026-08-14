@@ -1,0 +1,451 @@
+import axios, { AxiosInstance } from 'axios';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { PrismaClient } from '@prisma/client';
+
+/**
+ * Integración con Factus (facturación electrónica DIAN, Halltec).
+ * Emite facturas electrónicas a partir de cuentas de cobro existentes.
+ * Config por env: FACTUS_BASE_URL (sandbox por defecto), FACTUS_EMAIL,
+ * FACTUS_PASSWORD, FACTUS_CLIENT_ID, FACTUS_CLIENT_SECRET.
+ */
+
+const prisma = new PrismaClient();
+
+const BASE_URL = () => process.env.FACTUS_BASE_URL || 'https://api-sandbox.factus.com.co';
+const esSandbox = () => BASE_URL().includes('sandbox');
+
+// El token dura 1 hora; se cachea y se renueva 2 min antes de vencer.
+let tokenCache: { token: string; expiresAt: number } | null = null;
+
+const isConfigured = () =>
+  Boolean(process.env.FACTUS_EMAIL && process.env.FACTUS_PASSWORD &&
+    process.env.FACTUS_CLIENT_ID && process.env.FACTUS_CLIENT_SECRET);
+
+async function getToken(): Promise<string> {
+  if (tokenCache && Date.now() < tokenCache.expiresAt - 120_000) return tokenCache.token;
+  const { data } = await axios.post(`${BASE_URL()}/oauth/token`, {
+    grant_type: 'password',
+    client_id: process.env.FACTUS_CLIENT_ID,
+    client_secret: process.env.FACTUS_CLIENT_SECRET,
+    username: process.env.FACTUS_EMAIL,
+    password: process.env.FACTUS_PASSWORD,
+  }, { timeout: 30_000 });
+  tokenCache = { token: data.access_token, expiresAt: Date.now() + (data.expires_in || 3600) * 1000 };
+  return tokenCache.token;
+}
+
+async function api(): Promise<AxiosInstance> {
+  const token = await getToken();
+  return axios.create({
+    baseURL: BASE_URL(),
+    timeout: 60_000,
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+    validateStatus: () => true, // los errores de validación de Factus traen detalle en el body
+  });
+}
+
+/** Rango de numeración activo para Factura de Venta (cacheado 10 min) */
+let rangoCache: { id: number; at: number } | null = null;
+async function rangoFacturaVenta(): Promise<number | undefined> {
+  if (rangoCache && Date.now() - rangoCache.at < 600_000) return rangoCache.id;
+  const cli = await api();
+  const r = await cli.get('/v2/numbering-ranges');
+  const rangos: any[] = r.data?.data?.data || r.data?.data || [];
+  const rango = rangos.find((x) => x.is_active && !x.is_expired && /factura de venta/i.test(x.document || ''));
+  if (!rango) return undefined;
+  rangoCache = { id: rango.id, at: Date.now() };
+  return rango.id;
+}
+
+/** "901.234.567-8" → { id: "901234567", dv: "8" }; sin guion no se manda dv (Factus lo calcula) */
+const parseNit = (raw: string) => {
+  const limpio = (raw || '').replace(/[.\s]/g, '');
+  const m = limpio.match(/^(\d{5,15})-(\d)$/);
+  if (m) return { id: m[1], dv: m[2] };
+  return { id: limpio.replace(/\D/g, ''), dv: undefined };
+};
+
+export interface EmitirOpts {
+  tipoPersona?: 'juridica' | 'natural';
+  ivaPct?: number;          // 0 (default, no responsable) o 19
+  municipio?: string;       // código DANE, default 08001 (Barranquilla)
+  sendEmail?: boolean;      // default false: en pruebas no se manda correo al cliente
+  medioPago?: string;       // código Factus del medio de pago, default 47 (transferencia)
+}
+
+// Medios de pago válidos (tabla de referencia Factus)
+export const MEDIOS_PAGO = ['10', '42', '20', '47', '71', '72', '1', '49', '48', 'ZZZ'];
+
+// Cuentas propias de DT Growth: alias de la UI → código DIAN + referencia visible
+const CUENTAS_PROPIAS: Record<string, { code: string; ref: string }> = {
+  bancolombia: { code: '47', ref: 'Cuenta de ahorros Bancolombia 78841707710' },
+  nequi: { code: '47', ref: 'Nequi 3007189383' },
+  daviplata: { code: '47', ref: 'Daviplata 3007189383' },
+  breb: { code: '47', ref: 'Bre-B 1143397563' },
+  efectivo: { code: '10', ref: 'Efectivo' },
+};
+
+
+export const factusService = {
+  isConfigured,
+  esSandbox,
+
+  /** Conexión + rangos de numeración: para el chequeo del panel de pruebas */
+  async estado() {
+    if (!isConfigured()) return { ok: false, configurado: false, sandbox: esSandbox(), mensaje: 'Faltan credenciales FACTUS_* en el .env' };
+    const cli = await api();
+    const r = await cli.get('/v2/numbering-ranges');
+    if (r.status !== 200) return { ok: false, configurado: true, sandbox: esSandbox(), mensaje: r.data?.message || `HTTP ${r.status}` };
+    const rangos: any[] = (r.data?.data?.data || []).filter((x: any) => x.is_active).map((x: any) => ({
+      id: x.id, documento: x.document, prefijo: x.prefix, actual: x.current, resolucion: x.resolution_number,
+    }));
+    return { ok: true, configurado: true, sandbox: esSandbox(), rangos };
+  },
+
+  /** Emite (crea y valida ante DIAN) una factura electrónica desde una cuenta de cobro */
+  async emitirCuenta(invoiceId: string, opts: EmitirOpts = {}) {
+    if (!isConfigured()) throw new Error('Factus no está configurado (FACTUS_* en el .env)');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new Error('Cuenta de cobro no encontrada');
+    const client = await prisma.client.findUnique({ where: { id: invoice.clientId } });
+
+    const { id: identificacion, dv } = parseNit(invoice.clientNit || client?.nit || '');
+    if (!identificacion) throw new Error('El cliente no tiene NIT/identificación registrada');
+
+    // Heurística: NIT de 9+ dígitos que empieza por 8/9 → persona jurídica
+    const tipoPersona = opts.tipoPersona ||
+      (identificacion.length >= 9 && /^[89]/.test(identificacion) ? 'juridica' : 'natural');
+    const esJuridica = tipoPersona === 'juridica';
+    const ivaPct = typeof opts.ivaPct === 'number' && opts.ivaPct > 0 ? opts.ivaPct : 0;
+    // Prioridad: municipio elegido en el diálogo → el guardado en la ficha → Barranquilla
+    const municipio = opts.municipio || (client as any)?.municipio || '08001';
+
+    const total = Math.round(invoice.totalAmount * 100) / 100;
+    // Con IVA el precio del ítem va sin impuestos; sin IVA (no responsable) va excluido
+    const base = ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total;
+    const totalConIva = ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : total;
+
+    const referenceCode = `dtos-${invoice.invoiceNumber}`;
+    const payload: any = {
+      reference_code: referenceCode,
+      observation: (invoice.observaciones || '').slice(0, 250) || undefined,
+      send_email: opts.sendEmail === true,
+      customer: {
+        identification_document_code: esJuridica ? '31' : '13',
+        identification: identificacion,
+        ...(dv && esJuridica ? { dv } : {}),
+        legal_organization_code: esJuridica ? '1' : '2',
+        tribute_code: 'ZZ',
+        ...(esJuridica ? { company: invoice.clientName } : {}),
+        names: invoice.clientName,
+        address: client?.address || 'No registrada',
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+        municipality_code: municipio,
+      },
+      payment_details: [
+        {
+          payment_form: '1', // contado
+          payment_method_code: (opts.medioPago && CUENTAS_PROPIAS[opts.medioPago]?.code) ||
+            (opts.medioPago && MEDIOS_PAGO.includes(opts.medioPago) ? opts.medioPago : '47'),
+          // Referencia con titular y TODAS las cuentas: el cliente necesita el
+          // nombre y la cédula para inscribir la cuenta en su banco. Saltos de
+          // línea para que cada dato quede en su propio renglón.
+          reference_code: 'Dairo Traslaviña\nCC 1143397563\nBancolombia ahorros 78841707710\nNequi/Daviplata 3007189383\nBre-B 1143397563',
+          amount: totalConIva.toFixed(2),
+        },
+      ],
+      items: [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: (invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales').slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94', // unidad
+        standard_code: '1',
+        taxes: ivaPct > 0
+          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+          : [{ code: '01', rate: '0.00', is_excluded: true }],
+        withholding_taxes: [],
+      }],
+    };
+    const rango = await rangoFacturaVenta();
+    if (rango) payload.numbering_range_id = rango;
+
+    const cli = await api();
+    let r = await cli.post('/v2/bills/validate', payload);
+
+    // 409: quedó una factura pendiente con esa referencia → se elimina y se reintenta
+    if (r.status === 409) {
+      await cli.delete(`/v2/bills/destroy/reference/${encodeURIComponent(referenceCode)}`);
+      r = await cli.post('/v2/bills/validate', payload);
+    }
+
+    // Factus devuelve la factura en data.bill o directamente en data según el caso
+    const d = r.data?.data;
+    const bill = d?.bill || (d?.number ? d : null);
+    if (!bill) {
+      const errores = r.data?.data?.errors || r.data?.errors;
+      const detalle = errores ? JSON.stringify(errores) : (r.data?.message || `HTTP ${r.status}`);
+      throw new Error(`Factus rechazó la factura: ${detalle}`);
+    }
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: {
+        factusReference: referenceCode,
+        factusNumber: bill.number,
+        factusCufe: bill.cufe || null,
+        factusStatus: bill.is_validated ? 'validada' : 'pendiente',
+        factusValidatedAt: bill.is_validated ? new Date() : null,
+      },
+    });
+
+    // El municipio elegido explícitamente queda en la ficha del cliente para las próximas
+    if (client && opts.municipio && opts.municipio !== (client as any).municipio) {
+      await prisma.client.update({ where: { id: client.id }, data: { municipio } as any }).catch(() => {});
+    }
+
+    // Las "notificaciones" DIAN (p. ej. FAJ44b) son advertencias, no rechazos
+    const notificaciones = bill.errors && typeof bill.errors === 'object'
+      ? Object.values(bill.errors as Record<string, string>) : [];
+
+    return {
+      ok: true,
+      sandbox: esSandbox(),
+      number: bill.number,
+      cufe: bill.cufe || null,
+      total: bill.total,
+      validated: Boolean(bill.is_validated),
+      validatedAt: bill.validated_at || null,
+      qr: bill.qr || null,
+      notificaciones,
+    };
+  },
+
+  /** Anula una factura emitida con una nota crédito (concepto 2: anulación).
+   *  La factura DIAN es inmutable; la NC es el mecanismo legal de corrección. */
+  async anularFactura(invoiceId: string, motivo?: string, ivaPct = 0) {
+    if (!isConfigured()) throw new Error('Factus no está configurado');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    if (invoice.factusStatus === 'anulada') throw new Error(`Ya fue anulada con la nota crédito ${invoice.factusNcNumber || ''}`);
+    const client = await prisma.client.findUnique({ where: { id: invoice.clientId } });
+
+    const cli = await api();
+    // Rango de numeración para notas crédito: si no existe, se crea (no requiere resolución DIAN)
+    const rangosResp = await cli.get('/v2/numbering-ranges');
+    const rangos: any[] = rangosResp.data?.data?.data || [];
+    let rangoNC = rangos.find((x) => x.is_active && /nota cr[eé]dito/i.test(x.document || ''));
+    if (!rangoNC) {
+      const creado = await cli.post('/v2/numbering-ranges', { document: '22', prefix: 'NC', current: 1 });
+      rangoNC = creado.data?.data;
+      if (!rangoNC?.id) throw new Error(`No se pudo crear el rango de notas crédito: ${creado.data?.message || ''}`);
+    }
+
+    const { id: identificacion, dv } = parseNit(invoice.clientNit || client?.nit || '');
+    const esJuridica = identificacion.length >= 9 && /^[89]/.test(identificacion);
+    const total = Math.round(invoice.totalAmount * 100) / 100;
+    const base = ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total;
+
+    const referenceCode = `dtos-nc-${invoice.invoiceNumber}`;
+    const payload: any = {
+      reference_code: referenceCode,
+      bill_number: invoice.factusNumber,
+      correction_concept_code: '2', // anulación de factura electrónica
+      numbering_range_id: rangoNC.id,
+      observation: (motivo || `Anulación de la factura ${invoice.factusNumber}`).slice(0, 250),
+      send_email: false,
+      payment_details: [
+        { payment_form: '1', payment_method_code: '47', amount: (typeof base !== 'undefined' ? (ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : base) : 0).toFixed(2) },
+      ],
+      customer: {
+        identification_document_code: esJuridica ? '31' : '13',
+        identification: identificacion,
+        ...(dv && esJuridica ? { dv } : {}),
+        legal_organization_code: esJuridica ? '1' : '2',
+        tribute_code: 'ZZ',
+        ...(esJuridica ? { company: invoice.clientName } : {}),
+        names: invoice.clientName,
+        address: client?.address || 'No registrada',
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+        municipality_code: (client as any)?.municipio || '08001',
+      },
+      items: [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: (invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales').slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94',
+        standard_code: '1',
+        taxes: ivaPct > 0
+          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+          : [{ code: '01', rate: '0.00', is_excluded: true }],
+        withholding_taxes: [],
+      }],
+    };
+
+    let r = await cli.post('/v2/credit-notes/validate', payload);
+    if (r.status === 409) {
+      await cli.delete(`/v2/credit-notes/destroy/reference/${encodeURIComponent(referenceCode)}`);
+      r = await cli.post('/v2/credit-notes/validate', payload);
+    }
+    const d = r.data?.data;
+    const nc = d?.credit_note || (d?.number ? d : null);
+    if (!nc) {
+      const errores = r.data?.data?.errors || r.data?.errors;
+      throw new Error(`Factus rechazó la nota crédito: ${errores ? JSON.stringify(errores) : (r.data?.message || `HTTP ${r.status}`)}`);
+    }
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { factusStatus: 'anulada', factusNcNumber: nc.number },
+    });
+
+    return {
+      ok: true,
+      sandbox: esSandbox(),
+      ncNumber: nc.number,
+      cufe: nc.cude || nc.cufe || null,
+      validated: Boolean(nc.is_validated),
+      facturaAnulada: invoice.factusNumber,
+    };
+  },
+
+  /** Nota débito: cobra un valor ADICIONAL sobre una factura emitida
+   *  (intereses de mora, gastos por cobrar, valor facturado de menos). */
+  async notaDebito(invoiceId: string, valor: number, motivo: string, ivaPct = 0) {
+    if (!isConfigured()) throw new Error('Factus no está configurado');
+    if (!Number.isFinite(valor) || valor <= 0) throw new Error('El valor de la nota débito debe ser mayor a 0');
+    if (!motivo?.trim()) throw new Error('El motivo es obligatorio');
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    if (invoice.factusStatus === 'anulada') throw new Error('La factura está anulada; no admite notas débito');
+    const client = await prisma.client.findUnique({ where: { id: invoice.clientId } });
+
+    const cli = await api();
+    // Rango ND: se crea si no existe (documento 23, sin resolución DIAN)
+    const rangosResp = await cli.get('/v2/numbering-ranges');
+    const rangos: any[] = rangosResp.data?.data?.data || [];
+    let rangoND = rangos.find((x) => x.is_active && /nota d[eé]bito/i.test(x.document || ''));
+    if (!rangoND) {
+      const creado = await cli.post('/v2/numbering-ranges', { document: '23', prefix: 'ND', current: 1 });
+      rangoND = creado.data?.data;
+      if (!rangoND?.id) throw new Error(`No se pudo crear el rango de notas débito: ${creado.data?.message || ''}`);
+    }
+
+    const { id: identificacion, dv } = parseNit(invoice.clientNit || client?.nit || '');
+    const esJuridica = identificacion.length >= 9 && /^[89]/.test(identificacion);
+    const monto = Math.round(valor * 100) / 100;
+    const base = ivaPct > 0 ? Math.round((monto / (1 + ivaPct / 100)) * 100) / 100 : monto;
+    // Concepto DIAN: 1 intereses, 2 gastos por cobrar, 3 cambio del valor
+    const conceptCode = /inter[eé]s|mora/i.test(motivo) ? '1' : /gasto/i.test(motivo) ? '2' : '3';
+
+    // Cada nota débito es un documento nuevo: referencia única por emisión
+    const referenceCode = `dtos-nd-${invoice.invoiceNumber}-${Date.now()}`;
+
+    const payload: any = {
+      reference_code: referenceCode,
+      bill_number: invoice.factusNumber,
+      correction_concept_code: conceptCode,
+      numbering_range_id: rangoND.id,
+      observation: motivo.slice(0, 250),
+      send_email: false,
+      payment_details: [
+        { payment_form: '1', payment_method_code: '47', amount: (typeof base !== 'undefined' ? (ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : base) : 0).toFixed(2) },
+      ],
+      customer: {
+        identification_document_code: esJuridica ? '31' : '13',
+        identification: identificacion,
+        ...(dv && esJuridica ? { dv } : {}),
+        legal_organization_code: esJuridica ? '1' : '2',
+        tribute_code: 'ZZ',
+        ...(esJuridica ? { company: invoice.clientName } : {}),
+        names: invoice.clientName,
+        address: client?.address || 'No registrada',
+        email: client?.email || undefined,
+        phone: client?.phone || undefined,
+        municipality_code: (client as any)?.municipio || '08001',
+      },
+      items: [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: motivo.slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94',
+        standard_code: '1',
+        taxes: ivaPct > 0
+          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+          : [{ code: '01', rate: '0.00', is_excluded: true }],
+        withholding_taxes: [],
+      }],
+    };
+
+    const r = await cli.post('/v2/debit-notes/validate', payload);
+    const d = r.data?.data;
+    const nd = d?.debit_note || (d?.number ? d : null);
+    if (!nd) {
+      const errores = r.data?.data?.errors || r.data?.errors;
+      throw new Error(`Factus rechazó la nota débito: ${errores ? JSON.stringify(errores) : (r.data?.message || `HTTP ${r.status}`)}`);
+    }
+
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { factusNdNumber: nd.number } });
+
+    return {
+      ok: true,
+      sandbox: esSandbox(),
+      ndNumber: nd.number,
+      cude: nd.cude || nd.cufe || null,
+      valor: monto,
+      factura: invoice.factusNumber,
+      validated: Boolean(nd.is_validated),
+    };
+  },
+
+  /** PDF con el diseño de DT Growth (representación gráfica propia).
+   *  Todo sale de la BD: número, CUFE y QR DIAN estándar por documentkey. */
+  async pdfPropio(invoiceId: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber || !invoice.factusCufe) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    const data = {
+      numero: invoice.factusNumber,
+      cufe: invoice.factusCufe,
+      qr_url: `https://catalogo-vpfe.dian.gov.co/document/searchqr?documentkey=${invoice.factusCufe}`,
+      cliente: invoice.clientName,
+      identificacion: invoice.clientNit || '',
+      fecha: invoice.fecha.toISOString().slice(0, 10).split('-').reverse().join('/'),
+      items: [{ descripcion: invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales', cantidad: 1, valor: invoice.totalAmount }],
+      total: invoice.totalAmount,
+      observaciones: invoice.observaciones || '',
+      resolucion: 'Resolución de Facturación Electrónica DIAN No. 18764113521092 · Prefijo DTGP del 101 al 200 · Vigencia 03-08-2026 a 03-08-2028',
+    };
+    const tmp = path.join(os.tmpdir(), `factura_${invoice.factusNumber}.json`);
+    fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
+    try {
+      const script = path.join(__dirname, 'generador_factura.py');
+      const { stdout } = await promisify(execFile)('python3', [script, tmp], { timeout: 60_000 });
+      const pdfPath = stdout.trim().split(/\r?\n/).pop()!;
+      return { buffer: fs.readFileSync(pdfPath), fileName: `factura_${invoice.factusNumber}_dtgrowth.pdf` };
+    } finally {
+      fs.unlinkSync(tmp);
+    }
+  },
+
+  /** PDF oficial DIAN de la factura emitida (Buffer + nombre de archivo) */
+  async descargarPdf(invoiceId: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    const cli = await api();
+    const r = await cli.get(`/v2/bills/${encodeURIComponent(invoice.factusNumber)}/download-pdf`);
+    const b64 = r.data?.data?.pdf_base_64_encoded;
+    if (!b64) throw new Error(r.data?.message || 'Factus no devolvió el PDF');
+    return {
+      buffer: Buffer.from(b64, 'base64'),
+      fileName: `${r.data?.data?.file_name || invoice.factusNumber}.pdf`,
+    };
+  },
+};

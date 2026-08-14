@@ -56,6 +56,7 @@ const MODULE_PERMISSIONS = [
   { value: 'logs', label: 'Logs (tail de archivos)' },
   { value: 'cobros', label: 'Cobros & MRR' },
   { value: 'propuestas', label: 'Propuestas' },
+  { value: 'documentaciones', label: 'Documentaciones' },
   { value: 'dominios', label: 'Dominios' },
   { value: 'webs', label: 'Webs' },
 ] as const;
@@ -70,6 +71,7 @@ const DEFAULT_USER_PERMISSIONS = [
   'reportes',
   'productos',
   'cuentas-cobro',
+  'documentaciones',
   'crm',
   'terceros',
 ];

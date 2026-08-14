@@ -17,6 +17,7 @@ import ClientSedesManager from '@/components/clients/ClientSedesManager';
 import ClientContactsManager from '@/components/clients/ClientContactsManager';
 import ClientStrategy from '@/components/clients/ClientStrategy';
 import ClientReports from '@/components/clients/ClientReports';
+import ClientNpsBadge from '@/components/clients/ClientNpsBadge';
 import {
   fmtFull, fmtM, requiereAccion,
   type ClientV2, type ContractType,
@@ -474,6 +475,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
                 {(c.projectValue ?? 0) > 0 && (
                   <span className="px-2 py-0.5 rounded-md bg-violet-500/15 text-violet-400 font-medium">IPP · {fmtM(c.projectValue!)}</span>
                 )}
+                <ClientNpsBadge clientId={c.id} />
                 {c.nit && <span className="text-muted-foreground">NIT {c.nit}</span>}
               </div>
               <p className="text-xs text-muted-foreground mt-1">

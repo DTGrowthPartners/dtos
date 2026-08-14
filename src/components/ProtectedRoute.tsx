@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/lib/auth';
 import { ShieldAlert } from 'lucide-react';
 
@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, requiredPermission }: ProtectedRouteProps) {
   const { firebaseUser, user, token, isLoading } = useAuthStore();
+  const location = useLocation();
 
   // Tenemos sesion del backend (JWT persistido) si user + token existen en zustand.
   // Eso es suficiente para considerar al usuario autenticado mientras Firebase termina
@@ -50,6 +51,13 @@ export default function ProtectedRoute({ children, requiredPermission }: Protect
     const hasPermission = isAdmin || userPermissions.includes(requiredPermission);
 
     if (!hasPermission) {
+      // Entrar a la raíz (o a un dashboard) sin ese permiso no debe dejar al
+      // usuario en una pantalla muerta: se le lleva a su vista natural.
+      const esLanding = location.pathname === '/' || location.pathname.startsWith('/dashboard');
+      if (esLanding) {
+        return <Navigate to={userPermissions.includes('tareas') ? '/mis-tareas' : '/perfil'} replace />;
+      }
+
       return (
         <div className="flex items-center justify-center min-h-screen bg-background">
           <div className="flex flex-col items-center gap-4 text-center p-8">

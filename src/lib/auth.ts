@@ -85,6 +85,19 @@ onAuthStateChanged(auth, async (firebaseUser) => {
   // Firebase puede tardar o perder su sesion local al recargar; no debemos
   // desloguear por eso. La sesion solo se cierra con logout() explicito o cuando
   // un 401 + refresh fallido confirman que el token ya no sirve (ver api.ts).
+  if (!firebaseUser) {
+    // Sin sesion Firebase el usuario persistido quedaba congelado con permisos
+    // viejos: refrescarlo desde el backend con el JWT almacenado.
+    const { token, user } = useAuthStore.getState();
+    if (token && user) {
+      try {
+        const r = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (r.ok) setUser(await r.json());
+      } catch { /* sin red: se mantiene el usuario persistido */ }
+    }
+  }
 });
 
 class AuthService {

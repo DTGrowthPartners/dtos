@@ -8,7 +8,10 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { authService } from '@/lib/auth';
+import { cn } from '@/lib/utils';
 import { estrategiaKey, type EstrategiaConfig } from './ClientStrategy';
+import ClientReportsMensual from './ClientReportsMensual';
+import ClientReportsDiario from './ClientReportsDiario';
 
 /**
  * Configuración y operación del reporte de Meta Ads del cliente.
@@ -22,6 +25,13 @@ import { estrategiaKey, type EstrategiaConfig } from './ClientStrategy';
  * El enlace con el motor es `Client.metaAdAccountId` (act_…). Sin esa cuenta
  * enlazada la pestaña sigue guardando la configuración, pero no puede generar
  * ni enviar nada.
+ *
+ * Las otras dos sub-pestañas son motores DISTINTOS, cada uno con su PDF, su
+ * cron y su configuración — no son tres vistas del mismo reporte:
+ *   · Diario  → /home/ubuntu/meta-daily-report,   /api/meta-diario/*  (interno)
+ *   · Mensual → /home/ubuntu/meta-monthly-report, /api/meta-mensual/* (al grupo)
+ * Lo único que comparten es el `metaAdAccountId` y `clientes_config.yaml`, que
+ * vive en el proyecto diario y es la lista de clientes de los tres.
  */
 
 interface DestinatarioPrefs { semanal: boolean; mensual: boolean; correo: boolean; whatsapp: boolean; alertas: boolean }
@@ -135,6 +145,9 @@ export default function ClientReports({ clientId, clientName }: { clientId: stri
   // Presupuesto pactado con el cliente: es contra esto que el PDF compara el
   // avance del mes. Vacío = el motor lo estima desde los presupuestos de Meta.
   const [presupuesto, setPresupuesto] = useState('');
+  // Qué reporte se está configurando. Son tres motores distintos, no tres
+  // vistas del mismo: ver el docstring de arriba.
+  const [vista, setVista] = useState<'diario' | 'semanal' | 'mensual'>('semanal');
   const cancelado = useRef(false);
 
   useEffect(() => () => { cancelado.current = true; }, []);
@@ -184,8 +197,46 @@ export default function ClientReports({ clientId, clientName }: { clientId: stri
     [cfg]
   );
 
+  /** Selector Diario | Semanal | Mensual, común a los dos estados de carga. */
+  const subPestanas = (
+    <div className="flex items-center gap-1 border-b border-border">
+      {(['diario', 'semanal', 'mensual'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          onClick={() => setVista(v)}
+          className={cn(
+            'relative px-4 py-2 text-sm font-medium capitalize transition-colors',
+            vista === v ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {v}
+          {vista === v && <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Se evalúa ANTES del spinner de `cfg`: ni el diario ni el mensual dependen
+  // de AppConfig, así que no tienen por qué esperar a la config del semanal.
+  if (vista !== 'semanal') {
+    return (
+      <div className="space-y-4">
+        {subPestanas}
+        {vista === 'mensual'
+          ? <ClientReportsMensual adAccountId={adAccountId} clientName={clientName} />
+          : <ClientReportsDiario adAccountId={adAccountId} clientName={clientName} />}
+      </div>
+    );
+  }
+
   if (!cfg) {
-    return <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>;
+    return (
+      <div className="space-y-4">
+        {subPestanas}
+        <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin" /></div>
+      </div>
+    );
   }
 
   /** Lo que la pestaña le manda al motor del reporte (no a AppConfig). */
@@ -393,6 +444,7 @@ export default function ClientReports({ clientId, clientName }: { clientId: stri
 
   return (
     <div className="space-y-4">
+      {subPestanas}
       {/* Tarjeta resumen del módulo */}
       <div className="rounded-xl bg-card border border-border p-4">
         <div className="flex items-center justify-between mb-4">

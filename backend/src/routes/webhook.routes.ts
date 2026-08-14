@@ -99,18 +99,10 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     });
   }
 
-  // 'actualizada' = aviso de edición (se envía sin importar la prioridad).
-  // 'creada' (o sin evento) = comportamiento original: solo tareas de alta prioridad.
+  // Toda tarea notifica por WhatsApp, sea urgente o no (cambio 2026-08-03).
+  // 'actualizada' = aviso de edición; el resto son creaciones.
   const isUpdate = evento === 'actualizada';
   const isHigh = prioridad === 'Alta' || prioridad === 'HIGH';
-
-  if (!isUpdate && !isHigh) {
-    return res.json({
-      success: true,
-      message: 'Tarea no es de alta prioridad, no se envía a WhatsApp',
-      sent: false,
-    });
-  }
 
   const prioridadTxt = isHigh ? 'Alta' : prioridad === 'Baja' || prioridad === 'LOW' ? 'Baja' : 'Media';
 
@@ -142,8 +134,10 @@ router.post('/whatsapp/tasks', authMiddleware, async (req: Request, res: Respons
     const proyectoTxt = task.proyecto && task.proyecto !== 'Sin proyecto' ? ` [${task.proyecto}]` : '';
     const encabezado = isUpdate
       ? `✏️ *Tarea actualizada*${proyectoTxt}`
-      : `🔴 *Tarea urgente*${proyectoTxt}`;
-    const prioridadLinea = isUpdate ? `\n⚡ Prioridad: ${task.prioridad}` : '';
+      : isHigh
+        ? `🔴 *Tarea urgente*${proyectoTxt}`
+        : `🆕 *Nueva tarea*${proyectoTxt}`;
+    const prioridadLinea = isUpdate || !isHigh ? `\n⚡ Prioridad: ${task.prioridad}` : '';
     const mensaje =
       `${encabezado}\n` +
       `*${task.titulo}*\n` +
@@ -201,6 +195,24 @@ router.post('/bot/invoices/run-recurring', verifyBotApiKey, async (_req: Request
   } catch (error) {
     console.error('[Bot API] Error generando cuentas recurrentes:', error);
     res.status(500).json({ success: false, error: 'Error generando cuentas recurrentes' });
+  }
+});
+
+/**
+ * POST /api/webhook/bot/reports/daily[?dry=1]
+ *
+ * Reportes diarios por correo (Estado de Resultados + Cartera) a Dairo/Jhon.
+ * Port del antiguo run_daily_reports.sh de api-cuentas-de-cobro; lo dispara
+ * el cron del VPS a las 7:00 AM Bogotá. Con dry=1 genera sin enviar.
+ */
+router.post('/bot/reports/daily', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { enviarReportesDiarios } = await import('../services/dailyReports.service');
+    const result = await enviarReportesDiarios({ dryRun: req.query.dry === '1' });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Bot API] Error en reportes diarios:', error);
+    res.status(500).json({ success: false, error: 'Error generando reportes diarios' });
   }
 });
 

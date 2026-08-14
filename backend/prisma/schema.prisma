@@ -91,6 +91,8 @@ model Client {
   // Meta Ads Integration
   metaAdAccountId  String?   // ID de cuenta publicitaria de Meta (ej: act_123456789)
   metaBusinessId   String?   // ID del Business Manager de Meta
+  // Facturación electrónica: municipio del cliente (código DANE, ej: 08001 Barranquilla)
+  municipio        String?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -248,10 +250,101 @@ model Invoice {
   // Cobranza automática: último recordatorio enviado al cliente y cuántos van
   lastReminderAt  DateTime?
   remindersSent   Int      @default(0)
+  // Factura electrónica DIAN emitida vía Factus (null = no emitida)
+  factusReference   String?
+  factusNumber      String?
+  factusCufe        String?
+  factusStatus      String?   // validada, pendiente, anulada
+  factusValidatedAt DateTime?
+  factusNcNumber    String?   // nota crédito que la anuló (ej NC1)
+  factusNdNumber    String?   // última nota débito emitida sobre esta factura (ej ND1)
   payments        InvoicePayment[]
   createdBy       String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// Movimientos bancarios detectados por el monitor de correos (Bancolombia).
+// Auditoría de lo que se insertó en el Sheets + cola de notificación WhatsApp.
+model BankTransaction {
+  id          String   @id @default(cuid())
+  emailUid    Int?     // UID IMAP del correo origen
+  tipo        String   // entrante | saliente
+  monto       Float
+  descripcion String
+  categoria   String
+  cuenta      String   @default("Bancolombia")
+  entidad     String
+  fecha       String   // como quedó en el Sheets (DD/MM/YYYY HH:mm:ss)
+  sheetOk     Boolean  @default(false)
+  notificado  Boolean  @default(false) // aviso enviado al grupo de WhatsApp
+  createdAt   DateTime @default(now())
+}
+
+// ==================== NPS trimestral (spec de Dairo, plus/nps-spec-stiven.md) ====================
+
+model NpsContacto {
+  id        String     @id @default(cuid())
+  clienteId String
+  nombre    String
+  cargo     String?
+  whatsapp  String?
+  email     String?
+  activo    Boolean    @default(true)
+  envios    NpsEnvio[]
+  createdAt DateTime   @default(now())
+}
+
+model NpsEnvio {
+  id         String        @id @default(cuid())
+  contactoId String
+  contacto   NpsContacto   @relation(fields: [contactoId], references: [id], onDelete: Cascade)
+  clienteId  String
+  trimestre  String        // 2026-Q3
+  token      String        @unique
+  estado     String        @default("pendiente") // pendiente, respondido, vencido
+  enviadoAt  DateTime      @default(now())
+  venceAt    DateTime
+  respuesta  NpsRespuesta?
+}
+
+model NpsRespuesta {
+  id            String   @id @default(cuid())
+  envioId       String   @unique
+  envio         NpsEnvio @relation(fields: [envioId], references: [id], onDelete: Cascade)
+  puntaje       Int
+  comentario    String?
+  aspectos      String[] // ej. ["Comunicación","Reportes"]
+  quiereLlamada Boolean  @default(false)
+  respondidoAt  DateTime @default(now())
+}
+
+// ==================== Documentaciones (wiki interna por proyecto) ====================
+
+model DocProject {
+  id          String     @id @default(cuid())
+  nombre      String
+  descripcion String?
+  color       String     @default("#7c3aed")
+  estado      String     @default("activo") // activo | inactivo
+  orden       Int        @default(0)
+  docs        DocEntry[]
+  createdBy   String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model DocEntry {
+  id        String     @id @default(cuid())
+  projectId String
+  project   DocProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  titulo    String
+  tipo      String     @default("doc") // ficha-tecnica, guia, api, proceso, doc
+  contenido String     @default("")    // markdown
+  orden     Int        @default(0)
+  updatedBy String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 }
 
 // Registro idempotente de la conciliación pagos (Sheets) ↔ facturas.

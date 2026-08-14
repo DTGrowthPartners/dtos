@@ -20,9 +20,14 @@ class InvoiceController {
         return;
       }
 
-      // Basic validation
-      if (!invoiceData.nombre_cliente || !invoiceData.identificacion || !invoiceData.servicios || !invoiceData.fecha) {
-        res.status(400).json({ message: 'Missing required fields: nombre_cliente, identificacion, servicios, fecha' });
+      // Basic validation: se informa exactamente qué falta
+      const faltantes: string[] = [];
+      if (!invoiceData.nombre_cliente) faltantes.push('el nombre del cliente');
+      if (!invoiceData.identificacion) faltantes.push('el NIT/cédula del cliente');
+      if (!invoiceData.servicios) faltantes.push('los servicios');
+      if (!invoiceData.fecha) faltantes.push('la fecha');
+      if (faltantes.length > 0) {
+        res.status(400).json({ message: `Falta ${faltantes.join(', ')}` });
         return;
       }
 

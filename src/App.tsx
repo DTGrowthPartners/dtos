@@ -36,6 +36,8 @@ const Vps = lazy(() => import("@/pages/Vps"));
 const Logs = lazy(() => import("@/pages/Logs"));
 const CobrosMRR = lazy(() => import("@/pages/CobrosMRR"));
 const Propuestas = lazy(() => import("@/pages/Propuestas"));
+const Documentaciones = lazy(() => import("@/pages/Documentaciones"));
+const NpsPanel = lazy(() => import("@/pages/NpsPanel"));
 const Dominios = lazy(() => import("@/pages/Dominios"));
 const Webs = lazy(() => import("@/pages/Webs"));
 const Profile = lazy(() => import("@/pages/Profile"));
@@ -83,10 +85,10 @@ const App = () => (
 
               {/* Main App Routes */}
               <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-                <Route path="/" element={<SalesDashboard />} />
-                <Route path="/dashboard" element={<SalesDashboard />} />
-                <Route path="/dashboard-clasico" element={<Dashboard />} />
-                <Route path="/dashboard-executive" element={<ExecutiveDashboard />} />
+                <Route path="/" element={<ProtectedRoute requiredPermission="dashboard"><SalesDashboard /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute requiredPermission="dashboard"><SalesDashboard /></ProtectedRoute>} />
+                <Route path="/dashboard-clasico" element={<ProtectedRoute requiredPermission="dashboard"><Dashboard /></ProtectedRoute>} />
+                <Route path="/dashboard-executive" element={<ProtectedRoute requiredPermission="dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
                 <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><ClientesRedesign /></ProtectedRoute>} />
                 <Route path="/clientes-clasico" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
                 <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
@@ -107,6 +109,8 @@ const App = () => (
                 <Route path="/logs" element={<ProtectedRoute requiredPermission="logs"><Logs /></ProtectedRoute>} />
                 <Route path="/cobros" element={<ProtectedRoute requiredPermission="cobros"><CobrosMRR /></ProtectedRoute>} />
                 <Route path="/propuestas" element={<ProtectedRoute requiredPermission="propuestas"><Propuestas /></ProtectedRoute>} />
+                <Route path="/documentaciones" element={<ProtectedRoute requiredPermission="documentaciones"><Documentaciones /></ProtectedRoute>} />
+                <Route path="/nps" element={<ProtectedRoute requiredPermission="reportes"><NpsPanel /></ProtectedRoute>} />
                 <Route path="/dominios" element={<ProtectedRoute requiredPermission="dominios"><Dominios /></ProtectedRoute>} />
                 <Route path="/webs" element={<ProtectedRoute requiredPermission="webs"><Webs /></ProtectedRoute>} />
                 <Route path="/perfil" element={<Profile />} />

@@ -885,14 +885,15 @@ export default function Tareas() {
           });
         }
 
-        // Send to WhatsApp webhook if high priority y el usuario dejó activado el aviso
-        if (taskData.priority === Priority.HIGH && formData.notifyWhatsApp) {
+        // Aviso por WhatsApp para TODA tarea nueva (cualquier prioridad) si el
+        // usuario dejó activado el check de avisar.
+        if (formData.notifyWhatsApp) {
           const project = projects.find(p => p.id === taskData.projectId);
           sendHighPriorityTaskToWhatsApp({
             id: newTaskId,
             titulo: taskData.title,
             descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
-            prioridad: 'Alta',
+            prioridad: taskData.priority === Priority.HIGH ? 'Alta' : taskData.priority === Priority.LOW ? 'Baja' : 'Media',
             asignado: taskData.assignee,
             creador: taskData.creator,
             proyecto: project?.name || 'Sin proyecto',
@@ -4143,14 +4144,15 @@ export default function Tareas() {
               </div>
         ) : (
           /* ==================== DEFAULT HEADER (All projects / Archived / Deleted) ==================== */
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex-1 min-w-0">
-              <h1 className="text-base md:text-lg font-semibold text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* El título no se encoge: si los botones no caben, bajan a una segunda línea */}
+            <div className="flex-shrink-0">
+              <h1 className="whitespace-nowrap text-base md:text-lg font-semibold text-muted-foreground">
                 {taskView === 'active' && 'Mis Tareas'}
                 {taskView === 'archived' && 'Tareas Archivadas'}
                 {taskView === 'deleted' && 'Tareas Eliminadas'}
               </h1>
-              <p className="text-sm md:text-base font-medium text-foreground">
+              <p className="whitespace-nowrap text-sm md:text-base font-medium text-foreground">
                 {taskView === 'active' && (
                   <>
                     Todos los proyectos

@@ -53,3 +53,9 @@ tmpclaude*
 COBRAFLOW_INSTRUCTIONS.md
 FIXES_ANALISIS.md
 INTEGRACION_TAREAS.md
+
+# Archivos de trabajo local (audios, documentos de referencia, pruebas)
+*.ogg
+dian/
+factus_*.json
+viualesfinznas.md
