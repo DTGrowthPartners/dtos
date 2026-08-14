@@ -3,3 +3,6 @@ dist/
 .env
 firebase-service-account.json
 *.log
+.env.bak*
+uploads/
+src/services/creadas/
