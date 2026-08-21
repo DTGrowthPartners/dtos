@@ -139,6 +139,7 @@ interface PendingClientService {
     logo?: string;
     email?: string;
     nit?: string;
+    tipoFacturacion?: string; // cuenta_cobro | factura_electronica
   };
   service: {
     id: string;
@@ -1373,7 +1374,9 @@ export function AccountsPanel() {
               <Button
                 className="w-full"
                 onClick={() => {
-                  // Navigate to invoice generation page with pre-filled data
+                  // Navigate to invoice generation page with pre-filled data.
+                  // El destino depende del tipo de facturación fijo del cliente.
+                  const esFacturaElectronica = selectedServiceForInvoice?.client.tipoFacturacion === 'factura_electronica';
                   const params = new URLSearchParams({
                     clientId: selectedServiceForInvoice?.client.id || '',
                     clientName: selectedServiceForInvoice?.client.name || '',
@@ -1382,11 +1385,11 @@ export function AccountsPanel() {
                     amount: String(selectedServiceForInvoice?.amount || 0),
                     currency: selectedServiceForInvoice?.currency || 'COP',
                   });
-                  window.location.href = `/cuentas-cobro?${params.toString()}`;
+                  window.location.href = `${esFacturaElectronica ? '/facturas' : '/cuentas-cobro'}?${params.toString()}`;
                 }}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Ir a Generar Cuenta de Cobro
+                {selectedServiceForInvoice?.client.tipoFacturacion === 'factura_electronica' ? 'Ir a Generar Factura' : 'Ir a Generar Cuenta de Cobro'}
               </Button>
               <p className="text-xs text-center text-muted-foreground">
                 Serás redirigido a la página de cuentas de cobro con los datos pre-cargados

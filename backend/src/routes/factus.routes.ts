@@ -87,4 +87,31 @@ router.get('/pdf/:invoiceId', async (req, res) => {
   }
 });
 
+// GET /api/factus/xml/:invoiceId — XML (UBL firmado) oficial DIAN de la factura emitida
+router.get('/xml/:invoiceId', async (req, res) => {
+  try {
+    const { buffer, fileName } = await factusService.descargarXml(req.params.invoiceId);
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    res.send(buffer);
+  } catch (e: any) {
+    res.status(400).json({ ok: false, message: e?.message || 'No se pudo descargar el XML' });
+  }
+});
+
+// POST /api/factus/enviar-correo/:invoiceId — envía el PDF + XML de la factura emitida. body: { email }
+router.post('/enviar-correo/:invoiceId', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      res.status(400).json({ ok: false, message: 'Correo inválido' });
+      return;
+    }
+    const result = await factusService.enviarPorCorreo(req.params.invoiceId, email);
+    res.json(result);
+  } catch (e: any) {
+    res.status(400).json({ ok: false, message: e?.message || 'No se pudo enviar el correo' });
+  }
+});
+
 export default router;

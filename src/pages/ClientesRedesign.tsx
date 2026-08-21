@@ -365,13 +365,13 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
   // Pestañas del perfil bajo el encabezado (pedido de Dairo: la navegación
   // estaba demasiado abajo y la ficha crecía verticalmente sin fin)
   const [mgmtTab, setMgmtTab] = useState<'resumen' | 'estrategia' | 'reportes' | 'servicios' | 'sedes' | 'contactos'>('resumen');
-  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
+  const [form, setForm] = useState({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active', tipoFacturacion: c.tipoFacturacion || 'cuenta_cobro' });
   const [toggling, setToggling] = useState(false);
   const waPhone = (c.phone || '').replace(/[^0-9]/g, '');
   const activo = c.status === 'active';
 
   const openEdit = () => {
-    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active' });
+    setForm({ name: c.name, email: c.email || '', nit: c.nit || '', phone: c.phone || '', address: c.address || '', status: c.status || 'active', tipoFacturacion: c.tipoFacturacion || 'cuenta_cobro' });
     setEditOpen(true);
   };
   const save = async () => {
@@ -381,7 +381,7 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
       await apiClient.put(`/api/clients/${c.id}`, {
         name: form.name.trim(), email: form.email.trim(), nit: form.nit.trim() || undefined,
         phone: form.phone.trim() || undefined, address: form.address.trim() || undefined,
-        status: form.status,
+        status: form.status, tipoFacturacion: form.tipoFacturacion,
       });
       setEditOpen(false);
       toast({ title: 'Cliente actualizado' });
@@ -697,6 +697,15 @@ function ClientDetail({ c, onBack, onUpdated }: { c: ClientV2; onBack: () => voi
             </div>
             <div className="space-y-1"><Label className="text-xs">Dirección</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+            <div className="space-y-1"><Label className="text-xs">Tipo de facturación</Label>
+              <Select value={form.tipoFacturacion} onValueChange={(v) => setForm({ ...form, tipoFacturacion: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cuenta_cobro">Cuenta de Cobro</SelectItem>
+                  <SelectItem value="factura_electronica">Factura Electrónica (DIAN)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Define en qué pestaña se generan los documentos de este cliente: Cuentas de Cobro o Facturas.</p></div>
             <div className="space-y-1"><Label className="text-xs">Estado</Label>
               <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -735,7 +744,7 @@ function Row({ label, value, extra }: { label: string; value: string; extra?: st
 function NewClientDialog({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (v: boolean) => void; onCreated: () => void }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', nit: '', phone: '', address: '' });
+  const [form, setForm] = useState({ name: '', email: '', nit: '', phone: '', address: '', tipoFacturacion: 'cuenta_cobro' });
   const save = async () => {
     if (!form.name.trim() || saving) return;
     setSaving(true);
@@ -744,10 +753,10 @@ function NewClientDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
         name: form.name.trim(),
         email: form.email.trim() || `${form.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '')}@dtgrowthpartners.com`,
         nit: form.nit.trim() || undefined, phone: form.phone.trim() || undefined, address: form.address.trim() || undefined,
-        status: 'active',
+        status: 'active', tipoFacturacion: form.tipoFacturacion,
       });
       onOpenChange(false);
-      setForm({ name: '', email: '', nit: '', phone: '', address: '' });
+      setForm({ name: '', email: '', nit: '', phone: '', address: '', tipoFacturacion: 'cuenta_cobro' });
       toast({ title: 'Cliente creado' });
       onCreated();
     } catch (e: any) {
@@ -771,6 +780,15 @@ function NewClientDialog({ open, onOpenChange, onCreated }: { open: boolean; onO
           </div>
           <div className="space-y-1"><Label className="text-xs">Dirección</Label>
             <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
+          <div className="space-y-1"><Label className="text-xs">Tipo de facturación</Label>
+            <Select value={form.tipoFacturacion} onValueChange={(v) => setForm({ ...form, tipoFacturacion: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cuenta_cobro">Cuenta de Cobro</SelectItem>
+                <SelectItem value="factura_electronica">Factura Electrónica (DIAN)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">Define en qué pestaña se generan los documentos de este cliente: Cuentas de Cobro o Facturas.</p></div>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancelar</Button>

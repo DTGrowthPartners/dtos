@@ -52,7 +52,22 @@ class InvoiceController {
         }
       }
 
-      const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf(invoiceData);
+      // Tipo de documento: si viene explícito se respeta, si no se toma del cliente
+      // (fijo por cliente: cuenta_cobro o factura_electronica), y si no hay cliente
+      // asociado por defecto es cuenta_cobro. Se resuelve antes de generar el PDF
+      // para que el título impreso coincida con el tipo real del documento.
+      let tipoDocumento = 'cuenta_cobro';
+      if (invoiceData.tipoDocumento === 'factura_electronica' || invoiceData.tipoDocumento === 'cuenta_cobro') {
+        tipoDocumento = invoiceData.tipoDocumento;
+      } else if (invoiceData.cliente_id) {
+        const cliente = await prisma.client.findUnique({
+          where: { id: invoiceData.cliente_id },
+          select: { tipoFacturacion: true },
+        });
+        if (cliente?.tipoFacturacion === 'factura_electronica') tipoDocumento = 'factura_electronica';
+      }
+
+      const { generatedPath, invoiceNumber } = await invoiceService.generateInvoicePdf(invoiceData, tipoDocumento);
 
       // Calculate total amount
       const totalAmount = invoiceData.servicios.reduce(
@@ -74,6 +89,7 @@ class InvoiceController {
           observaciones: cleanText(invoiceData.observaciones) || null,
           serviceId: invoiceData.serviceId || null,
           filePath: generatedPath,
+          tipoDocumento,
           createdBy: userId,
         },
       });
@@ -105,7 +121,14 @@ class InvoiceController {
 
   public list = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const { tipoDocumento } = req.query;
+      const where =
+        tipoDocumento === 'factura_electronica' || tipoDocumento === 'cuenta_cobro'
+          ? { tipoDocumento: tipoDocumento as string }
+          : {};
+
       const invoices = await prisma.invoice.findMany({
+        where,
         orderBy: { createdAt: 'desc' },
         include: { payments: { orderBy: { paidAt: 'desc' } } },
       });

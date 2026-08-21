@@ -14,4 +14,5 @@ export interface CreateInvoiceDto {
   servicio_proyecto?: string;
   cliente_id?: string;
   serviceId?: string; // servicio del catálogo que factura esta cuenta de cobro
+  tipoDocumento?: string; // cuenta_cobro | factura_electronica (si no viene, se toma del cliente)
 }

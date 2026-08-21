@@ -548,6 +548,7 @@ export const accountService = {
             logo: true,
             email: true,
             nit: true,
+            tipoFacturacion: true,
           },
         },
         service: {

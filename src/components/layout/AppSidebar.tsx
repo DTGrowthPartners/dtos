@@ -26,6 +26,7 @@ import {
   Receipt,
   Globe,
   MonitorSmartphone,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -81,6 +82,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
       { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'finanzas' },
+      { title: 'Facturas Electrónicas', path: '/facturas', icon: ShieldCheck, permission: 'finanzas' },
       { title: 'Reporte de gastos', path: '/finanzas?tab=reportes', icon: FileBarChart, permission: 'finanzas' },
       { title: 'Cobros & MRR', path: '/cobros', icon: Receipt, permission: 'cobros', badge: 'nuevo' },
     ],

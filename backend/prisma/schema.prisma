@@ -93,6 +93,9 @@ model Client {
   metaBusinessId   String?   // ID del Business Manager de Meta
   // Facturación electrónica: municipio del cliente (código DANE, ej: 08001 Barranquilla)
   municipio        String?
+  // Tipo de documento que se le genera a este cliente: cuenta_cobro (default, PDF simple)
+  // o factura_electronica (pasa por Factus/DIAN). Fijo por cliente, no se elige por documento.
+  tipoFacturacion  String         @default("cuenta_cobro") // cuenta_cobro | factura_electronica
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 }
@@ -246,6 +249,9 @@ model Invoice {
   service         Service? @relation("InvoiceService", fields: [serviceId], references: [id])
   filePath        String   // Ruta del PDF generado
   status          String   @default("pendiente") // pendiente, enviada, parcial, pagada
+  // Tipo de documento: cuenta_cobro (default, histórico) o factura_electronica (pestaña
+  // Facturas — borrador local hasta que factusNumber quede seteado, luego "enviada a DIAN").
+  tipoDocumento   String   @default("cuenta_cobro") // cuenta_cobro | factura_electronica
   paidAt          DateTime?
   // Cobranza automática: último recordatorio enviado al cliente y cuántos van
   lastReminderAt  DateTime?

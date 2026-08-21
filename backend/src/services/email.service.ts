@@ -16,6 +16,7 @@ interface EmailOptions {
   subject: string;
   html: string;
   text?: string;
+  attachments?: { filename: string; content: Buffer }[];
 }
 
 export const sendEmail = async (options: EmailOptions): Promise<void> => {
@@ -25,6 +26,7 @@ export const sendEmail = async (options: EmailOptions): Promise<void> => {
     subject: options.subject,
     html: options.html,
     text: options.text || options.html.replace(/<[^>]*>/g, ''),
+    attachments: options.attachments,
   };
 
   try {

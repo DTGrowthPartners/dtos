@@ -5,6 +5,7 @@ export interface CreateClientDto {
   phone?: string;
   address?: string;
   logo?: string;
+  tipoFacturacion?: string; // cuenta_cobro | factura_electronica
 }
 
 export interface UpdateClientDto {
@@ -15,6 +16,7 @@ export interface UpdateClientDto {
   address?: string;
   logo?: string;
   status?: string;
+  tipoFacturacion?: string; // cuenta_cobro | factura_electronica
 }
 
 export interface ClientResponse {
@@ -26,6 +28,7 @@ export interface ClientResponse {
   address?: string;
   logo: string;
   status: string;
+  tipoFacturacion: string;
   createdAt: Date;
   updatedAt: Date;
 }

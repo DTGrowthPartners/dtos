@@ -41,6 +41,7 @@ export interface ClienteV2 {
   id: string; name: string; initials: string; status: string;
   email?: string; phone?: string; address?: string;
   contractType: 'mrr' | 'project'; monthlyValue: number; projectValue: number; nit?: string; clientSince: string;
+  tipoFacturacion: string; // cuenta_cobro | factura_electronica
   sedes: number;
   servicesSummary: string; servicesCount: number;
   services: { name: string; status: string; monthlyPrice: number; frecuencia: string; recurring: boolean }[];
@@ -62,7 +63,7 @@ export const getClientesV2 = async () => {
   const period = currentPeriod();
 
   const clients = await prisma.client.findMany({
-    select: { id: true, name: true, nit: true, status: true, createdAt: true, email: true, phone: true, address: true, metaAdAccountId: true },
+    select: { id: true, name: true, nit: true, status: true, createdAt: true, email: true, phone: true, address: true, metaAdAccountId: true, tipoFacturacion: true },
   });
 
   // Gasto en pauta del mes por cuenta (snapshot del reporte diario, no bloquea)
@@ -205,6 +206,7 @@ export const getClientesV2 = async () => {
       monthlyValue: Math.round(svc?.monthly || 0),
       projectValue: Math.round(svc?.projectValue || 0),
       nit: cl.nit || undefined,
+      tipoFacturacion: cl.tipoFacturacion || 'cuenta_cobro',
       clientSince: monthYear(cl.createdAt),
       sedes: sedesByClient.get(cl.id) || 0,
       servicesSummary: svc?.names.length ? [...new Set(svc.names)].join(' · ') : 'Sin servicios',

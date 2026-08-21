@@ -21,6 +21,7 @@ export interface ClientV2 {
   monthlyValue: number;
   projectValue?: number;        // IPP: ingreso por proyecto (pago único)
   nit?: string;
+  tipoFacturacion?: string;     // cuenta_cobro | factura_electronica
   clientSince: string;          // "ene 2026"
   servicesSummary: string;      // "Meta Ads · WhatsApp Bot"
   servicesCount: number;

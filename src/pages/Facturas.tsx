@@ -1,12 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, Trash2, FileText, CheckSquare, Square, Search, Check, ChevronsUpDown, Send, CircleCheck, Clock, ShieldCheck } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  PlusCircle, Trash2, FileText, CheckSquare, Square, Check, ChevronsUpDown,
+  Send, CircleCheck, Clock, ShieldCheck, FileEdit,
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import {
@@ -66,7 +69,7 @@ interface ServiceItem {
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
-  serviceId?: string; // servicio del catálogo que se está facturando (para amarrar la factura)
+  serviceId?: string;
 }
 
 interface Invoice {
@@ -82,7 +85,7 @@ interface Invoice {
   status: 'pendiente' | 'enviada' | 'pagada';
   paidAt: string | null;
   createdAt: string;
-  // Factura electrónica DIAN (Factus)
+  // Factura electrónica DIAN (Factus): sin factusNumber = borrador, con = enviada a DIAN
   factusNumber?: string | null;
   factusCufe?: string | null;
   factusStatus?: string | null;
@@ -96,10 +99,9 @@ const INVOICE_STATUS = {
   pagada: { label: 'Pagada', color: 'bg-green-100 text-green-800', icon: CircleCheck },
 } as const;
 
-// Fallback seguro: cualquier estado desconocido no debe tumbar la página.
 const statusInfo = (s?: string) => INVOICE_STATUS[(s || 'pendiente') as keyof typeof INVOICE_STATUS] || INVOICE_STATUS.pendiente;
 
-const CuentasCobro = () => {
+const Facturas = () => {
   const { toast } = useToast();
   const [clients, setClients] = useState<Client[]>([]);
   const [services, setServices] = useState<Service[]>([]);
@@ -108,6 +110,7 @@ const CuentasCobro = () => {
   const [selectedInvoices, setSelectedInvoices] = useState<Set<string>>(new Set());
   const [clientSearchOpen, setClientSearchOpen] = useState(false);
   const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'borradores' | 'enviadas'>('enviadas');
 
   const [invoiceData, setInvoiceData] = useState({
     cliente_id: '',
@@ -116,64 +119,23 @@ const CuentasCobro = () => {
     fecha: new Date().toISOString().split('T')[0],
     concepto: 'Prestación de servicios profesionales de marketing digital y desarrollo de software',
     servicio_proyecto: '',
-    observaciones: 'No responsable de IVA. Cuenta de cobro emitida bajo el régimen de tributación simplificada.',
+    observaciones: 'Factura electrónica de venta.',
   });
 
   const [serviceItems, setServiceItems] = useState<ServiceItem[]>([
     { id: 1, descripcion: '', cantidad: 1, precio_unitario: 0 },
   ]);
 
-  // --- Data Fetching ---
   useEffect(() => {
     fetchData();
   }, [toast]);
-
-  // Prefill desde el driver del chat (María): /cuentas-cobro?nueva=1&cliente=&concepto=&items=[...]
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get('nueva') !== '1') return;
-    if (clients.length === 0) return; // espera a que carguen los clientes para cruzar el nombre
-
-    const norm = (s: string) => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
-    const nombre = searchParams.get('cliente') || '';
-    const n = norm(nombre);
-    const cl = n.length >= 3
-      ? clients.find((c) => norm(c.name).includes(n) || n.includes(norm(c.name)))
-      : undefined;
-
-    setInvoiceData((prev) => ({
-      ...prev,
-      cliente_id: cl?.id || prev.cliente_id,
-      nombre_cliente: cl?.name || nombre || prev.nombre_cliente,
-      identificacion: cl?.nit || prev.identificacion,
-      concepto: searchParams.get('concepto') || prev.concepto,
-    }));
-
-    const itemsRaw = searchParams.get('items');
-    if (itemsRaw) {
-      try {
-        const arr = JSON.parse(itemsRaw);
-        if (Array.isArray(arr) && arr.length) {
-          setServiceItems(arr.map((it: any, i: number) => ({
-            id: Date.now() + i,
-            descripcion: String(it.descripcion ?? it.description ?? ''),
-            cantidad: Number(it.cantidad ?? it.qty) || 1,
-            precio_unitario: Number(it.precio_unitario ?? it.precioUnitario ?? it.precio ?? it.valor) || 0,
-          })));
-        }
-      } catch { /* items malformados: se ignoran */ }
-    }
-
-    setSearchParams({}, { replace: true });
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [clients, searchParams]);
 
   const fetchData = async () => {
     try {
       const [clientsData, servicesData, invoicesData] = await Promise.all([
         apiClient.get<Client[]>('/api/clients'),
         apiClient.get<Service[]>('/api/services'),
-        apiClient.get<Invoice[]>('/api/invoices?tipoDocumento=cuenta_cobro'),
+        apiClient.get<Invoice[]>('/api/invoices?tipoDocumento=factura_electronica'),
       ]);
       setClients(clientsData);
       setServices(servicesData);
@@ -187,27 +149,29 @@ const CuentasCobro = () => {
     }
   };
 
-  // --- Handlers ---
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setInvoiceData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Solo clientes marcados para Cuenta de Cobro (los de Factura Electrónica van por /facturas)
-  const cuentaCobroClients = useMemo(
-    () => clients.filter((c) => (c.tipoFacturacion || 'cuenta_cobro') !== 'factura_electronica'),
+  // Solo clientes marcados para Factura Electrónica (los de Cuenta de Cobro van por /cuentas-cobro)
+  const facturaClients = useMemo(
+    () => clients.filter((c) => c.tipoFacturacion === 'factura_electronica'),
     [clients]
   );
 
-  // Filter clients based on search query
   const filteredClients = useMemo(() => {
-    if (!clientSearchQuery) return cuentaCobroClients;
+    if (!clientSearchQuery) return facturaClients;
     const query = clientSearchQuery.toLowerCase();
-    return cuentaCobroClients.filter(client =>
+    return facturaClients.filter(client =>
       client.name.toLowerCase().includes(query) ||
       (client.nit && client.nit.toLowerCase().includes(query))
     );
-  }, [cuentaCobroClients, clientSearchQuery]);
+  }, [facturaClients, clientSearchQuery]);
+
+  const borradores = useMemo(() => invoices.filter((inv) => !inv.factusNumber), [invoices]);
+  const enviadas = useMemo(() => invoices.filter((inv) => !!inv.factusNumber), [invoices]);
+  const visibleInvoices = activeTab === 'borradores' ? borradores : enviadas;
 
   const handleClientChange = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
@@ -228,7 +192,7 @@ const CuentasCobro = () => {
       toast({
         title: 'Estado actualizado',
         description: newStatus === 'pagada'
-          ? 'La cuenta se marcó como pagada y se registró el ingreso en Finanzas.'
+          ? 'La factura se marcó como pagada y se registró el ingreso en Finanzas.'
           : `Estado cambiado a "${INVOICE_STATUS[newStatus].label}"`,
       });
       fetchData();
@@ -260,9 +224,7 @@ const CuentasCobro = () => {
     setServiceItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const calculateTotal = (item: ServiceItem) => {
-    return item.cantidad * item.precio_unitario;
-  };
+  const calculateTotal = (item: ServiceItem) => item.cantidad * item.precio_unitario;
 
   const grandTotal = serviceItems
     .filter(item => item.descripcion.trim() !== '')
@@ -273,7 +235,6 @@ const CuentasCobro = () => {
 
     const usados = serviceItems.filter(item => item.descripcion.trim() !== '');
 
-    // Validación con mensajes claros antes de llamar al backend
     const faltantes: string[] = [];
     if (!invoiceData.nombre_cliente) faltantes.push('selecciona el cliente');
     if (!invoiceData.identificacion.trim()) faltantes.push('escribe el NIT o cédula del cliente (no la tiene registrada en su ficha)');
@@ -281,7 +242,7 @@ const CuentasCobro = () => {
     if (!invoiceData.fecha) faltantes.push('elige la fecha');
     if (faltantes.length > 0) {
       toast({
-        title: 'Faltan datos para generar la cuenta',
+        title: 'Faltan datos para guardar el borrador',
         description: faltantes.join(' · '),
         variant: 'destructive',
       });
@@ -291,17 +252,15 @@ const CuentasCobro = () => {
     setIsLoading(true);
     const submissionData = {
       ...invoiceData,
-      // Amarra la factura al servicio facturado (el primer ítem con servicio del catálogo).
       serviceId: usados.find(i => i.serviceId)?.serviceId,
-      servicios: usados.map(({ id, serviceId, ...rest }) => rest), // el PDF no necesita id/serviceId
+      servicios: usados.map(({ id, serviceId, ...rest }) => rest),
+      tipoDocumento: 'factura_electronica',
     };
 
     try {
-      // Get the auth token
       const token = await (await import('@/lib/auth')).authService.getToken();
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-      // Make a direct fetch request to handle blob response
       const response = await fetch(`${API_URL}/api/invoices/generate`, {
         method: 'POST',
         headers: {
@@ -321,17 +280,17 @@ const CuentasCobro = () => {
       window.open(blobUrl, '_blank');
 
       toast({
-        title: 'Éxito',
-        description: 'La cuenta de cobro se ha generado y abierta en una nueva pestaña.',
+        title: 'Borrador guardado',
+        description: 'La factura quedó como borrador. Emítela a la DIAN desde la pestaña "Borradores" cuando esté lista.',
       });
 
-      // Reload invoices list
+      setActiveTab('borradores');
       fetchData();
     } catch (error) {
       console.error('Error generating invoice:', error);
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Hubo un problema al generar la cuenta de cobro.',
+        description: error instanceof Error ? error.message : 'Hubo un problema al guardar el borrador.',
         variant: 'destructive',
       });
     } finally {
@@ -339,7 +298,7 @@ const CuentasCobro = () => {
     }
   };
 
-  const handleView = async (invoiceId: string, invoiceNumber: string) => {
+  const handleView = async (invoiceId: string) => {
     try {
       const token = await (await import('@/lib/auth')).authService.getToken();
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -361,30 +320,28 @@ const CuentasCobro = () => {
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'No se pudo abrir la cuenta de cobro.',
+        description: 'No se pudo abrir la factura.',
         variant: 'destructive',
       });
     }
   };
 
-  // Facturación electrónica DIAN: en esta pantalla solo se VE el estado de facturas ya
-  // emitidas en el pasado (legacy). Emitir facturas nuevas se hace desde /facturas.
   const [factusInvoice, setFactusInvoice] = useState<Invoice | null>(null);
 
   const handleDelete = async (invoiceId: string) => {
-    if (!confirm('¿Estás seguro de eliminar esta cuenta de cobro?')) return;
+    if (!confirm('¿Estás seguro de eliminar este borrador de factura?')) return;
 
     try {
       await apiClient.delete(`/api/invoices/${invoiceId}`);
       toast({
         title: 'Eliminado',
-        description: 'La cuenta de cobro se eliminó correctamente.',
+        description: 'El borrador se eliminó correctamente.',
       });
       fetchData();
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'No se pudo eliminar la cuenta de cobro.',
+        description: 'No se pudo eliminar el borrador.',
         variant: 'destructive',
       });
     }
@@ -393,45 +350,29 @@ const CuentasCobro = () => {
   const handleSelectInvoice = (invoiceId: string, checked: boolean) => {
     setSelectedInvoices(prev => {
       const newSet = new Set(prev);
-      if (checked) {
-        newSet.add(invoiceId);
-      } else {
-        newSet.delete(invoiceId);
-      }
+      if (checked) newSet.add(invoiceId); else newSet.delete(invoiceId);
       return newSet;
     });
   };
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedInvoices(new Set(invoices.map(inv => inv.id)));
-    } else {
-      setSelectedInvoices(new Set());
-    }
+    setSelectedInvoices(checked ? new Set(visibleInvoices.map(inv => inv.id)) : new Set());
   };
 
   const handleBulkDelete = async () => {
     if (selectedInvoices.size === 0) return;
-
     const count = selectedInvoices.size;
-    if (!confirm(`¿Estás seguro de eliminar ${count} cuenta(s) de cobro?`)) return;
+    if (!confirm(`¿Estás seguro de eliminar ${count} factura(s)?`)) return;
 
     try {
-      const deletePromises = Array.from(selectedInvoices).map(id =>
-        apiClient.delete(`/api/invoices/${id}`)
-      );
-      await Promise.all(deletePromises);
-
-      toast({
-        title: 'Eliminado',
-        description: `${count} cuenta(s) de cobro eliminada(s) correctamente.`,
-      });
+      await Promise.all(Array.from(selectedInvoices).map(id => apiClient.delete(`/api/invoices/${id}`)));
+      toast({ title: 'Eliminado', description: `${count} factura(s) eliminada(s) correctamente.` });
       setSelectedInvoices(new Set());
       fetchData();
     } catch (error) {
       toast({
         title: 'Error',
-        description: 'No se pudieron eliminar algunas cuentas de cobro.',
+        description: 'No se pudieron eliminar algunas facturas.',
         variant: 'destructive',
       });
     }
@@ -439,7 +380,7 @@ const CuentasCobro = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="text-2xl font-bold text-foreground">Generar Cuenta de Cobro</h1>
+      <h1 className="text-2xl font-bold text-foreground">Generar Factura Electrónica</h1>
       <form onSubmit={handleSubmit}>
         <Card>
           <CardHeader>
@@ -470,7 +411,9 @@ const CuentasCobro = () => {
                       onValueChange={setClientSearchQuery}
                     />
                     <CommandList>
-                      <CommandEmpty>No se encontraron clientes.</CommandEmpty>
+                      <CommandEmpty>
+                        No hay clientes con "Factura Electrónica" como tipo de facturación.
+                      </CommandEmpty>
                       <CommandGroup>
                         {filteredClients.map((client) => (
                           <CommandItem
@@ -497,6 +440,9 @@ const CuentasCobro = () => {
                   </Command>
                 </PopoverContent>
               </Popover>
+              <p className="text-xs text-muted-foreground">
+                Solo aparecen clientes marcados como "Factura Electrónica" en su ficha. Si falta uno, cámbialo desde Clientes.
+              </p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="identificacion">Identificación (NIT/CC)</Label>
@@ -537,7 +483,7 @@ const CuentasCobro = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {serviceItems.map((item, index) => (
+              {serviceItems.map((item) => (
                 <div key={item.id} className="flex flex-col gap-4 p-4 border rounded-lg">
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
                     <div className="space-y-2 sm:col-span-2 lg:col-span-1">
@@ -628,18 +574,18 @@ const CuentasCobro = () => {
 
         <div className="mt-6 flex justify-end">
           <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-            {isLoading ? 'Generando...' : 'Generar Cuenta de Cobro'}
+            {isLoading ? 'Guardando...' : 'Guardar Borrador'}
           </Button>
         </div>
       </form>
 
-      {/* Cuentas Generadas */}
+      {/* Facturas: Borradores / Enviadas a DIAN */}
       <Card className="mt-8">
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Cuentas Generadas
+              Facturas
             </CardTitle>
             {selectedInvoices.size > 0 && (
               <Button
@@ -653,11 +599,25 @@ const CuentasCobro = () => {
               </Button>
             )}
           </div>
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v as 'borradores' | 'enviadas'); setSelectedInvoices(new Set()); }} className="mt-2">
+            <TabsList>
+              <TabsTrigger value="borradores" className="flex items-center gap-2">
+                <FileEdit className="h-4 w-4" />
+                Borradores
+                <Badge variant="secondary" className="ml-1">{borradores.length}</Badge>
+              </TabsTrigger>
+              <TabsTrigger value="enviadas" className="flex items-center gap-2">
+                <ShieldCheck className="h-4 w-4" />
+                Enviadas a DIAN
+                <Badge variant="secondary" className="ml-1">{enviadas.length}</Badge>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </CardHeader>
         <CardContent>
-          {invoices.length === 0 ? (
+          {visibleInvoices.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              No hay cuentas de cobro generadas
+              {activeTab === 'borradores' ? 'No hay borradores pendientes de enviar.' : 'Todavía no se ha enviado ninguna factura a la DIAN.'}
             </div>
           ) : (
             <div className="table-responsive">
@@ -668,26 +628,26 @@ const CuentasCobro = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleSelectAll(selectedInvoices.size !== invoices.length)}
+                        onClick={() => handleSelectAll(selectedInvoices.size !== visibleInvoices.length)}
                         className="h-6 w-6 p-0"
                       >
-                        {selectedInvoices.size === invoices.length && invoices.length > 0 ? (
+                        {selectedInvoices.size === visibleInvoices.length && visibleInvoices.length > 0 ? (
                           <CheckSquare className="h-4 w-4" />
                         ) : (
                           <Square className="h-4 w-4" />
                         )}
                       </Button>
                     </TableHead>
-                    <TableHead className="min-w-[150px]">N° Cuenta</TableHead>
+                    <TableHead className="min-w-[150px]">N° / CUFE</TableHead>
                     <TableHead className="min-w-[100px]">Fecha</TableHead>
                     <TableHead className="min-w-[150px]">Cliente</TableHead>
                     <TableHead className="text-right min-w-[120px]">Valor</TableHead>
-                    <TableHead className="min-w-[130px]">Estado</TableHead>
-                    <TableHead className="text-right min-w-[100px]">Acciones</TableHead>
+                    <TableHead className="min-w-[130px]">Estado de cobro</TableHead>
+                    <TableHead className="text-right min-w-[140px]">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {invoices.map((invoice) => (
+                  {visibleInvoices.map((invoice) => (
                     <TableRow key={invoice.id}>
                       <TableCell>
                         <input
@@ -759,12 +719,12 @@ const CuentasCobro = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleView(invoice.id, invoice.invoiceNumber)}
+                            onClick={() => handleView(invoice.id)}
                             title="Ver PDF"
                           >
                             <FileText className="h-4 w-4" />
                           </Button>
-                          {invoice.factusNumber && (
+                          {invoice.factusNumber ? (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -773,6 +733,17 @@ const CuentasCobro = () => {
                               className="text-emerald-600 hover:text-emerald-700"
                             >
                               <ShieldCheck className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFactusInvoice(invoice)}
+                              title="Enviar a la DIAN"
+                              className="border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                            >
+                              <ShieldCheck className="h-4 w-4 mr-1" />
+                              Enviar a DIAN
                             </Button>
                           )}
                           <Button
@@ -795,7 +766,6 @@ const CuentasCobro = () => {
         </CardContent>
       </Card>
 
-      {/* Factura electrónica DIAN (Factus) — solo lectura/gestión de lo ya emitido antes */}
       <FactusDialog
         invoice={factusInvoice}
         onClose={() => setFactusInvoice(null)}
@@ -807,4 +777,4 @@ const CuentasCobro = () => {
   );
 };
 
-export default CuentasCobro;
+export default Facturas;

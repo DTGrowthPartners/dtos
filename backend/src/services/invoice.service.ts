@@ -29,7 +29,7 @@ export const cxcFilename = (clientName: string, invoiceNumber: string): string =
 };
 
 class InvoiceService {
-  public async generateInvoicePdf(invoiceData: CreateInvoiceDto): Promise<{ generatedPath: string; invoiceNumber: string }> {
+  public async generateInvoicePdf(invoiceData: CreateInvoiceDto, tipoDocumento: string = 'cuenta_cobro'): Promise<{ generatedPath: string; invoiceNumber: string }> {
     return new Promise((resolve, reject) => {
       const {
         nombre_cliente,
@@ -56,6 +56,7 @@ class InvoiceService {
         clean(concepto),
         clean(fecha),
         clean(servicio_proyecto),
+        tipoDocumento,
       ];
 
       // Spawn the Python process

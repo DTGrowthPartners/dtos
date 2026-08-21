@@ -5,7 +5,7 @@ const prisma = new PrismaClient();
 
 export class ClientService {
   async create(createClientDto: CreateClientDto, userId: string) {
-    const { name, email, nit, phone, address, logo } = createClientDto;
+    const { name, email, nit, phone, address, logo, tipoFacturacion } = createClientDto;
 
     const existingClient = await prisma.client.findUnique({
       where: { email },
@@ -23,6 +23,7 @@ export class ClientService {
         phone,
         address,
         logo: logo || '/img/logo.png',
+        tipoFacturacion: tipoFacturacion === 'factura_electronica' ? 'factura_electronica' : 'cuenta_cobro',
         createdBy: userId,
       },
     });

@@ -56,6 +56,7 @@ interface Client {
   address?: string;
   logo: string;
   status: string;
+  tipoFacturacion?: string; // cuenta_cobro | factura_electronica
   createdAt: string;
 }
 
@@ -149,6 +150,7 @@ export default function Clientes() {
     phone: '',
     address: '',
     logo: '',
+    tipoFacturacion: 'cuenta_cobro',
   });
 
   // Servicio recurrente opcional al crear cliente (alimenta Cobros & MRR)
@@ -366,7 +368,7 @@ export default function Clientes() {
 
   const handleEdit = (client: Client) => {
     setEditingClient(client);
-    setFormData({ name: client.name, email: client.email, nit: client.nit || '', phone: client.phone || '', address: client.address || '', logo: client.logo || '' });
+    setFormData({ name: client.name, email: client.email, nit: client.nit || '', phone: client.phone || '', address: client.address || '', logo: client.logo || '', tipoFacturacion: client.tipoFacturacion || 'cuenta_cobro' });
     setIsDialogOpen(true);
   };
 
@@ -394,7 +396,7 @@ export default function Clientes() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', email: '', nit: '', phone: '', address: '', logo: '' });
+    setFormData({ name: '', email: '', nit: '', phone: '', address: '', logo: '', tipoFacturacion: 'cuenta_cobro' });
     setAddRecurring(false);
     setRecurring({ serviceId: '', precioCliente: '', frecuencia: 'mensual', diaCobro: '5' });
     setEditingClient(null);
@@ -494,6 +496,19 @@ export default function Clientes() {
               <div className="space-y-2">
                 <Label htmlFor="nit">NIT/RUT</Label>
                 <Input id="nit" placeholder="123456789-0" value={formData.nit} onChange={(e) => setFormData({ ...formData, nit: e.target.value })} disabled={isLoading} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tipoFacturacion">Tipo de facturación</Label>
+                <Select value={formData.tipoFacturacion} onValueChange={(value) => setFormData({ ...formData, tipoFacturacion: value })} disabled={isLoading}>
+                  <SelectTrigger id="tipoFacturacion"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cuenta_cobro">Cuenta de Cobro</SelectItem>
+                    <SelectItem value="factura_electronica">Factura Electrónica (DIAN)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Define en qué pestaña se generan los documentos de este cliente: Cuentas de Cobro o Facturas.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="phone">Teléfono</Label>

@@ -18,6 +18,15 @@ interface Transaction {
   entidad: string;
 }
 
+// Cuentas de Cobro y Facturas electrónicas (ambas comparten el modelo Invoice,
+// diferenciadas por tipoDocumento). Se usan solo para el dato informativo
+// "Facturado" — no afectan el cálculo de ingresos en base caja de este informe.
+interface InvoiceLite {
+  totalAmount: number;
+  fecha: string;
+  tipoDocumento?: string; // cuenta_cobro | factura_electronica
+}
+
 interface IncomeStatementProps {
   ingresos: Transaction[];
   gastos: Transaction[];
@@ -96,6 +105,7 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [budgetData, setBudgetData] = useState<BudgetQ1Data | null>(null);
+  const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
 
   // Get current month
   const currentDate = new Date();
@@ -113,6 +123,18 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
       }
     };
     fetchBudget();
+
+    // Facturado (informativo): Cuentas de Cobro + Facturas electrónicas del período,
+    // independiente de si ya se cobraron o no.
+    const fetchInvoices = async () => {
+      try {
+        const data = await apiClient.get<InvoiceLite[]>('/api/invoices');
+        setInvoices(data);
+      } catch (error) {
+        console.error('Error fetching invoices for "Facturado":', error);
+      }
+    };
+    fetchInvoices();
   }, []);
 
   // Filter transactions by period
@@ -153,6 +175,24 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
   // Calculate real values
   const totalIngresos = useMemo(() => filteredIngresos.reduce((sum, t) => sum + t.importe, 0), [filteredIngresos]);
   const totalGastos = useMemo(() => filteredGastos.reduce((sum, t) => sum + t.importe, 0), [filteredGastos]);
+
+  // Facturado (informativo): Cuentas de Cobro + Facturas electrónicas del período,
+  // reutiliza el mismo filtro de fechas que ingresos/gastos. No afecta la utilidad.
+  const filteredInvoices = useMemo(() => filterByPeriod(
+    invoices.map((inv): Transaction => ({
+      fecha: inv.fecha, importe: inv.totalAmount, descripcion: '', categoria: '', cuenta: '', entidad: '',
+    })),
+    () => false
+  ), [invoices, selectedPeriod, dateRange]);
+  const totalFacturado = useMemo(() => filteredInvoices.reduce((sum, t) => sum + t.importe, 0), [filteredInvoices]);
+  const totalFacturadoCuentaCobro = useMemo(() => {
+    const tipos = invoices.filter((inv) => (inv.tipoDocumento || 'cuenta_cobro') !== 'factura_electronica');
+    return filterByPeriod(
+      tipos.map((inv): Transaction => ({ fecha: inv.fecha, importe: inv.totalAmount, descripcion: '', categoria: '', cuenta: '', entidad: '' })),
+      () => false
+    ).reduce((sum, t) => sum + t.importe, 0);
+  }, [invoices, selectedPeriod, dateRange]);
+  const totalFacturadoElectronica = totalFacturado - totalFacturadoCuentaCobro;
   const utilidadBruta = totalIngresos - totalGastos;
   const margenBruto = totalIngresos > 0 ? (utilidadBruta / totalIngresos) * 100 : 0;
 
@@ -369,6 +409,9 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
     reservaEmpresa,
     sueldoDairo,
     totalDairo,
+    totalFacturado,
+    totalFacturadoCuentaCobro,
+    totalFacturadoElectronica,
   });
 
   return (
@@ -635,6 +678,31 @@ export default function IncomeStatement({ ingresos, gastos }: IncomeStatementPro
             <div className="flex items-center justify-between py-2 pl-10 pr-4 bg-muted/40 rounded-lg mt-1">
               <span className="text-sm font-bold text-foreground italic">Total Socio (Sueldo + Dividendos)</span>
               <span className="text-sm font-bold text-foreground italic">{formatCurrencyFull(totalDairo)}</span>
+            </div>
+          </div>
+
+          {/* ===== Sección informativa: Facturado ===== */}
+          {/* No afecta la utilidad: este informe sigue en base caja (Total Ingresos = cobrado real).
+              "Facturado" es cuentas de cobro + facturas electrónicas emitidas en el período,
+              se hayan cobrado o no todavía. */}
+          <div className="mt-5 pt-4 border-t border-dashed border-border">
+            <p className="text-xs text-muted-foreground italic px-4 mb-2">
+              Informativo — Facturado (no afecta la utilidad, es base caja)
+            </p>
+
+            <div className="flex items-center justify-between py-1.5 pl-10 pr-4">
+              <span className="text-sm text-muted-foreground italic">Cuentas de Cobro</span>
+              <span className="text-sm text-muted-foreground italic">{formatCurrencyFull(totalFacturadoCuentaCobro)}</span>
+            </div>
+
+            <div className="flex items-center justify-between py-1.5 pl-10 pr-4">
+              <span className="text-sm text-muted-foreground italic">Facturas electrónicas (DIAN)</span>
+              <span className="text-sm text-muted-foreground italic">{formatCurrencyFull(totalFacturadoElectronica)}</span>
+            </div>
+
+            <div className="flex items-center justify-between py-2 pl-10 pr-4 bg-muted/40 rounded-lg mt-1">
+              <span className="text-sm font-bold text-foreground italic">Total Facturado</span>
+              <span className="text-sm font-bold text-foreground italic">{formatCurrencyFull(totalFacturado)}</span>
             </div>
           </div>
         </div>

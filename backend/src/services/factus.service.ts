@@ -5,6 +5,8 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
+import JSZip from 'jszip';
+import { sendEmail } from './email.service';
 
 /**
  * Integración con Factus (facturación electrónica DIAN, Halltec).
@@ -447,5 +449,60 @@ export const factusService = {
       buffer: Buffer.from(b64, 'base64'),
       fileName: `${r.data?.data?.file_name || invoice.factusNumber}.pdf`,
     };
+  },
+
+  /** XML (UBL firmado) oficial DIAN de la factura emitida (Buffer + nombre de archivo) */
+  async descargarXml(invoiceId: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    const cli = await api();
+    const r = await cli.get(`/v2/bills/${encodeURIComponent(invoice.factusNumber)}/download-xml`);
+    const b64 = r.data?.data?.xml_base_64_encoded;
+    if (!b64) throw new Error(r.data?.message || 'Factus no devolvió el XML');
+    return {
+      buffer: Buffer.from(b64, 'base64'),
+      fileName: `${r.data?.data?.file_name || invoice.factusNumber}.xml`,
+    };
+  },
+
+  /** Empaqueta el PDF (representación DT Growth) y el XML de la factura emitida
+   *  en un único .zip nombrado con el consecutivo de la factura. */
+  async zipFactura(invoiceId: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+
+    const [pdf, xml] = await Promise.all([
+      this.pdfPropio(invoiceId),
+      this.descargarXml(invoiceId),
+    ]);
+
+    const zip = new JSZip();
+    zip.file(pdf.fileName, pdf.buffer);
+    zip.file(xml.fileName, xml.buffer);
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+    return { buffer, fileName: `${invoice.factusNumber}.zip` };
+  },
+
+  /** Envía el PDF y el XML de la factura emitida, empaquetados en un .zip, al correo indicado */
+  async enviarPorCorreo(invoiceId: string, destinatario: string) {
+    const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice?.factusNumber) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    if (!destinatario?.trim()) throw new Error('Debes indicar un correo de destino');
+
+    const zip = await this.zipFactura(invoiceId);
+
+    const totalFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount);
+    await sendEmail({
+      to: destinatario.trim(),
+      subject: `Factura electrónica ${invoice.factusNumber} — DT Growth Partners`,
+      html: `
+        <p>Adjunto la factura electrónica <strong>${invoice.factusNumber}</strong> a nombre de ${invoice.clientName} por ${totalFmt}.</p>
+        <p>El archivo ${zip.fileName} incluye el PDF de representación gráfica y el XML (UBL firmado) validado ante la DIAN.</p>
+      `,
+      attachments: [{ filename: zip.fileName, content: zip.buffer }],
+    });
+
+    return { ok: true, enviadoA: destinatario.trim() };
   },
 };

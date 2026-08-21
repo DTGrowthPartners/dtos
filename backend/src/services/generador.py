@@ -9,9 +9,10 @@ from datetime import datetime
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios: list, observaciones: str, concepto: str, fecha: str, servicio_proyecto: str = None) -> str:
+def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios: list, observaciones: str, concepto: str, fecha: str, servicio_proyecto: str = None, tipo_documento: str = "cuenta_cobro") -> str:
     """
-    Genera una cuenta de cobro en formato PDF con una tabla detallada de servicios.
+    Genera una cuenta de cobro o el borrador de una factura electrónica en formato
+    PDF con una tabla detallada de servicios.
 
     Args:
         nombre_cliente: El nombre del cliente.
@@ -21,6 +22,9 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
         concepto: El concepto general de la cuenta de cobro.
         fecha: La fecha de la cuenta de cobro.
         servicio_proyecto: Nombres de los servicios/proyectos separados por comas.
+        tipo_documento: "cuenta_cobro" (default) o "factura_electronica" — solo cambia
+            el título impreso; la factura oficial (XML firmado + PDF con CUFE) se genera
+            aparte al emitir vía Factus (generador_factura.py).
 
     Returns:
         La ruta del archivo PDF generado.
@@ -130,7 +134,8 @@ def generar_cuenta_de_cobro(nombre_cliente: str, identificacion: str, servicios:
     margen_izquierdo = 40
     c.setFont(font_normal, 22)
     c.setFillColor(colors.HexColor("#005F99"))
-    c.drawCentredString(width / 2.0, height - 120, f"CUENTA DE COBRO N.° {numero_cuenta}")
+    titulo = "FACTURA ELECTRÓNICA DE VENTA (Borrador)" if tipo_documento == "factura_electronica" else "CUENTA DE COBRO"
+    c.drawCentredString(width / 2.0, height - 120, f"{titulo} N.° {numero_cuenta}")
 
     y = height - 160
     c.setFont(font_normal, 9)
@@ -286,9 +291,9 @@ if __name__ == "__main__":
     import sys
     import json
 
-    # Expects 7 arguments: script_name, nombre_cliente, identificacion, servicios_json, observaciones, concepto, fecha, [servicio_proyecto]
+    # Expects 7 arguments: script_name, nombre_cliente, identificacion, servicios_json, observaciones, concepto, fecha, [servicio_proyecto], [tipo_documento]
     if len(sys.argv) < 7:
-        print("Usage: python generador.py <nombre_cliente> <identificacion> <servicios_json> <observaciones> <concepto> <fecha> [<servicio_proyecto>]")
+        print("Usage: python generador.py <nombre_cliente> <identificacion> <servicios_json> <observaciones> <concepto> <fecha> [<servicio_proyecto>] [<tipo_documento>]")
         sys.exit(1)
 
     nombre_cliente = sys.argv[1]
@@ -298,6 +303,7 @@ if __name__ == "__main__":
     concepto = sys.argv[5]
     fecha = sys.argv[6]
     servicio_proyecto = sys.argv[7] if len(sys.argv) > 7 else ""
+    tipo_documento = sys.argv[8] if len(sys.argv) > 8 else "cuenta_cobro"
 
     try:
         servicios = json.loads(servicios_json)
@@ -321,7 +327,8 @@ if __name__ == "__main__":
             observaciones,
             concepto,
             fecha,
-            servicio_proyecto
+            servicio_proyecto,
+            tipo_documento
         )
         # Print the path of the generated PDF to stdout
         print(pdf_path)
