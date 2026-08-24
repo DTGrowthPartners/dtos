@@ -455,6 +455,7 @@ model Deal {
   // Metadata
   notes             String?
   activities        DealActivity[]
+  links             DealLink[]
   reminders         DealReminder[]
   calendarEvents    CalendarEvent[]
 
@@ -465,6 +466,22 @@ model Deal {
   updatedAt         DateTime  @updatedAt
   createdBy         String
   createdByUser     User      @relation("DealCreatedBy", fields: [createdBy], references: [id])
+}
+
+// Enlaces y recursos de un prospecto: grabaciones de reuniones (pueden ser
+// varias), propuestas, carpetas, el chat del bot… con su etiqueta para saber
+// qué es cada uno sin abrirlo.
+model DealLink {
+  id        String   @id @default(cuid())
+  dealId    String
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  titulo    String
+  url       String
+  tipo      String   @default("enlace") // grabacion, propuesta, documento, bot, enlace
+  createdBy String
+  createdAt DateTime @default(now())
+
+  @@index([dealId])
 }
 
 model DealActivity {

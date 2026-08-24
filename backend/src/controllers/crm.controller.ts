@@ -249,6 +249,35 @@ export const createActivity = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== Enlaces ====================
+
+export const getLinks = async (req: Request, res: Response) => {
+  try {
+    res.json(await crmService.getLinks(req.params.dealId));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createLink = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const link = await crmService.createLink(req.params.dealId, req.body, userId);
+    res.status(201).json(link);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+export const deleteLink = async (req: Request, res: Response) => {
+  try {
+    await crmService.deleteLink(req.params.linkId);
+    res.json({ message: 'Enlace eliminado' });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
 // ==================== Reminders ====================
 
 export const getPendingReminders = async (req: Request, res: Response) => {
@@ -332,6 +361,9 @@ export default {
   createPublicLead,
   getActivities,
   createActivity,
+  getLinks,
+  createLink,
+  deleteLink,
   getPendingReminders,
   createReminder,
   completeReminder,

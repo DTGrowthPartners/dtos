@@ -1,7 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Phone, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
+import { Plus, Search, Phone, FileText, Link2, ExternalLink, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { DateRange } from 'react-day-picker';
 import PipelineAnalytics from '@/components/crm/PipelineAnalytics';
@@ -121,6 +132,14 @@ interface DealStage {
   _count?: { deals: number };
 }
 
+interface DealLink {
+  id: string;
+  titulo: string;
+  url: string;
+  tipo: string;
+  createdAt: string;
+}
+
 interface DealAlert {
   type: 'follow_up_overdue' | 'high_value_dormant' | 'no_interaction' | 'meeting_reminder';
   message: string;
@@ -165,6 +184,7 @@ interface Deal {
   tags?: string[];
   daysSinceInteraction?: number;
   alerts?: DealAlert[];
+  links?: DealLink[];
   // Relations
   activities?: DealActivity[];
   reminders?: DealReminder[];
@@ -308,6 +328,17 @@ const normalizePhone = (phone: string, countryCode: string): string => {
 const getBotChatUrl = (phone: string, countryCode: string) => {
   return `https://dairo.dtgp.ai/admin/chats/${normalizePhone(phone, countryCode)}`;
 };
+
+// Etiquetas de seguimiento de uso frecuente. Son las mismas que el bot aplica por
+// WhatsApp (POST /webhook/bot/crm/tags), así el tablero habla un solo idioma.
+const TAGS_RAPIDAS = [
+  'cita agendada',
+  'interesado',
+  'cotizado',
+  'sin respuesta',
+  'no interesado',
+  'cliente',
+];
 
 // Fecha local -> "YYYY-MM-DD" (evita el corrimiento de día de toISOString por UTC).
 const toYMD = (d: Date) =>
@@ -699,6 +730,62 @@ export default function CRM() {
         description: 'No se pudo marcar como ganado',
         variant: 'destructive',
       });
+    }
+  };
+
+  // Etiqueta rápida desde el menú contextual: suma o quita sin tocar las demás.
+  const toggleTagRapida = async (deal: Deal, tag: string) => {
+    const actuales = deal.tags || [];
+    const tiene = actuales.some((x) => x.toLowerCase() === tag.toLowerCase());
+    const nuevas = tiene
+      ? actuales.filter((x) => x.toLowerCase() !== tag.toLowerCase())
+      : [...actuales, tag];
+    try {
+      await apiClient.patch(`/api/crm/deals/${deal.id}`, { tags: nuevas });
+      toast({ title: tiene ? `Se quitó "${tag}"` : `Marcado como "${tag}"` });
+      loadData();
+      if (selectedDeal?.id === deal.id) loadDealDetail(deal.id);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo actualizar la etiqueta', variant: 'destructive' });
+    }
+  };
+
+  // --- Enlaces del prospecto (grabaciones de reuniones, propuestas, etc.) ---
+  const [linkDealId, setLinkDealId] = useState<string | null>(null);
+  const [linkForm, setLinkForm] = useState({ titulo: '', url: '', tipo: 'grabacion' });
+  const [linkSaving, setLinkSaving] = useState(false);
+
+  const abrirDialogoLink = (dealId: string) => {
+    setLinkDealId(dealId);
+    setLinkForm({ titulo: '', url: '', tipo: 'grabacion' });
+  };
+
+  const guardarLink = async () => {
+    if (!linkDealId || !linkForm.url.trim()) return;
+    setLinkSaving(true);
+    try {
+      await apiClient.post(`/api/crm/deals/${linkDealId}/links`, linkForm);
+      toast({ title: 'Enlace agregado' });
+      setLinkDealId(null);
+      if (selectedDeal?.id === linkDealId) loadDealDetail(linkDealId);
+    } catch (e) {
+      toast({
+        title: 'Error',
+        description: e instanceof Error ? e.message : 'No se pudo guardar el enlace',
+        variant: 'destructive',
+      });
+    } finally {
+      setLinkSaving(false);
+    }
+  };
+
+  const eliminarLink = async (linkId: string, dealId: string) => {
+    if (!confirm('¿Eliminar este enlace?')) return;
+    try {
+      await apiClient.delete(`/api/crm/links/${linkId}`);
+      loadDealDetail(dealId);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo eliminar', variant: 'destructive' });
     }
   };
 
@@ -1358,6 +1445,8 @@ export default function CRM() {
                                   {...provided.draggableProps}
                                   {...provided.dragHandleProps}
                                 >
+                                  <ContextMenu>
+                                    <ContextMenuTrigger asChild>
                                   <Card
                                     className={`cursor-pointer hover:shadow-md transition-shadow ${hasUrgentAlert ? 'border-red-400 border-2' : ''}`}
                                     onClick={() => loadDealDetail(deal.id)}
@@ -1538,6 +1627,93 @@ export default function CRM() {
                                       )}
                                     </CardContent>
                                   </Card>
+                                    </ContextMenuTrigger>
+                                    <ContextMenuContent className="w-56">
+                                      <ContextMenuLabel className="text-xs">{deal.name}</ContextMenuLabel>
+                                      <ContextMenuSeparator />
+
+                                      <ContextMenuSub>
+                                        <ContextMenuSubTrigger>
+                                          <Tag className="h-4 w-4 mr-2" /> Marcar como
+                                        </ContextMenuSubTrigger>
+                                        <ContextMenuSubContent className="w-48">
+                                          {TAGS_RAPIDAS.map((tag) => {
+                                            const activa = (deal.tags || []).some(
+                                              (x) => x.toLowerCase() === tag.toLowerCase()
+                                            );
+                                            return (
+                                              <ContextMenuItem
+                                                key={tag}
+                                                onClick={() => toggleTagRapida(deal, tag)}
+                                                className={activa ? 'text-primary font-medium' : ''}
+                                              >
+                                                {activa ? '✓ ' : ''}
+                                                {tag}
+                                              </ContextMenuItem>
+                                            );
+                                          })}
+                                        </ContextMenuSubContent>
+                                      </ContextMenuSub>
+
+                                      <ContextMenuSub>
+                                        <ContextMenuSubTrigger>
+                                          <ChevronRight className="h-4 w-4 mr-2" /> Mover a etapa
+                                        </ContextMenuSubTrigger>
+                                        <ContextMenuSubContent className="w-52">
+                                          {stages.map((s) => (
+                                            <ContextMenuItem
+                                              key={s.id}
+                                              disabled={s.id === deal.stageId}
+                                              onClick={() => handleChangeStage(deal.id, s.id)}
+                                            >
+                                              {s.id === deal.stageId ? '✓ ' : ''}
+                                              {s.name}
+                                            </ContextMenuItem>
+                                          ))}
+                                        </ContextMenuSubContent>
+                                      </ContextMenuSub>
+
+                                      <ContextMenuSeparator />
+
+                                      <ContextMenuItem onClick={() => abrirDialogoLink(deal.id)}>
+                                        <Plus className="h-4 w-4 mr-2" /> Agregar enlace o nota
+                                      </ContextMenuItem>
+
+                                      {deal.phone && (
+                                        <>
+                                          <ContextMenuItem
+                                            onClick={() => {
+                                              window.open(getBotChatUrl(deal.phone!, deal.phoneCountryCode), '_blank');
+                                              handleLogActivity(deal.id, 'whatsapp', 'Abrió chat en el bot');
+                                            }}
+                                          >
+                                            <Bot className="h-4 w-4 mr-2" /> Abrir chat del bot
+                                          </ContextMenuItem>
+                                          <ContextMenuItem
+                                            onClick={() =>
+                                              window.open(
+                                                getWhatsAppUrl(deal.phone!, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0]),
+                                                '_blank'
+                                              )
+                                            }
+                                          >
+                                            <MessageCircle className="h-4 w-4 mr-2" /> Escribir por WhatsApp
+                                          </ContextMenuItem>
+                                        </>
+                                      )}
+
+                                      <ContextMenuSeparator />
+                                      <ContextMenuItem onClick={() => handleEdit(deal)}>
+                                        <FileText className="h-4 w-4 mr-2" /> Editar prospecto
+                                      </ContextMenuItem>
+                                      <ContextMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => handleDelete(deal.id)}
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                                      </ContextMenuItem>
+                                    </ContextMenuContent>
+                                  </ContextMenu>
                                 </div>
                               )}
                             </Draggable>
@@ -2008,6 +2184,50 @@ export default function CRM() {
                       Agendar Cita
                     </Button>
                   </div>
+                </div>
+
+                <Separator />
+
+                {/* Enlaces del prospecto: grabaciones de reuniones, propuestas, chat del bot */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-sm flex items-center gap-2">
+                      <Link2 className="h-4 w-4" /> Enlaces y recursos
+                    </h4>
+                    <Button variant="outline" size="sm" className="h-7" onClick={() => abrirDialogoLink(selectedDeal.id)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Agregar
+                    </Button>
+                  </div>
+                  {selectedDeal.links && selectedDeal.links.length > 0 ? (
+                    <div className="space-y-1.5">
+                      {selectedDeal.links.map((l) => (
+                        <div key={l.id} className="group flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-sm">
+                          <Badge variant="outline" className="flex-shrink-0 text-[10px] capitalize">{l.tipo}</Badge>
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="min-w-0 flex-1 truncate text-primary hover:underline"
+                            title={l.url}
+                          >
+                            {l.titulo}
+                          </a>
+                          <ExternalLink className="h-3 w-3 flex-shrink-0 text-muted-foreground" />
+                          <button
+                            onClick={() => eliminarLink(l.id, selectedDeal.id)}
+                            className="flex-shrink-0 text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                            title="Eliminar enlace"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Sin enlaces. Aquí van las grabaciones de las reuniones, propuestas o cualquier recurso del prospecto.
+                    </p>
+                  )}
                 </div>
 
                 <Separator />
@@ -2716,6 +2936,55 @@ export default function CRM() {
                 Vaciar Papelera
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Agregar enlace al prospecto (grabaciones de reuniones, propuestas, etc.) */}
+      <Dialog open={!!linkDealId} onOpenChange={(o) => { if (!o) setLinkDealId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agregar enlace</DialogTitle>
+            <DialogDescription>
+              Grabaciones de reuniones, propuestas, carpetas o cualquier recurso del prospecto.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={linkForm.tipo} onValueChange={(v) => setLinkForm({ ...linkForm, tipo: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="grabacion">Grabación de reunión</SelectItem>
+                  <SelectItem value="propuesta">Propuesta</SelectItem>
+                  <SelectItem value="documento">Documento</SelectItem>
+                  <SelectItem value="bot">Chat del bot</SelectItem>
+                  <SelectItem value="enlace">Otro enlace</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Titulo</Label>
+              <Input
+                placeholder="Ej: Reunion de diagnostico 24 ago"
+                value={linkForm.titulo}
+                onChange={(e) => setLinkForm({ ...linkForm, titulo: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Enlace</Label>
+              <Input
+                placeholder="https://..."
+                value={linkForm.url}
+                onChange={(e) => setLinkForm({ ...linkForm, url: e.target.value })}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLinkDealId(null)}>Cancelar</Button>
+            <Button onClick={guardarLink} disabled={linkSaving || !linkForm.url.trim()}>
+              {linkSaving ? 'Guardando...' : 'Agregar'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -252,6 +252,9 @@ export const getDeal = async (id: string) => {
           organizacion: true,
         },
       },
+      links: {
+        orderBy: { createdAt: 'desc' },
+      },
       activities: {
         orderBy: { performedAt: 'desc' },
         include: {
@@ -1065,11 +1068,42 @@ export const getPerformanceMetrics = async (days: number = 90): Promise<Performa
   };
 };
 
+// ==================== Enlaces del prospecto ====================
+// Grabaciones de reuniones (suelen ser varias), propuestas, el chat del bot…
+
+export const getLinks = async (dealId: string) =>
+  prisma.dealLink.findMany({ where: { dealId }, orderBy: { createdAt: 'desc' } });
+
+export const createLink = async (
+  dealId: string,
+  data: { titulo?: string; url: string; tipo?: string },
+  userId: string
+) => {
+  const url = (data.url || '').trim();
+  if (!/^https?:\/\//i.test(url)) throw new Error('El enlace debe empezar por http:// o https://');
+  const tipos = ['grabacion', 'propuesta', 'documento', 'bot', 'enlace'];
+  return prisma.dealLink.create({
+    data: {
+      dealId,
+      url,
+      titulo: (data.titulo || '').trim() || 'Enlace',
+      tipo: tipos.includes(String(data.tipo)) ? String(data.tipo) : 'enlace',
+      createdBy: userId,
+    },
+  });
+};
+
+export const deleteLink = async (linkId: string) =>
+  prisma.dealLink.delete({ where: { id: linkId } });
+
 export default {
   getStages,
   seedDefaultStages,
   getDeals,
   getDeal,
+  getLinks,
+  createLink,
+  deleteLink,
   createDeal,
   updateDeal,
   changeStage,

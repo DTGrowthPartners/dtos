@@ -34,6 +34,11 @@ router.delete('/trash', crmController.emptyTrash);
 router.get('/deals/:dealId/activities', crmController.getActivities);
 router.post('/deals/:dealId/activities', crmController.createActivity);
 
+// Enlaces del prospecto (grabaciones de reuniones, propuestas, chat del bot…)
+router.get('/deals/:dealId/links', crmController.getLinks);
+router.post('/deals/:dealId/links', crmController.createLink);
+router.delete('/links/:linkId', crmController.deleteLink);
+
 // ==================== Reminders ====================
 router.get('/reminders/pending', crmController.getPendingReminders);
 router.post('/deals/:dealId/reminders', crmController.createReminder);
