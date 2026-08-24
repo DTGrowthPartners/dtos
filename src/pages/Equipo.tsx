@@ -48,7 +48,7 @@ const MODULE_PERMISSIONS = [
   { value: 'reportes', label: 'Reportes' },
   { value: 'productos', label: 'Productos' },
   { value: 'finanzas', label: 'Finanzas' },
-  { value: 'cuentas-cobro', label: 'Cuentas de Cobro' },
+  { value: 'cuentas-cobro', label: 'Cuentas de Cobro y Facturas' },
   { value: 'agentes', label: 'Agentes (WhatsApp bots)' },
   { value: 'crons', label: 'Crons (tareas programadas)' },
   { value: 'procesos', label: 'Procesos (PM2 admin)' },

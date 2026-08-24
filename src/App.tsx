@@ -99,8 +99,8 @@ const App = () => (
                 <Route path="/equipo" element={<ProtectedRoute requiredPermission="equipo"><Equipo /></ProtectedRoute>} />
                 <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
                 <Route path="/finanzas" element={<ProtectedRoute requiredPermission="finanzas"><Finanzas /></ProtectedRoute>} />
-                <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="finanzas"><CuentasCobro /></ProtectedRoute>} />
-                <Route path="/facturas" element={<ProtectedRoute requiredPermission="finanzas"><Facturas /></ProtectedRoute>} />
+                <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="cuentas-cobro"><CuentasCobro /></ProtectedRoute>} />
+                <Route path="/facturas" element={<ProtectedRoute requiredPermission="cuentas-cobro"><Facturas /></ProtectedRoute>} />
                 <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
                 <Route path="/terceros" element={<ProtectedRoute requiredPermission="terceros"><Terceros /></ProtectedRoute>} />
                 <Route path="/apps" element={<Apps />} />
