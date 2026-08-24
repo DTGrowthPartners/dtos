@@ -2534,6 +2534,75 @@ router.patch('/bot/tasks/:id', verifyBotApiKey, async (req: Request, res: Respon
 });
 
 /**
+ * POST /api/webhook/bot/crm/tags
+ *
+ * Aplica etiquetas de seguimiento a un lead identificándolo por su teléfono
+ * (el bot no conoce los IDs internos del CRM). Pensado para que el bot de
+ * WhatsApp refleje en DT-OS lo que etiqueta en la conversación:
+ * "cita agendada", "interesado", "sin respuesta"...
+ *
+ * Body: { telefono: "573001112233", agregar?: ["cita agendada"], quitar?: ["sin respuesta"] }
+ *
+ * Suma y resta sobre las etiquetas existentes (no las reemplaza), así dos
+ * llamadas seguidas del bot no se pisan entre sí.
+ */
+router.post('/bot/crm/tags', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { telefono, phone, agregar, quitar, tags } = req.body || {};
+    const numero = String(telefono || phone || '');
+    // Se comparan los últimos 10 dígitos: el bot manda 573001112233 y en el CRM
+    // el número puede estar como "3001112233", "300 111 2233" o "+57 300...".
+    const clave = numero.replace(/\D/g, '').slice(-10);
+    if (clave.length < 7) {
+      return res.status(400).json({ success: false, error: 'Campo requerido: telefono (con al menos 7 dígitos)' });
+    }
+
+    const aAgregar: string[] = Array.isArray(agregar) ? agregar : Array.isArray(tags) ? tags : [];
+    const aQuitar: string[] = Array.isArray(quitar) ? quitar : [];
+    if (!aAgregar.length && !aQuitar.length) {
+      return res.status(400).json({ success: false, error: 'Envía al menos una etiqueta en "agregar" o en "quitar"' });
+    }
+
+    const candidatos = await prisma.deal.findMany({
+      where: { deletedAt: null, phone: { not: null } },
+      include: { tercero: { select: { telefono: true } }, stage: { select: { name: true } } },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const coincide = (v?: string | null) => !!v && v.replace(/\D/g, '').slice(-10) === clave;
+    const deal = candidatos.find((d) => coincide(d.phone) || coincide(d.tercero?.telefono));
+
+    if (!deal) {
+      return res.status(404).json({
+        success: false,
+        error: `No hay ningún lead en el CRM con el teléfono ${numero}`,
+      });
+    }
+
+    const norm = (s: string) => s.trim().toLowerCase();
+    const quitarNorm = aQuitar.map(norm);
+    const actuales = (deal.tags || []).filter((t) => !quitarNorm.includes(norm(t)));
+    for (const nueva of aAgregar) {
+      const limpia = String(nueva).trim();
+      if (limpia && !actuales.some((t) => norm(t) === norm(limpia))) actuales.push(limpia);
+    }
+
+    const actualizado = await prisma.deal.update({
+      where: { id: deal.id },
+      data: { tags: actuales, lastInteractionAt: new Date() },
+    });
+
+    res.json({
+      success: true,
+      lead: { id: deal.id, nombre: deal.name, etapa: deal.stage?.name },
+      tags: actualizado.tags,
+    });
+  } catch (error) {
+    console.error('[Bot API] Error aplicando etiquetas al lead:', error);
+    res.status(500).json({ success: false, error: 'Error aplicando etiquetas' });
+  }
+});
+
+/**
  * POST /api/webhook/bot/crm/deals
  *
  * Crea un nuevo deal en el CRM.

@@ -1475,12 +1475,17 @@ export default function CRM() {
                                             {deal.service.name}
                                           </Badge>
                                         )}
-                                        {deal.tags && deal.tags.slice(0, 2).map((tag, idx) => (
-                                          <Badge key={idx} variant="outline" className="text-xs">
+                                        {deal.tags && deal.tags.slice(0, 3).map((tag, idx) => (
+                                          <Badge key={idx} variant="outline" className="text-xs border-primary/40 text-primary">
                                             <Tag className="h-2 w-2 mr-0.5" />
                                             {tag}
                                           </Badge>
                                         ))}
+                                        {deal.tags && deal.tags.length > 3 && (
+                                          <Badge variant="outline" className="text-xs text-muted-foreground">
+                                            +{deal.tags.length - 3}
+                                          </Badge>
+                                        )}
                                       </div>
 
                                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
