@@ -2172,7 +2172,7 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
       const raw = (d.phone || '').replace(/\D/g, '');
       if (!raw) return null;
       const num = raw.startsWith('57') ? raw : raw.length === 10 ? '57' + raw : raw;
-      return `https://david.dtgrowthpartners.com/admin/chats/${num}`;
+      return `https://dairo.dtgp.ai/admin/chats/${num}`;
     };
 
     // KPIs sobre TODO el pipeline abierto.

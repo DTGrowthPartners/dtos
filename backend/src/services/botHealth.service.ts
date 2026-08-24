@@ -7,7 +7,7 @@ import { sendPushToUser } from './push.service';
 /**
  * Monitor de salud de los bots de WhatsApp.
  * Detecta: canal Whapi desautorizado (hay que escanear QR), backend de María
- * caído y bot David inaccesible. Avisa por notificación in-app + push a los
+ * caído y bot Dairo inaccesible. Avisa por notificación in-app + push a los
  * admins y por WhatsApp (vía el bot que siga vivo).
  *
  * Alerta al caer, recordatorio cada 6h mientras siga caído, y aviso de
@@ -23,7 +23,7 @@ const STATE_KEY = 'bot_health_state';
 
 const WHAPI_BASE = process.env.WHAPI_BASE_URL || 'https://gate.whapi.cloud';
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN || '';
-const BOT_URL = process.env.BOT_EXTERNO_URL || 'https://david.dtgrowthpartners.com/api/externo/enviar';
+const BOT_URL = process.env.BOT_EXTERNO_URL || 'https://dairo.dtgp.ai/api/externo/enviar';
 const BOT_KEY = process.env.BOT_EXTERNO_KEY || '';
 const ALERT_WA = process.env.BOT_ALERT_WA || '573007189383'; // Dairo
 const ADMIN_EMAILS = (process.env.BOT_ALERT_EMAILS || 'stiven@dtgrowthpartners.com,dairo@dtos.com,jhonatan@dtgrowthpartners.com')
@@ -65,9 +65,9 @@ const CHECKS: Check[] = [
   },
   {
     id: 'bot-david',
-    nombre: 'Bot David (WhatsApp comercial)',
+    nombre: 'Bot Dairo (WhatsApp comercial)',
     run: async () => {
-      const r = await axios.get('https://david.dtgrowthpartners.com/', { timeout: 15_000, validateStatus: () => true });
+      const r = await axios.get('https://dairo.dtgp.ai/', { timeout: 15_000, validateStatus: () => true });
       return r.status < 500
         ? { ok: true, detalle: `HTTP ${r.status}` }
         : { ok: false, detalle: `HTTP ${r.status}` };
@@ -80,7 +80,7 @@ const CHECKS: Check[] = [
       // certbot renueva ~30 días antes de vencer: un cert con <10 días significa
       // que la renovación está fallando (como el 5/ago con os.dtgrowthpartners).
       const dominios = ['os.dtgrowthpartners.com', 'feedback.dtgrowthpartners.com',
-        'david.dtgrowthpartners.com', 'maria.dtgrowthpartners.com',
+        'dairo.dtgp.ai', 'maria.dtgrowthpartners.com',
         'mcp2.dtgrowthpartners.com', 'correo.dtgrowthpartners.com'];
       const diasCert = (host: string) => new Promise<number>((resolve, reject) => {
         const s = tls.connect({ host, port: 443, servername: host, timeout: 10_000 }, () => {
@@ -132,7 +132,7 @@ async function avisar(titulo: string, mensaje: string) {
     await sendPushToUser(a.id, { title: titulo, body: mensaje, tag: 'bot-health' })
       .catch((e) => log(`error push: ${e?.message}`));
   }
-  // 2. WhatsApp por el bot David (si el caído es otro, este canal sigue vivo)
+  // 2. WhatsApp por el bot Dairo (si el caído es otro, este canal sigue vivo)
   if (BOT_KEY) {
     await axios.post(BOT_URL, {
       destino: ALERT_WA,

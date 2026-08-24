@@ -304,14 +304,75 @@ const normalizePhone = (phone: string, countryCode: string): string => {
 };
 
 // Link al chat del contacto dentro del bot de WhatsApp (Dairo). Usa el número con
-// prefijo, solo dígitos. Ej: https://david.dtgrowthpartners.com/admin/chats/19294680885
+// prefijo, solo dígitos. Ej: https://dairo.dtgp.ai/admin/chats/19294680885
 const getBotChatUrl = (phone: string, countryCode: string) => {
-  return `https://david.dtgrowthpartners.com/admin/chats/${normalizePhone(phone, countryCode)}`;
+  return `https://dairo.dtgp.ai/admin/chats/${normalizePhone(phone, countryCode)}`;
 };
 
 // Fecha local -> "YYYY-MM-DD" (evita el corrimiento de día de toISOString por UTC).
 const toYMD = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Campo de fecha con el calendario de shadcn. El input nativo type="date" deja el
+// icono del calendario casi invisible en tema oscuro y no se ve dónde hacer clic.
+function DateField({
+  value,
+  onPick,
+  placeholder = 'Seleccionar fecha',
+}: {
+  value?: string;
+  onPick: (ymd: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const fecha = value ? new Date(value + 'T00:00:00') : undefined;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          className={`w-full justify-start gap-2 font-normal ${!value ? 'text-muted-foreground' : ''}`}
+        >
+          <Calendar className="h-4 w-4 shrink-0 opacity-70" />
+          {fecha
+            ? fecha.toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })
+            : placeholder}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="start">
+        <CalendarPicker
+          mode="single"
+          selected={fecha}
+          defaultMonth={fecha}
+          onSelect={(d) => {
+            if (d) {
+              onPick(toYMD(d));
+              setOpen(false);
+            }
+          }}
+          initialFocus
+        />
+        {value && (
+          <div className="border-t border-border p-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                onPick('');
+                setOpen(false);
+              }}
+            >
+              Limpiar fecha
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 // Botón con calendario emergente (Popover + Calendar) para elegir una fecha,
 // en vez del prompt() manual. Reutilizable (reprogramar seguimiento, etc.).
@@ -2249,12 +2310,11 @@ export default function CRM() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="nextFollowUp">Proximo seguimiento</Label>
-                  <Input
-                    id="nextFollowUp"
-                    type="date"
+                  <Label>Proximo seguimiento</Label>
+                  <DateField
                     value={formData.nextFollowUp}
-                    onChange={(e) => setFormData({ ...formData, nextFollowUp: e.target.value })}
+                    onPick={(ymd) => setFormData({ ...formData, nextFollowUp: ymd })}
+                    placeholder="Sin seguimiento agendado"
                   />
                 </div>
               </div>
@@ -2299,12 +2359,11 @@ export default function CRM() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="expectedCloseDate">Fecha esperada de cierre</Label>
-                <Input
-                  id="expectedCloseDate"
-                  type="date"
+                <Label>Fecha esperada de cierre</Label>
+                <DateField
                   value={formData.expectedCloseDate}
-                  onChange={(e) => setFormData({ ...formData, expectedCloseDate: e.target.value })}
+                  onPick={(ymd) => setFormData({ ...formData, expectedCloseDate: ymd })}
+                  placeholder="Sin fecha de cierre"
                 />
               </div>
 
@@ -2464,10 +2523,10 @@ export default function CRM() {
               </div>
               <div className="space-y-2">
                 <Label>Fecha limite</Label>
-                <Input
-                  type="date"
+                <DateField
                   value={taskFormData.dueDate}
-                  onChange={(e) => setTaskFormData({ ...taskFormData, dueDate: e.target.value })}
+                  onPick={(ymd) => setTaskFormData({ ...taskFormData, dueDate: ymd })}
+                  placeholder="Sin fecha limite"
                 />
               </div>
             </div>

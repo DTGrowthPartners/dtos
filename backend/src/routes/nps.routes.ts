@@ -29,7 +29,7 @@ async function alertar(titulo: string, mensaje: string) {
     await sendPushToUser(a.id, { title: titulo, body: mensaje, tag: 'nps' }).catch(() => {});
   }
   if (process.env.BOT_EXTERNO_KEY) {
-    await axios.post(process.env.BOT_EXTERNO_URL || 'https://david.dtgrowthpartners.com/api/externo/enviar', {
+    await axios.post(process.env.BOT_EXTERNO_URL || 'https://dairo.dtgp.ai/api/externo/enviar', {
       destino: process.env.BOT_ALERT_WA || '573007189383',
       mensaje: `📊 *${titulo}*\n\n${mensaje}`,
       origen: 'dtos_nps',

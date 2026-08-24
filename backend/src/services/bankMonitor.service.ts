@@ -27,7 +27,7 @@ const IMAP_PORT = Number(process.env.BANK_IMAP_PORT || 993);
 const IMAP_USER = process.env.BANK_IMAP_USER || 'contabilidad@dtgrowthpartners.com';
 const IMAP_PASS = process.env.BANK_IMAP_PASS || '';
 const SLACK_WEBHOOK = process.env.BANK_SLACK_WEBHOOK || '';
-const BOT_URL = process.env.BOT_EXTERNO_URL || 'https://david.dtgrowthpartners.com/api/externo/enviar';
+const BOT_URL = process.env.BOT_EXTERNO_URL || 'https://dairo.dtgp.ai/api/externo/enviar';
 const BOT_KEY = process.env.BOT_EXTERNO_KEY || '';
 const WA_GROUP = process.env.BANK_WA_GROUP || '120363427797637886@g.us'; // MOVIMIENTOS DTGP
 

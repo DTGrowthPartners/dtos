@@ -11,7 +11,7 @@ import axios, { AxiosError } from 'axios';
  *   2. Set AGENT_<ID>_API_KEY=... en /home/ubuntu/dtos/backend/.env del VPS.
  *   3. pm2 restart dtos-backend.
  *
- * Los paths bajo /api/externo/ son los del agente externo (ej. david.dtgrowthpartners.com).
+ * Los paths bajo /api/externo/ son los del agente externo (ej. dairo.dtgp.ai).
  * Asumimos contrato comun: GET /estado, POST /estado, GET /stats, POST /enviar, GET /health.
  */
 
@@ -38,7 +38,7 @@ const AGENTS: AgentConfig[] = [
     id: 'dairo',
     name: 'Bot Dairo WhatsApp',
     description: 'Asistente conversacional de Dairo en WhatsApp.',
-    baseUrl: 'https://david.dtgrowthpartners.com',
+    baseUrl: 'https://dairo.dtgp.ai',
     pathPrefix: '/api/externo',
     auth: 'x-api-key',
     envKey: 'AGENT_DAIRO_API_KEY',
