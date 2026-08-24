@@ -316,9 +316,15 @@ const getWhatsAppUrl = (phone: string, countryCode: string, stageName: string, d
 
 // Normaliza un teléfono a "código de país + número" en solo dígitos, SIN duplicar
 // el prefijo si el número ya lo incluye (ej: cc '+57' + phone '573007071626' -> '573007071626').
+// WhatsApp entrega un LID ("lid:1359401441...") en vez del número cuando el
+// contacto tiene el teléfono oculto. No es un teléfono: no lleva indicativo y no
+// sirve para wa.me ni para llamar.
+const esLid = (phone?: string | null): boolean => /^\s*lid:/i.test(phone || '');
+
 const normalizePhone = (phone: string, countryCode: string): string => {
-  const cc = (countryCode || '').replace(/\D/g, '');
   const p = (phone || '').replace(/\D/g, '');
+  if (esLid(phone)) return p; // el LID va tal cual, sin anteponer indicativo
+  const cc = (countryCode || '').replace(/\D/g, '');
   if (cc && p.startsWith(cc)) return p;
   return cc + p;
 };
@@ -1578,7 +1584,7 @@ export default function CRM() {
                                       </div>
 
                                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                                        {deal.phone && (
+                                        {deal.phone && !esLid(deal.phone) && (
                                           <a
                                             href={getWhatsAppUrl(deal.phone, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0])}
                                             target="_blank"
@@ -1603,7 +1609,7 @@ export default function CRM() {
                                             Bot
                                           </a>
                                         )}
-                                        {deal.phone && (
+                                        {deal.phone && !esLid(deal.phone) && (
                                           <a
                                             href={`tel:${deal.phoneCountryCode}${deal.phone}`}
                                             onClick={() => handleLogActivity(deal.id, 'call', 'Llamada')}
@@ -1689,16 +1695,18 @@ export default function CRM() {
                                           >
                                             <Bot className="h-4 w-4 mr-2" /> Abrir chat del bot
                                           </ContextMenuItem>
-                                          <ContextMenuItem
-                                            onClick={() =>
-                                              window.open(
-                                                getWhatsAppUrl(deal.phone!, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0]),
-                                                '_blank'
-                                              )
-                                            }
-                                          >
-                                            <MessageCircle className="h-4 w-4 mr-2" /> Escribir por WhatsApp
-                                          </ContextMenuItem>
+                                          {!esLid(deal.phone) && (
+                                            <ContextMenuItem
+                                              onClick={() =>
+                                                window.open(
+                                                  getWhatsAppUrl(deal.phone!, deal.phoneCountryCode, stage.slug, deal.name.split(' ')[0]),
+                                                  '_blank'
+                                                )
+                                              }
+                                            >
+                                              <MessageCircle className="h-4 w-4 mr-2" /> Escribir por WhatsApp
+                                            </ContextMenuItem>
+                                          )}
                                         </>
                                       )}
 
@@ -1893,9 +1901,14 @@ export default function CRM() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-sm">
                         <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span>{selectedDeal.phoneCountryCode} {selectedDeal.phone}</span>
+                        <span>
+                          {esLid(selectedDeal.phone)
+                            ? 'Número oculto por WhatsApp (solo por el bot)'
+                            : `${selectedDeal.phoneCountryCode} ${selectedDeal.phone}`}
+                        </span>
                       </div>
                       <div className="flex gap-1">
+                        {!esLid(selectedDeal.phone) && (
                         <a
                           href={getWhatsAppUrl(selectedDeal.phone, selectedDeal.phoneCountryCode, selectedDeal.stage?.slug || '', selectedDeal.name.split(' ')[0])}
                           target="_blank"
@@ -1906,6 +1919,7 @@ export default function CRM() {
                             <MessageCircle className="h-4 w-4" />
                           </Button>
                         </a>
+                        )}
                         <a
                           href={getBotChatUrl(selectedDeal.phone, selectedDeal.phoneCountryCode)}
                           target="_blank"
@@ -1917,11 +1931,13 @@ export default function CRM() {
                             <Bot className="h-4 w-4" />
                           </Button>
                         </a>
+                        {!esLid(selectedDeal.phone) && (
                         <a href={`tel:${selectedDeal.phoneCountryCode}${selectedDeal.phone}`}>
                           <Button size="sm" variant="outline">
                             <Phone className="h-4 w-4" />
                           </Button>
                         </a>
+                        )}
                       </div>
                     </div>
                   )}
