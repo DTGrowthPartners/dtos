@@ -203,6 +203,10 @@ export const factusService = {
         factusCufe: bill.cufe || null,
         factusStatus: bill.is_validated ? 'validada' : 'pendiente',
         factusValidatedAt: bill.is_validated ? new Date() : null,
+        // Una vez timbrada ante la DIAN el documento ES una factura electrónica,
+        // haya nacido como cuenta de cobro o no. Sin esto se queda clasificada como
+        // cuenta de cobro y no aparece en el módulo de Facturas Electrónicas.
+        tipoDocumento: 'factura_electronica',
       },
     });
 
