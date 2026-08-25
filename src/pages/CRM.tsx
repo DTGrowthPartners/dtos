@@ -1619,6 +1619,14 @@ export default function CRM() {
                                         )}
                                       </div>
 
+                                      {/* En Sin Calificar: qué le falta para poder avanzar de etapa */}
+                                      {stage.slug === 'sin-calificar' && faltantesCalificacion(deal).length > 0 && (
+                                        <div className="mb-2 flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-600">
+                                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                                          Falta: {faltantesCalificacion(deal).join(', ')}
+                                        </div>
+                                      )}
+
                                       <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                                         {deal.phone && !esLid(deal.phone) && (
                                           <a
@@ -2012,12 +2020,36 @@ export default function CRM() {
                       </div>
                     );
                   })()}
-                  {selectedDeal.service && (
-                    <div className="flex items-center gap-2 text-sm">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      <span>Servicio: {selectedDeal.service.name}</span>
-                    </div>
-                  )}
+                  {/* Servicio de interés: editable aquí mismo, es requisito para calificar */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <Building2 className="h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <span className="text-muted-foreground">Servicio:</span>
+                    <Select
+                      value={selectedDeal.serviceId || 'none'}
+                      onValueChange={async (v) => {
+                        try {
+                          await apiClient.patch(`/api/crm/deals/${selectedDeal.id}`, {
+                            serviceId: v === 'none' ? null : v,
+                          });
+                          loadDealDetail(selectedDeal.id);
+                          refreshDeals();
+                          toast({ title: 'Servicio actualizado' });
+                        } catch {
+                          toast({ title: 'Error', description: 'No se pudo asignar el servicio', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-7 w-auto min-w-[130px] flex-1 text-xs">
+                        <SelectValue placeholder="Sin servicio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sin servicio</SelectItem>
+                        {services.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {/* Responsable / asignación del prospecto */}
                   <div className="flex items-center gap-2 text-sm">
                     <UserCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
