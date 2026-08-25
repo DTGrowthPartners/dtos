@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Search, Phone, FileText, Link2, ExternalLink, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
+import { Plus, Search, Phone, FileText, Link2, ExternalLink, Archive, Mail, Building2, DollarSign, Calendar, Clock, MessageCircle, ChevronRight, X, MoreHorizontal, Filter, TrendingUp, AlertTriangle, Tag, Gauge, CheckSquare, ImagePlus, Trash2, RotateCcw, UserCheck, Bot } from 'lucide-react';
 import { Calendar as CalendarPicker } from '@/components/ui/calendar';
 import {
   ContextMenu,
@@ -470,6 +470,9 @@ export default function CRM() {
   const [isMeetingDialogOpen, setIsMeetingDialogOpen] = useState(false);
   const [isTrashDialogOpen, setIsTrashDialogOpen] = useState(false);
   const [deletedDeals, setDeletedDeals] = useState<Deal[]>([]);
+  // Archivo: cerrados (ganados/perdidos) + papelera, fuera del tablero para no saturarlo
+  const [archivoTab, setArchivoTab] = useState<'perdidos' | 'ganados' | 'papelera'>('perdidos');
+  const [archivoBusqueda, setArchivoBusqueda] = useState('');
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [dealToClose, setDealToClose] = useState<Deal | null>(null);
   const [isConvertDialogOpen, setIsConvertDialogOpen] = useState(false);
@@ -977,6 +980,17 @@ export default function CRM() {
     }
   };
 
+  // Reabrir un cerrado: vuelve al pipeline en la etapa que se elija
+  const reabrirDeal = async (deal: Deal, stageId: string) => {
+    try {
+      await apiClient.patch(`/api/crm/deals/${deal.id}/stage`, { stageId });
+      toast({ title: `${deal.name} volvió al pipeline` });
+      loadData();
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo reabrir', variant: 'destructive' });
+    }
+  };
+
   const handleRestoreDeal = async (dealId: string) => {
     try {
       await apiClient.post(`/api/crm/trash/${dealId}/restore`);
@@ -1211,6 +1225,10 @@ export default function CRM() {
   const activeStages = stages.filter((s) => !s.isWon && !s.isLost);
   const wonStage = stages.find((s) => s.isWon);
   const lostStage = stages.find((s) => s.isLost);
+  // Cerrados: no ocupan el tablero, se consultan desde el Archivo
+  const dealsGanados = deals.filter((d) => d.stageId === wonStage?.id);
+  const dealsPerdidos = deals.filter((d) => d.stageId === lostStage?.id);
+  const cerradosCount = dealsGanados.length + dealsPerdidos.length;
 
   if (isLoading) {
     return (
@@ -1231,10 +1249,14 @@ export default function CRM() {
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
-            onClick={() => { loadDeletedDeals(); setIsTrashDialogOpen(true); }}
+            onClick={() => { loadDeletedDeals(); setArchivoTab('perdidos'); setIsTrashDialogOpen(true); }}
+            title="Perdidos, ganados y papelera"
           >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Papelera
+            <Archive className="h-4 w-4 mr-2" />
+            Archivo
+            {cerradosCount > 0 && (
+              <Badge variant="secondary" className="ml-2 text-xs">{cerradosCount}</Badge>
+            )}
           </Button>
           <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
             <Plus className="h-4 w-4 mr-2" />
@@ -2892,16 +2914,97 @@ export default function CRM() {
 
       {/* Trash Dialog (Papelera) */}
       <Dialog open={isTrashDialogOpen} onOpenChange={setIsTrashDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[760px] max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5" />
-              Papelera
+              <Archive className="h-5 w-5" />
+              Archivo
             </DialogTitle>
             <DialogDescription>
-              Prospectos eliminados. Puedes restaurarlos o eliminarlos permanentemente.
+              Los cerrados y eliminados salen del tablero para no saturarlo, pero quedan aquí.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Pestañas */}
+          <div className="flex flex-wrap items-center gap-2">
+            {([
+              ['perdidos', 'Perdidos', dealsPerdidos.length],
+              ['ganados', 'Ganados', dealsGanados.length],
+              ['papelera', 'Papelera', deletedDeals.length],
+            ] as const).map(([key, label, n]) => (
+              <Button
+                key={key}
+                size="sm"
+                variant={archivoTab === key ? 'default' : 'outline'}
+                onClick={() => setArchivoTab(key)}
+              >
+                {label}
+                <Badge variant="secondary" className="ml-2 text-xs">{n}</Badge>
+              </Button>
+            ))}
+            <div className="relative ml-auto">
+              <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar..."
+                value={archivoBusqueda}
+                onChange={(e) => setArchivoBusqueda(e.target.value)}
+                className="h-9 w-[180px] pl-8"
+              />
+            </div>
+          </div>
+
+          {/* Cerrados: ganados y perdidos */}
+          {archivoTab !== 'papelera' && (() => {
+            const lista = (archivoTab === 'ganados' ? dealsGanados : dealsPerdidos).filter((d) =>
+              `${d.name} ${d.company || ''}`.toLowerCase().includes(archivoBusqueda.toLowerCase())
+            );
+            if (!lista.length) {
+              return (
+                <div className="py-10 text-center text-muted-foreground">
+                  <Archive className="mx-auto mb-3 h-10 w-10 opacity-30" />
+                  <p>Sin prospectos {archivoTab === 'ganados' ? 'ganados' : 'perdidos'}</p>
+                </div>
+              );
+            }
+            return (
+              <div className="space-y-2 py-2">
+                {lista.map((deal) => (
+                  <div key={deal.id} className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 p-3">
+                    <button
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => { setIsTrashDialogOpen(false); loadDealDetail(deal.id); }}
+                    >
+                      <p className="truncate font-medium">{deal.name}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {deal.company || 'Sin empresa'}
+                        {archivoTab === 'perdidos' && deal.lostReason ? ` · ${deal.lostReason}` : ''}
+                        {archivoTab === 'ganados' && deal.estimatedValue
+                          ? ` · ${formatCurrency(deal.estimatedValue, deal.currency)}`
+                          : ''}
+                      </p>
+                    </button>
+                    <Select onValueChange={(stageId) => reabrirDeal(deal, stageId)}>
+                      <SelectTrigger className="h-8 w-[150px]">
+                        <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                        <span className="text-xs">Reabrir en...</span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeStages.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleDelete(deal.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+
+          {archivoTab === 'papelera' && (
+          <>
 
           {deletedDeals.length > 0 ? (
             <div className="space-y-3 py-4">
@@ -2956,12 +3059,14 @@ export default function CRM() {
               <p>La papelera está vacía</p>
             </div>
           )}
+          </>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsTrashDialogOpen(false)}>
               Cerrar
             </Button>
-            {deletedDeals.length > 0 && (
+            {archivoTab === 'papelera' && deletedDeals.length > 0 && (
               <Button variant="destructive" onClick={handleEmptyTrash}>
                 Vaciar Papelera
               </Button>

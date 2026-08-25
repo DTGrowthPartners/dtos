@@ -2333,10 +2333,17 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
  */
 router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response) => {
   try {
-    const { etapa, stage, propietario, owner, prioridad, priority } = req.query;
+    const { etapa, stage, propietario, owner, prioridad, priority, buscar, telefono, tag, abiertos, limite } = req.query;
     const stageSlug = (etapa || stage) as string | undefined;
     const ownerName = (propietario || owner) as string | undefined;
     const dealPriority = (prioridad || priority) as string | undefined;
+    const texto = buscar as string | undefined;
+    const tel = telefono as string | undefined;
+    const etiqueta = tag as string | undefined;
+    // abiertos=1 excluye ganados y perdidos: es lo que suele querer el bot para
+    // hablar solo del pipeline vivo (el 20% del tablero son cerrados).
+    const soloAbiertos = abiertos === '1' || abiertos === 'true';
+    const take = Math.min(parseInt(String(limite || '50'), 10) || 50, 200);
 
     const whereClause: any = { deletedAt: null };
 
@@ -2347,8 +2354,34 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
       }
     }
 
+    if (soloAbiertos) {
+      const cerradas = await prisma.dealStage.findMany({
+        where: { OR: [{ isWon: true }, { isLost: true }] },
+        select: { id: true },
+      });
+      whereClause.stageId = { notIn: cerradas.map((s) => s.id) };
+    }
+
     if (dealPriority) {
       whereClause.priority = dealPriority.toLowerCase();
+    }
+
+    if (etiqueta) {
+      whereClause.tags = { has: etiqueta };
+    }
+
+    if (texto) {
+      whereClause.OR = [
+        { name: { contains: texto, mode: 'insensitive' } },
+        { company: { contains: texto, mode: 'insensitive' } },
+        { email: { contains: texto, mode: 'insensitive' } },
+      ];
+    }
+
+    // El teléfono puede venir con o sin indicativo: se compara por los últimos dígitos
+    if (tel) {
+      const clave = String(tel).replace(/\D/g, '').slice(-10);
+      if (clave.length >= 7) whereClause.phone = { contains: clave };
     }
 
     const deals = await prisma.deal.findMany({
@@ -2360,7 +2393,7 @@ router.get('/bot/crm/deals', verifyBotApiKey, async (req: Request, res: Response
         tercero: { select: { nombre: true, telefono: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take,
     });
 
     // Filtrar por propietario si se especificó
