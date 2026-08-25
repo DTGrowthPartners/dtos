@@ -35,10 +35,16 @@ router.delete('/:clientId/services/:serviceId', clientServiceController.removeSe
 // Generar la cuenta de cobro de UN servicio contratado desde el perfil del cliente
 // (botón "Generar cuenta"). Crea el PDF + Invoice borrador amarrada al servicio y
 // avanza el próximo cobro (único → sin más cobros).
+// body: { tipoDocumento?: 'cuenta_cobro' | 'factura_electronica' } — si no viene se
+// usa el tipo de facturación del cliente. La factura electrónica se emite después
+// con /api/factus/emitir sobre esta misma cuenta, así que no se duplica nada.
 router.post('/:clientId/services/:clientServiceId/generar-cuenta', async (req, res) => {
   try {
     const user = (req as any).user;
-    const cuenta = await generarCuentaDeServicio(req.params.clientServiceId, user?.email || 'perfil-cliente');
+    const t = req.body?.tipoDocumento;
+    const cuenta = await generarCuentaDeServicio(req.params.clientServiceId, user?.email || 'perfil-cliente', {
+      tipoDocumento: t === 'factura_electronica' || t === 'cuenta_cobro' ? t : undefined,
+    });
     res.json({ success: true, ...cuenta });
   } catch (e: any) {
     res.status(Number.isInteger(e?.status) ? e.status : 500).json({ success: false, error: e?.message || 'No se pudo generar la cuenta' });

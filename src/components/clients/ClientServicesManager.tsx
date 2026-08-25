@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle, Percent, Calculator, Loader2, Receipt } from 'lucide-react';
+import { Plus, Briefcase, Calendar, DollarSign, Edit, Trash2, Clock, AlertCircle, Percent, Calculator, Loader2, Receipt, ShieldCheck, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,8 +22,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
+import { FactusDialog, type FactusInvoiceLike } from '@/components/finance/FactusDialog';
 
 interface Service {
   id: string;
@@ -70,6 +79,31 @@ interface Client {
 interface ClientServicesManagerProps {
   client: Client;
   onUpdate?: () => void;
+}
+
+// Datos de facturación del cliente (para saber si por defecto va cuenta de cobro
+// o factura electrónica, y para precargar municipio/correo en el diálogo de Factus)
+interface ClienteFacturacion {
+  tipoFacturacion?: string;
+  municipio?: string | null;
+  email?: string | null;
+  nit?: string | null;
+}
+
+// Lo que devuelve el botón de generar: la cuenta ya creada y amarrada al servicio
+interface CuentaGenerada {
+  invoiceId: string;
+  invoiceNumber: string;
+  pdfUrl: string;
+  cliente: string;
+  servicio: string;
+  monto: number;
+  concepto: string;
+  tipoDocumento: string;
+  clientId: string;
+  clientNit: string;
+  clienteEmail: string | null;
+  clienteMunicipio: string | null;
 }
 
 const FRECUENCIAS = [
@@ -145,12 +179,23 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
   // Servicio cuya cuenta de cobro se está generando (deshabilita su botón)
   const [generating, setGenerating] = useState<string | null>(null);
 
+  // Facturación electrónica desde el mismo panel: al generar la cuenta como factura
+  // se abre el diálogo de Factus sobre esa misma cuenta (mismo Invoice → conserva el
+  // servicio y el MRR; no se crea un documento aparte).
+  const [clienteFact, setClienteFact] = useState<ClienteFacturacion>({});
+  const [factusInvoice, setFactusInvoice] = useState<FactusInvoiceLike | null>(null);
+
   const { toast } = useToast();
   const navigate = useNavigate();
+  const esFacturaElectronica = clienteFact.tipoFacturacion === 'factura_electronica';
 
   useEffect(() => {
     fetchClientServices();
     fetchAvailableServices();
+    apiClient
+      .get<ClienteFacturacion>(`/api/clients/${client.id}`)
+      .then((c) => setClienteFact(c || {}))
+      .catch(() => setClienteFact({}));
   }, [client.id]);
 
   const fetchClientServices = async () => {
@@ -278,23 +323,41 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
     setNewServiceName('');
   };
 
-  // Genera la cuenta de cobro de este servicio (queda amarrada al cliente/servicio
-  // y avanza el próximo cobro; pago único queda sin más cobros pendientes).
-  const generarCuenta = async (cs: ClientService) => {
+  // Genera el cobro de este servicio (queda amarrado al cliente/servicio y avanza
+  // el próximo cobro; pago único queda sin más cobros pendientes).
+  // tipo 'factura_electronica' crea la misma cuenta y abre Factus para timbrarla
+  // ante la DIAN sobre ese mismo documento — no se duplica el cobro ni el MRR.
+  const generarCuenta = async (cs: ClientService, tipo: 'cuenta_cobro' | 'factura_electronica') => {
     const precio = cs.precioCliente ?? cs.service.price;
-    if (!confirm(`¿Generar la cuenta de cobro de "${cs.service.name}" por ${formatCurrency(precio, cs.moneda || 'COP')}?`)) return;
+    const esFactura = tipo === 'factura_electronica';
+    const que = esFactura ? 'la factura electrónica' : 'la cuenta de cobro';
+    if (!confirm(`¿Generar ${que} de "${cs.service.name}" por ${formatCurrency(precio, cs.moneda || 'COP')}?`)) return;
     setGenerating(cs.id);
     try {
-      const r = await apiClient.post<{ invoiceNumber: string; pdfUrl: string; concepto: string }>(
+      const r = await apiClient.post<CuentaGenerada>(
         `/api/clients/${client.id}/services/${cs.id}/generar-cuenta`,
-        {}
+        { tipoDocumento: tipo }
       );
-      toast({ title: `Cuenta #${r.invoiceNumber} generada`, description: r.concepto });
-      window.open(r.pdfUrl, '_blank');
       fetchClientServices();
       onUpdate?.();
+      if (esFactura) {
+        // Segundo paso: emitirla ante la DIAN sobre esta misma cuenta
+        toast({ title: `Documento #${r.invoiceNumber} creado`, description: 'Ahora emitilo ante la DIAN.' });
+        setFactusInvoice({
+          id: r.invoiceId,
+          clientId: r.clientId,
+          clientName: r.cliente,
+          clientNit: r.clientNit,
+          totalAmount: r.monto,
+          concepto: r.concepto,
+          servicio: r.servicio,
+        });
+      } else {
+        toast({ title: `Cuenta #${r.invoiceNumber} generada`, description: r.concepto });
+        window.open(r.pdfUrl, '_blank');
+      }
     } catch (e: any) {
-      toast({ title: 'Error', description: e?.message || 'No se pudo generar la cuenta', variant: 'destructive' });
+      toast({ title: 'Error', description: e?.message || 'No se pudo generar el cobro', variant: 'destructive' });
     } finally {
       setGenerating(null);
     }
@@ -379,6 +442,15 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
               {formatCurrency(totalMensual)} /mes
             </p>
           )}
+          {clienteFact.tipoFacturacion && (
+            <Badge variant="outline" className="mt-1 gap-1 text-[11px] font-normal">
+              {esFacturaElectronica ? (
+                <><ShieldCheck className="h-3 w-3 text-emerald-500" /> Factura electrónica</>
+              ) : (
+                <><Receipt className="h-3 w-3 text-muted-foreground" /> Cuenta de cobro</>
+              )}
+            </Badge>
+          )}
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
           <Plus className="h-4 w-4 mr-2" />
@@ -461,17 +533,45 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
                         </Button>
                       )}
                       {!cs.esComision && cs.estado === 'activo' && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5"
-                          title="Generar la cuenta de cobro de este servicio"
-                          onClick={() => generarCuenta(cs)}
-                          disabled={generating === cs.id}
-                        >
-                          {generating === cs.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
-                          Generar cuenta
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5"
+                              title="Cobrar este servicio"
+                              disabled={generating === cs.id}
+                            >
+                              {generating === cs.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Receipt className="h-4 w-4" />}
+                              Cobrar
+                              <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-64">
+                            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                              {formatCurrency(cs.precioCliente ?? cs.service.price, cs.moneda || 'COP')} · {cs.service.name}
+                            </DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem className="gap-2" onClick={() => generarCuenta(cs, 'cuenta_cobro')}>
+                              <Receipt className="h-4 w-4 text-muted-foreground" />
+                              <div className="flex flex-col">
+                                <span>Cuenta de cobro</span>
+                                {!esFacturaElectronica && (
+                                  <span className="text-[11px] text-muted-foreground">Lo que usa este cliente</span>
+                                )}
+                              </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="gap-2" onClick={() => generarCuenta(cs, 'factura_electronica')}>
+                              <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                              <div className="flex flex-col">
+                                <span>Factura electrónica</span>
+                                <span className="text-[11px] text-muted-foreground">
+                                  {esFacturaElectronica ? 'Lo que usa este cliente' : 'Se timbra ante la DIAN'}
+                                </span>
+                              </div>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(cs)}>
                         <Edit className="h-4 w-4" />
@@ -747,6 +847,16 @@ export default function ClientServicesManager({ client, onUpdate }: ClientServic
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Emisión ante la DIAN de la cuenta que se acaba de generar. Es el mismo
+          Invoice: conserva el servicio y sigue contando en el MRR. */}
+      <FactusDialog
+        invoice={factusInvoice}
+        clientMunicipio={clienteFact.municipio}
+        clientEmail={clienteFact.email}
+        onClose={() => setFactusInvoice(null)}
+        onSuccess={() => { fetchClientServices(); onUpdate?.(); }}
+      />
     </div>
   );
 }

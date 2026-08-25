@@ -86,6 +86,12 @@ export interface CuentaGenerada {
   servicio: string;
   monto: number;
   concepto: string;
+  // Datos que necesita el diálogo de Factus para emitir sin salir del perfil
+  tipoDocumento: string;
+  clientId: string;
+  clientNit: string;
+  clienteEmail: string | null;
+  clienteMunicipio: string | null;
 }
 
 // Error de validación "esperado" (el cron lo reporta como omitido, no como error)
@@ -100,12 +106,14 @@ export const generarCuentaDeServicio = async (
   clientServiceId: string,
   createdBy = 'sistema-recurrente',
   // Comisión: monto calculado (spend × %) y concepto con el periodo de la pauta
-  opts?: { monto?: number; concepto?: string }
+  // tipoDocumento fuerza cuenta de cobro o factura electrónica; si no viene, manda
+  // el tipo de facturación configurado en el cliente.
+  opts?: { monto?: number; concepto?: string; tipoDocumento?: 'cuenta_cobro' | 'factura_electronica' }
 ): Promise<CuentaGenerada> => {
   const cs = await prisma.clientService.findUnique({
     where: { id: clientServiceId },
     include: {
-      client: { select: { id: true, name: true, nit: true } },
+      client: { select: { id: true, name: true, nit: true, tipoFacturacion: true, email: true, municipio: true } },
       service: { select: { name: true, price: true } },
     },
   });
@@ -125,6 +133,12 @@ export const generarCuentaDeServicio = async (
   const concepto =
     opts?.concepto || (esUnico ? servicioNombre : `${servicioNombre} ${buildPeriodo(cs.notas, dueDate, cs.frecuencia)}`);
   const fechaStr = toYMD(now);
+  // Cuenta de cobro o factura electrónica: lo que pida quien la genera y, si no
+  // dice nada, lo que tenga configurado el cliente. Cambia el encabezado del PDF
+  // y en cuál de las dos vistas aparece el documento.
+  const tipoDocumento =
+    opts?.tipoDocumento ||
+    (cs.client?.tipoFacturacion === 'factura_electronica' ? 'factura_electronica' : 'cuenta_cobro');
 
   // Observaciones vacías: el PDF imprime la nota estándar de régimen.
   // El número de cuenta es un timestamp por SEGUNDO (viene del nombre del PDF y va
@@ -142,7 +156,7 @@ export const generarCuentaDeServicio = async (
       fecha: fechaStr,
       servicio_proyecto: servicioNombre,
       cliente_id: cs.client?.id,
-    }));
+    }, tipoDocumento));
     const dup = await prisma.invoice.findUnique({ where: { invoiceNumber } });
     if (!dup) break;
     await new Promise((r) => setTimeout(r, 1200));
@@ -159,6 +173,7 @@ export const generarCuentaDeServicio = async (
       concepto,
       servicio: servicioNombre,
       serviceId: cs.serviceId || null,
+      tipoDocumento,
       observaciones: null,
       filePath: generatedPath,
       status: 'pendiente',
@@ -188,6 +203,11 @@ export const generarCuentaDeServicio = async (
     servicio: servicioNombre,
     monto: precio,
     concepto,
+    tipoDocumento,
+    clientId: cs.client?.id || '',
+    clientNit: nit,
+    clienteEmail: cs.client?.email || null,
+    clienteMunicipio: cs.client?.municipio || null,
   };
 };
 
