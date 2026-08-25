@@ -2918,12 +2918,56 @@ router.patch('/bot/crm/deals/:id', verifyBotApiKey, async (req: Request, res: Re
           ],
         },
       });
-      if (stageRecord) {
+      if (stageRecord && stageRecord.id !== existingDeal.stageId) {
+        // Mismas reglas que en DT-OS: no avanzar sin servicio + valor + responsable.
+        // Antes el bot escribia stageId directo, saltandose la validacion y sin
+        // dejar rastro en el historial del prospecto.
+        if (existingDeal.stage?.slug === 'sin-calificar' && stageRecord.slug !== 'sin-calificar') {
+          const calificado =
+            existingDeal.serviceId && existingDeal.estimatedValue && existingDeal.estimatedValue > 0 && existingDeal.ownerId;
+          if (!calificado) {
+            const falta = [
+              !existingDeal.serviceId ? 'servicio' : null,
+              !existingDeal.estimatedValue || existingDeal.estimatedValue <= 0 ? 'valor estimado' : null,
+              !existingDeal.ownerId ? 'responsable' : null,
+            ].filter(Boolean);
+            return res.status(400).json({
+              success: false,
+              error: `Para sacar el prospecto de Sin Calificar falta: ${falta.join(', ')}`,
+            });
+          }
+        }
+
         updateData.stageId = stageRecord.id;
 
         // Si la etapa es ganado o perdido, marcar fecha de cierre
         if (stageRecord.isWon || stageRecord.isLost) {
           updateData.closedAt = new Date();
+        }
+
+        // Registrar el movimiento en el historial del prospecto, indicando quien
+        // lo pidio desde el chat (el bot manda "usuario"; si no, queda como bot).
+        const quien = typeof req.body?.usuario === 'string' ? req.body.usuario.trim() : '';
+        const actor = quien
+          ? await prisma.user.findFirst({
+              where: { OR: [{ email: quien }, { firstName: { equals: quien, mode: 'insensitive' } }] },
+              select: { id: true, firstName: true },
+            })
+          : null;
+        const botUser = actor ? null : await prisma.user.findFirst({ where: { email: 'bot@dtgrowthpartners.com' }, select: { id: true } });
+        const performedBy = actor?.id || botUser?.id;
+        if (performedBy) {
+          await prisma.dealActivity.create({
+            data: {
+              dealId: id,
+              type: 'stage_change',
+              title: 'Cambio de etapa desde WhatsApp',
+              description: `${existingDeal.stage?.name || '?'} → ${stageRecord.name}${quien ? ` · pedido por ${actor?.firstName || quien}` : ''}`,
+              fromStageId: existingDeal.stageId,
+              toStageId: stageRecord.id,
+              performedBy,
+            },
+          });
         }
       }
     }
