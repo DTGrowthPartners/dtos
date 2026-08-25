@@ -55,6 +55,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api';
 import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
@@ -660,23 +661,42 @@ export default function CRM() {
     }
   };
 
+  // Qué le falta a un prospecto para salir de "Sin Calificar". Devuelve [] si está listo.
+  const faltantesCalificacion = (d: Deal): string[] => {
+    const falta: string[] = [];
+    if (!d.serviceId) falta.push('servicio');
+    if (!d.estimatedValue || d.estimatedValue <= 0) falta.push('valor estimado');
+    if (!d.ownerId) falta.push('responsable');
+    return falta;
+  };
+
+  const avisarFaltaCalificar = (d: Deal, falta: string[]) => {
+    const lista = falta.length > 1
+      ? `${falta.slice(0, -1).join(', ')} y ${falta[falta.length - 1]}`
+      : falta[0];
+    toast({
+      title: `Falta ${falta.length > 1 ? 'completar' : 'el'} ${lista}`,
+      description: `A ${d.name} le ${falta.length > 1 ? 'faltan esos datos' : 'falta ese dato'} para salir de Sin Calificar.`,
+      variant: 'destructive',
+      action: (
+        <ToastAction altText="Completar datos" onClick={() => handleEdit(d)}>
+          Completar
+        </ToastAction>
+      ),
+    });
+  };
+
   const handleChangeStage = async (dealId: string, newStageId: string) => {
     // Regla de calificación: no avanzar fuera de "Sin Calificar" sin servicio + valor + responsable.
     const movingDeal = deals.find((d) => d.id === dealId);
     const fromStage = stages.find((s) => s.id === movingDeal?.stageId);
     const toStage = stages.find((s) => s.id === newStageId);
-    if (
-      movingDeal &&
-      fromStage?.slug === 'sin-calificar' &&
-      toStage?.slug !== 'sin-calificar' &&
-      !(movingDeal.serviceId && movingDeal.estimatedValue && movingDeal.estimatedValue > 0 && movingDeal.ownerId)
-    ) {
-      toast({
-        title: 'Falta calificar el prospecto',
-        description: 'Para avanzar necesita: servicio, valor estimado y responsable asignado.',
-        variant: 'destructive',
-      });
-      return;
+    if (movingDeal && fromStage?.slug === 'sin-calificar' && toStage?.slug !== 'sin-calificar') {
+      const falta = faltantesCalificacion(movingDeal);
+      if (falta.length) {
+        avisarFaltaCalificar(movingDeal, falta);
+        return;
+      }
     }
     try {
       await apiClient.patch(`/api/crm/deals/${dealId}/stage`, { stageId: newStageId });
@@ -1108,18 +1128,12 @@ export default function CRM() {
     const movingDeal = deals.find((d) => d.id === dealId);
     const fromStage = stages.find((s) => s.id === source.droppableId);
     const toStage = stages.find((s) => s.id === newStageId);
-    if (
-      movingDeal &&
-      fromStage?.slug === 'sin-calificar' &&
-      toStage?.slug !== 'sin-calificar' &&
-      !(movingDeal.serviceId && movingDeal.estimatedValue && movingDeal.estimatedValue > 0 && movingDeal.ownerId)
-    ) {
-      toast({
-        title: 'Falta calificar el prospecto',
-        description: 'Para avanzar necesita: servicio, valor estimado y responsable asignado.',
-        variant: 'destructive',
-      });
-      return;
+    if (movingDeal && fromStage?.slug === 'sin-calificar' && toStage?.slug !== 'sin-calificar') {
+      const falta = faltantesCalificacion(movingDeal);
+      if (falta.length) {
+        avisarFaltaCalificar(movingDeal, falta);
+        return;
+      }
     }
 
     // Optimistic UI update
