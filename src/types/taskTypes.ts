@@ -43,7 +43,10 @@ export const TRACKING_PRESETS: { id: TrackingPreset; label: string; minutes: num
   { id: 'LONG_BREAK', label: 'Pausa larga', minutes: 15 },
 ];
 
-export type TeamMemberName = 'Lía' | 'Dairo' | 'Stiven' | 'Mariana' | 'Jose' | 'Anderson' | 'Edgardo' | 'Jhonathan';
+// El nombre del responsable es el firstName del usuario en DT-OS. Antes era una
+// lista cerrada aquí en el código y cada persona nueva quedaba invisible en
+// Operaciones hasta que alguien la agregara a mano (pasó con José y con Annie).
+export type TeamMemberName = string;
 
 export interface TeamMember {
   name: TeamMemberName;
@@ -52,6 +55,7 @@ export interface TeamMember {
   color: string;
 }
 
+// Colores e iniciales fijos de los de siempre, para que no cambien de aspecto.
 export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Lía', role: 'CEO', initials: 'LI', color: 'bg-purple-500' },
   { name: 'Dairo', role: 'CEO', initials: 'DA', color: 'bg-indigo-500' },
@@ -60,6 +64,92 @@ export const TEAM_MEMBERS: TeamMember[] = [
   { name: 'Jhonathan', role: 'Usuario', initials: 'JH', color: 'bg-amber-500' },
   { name: 'Jose', role: 'Diseñador', initials: 'JD', color: 'bg-pink-500' },
 ];
+
+const PALETA_EQUIPO = [
+  'bg-emerald-500', 'bg-cyan-500', 'bg-rose-500', 'bg-violet-500',
+  'bg-orange-500', 'bg-teal-500', 'bg-fuchsia-500', 'bg-sky-500',
+];
+
+const sinTildes = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+/** Color e iniciales de cualquier persona: los de la tabla si está ahí, y si no
+ *  unos derivados del nombre (siempre los mismos para el mismo nombre). */
+export const teamMemberStyle = (name: string | undefined): TeamMember => {
+  const nombre = (name || '').trim();
+  const fijo = TEAM_MEMBERS.find((m) => esMismoMiembro(m.name, nombre));
+  if (fijo) return fijo;
+  const partes = nombre.split(/\s+/).filter(Boolean);
+  const initials = (partes.length > 1
+    ? partes[0][0] + partes[1][0]
+    : nombre.slice(0, 2)).toUpperCase() || '?';
+  let h = 0;
+  for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) >>> 0;
+  return { name: nombre, role: 'Miembro', initials, color: PALETA_EQUIPO[h % PALETA_EQUIPO.length] };
+};
+
+// Cuentas que no son personas y no deben salir como responsables
+const CUENTAS_TECNICAS = ['bot@', 'system@', 'smoke@', 'noreply@'];
+
+/** ¿Dos nombres son de la misma persona? Acepta una letra de diferencia en
+ *  nombres largos: las tareas viejas dicen "Jhonathan" y el usuario es
+ *  "Jhonatan", y si no toleramos eso sus tareas quedan sin dueño. */
+export const esMismoMiembro = (a: string | undefined, b: string | undefined): boolean => {
+  const x = sinTildes(a || '');
+  const y = sinTildes(b || '');
+  if (!x || !y) return false;
+  if (x === y || x.startsWith(y) || y.startsWith(x)) return true;
+  if (Math.min(x.length, y.length) < 6 || Math.abs(x.length - y.length) > 1) return false;
+  // distancia de edición 1 (una letra de más, de menos o cambiada)
+  let i = 0; let j = 0; let fallas = 0;
+  while (i < x.length && j < y.length) {
+    if (x[i] === y[j]) { i++; j++; continue; }
+    if (++fallas > 1) return false;
+    if (x.length > y.length) i++;
+    else if (y.length > x.length) j++;
+    else { i++; j++; }
+  }
+  return fallas + (x.length - i) + (y.length - j) <= 1;
+};
+
+/** ¿Este nombre/correo corresponde a este miembro? (tolera tildes y variantes) */
+const coincide = (miembro: string, nombre: string, email: string): boolean => {
+  if (esMismoMiembro(miembro, nombre)) return true;
+  const m = sinTildes(miembro);
+  const prefijo = sinTildes((email || '').split('@')[0]);
+  return Boolean(prefijo) && (m === prefijo || prefijo.includes(m));
+};
+
+/** Arma el equipo con los usuarios reales de DT-OS (GET /api/users/team). */
+export const buildTeamMembers = (
+  users: { firstName?: string | null; email?: string | null }[]
+): TeamMember[] => {
+  const vistos = new Set<string>();
+  const lista: TeamMember[] = [];
+  for (const u of users) {
+    const email = (u.email || '').toLowerCase().trim();
+    if (CUENTAS_TECNICAS.some((c) => email.startsWith(c))) continue;
+    const nombre = (u.firstName || email.split('@')[0] || '').trim();
+    if (!nombre) continue;
+    // Si la persona ya estaba en la tabla fija se conserva ESE nombre tal cual:
+    // es el que tienen guardado las tareas ('Jhonathan' en las tareas frente al
+    // 'Jhonatan' del usuario) y con el que se decide quién ve qué. Cambiarlo
+    // dejaría a esa persona sin ver sus propias tareas.
+    const miembro = TEAM_MEMBERS.find((m) => coincide(m.name, nombre, email)) || teamMemberStyle(nombre);
+    const clave = sinTildes(miembro.name);
+    if (vistos.has(clave)) continue;
+    vistos.add(clave);
+    lista.push(miembro);
+  }
+  return lista.length ? lista : TEAM_MEMBERS;
+};
+
+/** Busca a qué miembro corresponde un usuario logueado (por nombre o correo). */
+export const matchTeamMember = (
+  miembros: TeamMember[],
+  firstName: string | undefined,
+  email: string | undefined
+): TeamMemberName | undefined =>
+  miembros.find((m) => coincide(m.name, firstName || '', email || ''))?.name;
 
 export interface ProjectFolder {
   id: string;

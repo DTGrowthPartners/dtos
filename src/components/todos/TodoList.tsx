@@ -19,13 +19,15 @@ import { useAuthStore } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { loadTodos, createTodo, updateTodo, deleteTodo, type Todo } from '@/lib/firestoreTodoService';
 import { createTask, loadProjects } from '@/lib/firestoreTaskService';
-import { TEAM_MEMBERS, type TeamMemberName, type Task } from '@/types/taskTypes';
+import { matchTeamMember, type TeamMemberName, type Task } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 
 /**
  * Lista To-Do rápida y personal (por usuario). Pensada para usarse embebida
  * (p. ej. dentro de un popup en Operaciones) para pendientes muy pequeños.
  */
 export default function TodoList() {
+  const teamMembers = useTeamMembers();
   const { toast } = useToast();
   const { user } = useAuthStore();
   const [todos, setTodos] = useState<Todo[]>([]);
@@ -66,7 +68,7 @@ export default function TodoList() {
   }, []);
 
   const myName = (): TeamMemberName =>
-    (TEAM_MEMBERS.find((m) => m.name === user?.firstName)?.name as TeamMemberName) || 'Stiven';
+    matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Stiven';
 
   const openConvert = (todo: Todo) => {
     setConvForm({ title: todo.text, assignee: myName(), projectId: '', priority: 'MEDIUM', dueDate: '' });
@@ -417,7 +419,7 @@ export default function TodoList() {
                 <Select value={convForm.assignee} onValueChange={(v) => setConvForm({ ...convForm, assignee: v as TeamMemberName })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TEAM_MEMBERS.map((m) => (<SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>))}
+                    {teamMembers.map((m) => (<SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>))}
                   </SelectContent>
                 </Select>
               </div>

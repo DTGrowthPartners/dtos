@@ -4,7 +4,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { useAuthStore } from '@/lib/auth';
-import { TEAM_MEMBERS, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { matchTeamMember, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { Link } from 'react-router-dom';
 
 const priorityConfig = {
@@ -24,15 +25,11 @@ export function TasksToday() {
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuthStore();
 
-  // Map user firstName to team member name
-  const getTeamMemberNameFromUser = (firstName: string | undefined): TeamMemberName | undefined => {
-    if (!firstName) return undefined;
-    const normalizedName = firstName.toLowerCase().trim();
-    const member = TEAM_MEMBERS.find(m => m.name.toLowerCase() === normalizedName);
-    return member?.name;
-  };
+  const teamMembers = useTeamMembers();
 
-  const loggedUserName = getTeamMemberNameFromUser(user?.firstName);
+  // Quién soy dentro del equipo; si no hay coincidencia, mi propio nombre
+  const loggedUserName: TeamMemberName | undefined =
+    matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName;
 
   useEffect(() => {
     const fetchTasks = async () => {

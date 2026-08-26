@@ -26,7 +26,8 @@ import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { apiClient } from '@/lib/api';
 import { isExcludedExpenseReportCategory, isExcludedIncomeReportCategory } from '@/lib/financeFilters';
 import { loadTasks } from '@/lib/firestoreTaskService';
-import { TEAM_MEMBERS, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { matchTeamMember, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -170,33 +171,11 @@ export default function Dashboard() {
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   };
 
-  // Map user firstName or email to team member name (flexible matching)
-  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
-    if (!firstName && !email) return undefined;
+  const teamMembers = useTeamMembers();
 
-    // Try matching by first name first
-    if (firstName) {
-      const normalizedInput = normalizeString(firstName);
-      const memberByFirstName = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === normalizedInput ||
-        normalizedInput.startsWith(normalizeString(m.name)) ||
-        normalizeString(m.name).startsWith(normalizedInput)
-      );
-      if (memberByFirstName) return memberByFirstName.name as TeamMemberName;
-    }
-
-    // Try matching by email prefix if first name matching failed
-    if (email) {
-      const emailPrefix = normalizeString(email.split('@')[0]);
-      const memberByEmail = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === emailPrefix ||
-        emailPrefix.includes(normalizeString(m.name))
-      );
-      if (memberByEmail) return memberByEmail.name as TeamMemberName;
-    }
-
-    return undefined;
-  };
+  // Quién soy dentro del equipo (por nombre o por el prefijo del correo)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined =>
+    matchTeamMember(teamMembers, firstName, email);
 
   const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName, authUser?.email);
 

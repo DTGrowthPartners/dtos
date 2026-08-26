@@ -146,13 +146,15 @@ import {
   TaskStatus,
   Priority,
   TASK_TYPES,
-  TEAM_MEMBERS,
+  teamMemberStyle,
+  matchTeamMember,
   DEFAULT_COLUMNS,
   DEFAULT_PROJECTS,
   RECURRENCE_OPTIONS,
   type TaskType,
   type TeamMemberName,
 } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 import NoteColumn from '@/components/notes/NoteColumn';
 import NoteColumnModal from '@/components/notes/NoteColumnModal';
 import NoteItemModal from '@/components/notes/NoteItemModal';
@@ -334,6 +336,8 @@ export default function Tareas() {
   });
   const [isDeletingProject, setIsDeletingProject] = useState(false);
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+  // Equipo real de DT-OS (no una lista fija): un usuario nuevo aparece solo
+  const teamMembers = useTeamMembers();
   const { toast } = useToast();
   const { user } = useAuthStore();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -343,36 +347,12 @@ export default function Tareas() {
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   };
 
-  // Map user firstName or email to team member name (flexible matching)
-  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
-    if (!firstName && !email) return undefined;
+  // Quién soy dentro del equipo (por nombre o por el prefijo del correo)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined =>
+    matchTeamMember(teamMembers, firstName, email);
 
-    // Try matching by first name first
-    if (firstName) {
-      const normalizedInput = normalizeString(firstName);
-      const memberByFirstName = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === normalizedInput ||
-        normalizedInput.startsWith(normalizeString(m.name)) ||
-        normalizeString(m.name).startsWith(normalizedInput)
-      );
-      if (memberByFirstName) return memberByFirstName.name;
-    }
-
-    // Try matching by email prefix if first name matching failed
-    if (email) {
-      const emailPrefix = normalizeString(email.split('@')[0]);
-      const memberByEmail = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === emailPrefix ||
-        emailPrefix.includes(normalizeString(m.name))
-      );
-      if (memberByEmail) return memberByEmail.name;
-    }
-
-    return undefined;
-  };
-
-  // Get current logged-in user name as identified in our TEAM_MEMBERS system
-  const loggedUserName = getTeamMemberNameFromUser(user?.firstName, user?.email);
+  // Si el usuario no estuviera en la lista, igual queda identificado por su nombre
+  const loggedUserName = getTeamMemberNameFromUser(user?.firstName, user?.email) || user?.firstName;
 
   // Check if user is admin - admins can see ALL tasks from all team members
   const isAdmin = user?.role?.toLowerCase() === 'admin';
@@ -2997,7 +2977,7 @@ export default function Tareas() {
   };
 
   const getTeamMember = (name: string) => {
-    return TEAM_MEMBERS.find((m) => m.name === name);
+    return teamMemberStyle(name);
   };
 
   // Filter tasks - only show tasks where user is creator or assignee
@@ -3223,7 +3203,7 @@ export default function Tareas() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {TEAM_MEMBERS.map((member) => (
+                  {teamMembers.map((member) => (
                     <SelectItem key={member.name} value={member.name}>
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${member.color}`}></div>
@@ -3261,14 +3241,14 @@ export default function Tareas() {
                     className="w-8 h-8 mx-auto rounded-full object-cover cursor-default"
                   />
                 ) : (
-                  <div className={`w-8 h-8 mx-auto rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white text-xs font-semibold cursor-default`}>
-                    {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                  <div className={`w-8 h-8 mx-auto rounded-full ${teamMemberStyle(loggedUserName).color} flex items-center justify-center text-white text-xs font-semibold cursor-default`}>
+                    {teamMemberStyle(loggedUserName).initials}
                   </div>
                 )}
               </TooltipTrigger>
               <TooltipContent side="right">
                 <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
-                <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
+                <p className="text-xs text-muted-foreground">{teamMemberStyle(loggedUserName).role}</p>
               </TooltipContent>
             </Tooltip>
           ) : (
@@ -3281,13 +3261,13 @@ export default function Tareas() {
                     className="w-10 h-10 rounded-full object-cover"
                   />
                 ) : (
-                  <div className={`w-10 h-10 rounded-full ${TEAM_MEMBERS.find(m => m.name === loggedUserName)?.color || 'bg-primary'} flex items-center justify-center text-white font-semibold`}>
-                    {TEAM_MEMBERS.find(m => m.name === loggedUserName)?.initials || user?.firstName?.charAt(0) || '?'}
+                  <div className={`w-10 h-10 rounded-full ${teamMemberStyle(loggedUserName).color} flex items-center justify-center text-white font-semibold`}>
+                    {teamMemberStyle(loggedUserName).initials}
                   </div>
                 )}
                 <div>
                   <p className="font-semibold">{loggedUserName || user?.firstName || 'Usuario'}</p>
-                  <p className="text-xs text-muted-foreground">{TEAM_MEMBERS.find(m => m.name === loggedUserName)?.role || 'Miembro'}</p>
+                  <p className="text-xs text-muted-foreground">{teamMemberStyle(loggedUserName).role}</p>
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -5789,7 +5769,7 @@ export default function Tareas() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {TEAM_MEMBERS.map((member) => (
+                      {teamMembers.map((member) => (
                         <SelectItem key={member.name} value={member.name}>
                           <div className="flex items-center gap-2">
                             {getUserPhoto(member.name) ? (
@@ -5820,7 +5800,7 @@ export default function Tareas() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {TEAM_MEMBERS.map((member) => (
+                      {teamMembers.map((member) => (
                         <SelectItem key={member.name} value={member.name}>
                           <div className="flex items-center gap-2">
                             {getUserPhoto(member.name) ? (

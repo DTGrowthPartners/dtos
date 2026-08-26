@@ -61,7 +61,8 @@ import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
 import { createTask, sendTaskNotification, loadProjects } from '@/lib/firestoreTaskService';
 import { useAuthStore } from '@/lib/auth';
-import { Priority as TaskPriority, TEAM_MEMBERS, TaskStatus, type TeamMemberName, type Project as FirestoreProject } from '@/types/taskTypes';
+import { Priority as TaskPriority, matchTeamMember, TaskStatus, type TeamMemberName, type Project as FirestoreProject } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 
 // Source Icons
 const ShopifyIcon = ({ className }: { className?: string }) => (
@@ -487,33 +488,11 @@ export default function CRM() {
     return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   };
 
-  // Map user firstName or email to team member name (flexible matching)
-  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined => {
-    if (!firstName && !email) return undefined;
+  const teamMembers = useTeamMembers();
 
-    // Try matching by first name first
-    if (firstName) {
-      const normalizedInput = normalizeString(firstName);
-      const memberByFirstName = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === normalizedInput ||
-        normalizedInput.startsWith(normalizeString(m.name)) ||
-        normalizeString(m.name).startsWith(normalizedInput)
-      );
-      if (memberByFirstName) return memberByFirstName.name;
-    }
-
-    // Try matching by email prefix if first name matching failed
-    if (email) {
-      const emailPrefix = normalizeString(email.split('@')[0]);
-      const memberByEmail = TEAM_MEMBERS.find(m =>
-        normalizeString(m.name) === emailPrefix ||
-        emailPrefix.includes(normalizeString(m.name))
-      );
-      if (memberByEmail) return memberByEmail.name;
-    }
-
-    return undefined;
-  };
+  // Quién soy dentro del equipo (por nombre o por el prefijo del correo)
+  const getTeamMemberNameFromUser = (firstName: string | undefined, email: string | undefined): TeamMemberName | undefined =>
+    matchTeamMember(teamMembers, firstName, email);
 
   const loggedUserName = getTeamMemberNameFromUser(authUser?.firstName, authUser?.email);
 

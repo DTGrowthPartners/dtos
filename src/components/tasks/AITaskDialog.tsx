@@ -30,7 +30,8 @@ import {
   createTask,
   getNextPositionForStatus,
 } from '@/lib/firestoreTaskService';
-import { TaskStatus, Priority, TEAM_MEMBERS, type Project, type TeamMemberName, type TaskType } from '@/types/taskTypes';
+import { TaskStatus, Priority, teamMemberStyle, type Project, type TeamMemberName, type TaskType } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
 
 export interface ParsedTask {
   title: string;
@@ -82,6 +83,7 @@ const mapPriority = (p: string): Priority =>
   p === 'HIGH' ? Priority.HIGH : p === 'LOW' ? Priority.LOW : Priority.MEDIUM;
 
 export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDialogProps) {
+  const teamMembers = useTeamMembers();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuthStore();
@@ -107,7 +109,7 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
 
   const defaultAssignee = (): TeamMemberName => {
     const name = user?.firstName || '';
-    const hit = TEAM_MEMBERS.find((m) => m.name.toLowerCase() === name.toLowerCase());
+    const hit = teamMembers.find((m) => m.name.toLowerCase() === name.toLowerCase());
     return (hit?.name as TeamMemberName) || ('Stiven' as TeamMemberName);
   };
 
@@ -366,7 +368,7 @@ export default function AITaskDialog({ open, onOpenChange, onParsed }: AITaskDia
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="AUTO">Auto (según IA)</SelectItem>
-                      {TEAM_MEMBERS.map((m) => (
+                      {teamMembers.map((m) => (
                         <SelectItem key={m.name} value={m.name}>
                           {m.name} · {m.role}
                         </SelectItem>

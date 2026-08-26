@@ -15,7 +15,7 @@ import PushButton from '@/components/layout/PushButton';
 import { cn } from '@/lib/utils';
 import { authService } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
-import { TEAM_MEMBERS } from '@/types/taskTypes';
+import { teamMemberStyle } from '@/types/taskTypes';
 import { applyTheme, getStoredTheme, type Theme } from '@/lib/theme';
 
 const pathNames: Record<string, string> = {
@@ -55,7 +55,7 @@ export function AppHeader() {
   const isMisTareasView = location.pathname === '/mis-tareas';
 
   // Obtener el rol/cargo del equipo basado en el nombre del usuario
-  const teamMember = TEAM_MEMBERS.find(m => m.name.toLowerCase() === user?.firstName?.toLowerCase());
+  const teamMember = user?.firstName ? teamMemberStyle(user.firstName) : undefined;
   const userRole = teamMember?.role || user?.role || 'Usuario';
 
   // Aplica el tema al montar / cuando cambia.

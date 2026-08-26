@@ -36,11 +36,14 @@ import {
   type Task,
   type Project,
   TaskStatus,
-  TEAM_MEMBERS,
+  teamMemberStyle,
   DEFAULT_COLUMNS,
   DEFAULT_PROJECTS,
   type TeamMemberName,
 } from '@/types/taskTypes';
+import { useTeamMembers } from '@/hooks/useTeamMembers';
+import { matchTeamMember } from '@/types/taskTypes';
+import { useAuthStore } from '@/lib/auth';
 import ImageModal from '@/components/ImageModal';
 import CommentsModal from '@/components/CommentsModal';
 import { useNavigate } from 'react-router-dom';
@@ -69,9 +72,13 @@ export default function MisTareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [userName, setUserName] = useState<TeamMemberName>('Edgardo');
+  // Arranca en el usuario logueado. Antes estaba fijo en 'Edgardo', así que
+  // todo el mundo entraba viendo las tareas de él.
+  const [userName, setUserName] = useState<TeamMemberName>('');
   const [viewMode, setViewMode] = useState<ViewMode>('simple');
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
+  const teamMembers = useTeamMembers();
+  const { user } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -106,12 +113,17 @@ export default function MisTareas() {
     }
   };
 
+  useEffect(() => {
+    if (userName) return;
+    setUserName(matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Edgardo');
+  }, [teamMembers, user?.firstName, user?.email, userName]);
+
   const getProject = (projectId: string) => {
     return projects.find((p) => p.id === projectId);
   };
 
   const getTeamMember = (name: string) => {
-    return TEAM_MEMBERS.find((m) => m.name === name);
+    return teamMemberStyle(name);
   };
 
   // Mismo orden que el tablero de Tareas: position (orden arrastrado) y, para
@@ -303,7 +315,7 @@ export default function MisTareas() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {TEAM_MEMBERS.map((member) => (
+                  {teamMembers.map((member) => (
                     <SelectItem key={member.name} value={member.name}>
                       <div className="flex items-center gap-2">
                         <div className={`w-3 h-3 rounded-full ${member.color}`}></div>
