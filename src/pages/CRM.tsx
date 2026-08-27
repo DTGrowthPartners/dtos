@@ -758,6 +758,36 @@ export default function CRM() {
     }
   };
 
+  // --- Reprogramar contacto (atajo del clic derecho y del panel de detalle) ---
+  // Opciones rápidas en días; null = quitar el seguimiento programado.
+  const SEGUIMIENTOS_RAPIDOS: { label: string; dias: number }[] = [
+    { label: 'Mañana', dias: 1 },
+    { label: 'En 3 días', dias: 3 },
+    { label: 'En 1 semana', dias: 7 },
+    { label: 'En 2 semanas', dias: 14 },
+    { label: 'En 1 mes', dias: 30 },
+  ];
+
+  const reprogramarContacto = async (deal: Deal, dias: number | null) => {
+    let cuando: string | null = null;
+    if (dias !== null) {
+      const d = new Date();
+      d.setDate(d.getDate() + dias);
+      cuando = d.toISOString().split('T')[0]; // el backend le pone las 9am
+    }
+    try {
+      await apiClient.patch(`/api/crm/deals/${deal.id}`, { nextFollowUp: cuando });
+      toast({
+        title: dias === null ? 'Seguimiento quitado' : 'Contacto reprogramado',
+        description: dias === null ? undefined : `${deal.name}: volver a contactar el ${new Date(cuando + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}`,
+      });
+      loadData();
+      if (selectedDeal?.id === deal.id) loadDealDetail(deal.id);
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo reprogramar el contacto', variant: 'destructive' });
+    }
+  };
+
   // --- Enlaces del prospecto (grabaciones de reuniones, propuestas, etc.) ---
   const [linkDealId, setLinkDealId] = useState<string | null>(null);
   const [linkForm, setLinkForm] = useState({ titulo: '', url: '', tipo: 'grabacion' });
@@ -1710,6 +1740,36 @@ export default function CRM() {
                                               {s.name}
                                             </ContextMenuItem>
                                           ))}
+                                        </ContextMenuSubContent>
+                                      </ContextMenuSub>
+
+                                      <ContextMenuSub>
+                                        <ContextMenuSubTrigger>
+                                          <Clock className="h-4 w-4 mr-2" /> Reprogramar contacto
+                                        </ContextMenuSubTrigger>
+                                        <ContextMenuSubContent className="w-52">
+                                          <ContextMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                                            {deal.nextFollowUp
+                                              ? `Ahora: ${formatRelativeDate(deal.nextFollowUp)}`
+                                              : 'Sin seguimiento programado'}
+                                          </ContextMenuLabel>
+                                          <ContextMenuSeparator />
+                                          {SEGUIMIENTOS_RAPIDOS.map((op) => (
+                                            <ContextMenuItem key={op.dias} onClick={() => reprogramarContacto(deal, op.dias)}>
+                                              {op.label}
+                                            </ContextMenuItem>
+                                          ))}
+                                          {deal.nextFollowUp && (
+                                            <>
+                                              <ContextMenuSeparator />
+                                              <ContextMenuItem
+                                                className="text-destructive focus:text-destructive"
+                                                onClick={() => reprogramarContacto(deal, null)}
+                                              >
+                                                Quitar seguimiento
+                                              </ContextMenuItem>
+                                            </>
+                                          )}
                                         </ContextMenuSubContent>
                                       </ContextMenuSub>
 
