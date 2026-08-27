@@ -1967,6 +1967,7 @@ interface PipeRow {
   name: string; company: string; servicio: string; etapa: string;
   owner: string | null; dias: number; vencido: boolean; valor: number;
   prob: number; prioridadAlta: boolean; nota: string; chatUrl: string | null;
+  dealUrl: string | null;
 }
 interface EtapaResumen { etapa: string; count: number; valor: number; top: PipeRow[] }
 
@@ -1990,11 +1991,19 @@ function filaPipe(r: PipeRow, borde: string, botonFill: boolean): string {
     : r.prob
       ? `${esc(r.etapa)}<br><span style="font-size:10px;color:#8A97A4;">${r.prob}%</span>`
       : esc(r.etapa);
-  const boton = r.chatUrl
+  // Dos accesos por prospecto: el chat en el bot y su tarjeta en el pipeline.
+  // Apilados, no lado a lado: en Gmail móvil la columna no da para dos botones.
+  const btnChat = r.chatUrl
     ? `<a href="${r.chatUrl}" style="display:inline-block;background-color:${
         botonFill ? PIPE_BANNER + ';color:#FFFFFF' : '#FFFFFF;color:' + PIPE_BANNER + ';border:1px solid #C3D5E4'
-      };font-size:11px;font-weight:bold;text-decoration:none;padding:6px 12px;border-radius:4px;">Chat →</a>`
+      };font-size:11px;font-weight:bold;text-decoration:none;padding:6px 12px;border-radius:4px;white-space:nowrap;">Chat →</a>`
     : `<span style="font-size:11px;color:#B8C4CE;">sin chat</span>`;
+  const btnDeal = r.dealUrl
+    ? `<a href="${r.dealUrl}" style="display:inline-block;background-color:#FFFFFF;color:${PIPE_BANNER};border:1px solid #C3D5E4;font-size:11px;font-weight:bold;text-decoration:none;padding:6px 12px;border-radius:4px;white-space:nowrap;">Tarjeta →</a>`
+    : '';
+  const boton = btnDeal
+    ? `${btnChat}<div style="height:6px;line-height:6px;font-size:0;">&nbsp;</div>${btnDeal}`
+    : btnChat;
   const notaHtml = r.nota
     ? `<tr><td colspan="7" style="padding:0 14px 10px 17px;border-left:3px solid ${borde};
          border-bottom:1px solid #EEF2F6;font-size:11px;color:#8A6D3B;">💡 ${esc(r.nota)}</td></tr>`
@@ -2019,7 +2028,7 @@ const HEAD_COLS =
     <td width="85" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Resp.</td>
     <td width="60" align="center" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Días</td>
     <td width="105" align="right" style="padding:9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Valor</td>
-    <td width="70" align="center" style="padding:9px 14px 9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Acción</td>
+    <td width="90" align="center" style="padding:9px 14px 9px 8px;background-color:#F4F7FA;border-bottom:1px solid ${PIPE_BORDE};font-size:10px;color:#7A8A99;text-transform:uppercase;letter-spacing:0.6px;">Acción</td>
   </tr>`;
 
 function seccionTabla(
@@ -2168,6 +2177,10 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
     // Umbral urgente por etapa avanzada; el resto entra por días sin contacto.
     const valorDe = (d: (typeof deals)[number]) =>
       d.estimatedValue || d.monthlyRecurring || 0;
+    // La tarjeta del prospecto en el pipeline: /crm?deal=<id> abre el modal.
+    const dtosBase = (process.env.FRONTEND_URL || 'https://os.dtgrowthpartners.com').replace(/\/+$/, '');
+    const dealUrlDe = (d: (typeof deals)[number]): string =>
+      `${dtosBase}/crm?deal=${encodeURIComponent(d.id)}`;
     const chatUrlDe = (d: (typeof deals)[number]): string | null => {
       const raw = (d.phone || '').replace(/\D/g, '');
       if (!raw) return null;
@@ -2196,7 +2209,7 @@ router.post('/bot/crm/seguimientos-run', verifyBotApiKey, async (_req: Request, 
         etapa: d.stage?.name || '', owner: d.owner?.firstName || null,
         dias, vencido, valor, prob: d.probability ?? 0,
         prioridadAlta: prio === 'alta' || prio === 'urgente', nota,
-        chatUrl: chatUrlDe(d),
+        chatUrl: chatUrlDe(d), dealUrl: dealUrlDe(d),
         score: valor * ((d.probability ?? 50) / 100),
         slug: (d.stage?.slug || '').toLowerCase(),
       };

@@ -1069,6 +1069,17 @@ export default function CRM() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  // Correo diario del pipeline: /crm?deal=<id> abre la tarjeta de ese prospecto.
+  // El botón "Tarjeta →" del correo apunta acá. Se limpia el param para que al
+  // cerrar el modal no vuelva a abrirse solo.
+  useEffect(() => {
+    const dealId = searchParams.get('deal');
+    if (!dealId) return;
+    loadDealDetail(dealId);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   const resetForm = () => {
     setFormData({
       name: '',
