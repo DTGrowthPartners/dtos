@@ -2650,7 +2650,8 @@ router.post('/bot/crm/tags', verifyBotApiKey, async (req: Request, res: Response
 
 /**
  * Convierte lo que diga el bot en una fecha: "2026-09-03", un ISO completo o algo
- * relativo como "manana", "en 3 dias", "2 semanas", "1 mes". La hora por defecto
+ * relativo como "manana", "en 3 dias", "proximo viernes", "2 semanas", "1 mes".
+ * La hora por defecto
  * son las 9:00 de Colombia, igual que el boton del panel.
  */
 const interpretarFecha = (fecha?: string, relativo?: string, hora?: string): Date | null => {
@@ -2676,15 +2677,29 @@ const interpretarFecha = (fecha?: string, relativo?: string, hora?: string): Dat
 
   const txt = String(relativo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
   if (!txt) return null;
-  const hoy = new Date();
+  // "Hoy" en Colombia, no en el servidor: este proceso corre en UTC y despues de
+  // las 7pm locales el dia UTC ya cambio, asi que "manana" se iria un dia de mas.
+  // Restando 5h, los getUTC* de esta fecha dan el dia colombiano.
+  const hoy = new Date(Date.now() - 5 * 3_600_000);
   const sumarDias = (n: number) => {
     const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
     d.setUTCDate(d.getUTCDate() + n);
     return enBogota(d);
   };
   if (/^hoy/.test(txt)) return sumarDias(0);
-  if (/^manana/.test(txt)) return sumarDias(1);
   if (/^pasado ?manana/.test(txt)) return sumarDias(2);
+  if (/^manana/.test(txt)) return sumarDias(1);
+
+  // "proximo lunes", "el viernes", "miercoles". Si hoy es ese mismo dia se toma
+  // el de la semana entrante, igual que el atajo del panel.
+  const DIAS_SEMANA: Record<string, number> = {
+    domingo: 0, lunes: 1, martes: 2, miercoles: 3, jueves: 4, viernes: 5, sabado: 6,
+  };
+  const dia = Object.keys(DIAS_SEMANA).find((d) => txt.includes(d));
+  if (dia) {
+    const falta = (DIAS_SEMANA[dia] - hoy.getUTCDay() + 7) % 7;
+    return sumarDias(falta === 0 ? 7 : falta);
+  }
 
   const m = txt.match(/(\d+)\s*(dia|dias|semana|semanas|mes|meses)/);
   if (m) {
@@ -2765,7 +2780,7 @@ router.post('/bot/crm/seguimiento', verifyBotApiKey, async (req: Request, res: R
     if (!cuando) {
       return res.status(400).json({
         success: false,
-        error: 'No entendí la fecha. Manda "fecha" (2026-09-03) o "en" ("manana", "3 dias", "2 semanas", "1 mes")',
+        error: 'No entendí la fecha. Manda "fecha" (2026-09-03) o "en" ("manana", "3 dias", "proximo viernes", "2 semanas", "1 mes")',
       });
     }
     if (cuando.getTime() < Date.now() - 60_000) {

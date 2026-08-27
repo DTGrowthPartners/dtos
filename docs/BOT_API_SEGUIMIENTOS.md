@@ -23,7 +23,7 @@ Agenda (o mueve) el próximo contacto de un prospecto.
 | `telefono` | string | sí* | Del prospecto. Se comparan los últimos 10 dígitos, así que `573001112233`, `3001112233` o `+57 300 111 2233` sirven igual. |
 | `dealId` | string | sí* | Alternativa a `telefono`. Es el `id` que devuelve `GET /bot/crm/deals`. Más confiable si ya lo tienes. |
 | `fecha` | string | sí** | `"2026-09-15"` o un ISO completo `"2026-09-15T14:30:00Z"`. |
-| `en` | string | sí** | Alternativa a `fecha`, en lenguaje natural: `hoy`, `manana`, `pasado manana`, `3 dias`, `2 semanas`, `1 mes`. Sin tildes o con tildes, da igual. |
+| `en` | string | sí** | Alternativa a `fecha`, en lenguaje natural: `hoy`, `manana`, `pasado manana`, `proximo lunes` (cualquier día de la semana), `3 dias`, `2 semanas`, `1 mes`. Con tildes o sin ellas, da igual. |
 | `hora` | string | no | `"14:30"`. Por defecto **9:00 de Colombia**, igual que el botón del panel. |
 | `nota` | string | no | Por qué se reprograma. Queda en el historial del prospecto. |
 | `usuario` | string | no | Correo o nombre de quien lo pide. Sin esto queda a nombre del bot. |
@@ -39,6 +39,9 @@ Agenda (o mueve) el próximo contacto de un prospecto.
 { "telefono": "573041035844", "en": "3 dias",
   "nota": "quedó de revisar la propuesta",
   "usuario": "annie@dtgrowthpartners.com" }
+
+// Por día de la semana
+{ "telefono": "573041035844", "en": "proximo lunes" }
 
 // Fecha y hora exactas
 { "dealId": "cmtax738o0029w09agasod0df", "fecha": "2026-09-15", "hora": "14:30" }
@@ -63,12 +66,16 @@ Agenda (o mueve) el próximo contacto de un prospecto.
 `proximoSeguimiento` viene en UTC: Colombia es UTC-5, por eso las 9:00 locales
 se ven como `14:00Z`.
 
+**Días de la semana:** `proximo viernes` es *el siguiente viernes que llegue*.
+Si hoy es jueves, eso es mañana. Solo cuando hoy ya es viernes salta al de la
+semana entrante. Si el prospecto pide algo distinto, confirma con `fecha` exacta.
+
 ### Errores
 
 | Código | `error` | Qué hacer |
 |---|---|---|
 | 400 | `Manda "dealId" o "telefono" (con al menos 7 dígitos)` | Faltó identificar al prospecto. |
-| 400 | `No entendí la fecha...` | Usa `fecha` o una de las formas de `en`. |
+| 400 | `No entendí la fecha...` | Usa `fecha` o una de las formas de `en`. El error trae los ejemplos válidos. |
 | 400 | `Esa fecha ya pasó` | Pide una fecha futura. |
 | 401 | `API key inválida o faltante` | Revisa el header `X-API-Key`. |
 | 404 | `No hay ningún prospecto en el CRM con el teléfono ...` | Ese número no tiene tarjeta. Créala con `POST /bot/crm/deals`. |

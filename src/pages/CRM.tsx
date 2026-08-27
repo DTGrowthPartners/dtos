@@ -759,21 +759,37 @@ export default function CRM() {
   };
 
   // --- Reprogramar contacto (atajo del clic derecho y del panel de detalle) ---
-  // Opciones rápidas en días; null = quitar el seguimiento programado.
-  const SEGUIMIENTOS_RAPIDOS: { label: string; dias: number }[] = [
-    { label: 'Mañana', dias: 1 },
-    { label: 'En 3 días', dias: 3 },
-    { label: 'En 1 semana', dias: 7 },
-    { label: 'En 2 semanas', dias: 14 },
-    { label: 'En 1 mes', dias: 30 },
+  // Cuántos días faltan para el próximo lunes/miércoles/viernes. Si hoy es ese
+  // mismo día, cuenta el de la semana entrante: "próximo lunes" nunca es hoy.
+  const diasHastaProximo = (diaSemana: number): number => {
+    const falta = (diaSemana - new Date().getDay() + 7) % 7;
+    return falta === 0 ? 7 : falta;
+  };
+
+  // Opciones rápidas; null = quitar el seguimiento programado.
+  const SEGUIMIENTOS_RAPIDOS: { label: string; dias: () => number }[] = [
+    { label: 'Mañana', dias: () => 1 },
+    { label: 'En 3 días', dias: () => 3 },
+    { label: 'Próximo lunes', dias: () => diasHastaProximo(1) },
+    { label: 'Próximo miércoles', dias: () => diasHastaProximo(3) },
+    { label: 'Próximo viernes', dias: () => diasHastaProximo(5) },
+    { label: 'En 2 semanas', dias: () => 14 },
   ];
+
+  // "31 ago" — para que se vea en qué fecha cae cada atajo
+  const fechaDeAtajo = (dias: number): string => {
+    const d = new Date();
+    d.setDate(d.getDate() + dias);
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+  };
 
   const reprogramarContacto = async (deal: Deal, dias: number | null) => {
     let cuando: string | null = null;
     if (dias !== null) {
       const d = new Date();
       d.setDate(d.getDate() + dias);
-      cuando = d.toISOString().split('T')[0]; // el backend le pone las 9am
+      // Fecha local, no toISOString(): eso pasa a UTC y de noche adelanta un dia
+      cuando = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
     try {
       await apiClient.patch(`/api/crm/deals/${deal.id}`, { nextFollowUp: cuando });
@@ -1754,11 +1770,19 @@ export default function CRM() {
                                               : 'Sin seguimiento programado'}
                                           </ContextMenuLabel>
                                           <ContextMenuSeparator />
-                                          {SEGUIMIENTOS_RAPIDOS.map((op) => (
-                                            <ContextMenuItem key={op.dias} onClick={() => reprogramarContacto(deal, op.dias)}>
-                                              {op.label}
-                                            </ContextMenuItem>
-                                          ))}
+                                          {SEGUIMIENTOS_RAPIDOS.map((op) => {
+                                            const dias = op.dias();
+                                            return (
+                                              <ContextMenuItem
+                                                key={op.label}
+                                                className="flex justify-between gap-3"
+                                                onClick={() => reprogramarContacto(deal, dias)}
+                                              >
+                                                <span>{op.label}</span>
+                                                <span className="text-[11px] text-muted-foreground">{fechaDeAtajo(dias)}</span>
+                                              </ContextMenuItem>
+                                            );
+                                          })}
                                           {deal.nextFollowUp && (
                                             <>
                                               <ContextMenuSeparator />
