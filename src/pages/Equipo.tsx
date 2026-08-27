@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield, Circle, EyeOff, Eye } from 'lucide-react';
+import { Mail, Plus, Pencil, Trash2, X, Users, UserPlus, Shield, Circle, EyeOff, Eye, LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -82,6 +82,24 @@ interface Role {
   permissions: string[];
 }
 
+/** "hace 5 min", "ayer", "hace 3 días"... para el último ingreso. */
+const ultimoAcceso = (iso?: string | null): { texto: string; frio: boolean } => {
+  if (!iso) return { texto: 'nunca ha entrado', frio: true };
+  const fecha = new Date(iso);
+  const min = Math.floor((Date.now() - fecha.getTime()) / 60000);
+  if (min < 1) return { texto: 'en línea ahora', frio: false };
+  if (min < 60) return { texto: `hace ${min} min`, frio: false };
+  const horas = Math.floor(min / 60);
+  if (horas < 24) return { texto: `hace ${horas} h`, frio: false };
+  const dias = Math.floor(horas / 24);
+  if (dias === 1) return { texto: 'ayer', frio: false };
+  if (dias < 30) return { texto: `hace ${dias} días`, frio: dias > 7 };
+  return {
+    texto: fecha.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }),
+    frio: true,
+  };
+};
+
 interface User {
   id: string;
   email: string;
@@ -91,6 +109,7 @@ interface User {
   permissions: string[];
   roleId: string;
   firebaseUid?: string;
+  lastLoginAt?: string | null;
   createdAt: string;
   updatedAt?: string;
   role: {
@@ -462,6 +481,21 @@ export default function Equipo() {
                   <Mail className="h-3 w-3 flex-shrink-0" />
                   <span className="truncate">{user.email}</span>
                 </div>
+                {(() => {
+                  const acceso = ultimoAcceso(user.lastLoginAt);
+                  return (
+                    <div
+                      className={cn(
+                        'flex items-center gap-1.5 mt-1 text-xs w-full justify-center',
+                        acceso.frio ? 'text-muted-foreground/70' : 'text-emerald-500'
+                      )}
+                      title="Último inicio de sesión"
+                    >
+                      <LogIn className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{acceso.texto}</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {user.role.name !== 'admin' && user.permissions && user.permissions.length > 0 && (

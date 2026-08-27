@@ -182,6 +182,7 @@ export class AuthService {
       });
     }
 
+    await this.marcarIngreso(user.id);
     return this.generateTokens(user);
   }
 
@@ -212,7 +213,16 @@ export class AuthService {
       throw new Error('Invalid credentials');
     }
 
+    await this.marcarIngreso(user.id);
     return this.generateTokens(user);
+  }
+
+  /** Deja constancia del ingreso para el panel de Equipo. Si falla no debe
+   *  tumbar el login: es un dato informativo, no parte de la autenticacion. */
+  private async marcarIngreso(userId: string) {
+    await prisma.user
+      .update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
+      .catch(() => {});
   }
 
   private generateTokens(user: any): TokenResponse {

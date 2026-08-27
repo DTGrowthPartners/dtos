@@ -115,6 +115,7 @@ router.get('/', roleMiddleware(['admin']), async (req, res) => {
         permissions: true,
         roleId: true,
         firebaseUid: true,
+        lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
         role: {

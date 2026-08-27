@@ -37,6 +37,8 @@ model User {
   // Notifications
   receivedNotifications Notification[] @relation("NotificationRecipient")
   sentNotifications     Notification[] @relation("NotificationSender")
+  // Ultimo inicio de sesion (panel de Equipo). Nulo = nunca ha entrado.
+  lastLoginAt   DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 }

@@ -2636,6 +2636,172 @@ router.post('/bot/crm/tags', verifyBotApiKey, async (req: Request, res: Response
 });
 
 /**
+ * Convierte lo que diga el bot en una fecha: "2026-09-03", un ISO completo o algo
+ * relativo como "manana", "en 3 dias", "2 semanas", "1 mes". La hora por defecto
+ * son las 9:00 de Colombia, igual que el boton del panel.
+ */
+const interpretarFecha = (fecha?: string, relativo?: string, hora?: string): Date | null => {
+  const [hh, mm] = (() => {
+    const m = String(hora || '').match(/^(\d{1,2})[:h](\d{2})?/);
+    return m ? [Number(m[1]), Number(m[2] || 0)] : [9, 0];
+  })();
+  // Colombia es UTC-5 todo el ano: 9:00 local = 14:00 UTC
+  const enBogota = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hh + 5, mm, 0, 0));
+
+  if (fecha) {
+    const texto = String(fecha).trim();
+    // ISO con hora: se respeta tal cual
+    if (texto.includes('T')) {
+      const d = new Date(texto);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    const m = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (m) return enBogota(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))));
+    const suelta = new Date(texto);
+    return isNaN(suelta.getTime()) ? null : suelta;
+  }
+
+  const txt = String(relativo || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+  if (!txt) return null;
+  const hoy = new Date();
+  const sumarDias = (n: number) => {
+    const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
+    d.setUTCDate(d.getUTCDate() + n);
+    return enBogota(d);
+  };
+  if (/^hoy/.test(txt)) return sumarDias(0);
+  if (/^manana/.test(txt)) return sumarDias(1);
+  if (/^pasado ?manana/.test(txt)) return sumarDias(2);
+
+  const m = txt.match(/(\d+)\s*(dia|dias|semana|semanas|mes|meses)/);
+  if (m) {
+    const n = Number(m[1]);
+    if (m[2].startsWith('dia')) return sumarDias(n);
+    if (m[2].startsWith('semana')) return sumarDias(n * 7);
+    const d = new Date(Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate()));
+    d.setUTCMonth(d.getUTCMonth() + n);
+    return enBogota(d);
+  }
+  return null;
+};
+
+/**
+ * POST /api/webhook/bot/crm/seguimiento
+ *
+ * El mismo botón "Programar / Reprogramar" del panel de ventas, pero desde el
+ * chat: el bot agenda cuándo hay que volver a hablarle al prospecto.
+ *
+ * body: {
+ *   telefono?: string,          // o dealId
+ *   dealId?: string,
+ *   fecha?: string,             // "2026-09-03" o ISO completo
+ *   en?: string,                // o relativo: "manana", "3 dias", "2 semanas", "1 mes"
+ *   hora?: string,              // "14:30" (por defecto 9:00 Colombia)
+ *   nota?: string,              // queda en la actividad del prospecto
+ *   usuario?: string,           // correo o nombre de quien lo pide
+ *   quitar?: boolean            // true = borrar el seguimiento programado
+ * }
+ */
+router.post('/bot/crm/seguimiento', verifyBotApiKey, async (req: Request, res: Response) => {
+  try {
+    const { telefono, phone, dealId, fecha, en, hora, nota, usuario, quitar } = req.body || {};
+
+    // 1. Ubicar el prospecto: por id, o por los últimos 10 dígitos del teléfono
+    let deal: any = null;
+    if (dealId) {
+      deal = await prisma.deal.findFirst({
+        where: { id: String(dealId), deletedAt: null },
+        include: { stage: { select: { name: true } }, owner: { select: { firstName: true } } },
+      });
+    } else {
+      const numero = String(telefono || phone || '');
+      const clave = numero.replace(/\D/g, '').slice(-10);
+      if (clave.length < 7) {
+        return res.status(400).json({ success: false, error: 'Manda "dealId" o "telefono" (con al menos 7 dígitos)' });
+      }
+      const candidatos = await prisma.deal.findMany({
+        where: { deletedAt: null },
+        include: {
+          tercero: { select: { telefono: true } },
+          stage: { select: { name: true } },
+          owner: { select: { firstName: true } },
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+      const coincide = (v?: string | null) => !!v && v.replace(/\D/g, '').slice(-10) === clave;
+      deal = candidatos.find((d) => coincide(d.phone) || coincide(d.tercero?.telefono));
+      if (!deal) {
+        return res.status(404).json({ success: false, error: `No hay ningún prospecto en el CRM con el teléfono ${numero}` });
+      }
+    }
+    if (!deal) return res.status(404).json({ success: false, error: 'Prospecto no encontrado' });
+
+    // 2. Quitar el seguimiento (equivale a "marcar contactado" sin nota)
+    if (quitar === true) {
+      await prisma.deal.update({ where: { id: deal.id }, data: { nextFollowUp: null } });
+      return res.json({
+        success: true,
+        mensaje: `Seguimiento de ${deal.name} eliminado`,
+        lead: { id: deal.id, nombre: deal.name },
+        proximoSeguimiento: null,
+      });
+    }
+
+    // 3. Calcular la fecha: explícita o relativa ("en 3 dias")
+    const cuando = interpretarFecha(fecha, en, hora);
+    if (!cuando) {
+      return res.status(400).json({
+        success: false,
+        error: 'No entendí la fecha. Manda "fecha" (2026-09-03) o "en" ("manana", "3 dias", "2 semanas", "1 mes")',
+      });
+    }
+    if (cuando.getTime() < Date.now() - 60_000) {
+      return res.status(400).json({ success: false, error: 'Esa fecha ya pasó' });
+    }
+
+    await prisma.deal.update({
+      where: { id: deal.id },
+      data: { nextFollowUp: cuando, lastInteractionAt: new Date() },
+    });
+
+    // 4. Dejar rastro en el historial del prospecto, como cualquier acción del panel
+    const quien = typeof usuario === 'string' ? usuario.trim() : '';
+    const actor = quien
+      ? await prisma.user.findFirst({
+          where: { OR: [{ email: quien }, { firstName: { equals: quien, mode: 'insensitive' } }] },
+          select: { id: true, firstName: true },
+        })
+      : null;
+    const botUser = actor ? null : await prisma.user.findFirst({ where: { email: 'bot@dtgrowthpartners.com' }, select: { id: true } });
+    const performedBy = actor?.id || botUser?.id;
+    const cuandoTexto = cuando.toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'full', timeStyle: 'short' });
+    if (performedBy) {
+      await prisma.dealActivity.create({
+        data: {
+          dealId: deal.id,
+          type: 'note',
+          title: 'Seguimiento programado desde WhatsApp',
+          description: `Volver a contactar el ${cuandoTexto}${nota ? ` · ${String(nota).slice(0, 300)}` : ''}${quien ? ` · pedido por ${actor?.firstName || quien}` : ''}`,
+          performedBy,
+        },
+      });
+    }
+
+    console.log(`[Bot API] Seguimiento de "${deal.name}" programado para ${cuando.toISOString()}`);
+
+    res.json({
+      success: true,
+      mensaje: `Listo: seguimiento de ${deal.name} para el ${cuandoTexto}`,
+      lead: { id: deal.id, nombre: deal.name, etapa: deal.stage?.name, responsable: deal.owner?.firstName || null },
+      proximoSeguimiento: cuando.toISOString(),
+    });
+  } catch (error) {
+    console.error('[Bot API] Error programando seguimiento:', error);
+    res.status(500).json({ success: false, error: 'Error programando el seguimiento' });
+  }
+});
+
+/**
  * POST /api/webhook/bot/crm/deals
  *
  * Crea un nuevo deal en el CRM.
