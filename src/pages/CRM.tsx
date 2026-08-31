@@ -671,6 +671,14 @@ export default function CRM() {
         return;
       }
     }
+    // Mover a Perdido sin razon deja el prospecto mudo: hoy 25 de los 130 perdidos
+    // no dicen por que se cayeron. Se pide la razon, igual que desde la ficha.
+    if (toStage?.isLost && movingDeal) {
+      setDealToClose(movingDeal);
+      setLostFormData({ reason: '', notes: '' });
+      setIsLostDialogOpen(true);
+      return;
+    }
     try {
       await apiClient.patch(`/api/crm/deals/${dealId}/stage`, { stageId: newStageId });
       toast({ title: 'Etapa actualizada' });
@@ -687,18 +695,28 @@ export default function CRM() {
     }
   };
 
+  // Abrir un dialogo desde un item del menu de tres puntos: hay que dejar que el
+  // menu termine de cerrarse primero. Si el menu se desmonta y el dialogo se monta
+  // en el mismo commit, React intenta quitar nodos que Radix ya quito y la pagina
+  // revienta con "removeChild: The node to be removed is not a child of this node"
+  // — la ficha desaparece y no se guarda nada.
+  const trasCerrarMenu = (fn: () => void) => setTimeout(fn, 0);
+
   const handleMarkAsLost = async () => {
     if (!dealToClose) return;
     try {
       await apiClient.post(`/api/crm/deals/${dealToClose.id}/lost`, lostFormData);
       toast({ title: 'Deal marcado como perdido' });
       setIsLostDialogOpen(false);
-      setDealToClose(null);
       setLostFormData({ reason: '', notes: '' });
       loadData();
-      if (selectedDeal?.id === dealToClose.id) {
-        setSelectedDeal(null);
-      }
+      // Cerrar la ficha en el mismo commit que el dialogo desmontaba dos portales
+      // de Radix a la vez y tumbaba la pagina. Se cierra despues, ya sin el dialogo.
+      const cerrada = dealToClose.id;
+      setDealToClose(null);
+      setTimeout(() => {
+        setSelectedDeal((actual) => (actual?.id === cerrada ? null : actual));
+      }, 0);
     } catch (error) {
       toast({
         title: 'Error',
@@ -717,12 +735,15 @@ export default function CRM() {
       });
       toast({ title: 'Deal ganado!', description: 'Felicidades por cerrar el deal!' });
       setIsWonDialogOpen(false);
-      setDealToClose(null);
       setWonFormData({ finalValue: '', notes: '' });
       loadData();
-      if (selectedDeal?.id === dealToClose.id) {
-        setSelectedDeal(null);
-      }
+      // Cerrar la ficha en el mismo commit que el dialogo desmontaba dos portales
+      // de Radix a la vez y tumbaba la pagina. Se cierra despues, ya sin el dialogo.
+      const cerrada = dealToClose.id;
+      setDealToClose(null);
+      setTimeout(() => {
+        setSelectedDeal((actual) => (actual?.id === cerrada ? null : actual));
+      }, 0);
     } catch (error) {
       toast({
         title: 'Error',
@@ -1942,25 +1963,25 @@ export default function CRM() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEdit(selectedDeal)}>
+                      <DropdownMenuItem onClick={() => trasCerrarMenu(() => handleEdit(selectedDeal))}>
                         Editar
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
-                        onClick={() => { setDealToClose(selectedDeal); setWonFormData({ finalValue: selectedDeal.estimatedValue?.toString() || '', notes: '' }); setIsWonDialogOpen(true); }}
+                        onClick={() => trasCerrarMenu(() => { setDealToClose(selectedDeal); setWonFormData({ finalValue: selectedDeal.estimatedValue?.toString() || '', notes: '' }); setIsWonDialogOpen(true); })}
                         className="text-green-600"
                       >
                         Marcar como Ganado
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => openConvertDialog(selectedDeal)}
+                        onClick={() => trasCerrarMenu(() => openConvertDialog(selectedDeal))}
                         className="text-blue-600"
                       >
                         <UserCheck className="h-4 w-4 mr-2" />
                         Convertir a Cliente
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        onClick={() => { setDealToClose(selectedDeal); setIsLostDialogOpen(true); }}
+                        onClick={() => trasCerrarMenu(() => { setDealToClose(selectedDeal); setIsLostDialogOpen(true); })}
                         className="text-red-600"
                       >
                         Marcar como Perdido
