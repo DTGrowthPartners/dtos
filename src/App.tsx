@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { useAuthStore } from "@/lib/auth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import ClientPortalRoute from "@/components/ClientPortalRoute";
 import { ClientPortalLayout } from "@/components/layout/ClientPortalLayout";
@@ -16,6 +17,7 @@ import { ClientPortalLayout } from "@/components/layout/ClientPortalLayout";
 const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const SalesDashboard = lazy(() => import("@/pages/SalesDashboard"));
 const ExecutiveDashboard = lazy(() => import("@/pages/ExecutiveDashboard"));
+const DashboardComercial = lazy(() => import("@/pages/DashboardComercial"));
 const Clientes = lazy(() => import("@/pages/Clientes"));
 const ClientesRedesign = lazy(() => import("@/pages/ClientesRedesign"));
 const Servicios = lazy(() => import("@/pages/Servicios"));
@@ -61,6 +63,19 @@ const PageLoader = () => (
   </div>
 );
 
+/**
+ * La pantalla de inicio depende de a que se dedica cada quien: el dashboard
+ * financiero (ingresos, gastos, metas) solo para quien tenga permiso de
+ * finanzas; el resto entra a su panel comercial. Antes todo el mundo con
+ * permiso de "dashboard" aterrizaba en las cifras de la empresa.
+ */
+const InicioSegunPerfil = () => {
+  const { user } = useAuthStore();
+  const esAdmin = user?.role?.toLowerCase() === 'admin';
+  const veFinanzas = esAdmin || (user?.permissions || []).includes('finanzas');
+  return veFinanzas ? <SalesDashboard /> : <DashboardComercial />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <SidebarProvider>
@@ -86,10 +101,12 @@ const App = () => (
 
               {/* Main App Routes */}
               <Route element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-                <Route path="/" element={<ProtectedRoute requiredPermission="dashboard"><SalesDashboard /></ProtectedRoute>} />
-                <Route path="/dashboard" element={<ProtectedRoute requiredPermission="dashboard"><SalesDashboard /></ProtectedRoute>} />
-                <Route path="/dashboard-clasico" element={<ProtectedRoute requiredPermission="dashboard"><Dashboard /></ProtectedRoute>} />
-                <Route path="/dashboard-executive" element={<ProtectedRoute requiredPermission="dashboard"><ExecutiveDashboard /></ProtectedRoute>} />
+                <Route path="/" element={<ProtectedRoute requiredPermission="dashboard"><InicioSegunPerfil /></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute requiredPermission="dashboard"><InicioSegunPerfil /></ProtectedRoute>} />
+                <Route path="/dashboard-comercial" element={<ProtectedRoute requiredPermission="crm"><DashboardComercial /></ProtectedRoute>} />
+                <Route path="/dashboard-finanzas" element={<ProtectedRoute requiredPermission="finanzas"><SalesDashboard /></ProtectedRoute>} />
+                <Route path="/dashboard-clasico" element={<ProtectedRoute requiredPermission="finanzas"><Dashboard /></ProtectedRoute>} />
+                <Route path="/dashboard-executive" element={<ProtectedRoute requiredPermission="finanzas"><ExecutiveDashboard /></ProtectedRoute>} />
                 <Route path="/clientes" element={<ProtectedRoute requiredPermission="clientes"><ClientesRedesign /></ProtectedRoute>} />
                 <Route path="/clientes-clasico" element={<ProtectedRoute requiredPermission="clientes"><Clientes /></ProtectedRoute>} />
                 <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
