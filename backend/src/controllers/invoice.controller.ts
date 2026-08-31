@@ -262,13 +262,30 @@ class InvoiceController {
 
       if (status === 'pagada' && invoice.status !== 'pagada') {
         updateData.paidAt = new Date();
+        // Sin esto la cuenta quedaba "pagada" con abonado en $0: los informes que
+        // suman paidAmount se quedaban cortos y la tarjeta mostraba "Abonado: $0".
+        updateData.paidAmount = invoice.totalAmount;
+
+        // Lo que falta por registrar, NO el total: si ya habia un abono, mandar el
+        // total otra vez a la hoja contaba ese dinero dos veces.
+        const faltante = Math.max(0, invoice.totalAmount - invoice.paidAmount);
+
+        // Deja el abono del saldo en el historial de pagos de la cuenta
+        if (faltante > 0) {
+          await prisma.invoicePayment.create({
+            data: {
+              invoiceId: id, amount: faltante, paymentMethod: cuenta,
+              notes: invoice.paidAmount > 0 ? 'Saldo al marcar la cuenta como pagada' : 'Marcada como pagada',
+            },
+          });
+        }
 
         // Only add income to Google Sheets if registerInSheets is true
-        if (registerInSheets) {
+        if (registerInSheets && faltante > 0) {
           const today = new Date().toISOString().split('T')[0];
           await googleSheetsService.addIncome({
             fecha: today,
-            importe: invoice.totalAmount,
+            importe: faltante,
             descripcion: `Pago cuenta de cobro #${invoice.invoiceNumber.substring(0, 12)} - ${invoice.servicio || 'Servicios'}`,
             categoria: 'PAGO DE CLIENTE',
             cuenta: cuenta,
