@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { razonPerdida } from '@/lib/lostReasons';
 import { apiClient } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { TrendingUp, Target, Clock, Trophy, XCircle, AlertTriangle } from 'lucide-react';
@@ -22,15 +23,6 @@ interface Perf {
 // Meta mensual del pipeline (brief MEJORAS 2 — bloque 6)
 const META_MENSUAL = 25_000_000;
 
-const REASON_LABELS: Record<string, string> = {
-  precio: 'Precio muy alto',
-  competencia: 'Eligió competencia',
-  timing: 'No es el momento',
-  no_necesita: 'No necesita',
-  sin_respuesta: 'No respondió',
-  no_califica: 'No califica',
-  otro: 'Otro',
-};
 
 export default function PipelineAnalytics({ deals, stages, formatCurrency }: Props) {
   const [perf, setPerf] = useState<Perf | null>(null);
@@ -163,7 +155,7 @@ export default function PipelineAnalytics({ deals, stages, formatCurrency }: Pro
             <div className="space-y-2">
               {[...perf.lostReasons].sort((a, b) => b.count - a.count).map((r) => (
                 <div key={r.reason} className="flex items-center gap-3">
-                  <span className="text-sm w-32 sm:w-40 truncate">{REASON_LABELS[r.reason] || r.reason}</span>
+                  <span className="text-sm w-32 sm:w-40 truncate">{razonPerdida(r.reason)}</span>
                   <div className="flex-1 bg-muted rounded h-5 overflow-hidden min-w-[40px]">
                     <div className="h-full bg-red-400 rounded" style={{ width: `${r.percentage}%` }} />
                   </div>

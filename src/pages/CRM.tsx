@@ -57,6 +57,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { ToastAction } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api';
+import { LOST_REASONS, razonPerdida } from '@/lib/lostReasons';
 import { convertImageToBase64 } from '@/lib/imageService';
 import { ScheduleMeetingDialog } from '@/components/crm/ScheduleMeetingDialog';
 import { createTask, sendTaskNotification, loadProjects } from '@/lib/firestoreTaskService';
@@ -235,16 +236,6 @@ interface Service {
   name: string;
   icon: string;
 }
-
-const LOST_REASONS = [
-  { value: 'precio', label: 'Precio muy alto' },
-  { value: 'competencia', label: 'Eligio competencia' },
-  { value: 'timing', label: 'No es el momento' },
-  { value: 'no_necesita', label: 'No necesita el servicio' },
-  { value: 'sin_respuesta', label: 'No respondio' },
-  { value: 'no_califica', label: 'No califica como cliente' },
-  { value: 'otro', label: 'Otro' },
-];
 
 const DEAL_SOURCES = [
   { value: 'referido', label: 'Referido', icon: null },
@@ -3083,7 +3074,7 @@ export default function CRM() {
                       <p className="truncate font-medium">{deal.name}</p>
                       <p className="truncate text-xs text-muted-foreground">
                         {deal.company || 'Sin empresa'}
-                        {archivoTab === 'perdidos' && deal.lostReason ? ` · ${deal.lostReason}` : ''}
+                        {archivoTab === 'perdidos' && deal.lostReason ? ` · ${razonPerdida(deal.lostReason)}` : ''}
                         {archivoTab === 'ganados' && deal.estimatedValue
                           ? ` · ${formatCurrency(deal.estimatedValue, deal.currency)}`
                           : ''}
