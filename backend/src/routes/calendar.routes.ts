@@ -14,6 +14,10 @@ router.get('/', calendarController.getEvents);
 router.get('/upcoming', calendarController.getUpcomingEvents);
 
 // Get single event
+// Antes de /:id: si no, "google" y "deal" se leen como un id de evento
+router.get('/google/estado', calendarController.googleEstado);
+router.post('/deal/:dealId/meeting', calendarController.createDealMeeting);
+
 router.get('/:id', calendarController.getEvent);
 
 // Create event

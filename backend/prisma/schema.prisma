@@ -845,6 +845,11 @@ model CalendarEvent {
   // Created by
   createdBy       String?
 
+  // Copia en Google Calendar. Nulo = la cita solo vive en DT-OS.
+  googleEventId   String?
+  googleHtmlLink  String?
+  meetLink        String?
+
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
