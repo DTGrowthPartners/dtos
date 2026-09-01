@@ -5,22 +5,38 @@ import fs from 'fs';
 /**
  * Google Calendar para las citas de ventas.
  *
- * Usa la MISMA cuenta de servicio que ya lee las hojas de finanzas
- * (credencials.json). Eso evita la pantalla de consentimiento de OAuth y su
- * verificacion: a una cuenta de servicio no le aplica el "modo produccion".
- * Solo hacen falta dos cosas, ambas fuera del codigo:
+ * Va con una cuenta de servicio, no con OAuth: a una cuenta de servicio no le
+ * aplica la pantalla de consentimiento ni el "modo produccion", que es lo que
+ * frenaba esto. Hacen falta tres cosas, todas fuera del codigo:
  *
  *   1. Habilitar la Google Calendar API en el proyecto de Google.
- *   2. Compartir el calendario con el correo de la cuenta de servicio dandole
- *      "Hacer cambios en los eventos", y poner su ID en GOOGLE_CALENDAR_ID.
+ *   2. Una cuenta de servicio de ESE proyecto, con su clave JSON en el servidor
+ *      (ruta en GOOGLE_CALENDAR_CREDENTIALS).
+ *   3. Compartir el calendario con el correo de esa cuenta dandole "Hacer
+ *      cambios en los eventos", y poner su ID en GOOGLE_CALENDAR_ID.
+ *
+ * El calendario puede vivir en un proyecto distinto al de las hojas de finanzas:
+ * por eso su archivo de credenciales es aparte y no se reusa credencials.json.
  *
  * Mientras eso no este listo, todo sigue funcionando: la cita se guarda en
  * DT-OS y simplemente no se copia a Google. Nunca tumba el agendamiento.
  */
 
-const CREDENTIALS_PATH = path.join(__dirname, '../../..', 'credencials.json');
+// Credenciales propias del calendario; si no se configura, cae en las de finanzas
+const CREDENTIALS_PATH =
+  process.env.GOOGLE_CALENDAR_CREDENTIALS ||
+  path.join(__dirname, '../../..', 'credencials.json');
 const CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID || '';
 const TZ = process.env.GOOGLE_CALENDAR_TZ || 'America/Bogota';
+
+/** El correo al que hay que compartirle el calendario. Se lee de la clave. */
+export const correoCuentaServicio = (): string | null => {
+  try {
+    return JSON.parse(fs.readFileSync(CREDENTIALS_PATH, 'utf8')).client_email || null;
+  } catch {
+    return null;
+  }
+};
 
 const log = (msg: string) => console.log(`[google-calendar] ${msg}`);
 
@@ -58,24 +74,25 @@ export const estaConfigurado = (): boolean =>
   Boolean(CALENDAR_ID) && fs.existsSync(CREDENTIALS_PATH);
 
 export const estado = async () => {
+  const cuenta = correoCuentaServicio();
   if (!fs.existsSync(CREDENTIALS_PATH)) {
-    return { ok: false, motivo: 'No esta el archivo de credenciales de Google en el servidor' };
+    return { ok: false, motivo: `No esta el archivo de credenciales en ${CREDENTIALS_PATH}` };
   }
   if (!CALENDAR_ID) {
-    return { ok: false, motivo: 'Falta GOOGLE_CALENDAR_ID en el .env del backend' };
+    return { ok: false, motivo: 'Falta GOOGLE_CALENDAR_ID en el .env del backend', cuentaServicio: cuenta };
   }
   try {
     const r = await cliente().calendars.get({ calendarId: CALENDAR_ID });
-    return { ok: true, calendario: r.data.summary, id: CALENDAR_ID, zona: TZ };
+    return { ok: true, calendario: r.data.summary, id: CALENDAR_ID, zona: TZ, cuentaServicio: cuenta };
   } catch (e: any) {
     const msg = e?.errors?.[0]?.message || e?.message || String(e);
     if (/has not been used|is disabled|SERVICE_DISABLED/i.test(msg)) {
-      return { ok: false, motivo: 'Falta habilitar la Google Calendar API en el proyecto de Google' };
+      return { ok: false, motivo: 'Falta habilitar la Google Calendar API en el proyecto de esa cuenta de servicio', cuentaServicio: cuenta };
     }
     if (/notFound|404/i.test(msg)) {
-      return { ok: false, motivo: `El calendario ${CALENDAR_ID} no existe o no esta compartido con la cuenta de servicio` };
+      return { ok: false, motivo: `El calendario ${CALENDAR_ID} no existe o no esta compartido con ${cuenta}`, cuentaServicio: cuenta };
     }
-    return { ok: false, motivo: msg };
+    return { ok: false, motivo: msg, cuentaServicio: cuenta };
   }
 };
 
@@ -194,4 +211,4 @@ export const eliminarEvento = async (googleEventId: string): Promise<boolean> =>
   }
 };
 
-export default { estaConfigurado, estado, crearEvento, actualizarEvento, eliminarEvento };
+export default { estaConfigurado, estado, crearEvento, actualizarEvento, eliminarEvento, correoCuentaServicio };
