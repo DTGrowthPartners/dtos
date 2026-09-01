@@ -129,18 +129,18 @@ export const crearEvento = async (d: DatosEvento): Promise<EventoGoogle | null> 
 
     let r: any = null;
     let invitar = invitados.length > 0;
-    let meet = Boolean(d.crearMeet);
+    let pedirMeet = Boolean(d.crearMeet);
     for (let intento = 0; intento < 3 && !r; intento++) {
       try {
-        r = await enviar(invitar, meet);
+        r = await enviar(invitar, pedirMeet);
       } catch (e: any) {
         const msg = e?.errors?.[0]?.message || e?.message || '';
         if (invitar && /invite attendees|Domain-Wide Delegation|forbiddenForServiceAccounts/i.test(msg)) {
           log('Google no deja invitar desde una cuenta de servicio; los correos van en la descripcion');
           invitar = false;
-        } else if (meet && /conference|hangout|meet/i.test(msg)) {
+        } else if (pedirMeet && /conference|hangout|meet/i.test(msg)) {
           log('esta cuenta no permite crear enlaces de Meet; la cita se crea sin el');
-          meet = false;
+          pedirMeet = false;
         } else {
           throw e;
         }
