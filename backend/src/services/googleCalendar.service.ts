@@ -107,32 +107,46 @@ export const crearEvento = async (d: DatosEvento): Promise<EventoGoogle | null> 
     }
 
     const invitados = (d.invitados || []).filter((c) => c && c.includes('@'));
-    const enviar = async (conInvitados: boolean) =>
-      cliente().events.insert({
+    // Dos cosas que Google puede rechazar segun de quien sea el calendario, y
+    // ninguna vale perder la cita:
+    //   - invitar personas: una cuenta de servicio no puede sin delegacion de dominio;
+    //   - crear el enlace de Meet: las cuentas @gmail normales no lo permiten.
+    // Se reintenta bajando una cosa a la vez; los correos quedan en la descripcion.
+    const enviar = async (conInvitados: boolean, conMeet: boolean) => {
+      const cuerpo: any = { ...base };
+      if (!conMeet) delete cuerpo.conferenceData;
+      if (conInvitados && invitados.length) {
+        cuerpo.attendees = invitados.map((email) => ({ email }));
+      } else if (invitados.length) {
+        cuerpo.description = `${base.description ? base.description + '\n\n' : ''}Participantes: ${invitados.join(', ')}`;
+      }
+      return cliente().events.insert({
         calendarId: CALENDAR_ID,
-        conferenceDataVersion: d.crearMeet ? 1 : 0,
-        requestBody: conInvitados && invitados.length
-          ? { ...base, attendees: invitados.map((email) => ({ email })) }
-          : {
-              ...base,
-              description: invitados.length
-                ? `${base.description ? base.description + '\n\n' : ''}Participantes: ${invitados.join(', ')}`
-                : base.description,
-            },
+        conferenceDataVersion: conMeet ? 1 : 0,
+        requestBody: cuerpo,
       });
+    };
 
-    let r;
-    try {
-      r = await enviar(invitados.length > 0);
-    } catch (e: any) {
-      const msg = e?.errors?.[0]?.message || e?.message || '';
-      if (invitados.length && /invite attendees|Domain-Wide Delegation|forbiddenForServiceAccounts/i.test(msg)) {
-        log('Google no deja invitar desde una cuenta de servicio; el evento se crea con los correos en la descripcion');
-        r = await enviar(false);
-      } else {
-        throw e;
+    let r: any = null;
+    let invitar = invitados.length > 0;
+    let meet = Boolean(d.crearMeet);
+    for (let intento = 0; intento < 3 && !r; intento++) {
+      try {
+        r = await enviar(invitar, meet);
+      } catch (e: any) {
+        const msg = e?.errors?.[0]?.message || e?.message || '';
+        if (invitar && /invite attendees|Domain-Wide Delegation|forbiddenForServiceAccounts/i.test(msg)) {
+          log('Google no deja invitar desde una cuenta de servicio; los correos van en la descripcion');
+          invitar = false;
+        } else if (meet && /conference|hangout|meet/i.test(msg)) {
+          log('esta cuenta no permite crear enlaces de Meet; la cita se crea sin el');
+          meet = false;
+        } else {
+          throw e;
+        }
       }
     }
+    if (!r) throw new Error('Google rechazo el evento incluso sin invitados ni Meet');
 
     const ev = r.data;
     const meet =
