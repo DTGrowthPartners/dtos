@@ -25,7 +25,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  createTask,
   loadTasks,
   loadProjects,
   updateTask,
@@ -36,6 +48,7 @@ import {
   type Task,
   type Project,
   TaskStatus,
+  Priority,
   teamMemberStyle,
   DEFAULT_COLUMNS,
   DEFAULT_PROJECTS,
@@ -78,6 +91,20 @@ export default function MisTareas() {
   const [viewMode, setViewMode] = useState<ViewMode>('simple');
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const teamMembers = useTeamMembers();
+
+  // Crear tarea desde aqui: va a la misma coleccion que Operaciones, asi que
+  // aparece en el tablero al instante. Antes tocaba salir a Operaciones para
+  // anotar cualquier pendiente propio.
+  const [nuevaAbierta, setNuevaAbierta] = useState(false);
+  const [guardandoNueva, setGuardandoNueva] = useState(false);
+  const [nueva, setNueva] = useState({
+    title: '',
+    description: '',
+    projectId: '',
+    assignee: '' as TeamMemberName,
+    priority: Priority.MEDIUM as Priority,
+    dueDate: '',
+  });
   const { user } = useAuthStore();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -117,6 +144,48 @@ export default function MisTareas() {
     if (userName) return;
     setUserName(matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Edgardo');
   }, [teamMembers, user?.firstName, user?.email, userName]);
+
+  const abrirNueva = () => {
+    setNueva({
+      title: '',
+      description: '',
+      projectId: projects[0]?.id || '',
+      assignee: userName,
+      priority: Priority.MEDIUM,
+      dueDate: '',
+    });
+    setNuevaAbierta(true);
+  };
+
+  const crearTarea = async () => {
+    if (!nueva.title.trim()) return;
+    setGuardandoNueva(true);
+    try {
+      await createTask({
+        title: nueva.title.trim(),
+        description: nueva.description.trim(),
+        status: TaskStatus.TODO,
+        priority: nueva.priority,
+        assignee: nueva.assignee || userName,
+        creator: userName,
+        projectId: nueva.projectId,
+        // Fecha local a mediodia: con la medianoche, el desfase de UTC la corria al dia anterior
+        dueDate: nueva.dueDate ? new Date(`${nueva.dueDate}T12:00:00`).getTime() : undefined,
+      } as Omit<Task, 'id' | 'createdAt'>);
+      toast({
+        title: 'Tarea creada',
+        description: nueva.assignee && nueva.assignee !== userName
+          ? `Queda asignada a ${nueva.assignee} y ya aparece en Operaciones.`
+          : 'Ya aparece en Operaciones.',
+      });
+      setNuevaAbierta(false);
+      await fetchData();
+    } catch (e) {
+      toast({ title: 'Error', description: 'No se pudo crear la tarea', variant: 'destructive' });
+    } finally {
+      setGuardandoNueva(false);
+    }
+  };
 
   const getProject = (projectId: string) => {
     return projects.find((p) => p.id === projectId);
@@ -308,6 +377,9 @@ export default function MisTareas() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={abrirNueva} className="gap-1.5">
+              <Plus className="h-4 w-4" /> Nueva tarea
+            </Button>
             <div className="flex items-center gap-2">
               <User className="h-4 w-4 text-muted-foreground" />
               <Select value={userName} onValueChange={(v) => setUserName(v as TeamMemberName)}>
@@ -736,6 +808,91 @@ export default function MisTareas() {
           fetchData();
         }}
       />
+
+      {/* Nueva tarea: misma coleccion que Operaciones */}
+      <Dialog open={nuevaAbierta} onOpenChange={setNuevaAbierta}>
+        <DialogContent className="sm:max-w-lg max-h-[88vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nueva tarea</DialogTitle>
+            <DialogDescription>Queda en Operaciones, en la columna Pendiente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>¿Qué hay que hacer? *</Label>
+              <Input
+                autoFocus
+                value={nueva.title}
+                onChange={(e) => setNueva({ ...nueva, title: e.target.value })}
+                onKeyDown={(e) => { if (e.key === 'Enter' && nueva.title.trim()) crearTarea(); }}
+                placeholder="Ej. Enviar propuesta a Tennis Cartagena"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Detalles</Label>
+              <Textarea
+                value={nueva.description}
+                onChange={(e) => setNueva({ ...nueva, description: e.target.value })}
+                placeholder="Opcional"
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Proyecto</Label>
+                <Select value={nueva.projectId} onValueChange={(v) => setNueva({ ...nueva, projectId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Elegir proyecto" /></SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Responsable</Label>
+                <Select value={nueva.assignee} onValueChange={(v) => setNueva({ ...nueva, assignee: v as TeamMemberName })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {teamMembers.map((m) => (
+                      <SelectItem key={m.name} value={m.name}>
+                        <div className="flex items-center gap-2">
+                          <div className={`w-2.5 h-2.5 rounded-full ${m.color}`} />
+                          {m.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Prioridad</Label>
+                <Select value={nueva.priority} onValueChange={(v) => setNueva({ ...nueva, priority: v as Priority })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={Priority.LOW}>Baja</SelectItem>
+                    <SelectItem value={Priority.MEDIUM}>Media</SelectItem>
+                    <SelectItem value={Priority.HIGH}>Alta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Fecha límite</Label>
+                <Input
+                  type="date"
+                  value={nueva.dueDate}
+                  onChange={(e) => setNueva({ ...nueva, dueDate: e.target.value })}
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNuevaAbierta(false)}>Cancelar</Button>
+            <Button onClick={crearTarea} disabled={guardandoNueva || !nueva.title.trim()}>
+              {guardandoNueva ? 'Creando…' : 'Crear tarea'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
