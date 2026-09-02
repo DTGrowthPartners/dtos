@@ -23,11 +23,17 @@ const normName = (s: string) =>
 
 const fmt = (n: number) => '$' + Math.round(n).toLocaleString('es-CO');
 
+/** Filas que la propia DT-OS escribio en la hoja al registrar un abono o un pago:
+ *  ya estan aplicadas a su cuenta, volver a aplicarlas duplica el dinero. */
+const ORIGEN_DTOS = /^\s*(abono cuenta|pago cuenta de cobro)\s*#/i;
+
 export interface ConciliacionResult {
   procesados: number;
   aplicados: string[];
   sugeridos: string[];
   sinMatch: number;
+  /** Filas escritas por la propia DT-OS, ya aplicadas: se saltan */
+  omitidosPropios: number;
   errores: string[];
 }
 
@@ -50,7 +56,7 @@ const aplicarAbono = async (invoiceId: string, amount: number, referencia: strin
 };
 
 export const runConciliacion = async (): Promise<ConciliacionResult> => {
-  const result: ConciliacionResult = { procesados: 0, aplicados: [], sugeridos: [], sinMatch: 0, errores: [] };
+  const result: ConciliacionResult = { procesados: 0, aplicados: [], sugeridos: [], sinMatch: 0, omitidosPropios: 0, errores: [] };
 
   let pagos: Array<{ tercero: string; importe: number; fecha: string; descripcion: string; cuenta: string; cuentaCobro: string; tipoPago: string }> = [];
   try {
@@ -66,6 +72,12 @@ export const runConciliacion = async (): Promise<ConciliacionResult> => {
 
   for (const p of pagos) {
     if (!p.importe || p.importe <= 0) continue;
+    // DT-OS escribe una fila en la hoja cada vez que alguien registra un abono o
+    // marca una cuenta como pagada. Si la conciliacion vuelve a leer esa fila,
+    // aplica el mismo dinero dos veces: le paso a MACRO SALSAMENTARIA, que quedo
+    // en $3.000.000 abonados habiendo pagado $1.500.000. Esas filas ya nacieron
+    // aplicadas, hay que saltarlas.
+    if (ORIGEN_DTOS.test(p.descripcion || '')) { result.omitidosPropios++; continue; }
     const numCC = (p.cuentaCobro || '').replace(/[^0-9]/g, '');
     const key = `${p.fecha}|${Math.round(p.importe)}|${normName(p.tercero)}|${numCC}`;
     const visto = await prisma.pagoConciliado.findUnique({ where: { sheetKey: key } });
