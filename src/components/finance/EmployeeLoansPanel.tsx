@@ -364,7 +364,9 @@ export default function EmployeeLoansPanel() {
 
       {/* Estado de cuenta */}
       <Dialog open={!!statementLoan} onOpenChange={(o) => !o && setStatementLoan(null)}>
-        <DialogContent className="max-w-lg">
+        {/* max-h + scroll propio: con varios movimientos el modal se salia de la
+            pantalla y cortaba la ultima fila por la mitad */}
+        <DialogContent className="sm:max-w-xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               Estado de Cuenta
@@ -384,25 +386,33 @@ export default function EmployeeLoansPanel() {
                 </Badge>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Total</p><p className="font-bold text-sm">{fmt(statementLoan.totalAmount)}</p></div>
-                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Abonado</p><p className="font-bold text-sm text-green-600">{fmt(statementLoan.paidAmount)}</p></div>
-                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Saldo</p><p className="font-bold text-sm text-red-500">{fmt(statementLoan.totalAmount - statementLoan.paidAmount)}</p></div>
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Total</p><p className="font-bold text-sm tabular-nums">{fmt(statementLoan.totalAmount)}</p></div>
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Abonado</p><p className="font-bold text-sm tabular-nums text-green-600">{fmt(statementLoan.paidAmount)}</p></div>
+                <div className="rounded-lg bg-muted p-2"><p className="text-[11px] text-muted-foreground">Saldo</p><p className="font-bold text-sm tabular-nums text-red-500">{fmt(statementLoan.totalAmount - statementLoan.paidAmount)}</p></div>
               </div>
               <div>
                 <p className="text-sm font-medium mb-2">Movimientos ({statementLoan.payments?.length || 0})</p>
                 {!statementLoan.payments || statementLoan.payments.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-3 text-center">Sin abonos registrados.</p>
                 ) : (
-                  <div className="border rounded-lg divide-y max-h-60 overflow-auto">
-                    {statementLoan.payments.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between px-3 py-2 text-sm">
-                        <div className="min-w-0">
-                          <p>{fmtDate(p.paidAt)}</p>
-                          <p className="text-xs text-muted-foreground truncate">{p.paymentMethod || 'Abono'}{p.reference ? ` · ${p.reference}` : ''}</p>
+                  <div className="border rounded-lg divide-y max-h-[42vh] overflow-y-auto">
+                    {/* Del mas reciente al mas viejo: venian en el orden en que se
+                        guardaron, que en un estado de cuenta no dice nada */}
+                    {[...statementLoan.payments]
+                      .sort((a, b) => new Date(b.paidAt || 0).getTime() - new Date(a.paidAt || 0).getTime())
+                      .map((p) => (
+                        <div key={p.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-sm">
+                          <div className="min-w-0">
+                            <p className="tabular-nums">{fmtDate(p.paidAt)}</p>
+                            <p className="text-xs text-muted-foreground break-words">
+                              {p.paymentMethod || 'Abono'}{p.reference ? ` · ${p.reference}` : ''}
+                            </p>
+                          </div>
+                          {/* shrink-0 para que el monto no se meta debajo de la barra
+                              de desplazamiento cuando la descripcion es larga */}
+                          <p className="shrink-0 font-medium tabular-nums text-green-600">{fmt(p.amount)}</p>
                         </div>
-                        <p className="font-medium text-green-600">{fmt(p.amount)}</p>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 )}
               </div>
