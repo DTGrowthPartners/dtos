@@ -57,6 +57,7 @@ import {
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { matchTeamMember } from '@/types/taskTypes';
 import { useAuthStore } from '@/lib/auth';
+import { TODO_DRAG_TYPE } from '@/components/todos/TodoList';
 import ImageModal from '@/components/ImageModal';
 import CommentsModal from '@/components/CommentsModal';
 import { useNavigate } from 'react-router-dom';
@@ -97,12 +98,15 @@ export default function MisTareas() {
   // anotar cualquier pendiente propio.
   const [nuevaAbierta, setNuevaAbierta] = useState(false);
   const [guardandoNueva, setGuardandoNueva] = useState(false);
+  // Si trae id, el dialogo esta editando esa tarea; si no, creando una nueva
+  const [editandoId, setEditandoId] = useState<string | null>(null);
   const [nueva, setNueva] = useState({
     title: '',
     description: '',
     projectId: '',
     assignee: '' as TeamMemberName,
     priority: Priority.MEDIUM as Priority,
+    status: TaskStatus.TODO as string,
     dueDate: '',
   });
   const { user } = useAuthStore();
@@ -146,13 +150,32 @@ export default function MisTareas() {
   }, [teamMembers, user?.firstName, user?.email, userName]);
 
   const abrirNueva = () => {
+    setEditandoId(null);
     setNueva({
       title: '',
       description: '',
       projectId: projects[0]?.id || '',
       assignee: userName,
       priority: Priority.MEDIUM,
+      status: TaskStatus.TODO,
       dueDate: '',
+    });
+    setNuevaAbierta(true);
+  };
+
+  const abrirEdicion = (task: Task) => {
+    setEditandoId(task.id);
+    setNueva({
+      title: task.title || '',
+      description: task.description || '',
+      projectId: task.projectId || projects[0]?.id || '',
+      assignee: task.assignee || userName,
+      priority: (task.priority as Priority) || Priority.MEDIUM,
+      status: task.status || TaskStatus.TODO,
+      // El input date necesita la fecha local, no la UTC de toISOString()
+      dueDate: task.dueDate
+        ? (() => { const d = new Date(task.dueDate); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })()
+        : '',
     });
     setNuevaAbierta(true);
   };
@@ -160,28 +183,42 @@ export default function MisTareas() {
   const crearTarea = async () => {
     if (!nueva.title.trim()) return;
     setGuardandoNueva(true);
+    // Fecha local a mediodia: con la medianoche, el desfase de UTC la corria al dia anterior
+    const vence = nueva.dueDate ? new Date(`${nueva.dueDate}T12:00:00`).getTime() : undefined;
     try {
-      await createTask({
-        title: nueva.title.trim(),
-        description: nueva.description.trim(),
-        status: TaskStatus.TODO,
-        priority: nueva.priority,
-        assignee: nueva.assignee || userName,
-        creator: userName,
-        projectId: nueva.projectId,
-        // Fecha local a mediodia: con la medianoche, el desfase de UTC la corria al dia anterior
-        dueDate: nueva.dueDate ? new Date(`${nueva.dueDate}T12:00:00`).getTime() : undefined,
-      } as Omit<Task, 'id' | 'createdAt'>);
-      toast({
-        title: 'Tarea creada',
-        description: nueva.assignee && nueva.assignee !== userName
-          ? `Queda asignada a ${nueva.assignee} y ya aparece en Operaciones.`
-          : 'Ya aparece en Operaciones.',
-      });
+      if (editandoId) {
+        await updateTask(editandoId, {
+          title: nueva.title.trim(),
+          description: nueva.description.trim(),
+          status: nueva.status,
+          priority: nueva.priority,
+          assignee: nueva.assignee || userName,
+          projectId: nueva.projectId,
+          dueDate: vence,
+        });
+        toast({ title: 'Tarea actualizada' });
+      } else {
+        await createTask({
+          title: nueva.title.trim(),
+          description: nueva.description.trim(),
+          status: nueva.status,
+          priority: nueva.priority,
+          assignee: nueva.assignee || userName,
+          creator: userName,
+          projectId: nueva.projectId,
+          dueDate: vence,
+        } as Omit<Task, 'id' | 'createdAt'>);
+        toast({
+          title: 'Tarea creada',
+          description: nueva.assignee && nueva.assignee !== userName
+            ? `Queda asignada a ${nueva.assignee} y ya aparece en Operaciones.`
+            : 'Ya aparece en Operaciones.',
+        });
+      }
       setNuevaAbierta(false);
       await fetchData();
     } catch (e) {
-      toast({ title: 'Error', description: 'No se pudo crear la tarea', variant: 'destructive' });
+      toast({ title: 'Error', description: `No se pudo ${editandoId ? 'actualizar' : 'crear'} la tarea`, variant: 'destructive' });
     } finally {
       setGuardandoNueva(false);
     }
@@ -238,11 +275,38 @@ export default function MisTareas() {
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    // El pendiente se copia (queda la tarea), la tarea se mueve de columna
+    const esPendiente = e.dataTransfer.types.includes(TODO_DRAG_TYPE);
+    e.dataTransfer.dropEffect = esPendiente ? 'copy' : 'move';
   };
 
   const handleDrop = async (e: React.DragEvent, newStatus: string) => {
     e.preventDefault();
+
+    // Un pendiente del To-Do arrastrado hasta una columna se convierte en tarea
+    const crudo = e.dataTransfer.getData(TODO_DRAG_TYPE);
+    if (crudo) {
+      try {
+        const pendiente = JSON.parse(crudo) as { id: string; text: string };
+        await createTask({
+          title: pendiente.text,
+          description: '',
+          status: newStatus,
+          priority: Priority.MEDIUM,
+          assignee: userName,
+          creator: userName,
+          projectId: projects[0]?.id || '',
+        } as Omit<Task, 'id' | 'createdAt'>);
+        // El To-Do escucha esto y saca el pendiente de su lista
+        window.dispatchEvent(new CustomEvent('dtos:todo-convertido', { detail: { id: pendiente.id } }));
+        toast({ title: 'Convertido en tarea', description: pendiente.text });
+        await fetchData();
+      } catch {
+        toast({ title: 'Error', description: 'No se pudo convertir el pendiente', variant: 'destructive' });
+      }
+      return;
+    }
+
     const taskId = e.dataTransfer.getData('taskId');
     const task = tasks.find(t => t.id === taskId);
 
@@ -515,6 +579,15 @@ export default function MisTareas() {
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
+                            title="Editar tarea"
+                            onClick={() => abrirEdicion(task)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
                             onClick={() => handleAddComment(task)}
                           >
                             <MessageCircle className="h-4 w-4" />
@@ -637,6 +710,9 @@ export default function MisTareas() {
                                   <span className={`text-xs px-2 py-0.5 rounded-full ${priority?.color || 'bg-gray-100'}`}>
                                     {priority?.label || task.priority}
                                   </span>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar tarea" onClick={() => abrirEdicion(task)}>
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
                                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(task)}>
                                     <Trash2 className="h-3 w-3" />
                                   </Button>
@@ -678,6 +754,18 @@ export default function MisTareas() {
                                     {task.title}
                                   </h3>
                                 </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  title="Editar tarea"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    abrirEdicion(task);
+                                  }}
+                                >
+                                  <Edit className="h-3 w-3" />
+                                </Button>
                                 <Button
                                   variant="ghost"
                                   size="icon"
@@ -813,8 +901,10 @@ export default function MisTareas() {
       <Dialog open={nuevaAbierta} onOpenChange={setNuevaAbierta}>
         <DialogContent className="sm:max-w-lg max-h-[88vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Nueva tarea</DialogTitle>
-            <DialogDescription>Queda en Operaciones, en la columna Pendiente.</DialogDescription>
+            <DialogTitle>{editandoId ? 'Editar tarea' : 'Nueva tarea'}</DialogTitle>
+            <DialogDescription>
+              {editandoId ? 'Los cambios se ven igual en Operaciones.' : 'Queda tambien en Operaciones.'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -883,12 +973,23 @@ export default function MisTareas() {
                   onChange={(e) => setNueva({ ...nueva, dueDate: e.target.value })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <Select value={nueva.status} onValueChange={(v) => setNueva({ ...nueva, status: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={TaskStatus.TODO}>Pendiente</SelectItem>
+                    <SelectItem value={TaskStatus.IN_PROGRESS}>En Progreso</SelectItem>
+                    <SelectItem value={TaskStatus.DONE}>Completado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setNuevaAbierta(false)}>Cancelar</Button>
             <Button onClick={crearTarea} disabled={guardandoNueva || !nueva.title.trim()}>
-              {guardandoNueva ? 'Creando…' : 'Crear tarea'}
+              {guardandoNueva ? 'Guardando…' : editandoId ? 'Guardar cambios' : 'Crear tarea'}
             </Button>
           </DialogFooter>
         </DialogContent>

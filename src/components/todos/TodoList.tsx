@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send } from 'lucide-react';
+import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send, GripVertical } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,9 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/auth';
 import { cn } from '@/lib/utils';
 import { loadTodos, createTodo, updateTodo, deleteTodo, type Todo } from '@/lib/firestoreTodoService';
+
+/** Formato del arrastre de un pendiente hacia el tablero de Mis Tareas. */
+export const TODO_DRAG_TYPE = 'application/dtos-todo';
 import { createTask, loadProjects } from '@/lib/firestoreTaskService';
 import { matchTeamMember, type TeamMemberName, type Task } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
@@ -180,6 +183,18 @@ export default function TodoList() {
     setTodos((prev) => sortTodos(prev.map((x) => (x.id === todo.id ? { ...x, done, completedAt: done ? Date.now() : null } : x))));
     try { await updateTodo(todo.id, { done, completedAt: done ? Date.now() : null }); } catch { load(); }
   };
+
+  // Mis Tareas avisa cuando un pendiente arrastrado ya quedo convertido en tarea
+  useEffect(() => {
+    const alConvertir = (e: Event) => {
+      const id = (e as CustomEvent).detail?.id;
+      if (!id) return;
+      setTodos((prev) => prev.filter((x) => x.id !== id));
+      deleteTodo(id).catch(() => {});
+    };
+    window.addEventListener('dtos:todo-convertido', alConvertir);
+    return () => window.removeEventListener('dtos:todo-convertido', alConvertir);
+  }, []);
 
   const remove = async (todo: Todo) => {
     setTodos((prev) => prev.filter((x) => x.id !== todo.id));
@@ -369,6 +384,23 @@ export default function TodoList() {
                           >
                             🐸
                           </button>
+                        )}
+                        {!selectMode && !todo.done && (
+                          <span
+                            draggable
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onDragStart={(e) => {
+                              e.stopPropagation();
+                              e.dataTransfer.effectAllowed = 'copy';
+                              e.dataTransfer.setData(TODO_DRAG_TYPE, JSON.stringify({ id: todo.id, text: todo.text }));
+                              // Respaldo: algunos navegadores solo dejan leer text/plain durante el dragover
+                              e.dataTransfer.setData('text/plain', todo.text);
+                            }}
+                            className="flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-primary transition-colors"
+                            title="Arrastrar a Mis Tareas para convertirlo en tarea"
+                          >
+                            <GripVertical className="h-4 w-4" />
+                          </span>
                         )}
                         {!selectMode && (
                           <button
