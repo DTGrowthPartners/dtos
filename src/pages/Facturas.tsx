@@ -154,11 +154,9 @@ const Facturas = () => {
     setInvoiceData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Solo clientes marcados para Factura Electrónica (los de Cuenta de Cobro van por /cuentas-cobro)
-  const facturaClients = useMemo(
-    () => clients.filter((c) => c.tipoFacturacion === 'factura_electronica'),
-    [clients]
-  );
+  // Mismos terceros/clientes que en Cuentas de Cobro: cualquier cliente puede
+  // facturarse como factura electrónica, sin importar su tipoFacturacion por defecto.
+  const facturaClients = clients;
 
   const filteredClients = useMemo(() => {
     if (!clientSearchQuery) return facturaClients;
@@ -412,7 +410,7 @@ const Facturas = () => {
                     />
                     <CommandList>
                       <CommandEmpty>
-                        No hay clientes con "Factura Electrónica" como tipo de facturación.
+                        No se encontraron clientes.
                       </CommandEmpty>
                       <CommandGroup>
                         {filteredClients.map((client) => (
@@ -441,7 +439,7 @@ const Facturas = () => {
                 </PopoverContent>
               </Popover>
               <p className="text-xs text-muted-foreground">
-                Solo aparecen clientes marcados como "Factura Electrónica" en su ficha. Si falta uno, cámbialo desde Clientes.
+                Se muestran todos los clientes, igual que en Cuentas de Cobro.
               </p>
             </div>
             <div className="space-y-2">
