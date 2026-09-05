@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   PlusCircle, Trash2, FileText, CheckSquare, Square, Check, ChevronsUpDown,
-  Send, CircleCheck, Clock, ShieldCheck, FileEdit,
+  Send, CircleCheck, Clock, ShieldCheck, FileEdit, Ban,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
@@ -663,54 +663,82 @@ const Facturas = () => {
                             {invoice.factusNumber}
                           </Badge>
                         )}
+                        {invoice.factusStatus === 'anulada' && invoice.factusNcNumber && (
+                          <Badge
+                            variant="outline"
+                            className="mt-1 flex w-fit items-center gap-1 border-red-300 text-red-700"
+                            title={`Anulada con la nota crédito ${invoice.factusNcNumber}`}
+                          >
+                            <Ban className="h-3 w-3" />
+                            NC {invoice.factusNcNumber}
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <span className="whitespace-nowrap">{new Date(invoice.fecha).toLocaleDateString('es-CO')}</span>
                       </TableCell>
                       <TableCell className="break-words">{invoice.clientName}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">
-                        {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                        {invoice.factusStatus === 'anulada' ? (
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span className="text-xs text-muted-foreground line-through">
+                              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                            </span>
+                            <span className="font-medium text-red-600">
+                              {new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(0)}
+                            </span>
+                          </div>
+                        ) : (
+                          new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)
+                        )}
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={invoice.status || 'pendiente'}
-                          onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'pagada')}
-                        >
-                          <SelectTrigger className="w-[120px] h-8">
-                            <SelectValue>
-                              {(() => {
-                                const status = statusInfo(invoice.status);
-                                const StatusIcon = status.icon;
-                                return (
-                                  <Badge className={cn("gap-1", status.color)}>
-                                    <StatusIcon className="h-3 w-3" />
-                                    {status.label}
-                                  </Badge>
-                                );
-                              })()}
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pendiente">
-                              <div className="flex items-center gap-2">
-                                <Clock className="h-3 w-3 text-yellow-600" />
-                                Pendiente
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="enviada">
-                              <div className="flex items-center gap-2">
-                                <Send className="h-3 w-3 text-blue-600" />
-                                Enviada
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="pagada">
-                              <div className="flex items-center gap-2">
-                                <CircleCheck className="h-3 w-3 text-green-600" />
-                                Pagada
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {invoice.factusStatus === 'anulada' ? (
+                          <Badge variant="outline" className="gap-1 border-red-300 text-red-700" title="Anulada por nota crédito: el valor de esta factura quedó en $0">
+                            <Ban className="h-3 w-3" />
+                            Anulada
+                          </Badge>
+                        ) : (
+                          <Select
+                            value={invoice.status || 'pendiente'}
+                            onValueChange={(value) => handleStatusChange(invoice.id, value as 'pendiente' | 'enviada' | 'pagada')}
+                          >
+                            <SelectTrigger className="w-[120px] h-8">
+                              <SelectValue>
+                                {(() => {
+                                  const status = statusInfo(invoice.status);
+                                  const StatusIcon = status.icon;
+                                  return (
+                                    <Badge className={cn("gap-1", status.color)}>
+                                      <StatusIcon className="h-3 w-3" />
+                                      {status.label}
+                                    </Badge>
+                                  );
+                                })()}
+                              </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="pendiente">
+                                <div className="flex items-center gap-2">
+                                  <Clock className="h-3 w-3 text-yellow-600" />
+                                  Pendiente
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="enviada">
+                                <div className="flex items-center gap-2">
+                                  <Send className="h-3 w-3 text-blue-600" />
+                                  Enviada
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="pagada">
+                                <div className="flex items-center gap-2">
+                                  <CircleCheck className="h-3 w-3 text-green-600" />
+                                  Pagada
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
