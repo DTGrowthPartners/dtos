@@ -18,6 +18,34 @@ from reportlab.lib.utils import ImageReader
 AZUL = colors.HexColor('#1663a7')
 GRIS = colors.HexColor('#555555')
 
+def envolver_texto(c, texto, fuente, tam, ancho_max, max_lineas=3):
+    """Parte `texto` en hasta `max_lineas` líneas que quepan en `ancho_max`.
+    Si sobra texto después de la última línea permitida, la corta con "…"
+    (en vez de perder contenido en silencio, como hacía el truncado anterior)."""
+    palabras = texto.split()
+    lineas = []
+    actual = ''
+    idx = 0
+    while idx < len(palabras) and len(lineas) < max_lineas:
+        palabra = palabras[idx]
+        prueba = f'{actual} {palabra}'.strip()
+        if not actual or c.stringWidth(prueba, fuente, tam) <= ancho_max:
+            actual = prueba
+            idx += 1
+        else:
+            lineas.append(actual)
+            actual = ''
+    if actual and len(lineas) < max_lineas:
+        lineas.append(actual)
+        actual = ''
+    if idx < len(palabras) or actual:
+        # quedó texto sin ubicar: se corta la última línea con "…"
+        ultima = lineas[-1] if lineas else actual
+        while ultima and c.stringWidth(ultima + '…', fuente, tam) > ancho_max:
+            ultima = ultima.rsplit(' ', 1)[0] if ' ' in ultima else ultima[:-1]
+        lineas = (lineas[:-1] if lineas else []) + [f'{ultima}…' if ultima else '…']
+    return lineas or ['']
+
 def generar(d):
     script_dir = os.path.dirname(os.path.abspath(__file__))
     # fuentes de la marca (mismas de la cuenta de cobro)
@@ -92,14 +120,16 @@ def generar(d):
     c.drawRightString(W - mi - 150, y, 'Cant.')
     c.drawRightString(W - mi - 8, y, 'Valor')
     c.setFillColor(colors.black); c.setFont(fn, 9)
+    ancho_desc = W - 2 * mi - 180
     for it in d['items']:
+        lineas = envolver_texto(c, it['descripcion'], fn, 9, ancho_desc, max_lineas=3)
         y -= 20
-        desc = it['descripcion']
-        while c.stringWidth(desc, fn, 9) > W - 2 * mi - 180 and len(desc) > 10:
-            desc = desc[:-1]
-        c.drawString(mi + 8, y, desc)
+        c.drawString(mi + 8, y, lineas[0])
         c.drawRightString(W - mi - 150, y, str(it.get('cantidad', 1)))
         c.drawRightString(W - mi - 8, y, f"$ {it['valor']:,.0f}".replace(',', '.'))
+        for linea_extra in lineas[1:]:
+            y -= 12
+            c.drawString(mi + 8, y, linea_extra)
     y -= 8
     c.setStrokeColor(colors.HexColor('#dddddd'))
     c.line(mi, y, W - mi, y)

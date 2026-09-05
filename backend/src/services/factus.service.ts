@@ -309,7 +309,11 @@ export const factusService = {
 
     await prisma.invoice.update({
       where: { id: invoice.id },
-      data: { factusStatus: 'anulada', factusNcNumber: nc.number },
+      data: {
+        factusStatus: 'anulada',
+        factusNcNumber: nc.number,
+        factusNcValidatedAt: nc.is_validated ? new Date() : null,
+      },
     });
 
     return {

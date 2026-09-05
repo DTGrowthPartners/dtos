@@ -90,6 +90,7 @@ interface Invoice {
   factusCufe?: string | null;
   factusStatus?: string | null;
   factusNcNumber?: string | null;
+  factusNcValidatedAt?: string | null;
 }
 
 const INVOICE_STATUS = {
@@ -170,6 +171,23 @@ const Facturas = () => {
   const borradores = useMemo(() => invoices.filter((inv) => !inv.factusNumber), [invoices]);
   const enviadas = useMemo(() => invoices.filter((inv) => !!inv.factusNumber), [invoices]);
   const visibleInvoices = activeTab === 'borradores' ? borradores : enviadas;
+
+  // Filas a renderizar: cada nota crédito de una factura anulada se muestra
+  // como su propia fila (con el valor en negativo), justo debajo de la factura.
+  type FilaFactura =
+    | { kind: 'factura'; invoice: Invoice }
+    | { kind: 'nota_credito'; invoice: Invoice };
+  const visibleRows = useMemo<FilaFactura[]>(
+    () =>
+      visibleInvoices.flatMap((invoice) => {
+        const filas: FilaFactura[] = [{ kind: 'factura', invoice }];
+        if (invoice.factusStatus === 'anulada' && invoice.factusNcNumber) {
+          filas.push({ kind: 'nota_credito', invoice });
+        }
+        return filas;
+      }),
+    [visibleInvoices]
+  );
 
   const handleClientChange = (clientId: string) => {
     const client = clients.find(c => c.id === clientId);
@@ -296,17 +314,24 @@ const Facturas = () => {
     }
   };
 
-  const handleView = async (invoiceId: string) => {
+  const handleView = async (invoice: Invoice) => {
     try {
       const token = await (await import('@/lib/auth')).authService.getToken();
       const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
-      const response = await fetch(`${API_URL}/api/invoices/${invoiceId}/download`, {
-        method: 'GET',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-      });
+      // Ya emitida: PDF con membrete DIAN (CUFE, QR), regenerado al vuelo desde
+      // los datos guardados — no hace falta reemitir para corregir el diseño o
+      // ver una descripción actualizada. Borrador: el PDF simple del formulario.
+      const authHeader = { 'Authorization': token ? `Bearer ${token}` : '' };
+      let response = invoice.factusNumber
+        ? await fetch(`${API_URL}/api/factus/pdf-propio/${invoice.id}`, { headers: authHeader })
+        : await fetch(`${API_URL}/api/invoices/${invoice.id}/download`, { headers: authHeader });
+
+      // Respaldo: si el PDF con membrete falla (ej. CUFE aún no confirmado),
+      // se cae al PDF del borrador en vez de mostrar un error.
+      if (!response.ok && invoice.factusNumber) {
+        response = await fetch(`${API_URL}/api/invoices/${invoice.id}/download`, { headers: authHeader });
+      }
 
       if (!response.ok) {
         throw new Error('Failed to load invoice');
@@ -645,7 +670,43 @@ const Facturas = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {visibleInvoices.map((invoice) => (
+                  {visibleRows.map((row) => {
+                    if (row.kind === 'nota_credito') {
+                      const invoice = row.invoice;
+                      return (
+                        <TableRow key={`${invoice.id}-nc`} className="bg-red-50/40 hover:bg-red-50/60">
+                          <TableCell />
+                          <TableCell className="font-medium">
+                            <Badge variant="outline" className="flex w-fit items-center gap-1 border-red-300 text-red-700">
+                              <Ban className="h-3 w-3" />
+                              NC {invoice.factusNcNumber}
+                            </Badge>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              Anulación de {invoice.factusNumber}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <span className="whitespace-nowrap">
+                              {new Date(invoice.factusNcValidatedAt || invoice.fecha).toLocaleDateString('es-CO')}
+                            </span>
+                          </TableCell>
+                          <TableCell className="break-words">{invoice.clientName}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap font-medium text-red-600">
+                            -{new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP' }).format(invoice.totalAmount)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="gap-1 border-red-300 text-red-700">
+                              <Ban className="h-3 w-3" />
+                              Nota crédito
+                            </Badge>
+                          </TableCell>
+                          <TableCell />
+                        </TableRow>
+                      );
+                    }
+
+                    const invoice = row.invoice;
+                    return (
                     <TableRow key={invoice.id}>
                       <TableCell>
                         <input
@@ -745,7 +806,7 @@ const Facturas = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleView(invoice.id)}
+                            onClick={() => handleView(invoice)}
                             title="Ver PDF"
                           >
                             <FileText className="h-4 w-4" />
@@ -784,7 +845,8 @@ const Facturas = () => {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
