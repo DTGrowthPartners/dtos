@@ -21,6 +21,7 @@ import { NominaModal } from '@/components/modals/NominaModal';
 import AccountsPanel from '@/components/finance/AccountsPanel';
 import BankMovements from '@/components/finance/BankMovements';
 import EmployeeLoansPanel from '@/components/finance/EmployeeLoansPanel';
+import CarteraPanel from '@/components/finance/CarteraPanel';
 import PayablesPanel from '@/components/finance/PayablesPanel';
 import FixedAssetsPanel from '@/components/finance/FixedAssetsPanel';
 import BudgetComparisonReport from '@/components/finance/BudgetComparisonReport';
@@ -1293,6 +1294,10 @@ export default function Finanzas() {
                   <Landmark className="h-4 w-4" />
                   Movimientos
                 </TabsTrigger>
+                <TabsTrigger value="cartera" className="flex items-center gap-2 whitespace-nowrap">
+                  <Wallet className="h-4 w-4" />
+                  Cartera
+                </TabsTrigger>
                 <TabsTrigger value="empleados" className="flex items-center gap-2 whitespace-nowrap">
                   <Users className="h-4 w-4" />
                   Cobrar a Empleados
@@ -1377,6 +1382,10 @@ export default function Finanzas() {
 
           <TabsContent value="movimientos" className="mt-6">
             <BankMovements />
+          </TabsContent>
+
+          <TabsContent value="cartera" className="mt-6">
+            <CarteraPanel />
           </TabsContent>
 
           <TabsContent value="empleados" className="mt-6">

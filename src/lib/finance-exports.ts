@@ -555,3 +555,172 @@ export async function exportBalanceSheetExcel(data: BalanceSheetExportData) {
   const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   saveAs(new Blob([buf], { type: 'application/octet-stream' }), `Situacion_Financiera_${data.periodLabel.replace(/\s+/g, '_')}.xlsx`);
 }
+
+// ============================================================
+// CARTERA (cuentas por cobrar a clientes)
+// ============================================================
+
+export interface CarteraClienteRow {
+  clientName: string;
+  nit: string;
+  facturas: number;
+  saldo: number;
+  diasAntiguedad: number;
+  bucketLabel: string;
+}
+
+export interface CarteraGeneralExportData {
+  vista: 'general';
+  periodLabel: string;
+  clientes: CarteraClienteRow[];
+  totalCartera: number;
+  bucketTotals: { label: string; total: number }[];
+}
+
+export interface CarteraFacturaRow {
+  invoiceNumber: string;
+  tipoDocumento: string;
+  fecha: string;
+  totalAmount: number;
+  paidAmount: number;
+  saldo: number;
+  statusLabel: string;
+}
+
+export interface CarteraClienteExportData {
+  vista: 'cliente';
+  periodLabel: string;
+  clientName: string;
+  clientNit: string;
+  facturas: CarteraFacturaRow[];
+  totalFacturado: number;
+  totalPagado: number;
+  totalSaldo: number;
+}
+
+export type CarteraExportData = CarteraGeneralExportData | CarteraClienteExportData;
+
+const carteraFileSuffix = (data: CarteraExportData) =>
+  data.vista === 'cliente' ? data.clientName.replace(/\s+/g, '_') : 'General';
+
+// ---------- PDF ----------
+
+export async function exportCarteraPDF(data: CarteraExportData) {
+  const { jsPDF, autoTable } = await loadPdf();
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+
+  const subtitle = data.vista === 'cliente'
+    ? `${data.clientName}${data.clientNit ? ` · NIT ${data.clientNit}` : ''} — Corte al ${data.periodLabel}`
+    : `Todos los clientes — Corte al ${data.periodLabel}`;
+  await drawHeader(doc, 'ESTADO DE CARTERA', subtitle);
+
+  if (data.vista === 'general') {
+    autoTable(doc, {
+      startY: 48,
+      head: [['Cliente', 'NIT', 'Facturas', 'Antigüedad', 'Saldo Pendiente']],
+      body: data.clientes.map((c) => [
+        c.clientName, c.nit || '—', String(c.facturas), c.bucketLabel, fmtNum(c.saldo),
+      ]),
+      foot: [[{ content: 'TOTAL CARTERA', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' as const } }, { content: fmtNum(data.totalCartera), styles: { fontStyle: 'bold', halign: 'right' as const } }]],
+      theme: 'plain',
+      styles: { fontSize: 8.5, cellPadding: { top: 2.2, bottom: 2.2, left: 4, right: 4 }, lineColor: LINE_COLOR, lineWidth: 0.1, textColor: DARK },
+      headStyles: { fillColor: BRAND_BLUE, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      footStyles: { fillColor: LIGHT_BG, textColor: DARK, lineWidth: 0.1, lineColor: LINE_COLOR },
+      columnStyles: { 2: { halign: 'right' as const }, 3: { halign: 'center' as const }, 4: { halign: 'right' as const } },
+      alternateRowStyles: { fillColor: [252, 252, 254] },
+    });
+
+    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    let y = finalY + 10;
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(35, 35, 35);
+    doc.text('Antigüedad de cartera', 14, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    data.bucketTotals.forEach((b) => {
+      doc.text(`${b.label}:`, 14, y);
+      doc.text(`$ ${fmtNum(b.total)}`, 70, y, { align: 'right' as const });
+      y += 5.5;
+    });
+  } else {
+    autoTable(doc, {
+      startY: 48,
+      head: [['N° Documento', 'Tipo', 'Fecha', 'Total', 'Abonado', 'Saldo', 'Estado']],
+      body: data.facturas.map((f) => [
+        f.invoiceNumber, f.tipoDocumento, f.fecha, fmtNum(f.totalAmount), fmtNum(f.paidAmount), fmtNum(f.saldo), f.statusLabel,
+      ]),
+      foot: [[{ content: 'TOTALES', colSpan: 3, styles: { fontStyle: 'bold', halign: 'right' as const } },
+        { content: fmtNum(data.totalFacturado), styles: { fontStyle: 'bold', halign: 'right' as const } },
+        { content: fmtNum(data.totalPagado), styles: { fontStyle: 'bold', halign: 'right' as const } },
+        { content: fmtNum(data.totalSaldo), styles: { fontStyle: 'bold', halign: 'right' as const } },
+        '']],
+      theme: 'plain',
+      styles: { fontSize: 8.5, cellPadding: { top: 2.2, bottom: 2.2, left: 4, right: 4 }, lineColor: LINE_COLOR, lineWidth: 0.1, textColor: DARK },
+      headStyles: { fillColor: BRAND_BLUE, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+      footStyles: { fillColor: LIGHT_BG, textColor: DARK, lineWidth: 0.1, lineColor: LINE_COLOR },
+      columnStyles: { 3: { halign: 'right' as const }, 4: { halign: 'right' as const }, 5: { halign: 'right' as const } },
+      alternateRowStyles: { fillColor: [252, 252, 254] },
+    });
+  }
+
+  doc.save(`Cartera_${carteraFileSuffix(data)}.pdf`);
+}
+
+// ---------- Excel ----------
+
+export async function exportCarteraExcel(data: CarteraExportData) {
+  const { XLSX, saveAs } = await loadXlsx();
+
+  const rows: (string | number | null)[][] = [
+    [COMPANY_NAME],
+    [COMPANY_NIT],
+    ['ESTADO DE CARTERA'],
+    [data.vista === 'cliente'
+      ? `${data.clientName}${data.clientNit ? ` · NIT ${data.clientNit}` : ''} — Corte al ${data.periodLabel}`
+      : `Todos los clientes — Corte al ${data.periodLabel}`],
+    [],
+  ];
+
+  if (data.vista === 'general') {
+    rows.push(['Cliente', 'NIT', 'Facturas', 'Antigüedad', 'Saldo Pendiente']);
+    data.clientes.forEach((c) => rows.push([c.clientName, c.nit || '—', c.facturas, c.bucketLabel, c.saldo]));
+    rows.push([]);
+    rows.push(['', '', '', 'TOTAL CARTERA', data.totalCartera]);
+    rows.push([]);
+    rows.push(['Antigüedad de cartera']);
+    data.bucketTotals.forEach((b) => rows.push([b.label, '', '', '', b.total]));
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 34 }, { wch: 18 }, { wch: 10 }, { wch: 16 }, { wch: 18 }];
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let r = 5; r <= range.e.r; r++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c: 4 })];
+      if (cell && typeof cell.v === 'number') { cell.t = 'n'; cell.z = '#,##0'; }
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `Cartera_${carteraFileSuffix(data)}.xlsx`);
+  } else {
+    rows.push(['N° Documento', 'Tipo', 'Fecha', 'Total', 'Abonado', 'Saldo', 'Estado']);
+    data.facturas.forEach((f) => rows.push([f.invoiceNumber, f.tipoDocumento, f.fecha, f.totalAmount, f.paidAmount, f.saldo, f.statusLabel]));
+    rows.push([]);
+    rows.push(['', '', 'TOTALES', data.totalFacturado, data.totalPagado, data.totalSaldo, '']);
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [{ wch: 22 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 14 }];
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let r = 5; r <= range.e.r; r++) {
+      for (const c of [3, 4, 5]) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (cell && typeof cell.v === 'number') { cell.t = 'n'; cell.z = '#,##0'; }
+      }
+    }
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Cartera');
+    const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `Cartera_${carteraFileSuffix(data)}.xlsx`);
+  }
+}
