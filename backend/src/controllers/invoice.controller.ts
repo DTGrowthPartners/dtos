@@ -87,6 +87,8 @@ class InvoiceController {
           concepto: cleanText(invoiceData.concepto) || null,
           servicio: cleanText(invoiceData.servicio_proyecto) || null,
           observaciones: cleanText(invoiceData.observaciones) || null,
+          // Snapshot de los Ítems de Servicio para desglosar la factura en Factus/PDF
+          items: invoiceData.servicios as unknown as object,
           serviceId: invoiceData.serviceId || null,
           filePath: generatedPath,
           tipoDocumento,

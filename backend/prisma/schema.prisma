@@ -246,6 +246,10 @@ model Invoice {
   concepto        String?
   servicio        String?
   observaciones   String?
+  // Ítems de Servicio del borrador (descripcion, cantidad, precio_unitario) tal
+  // como se cargaron en el formulario. Se usan para desglosar la factura
+  // electrónica en Factus y en el PDF propio — sin esto solo existía el total.
+  items           Json?
   // Servicio del catálogo que factura esta cuenta de cobro (opcional)
   serviceId       String?
   service         Service? @relation("InvoiceService", fields: [serviceId], references: [id])

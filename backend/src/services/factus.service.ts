@@ -126,10 +126,50 @@ export const factusService = {
     // Prioridad: municipio elegido en el diálogo → el guardado en la ficha → Barranquilla
     const municipio = opts.municipio || (client as any)?.municipio || '08001';
 
-    const total = Math.round(invoice.totalAmount * 100) / 100;
-    // Con IVA el precio del ítem va sin impuestos; sin IVA (no responsable) va excluido
-    const base = ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total;
-    const totalConIva = ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : total;
+    // Ítems de Servicio guardados en el borrador (varias líneas) si existen;
+    // si es una factura anterior a este campo, se colapsa todo en un solo ítem
+    // (comportamiento histórico, a partir de invoice.concepto/servicio/totalAmount).
+    const itemsGuardados = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
+    const taxes = ivaPct > 0
+      ? [{ code: '01', rate: ivaPct.toFixed(2) }]
+      : [{ code: '01', rate: '0.00', is_excluded: true }];
+
+    let payloadItems: any[];
+    let totalConIva: number;
+    if (itemsGuardados.length > 0) {
+      payloadItems = itemsGuardados.map((it, i) => {
+        const precioUnitario = Number(it.precio_unitario) || 0;
+        // Con IVA el precio del ítem va sin impuestos; sin IVA (no responsable) va excluido
+        const precioBase = ivaPct > 0 ? Math.round((precioUnitario / (1 + ivaPct / 100)) * 100) / 100 : precioUnitario;
+        return {
+          code_reference: `${invoice.invoiceNumber.slice(0, 15)}-${i + 1}`,
+          name: String(it.descripcion || 'Prestación de servicios profesionales').slice(0, 250),
+          quantity: String(Number(it.cantidad) || 1),
+          price: precioBase.toFixed(2),
+          unit_measure_code: '94', // unidad
+          standard_code: '1',
+          taxes,
+          withholding_taxes: [],
+        };
+      });
+      totalConIva = Math.round(
+        itemsGuardados.reduce((sum, it) => sum + (Number(it.cantidad) || 0) * (Number(it.precio_unitario) || 0), 0) * 100
+      ) / 100;
+    } else {
+      const total = Math.round(invoice.totalAmount * 100) / 100;
+      const base = ivaPct > 0 ? Math.round((total / (1 + ivaPct / 100)) * 100) / 100 : total;
+      totalConIva = ivaPct > 0 ? Math.round(base * (1 + ivaPct / 100) * 100) / 100 : total;
+      payloadItems = [{
+        code_reference: invoice.invoiceNumber.slice(0, 20),
+        name: (invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales').slice(0, 250),
+        quantity: '1',
+        price: base.toFixed(2),
+        unit_measure_code: '94',
+        standard_code: '1',
+        taxes,
+        withholding_taxes: [],
+      }];
+    }
 
     const referenceCode = `dtos-${invoice.invoiceNumber}`;
     const payload: any = {
@@ -161,18 +201,7 @@ export const factusService = {
           amount: totalConIva.toFixed(2),
         },
       ],
-      items: [{
-        code_reference: invoice.invoiceNumber.slice(0, 20),
-        name: (invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales').slice(0, 250),
-        quantity: '1',
-        price: base.toFixed(2),
-        unit_measure_code: '94', // unidad
-        standard_code: '1',
-        taxes: ivaPct > 0
-          ? [{ code: '01', rate: ivaPct.toFixed(2) }]
-          : [{ code: '01', rate: '0.00', is_excluded: true }],
-        withholding_taxes: [],
-      }],
+      items: payloadItems,
     };
     const rango = await rangoFacturaVenta();
     if (rango) payload.numbering_range_id = rango;
@@ -421,6 +450,14 @@ export const factusService = {
   async pdfPropio(invoiceId: string) {
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId } });
     if (!invoice?.factusNumber || !invoice.factusCufe) throw new Error('Esta cuenta no tiene factura electrónica emitida');
+    const itemsGuardados = Array.isArray(invoice.items) ? (invoice.items as any[]) : [];
+    const items = itemsGuardados.length > 0
+      ? itemsGuardados.map((it) => ({
+          descripcion: String(it.descripcion || 'Prestación de servicios profesionales'),
+          cantidad: Number(it.cantidad) || 1,
+          valor: Math.round((Number(it.cantidad) || 1) * (Number(it.precio_unitario) || 0) * 100) / 100,
+        }))
+      : [{ descripcion: invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales', cantidad: 1, valor: invoice.totalAmount }];
     const data = {
       numero: invoice.factusNumber,
       cufe: invoice.factusCufe,
@@ -428,7 +465,7 @@ export const factusService = {
       cliente: invoice.clientName,
       identificacion: invoice.clientNit || '',
       fecha: invoice.fecha.toISOString().slice(0, 10).split('-').reverse().join('/'),
-      items: [{ descripcion: invoice.concepto || invoice.servicio || 'Prestación de servicios profesionales', cantidad: 1, valor: invoice.totalAmount }],
+      items,
       total: invoice.totalAmount,
       observaciones: invoice.observaciones || '',
       resolucion: 'Resolución de Facturación Electrónica DIAN No. 18764113521092 · Prefijo DTGP del 101 al 200 · Vigencia 03-08-2026 a 03-08-2028',
