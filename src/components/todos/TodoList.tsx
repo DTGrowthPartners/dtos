@@ -429,9 +429,19 @@ export default function TodoList() {
                           </button>
                         )}
                         {!selectMode && !todo.done && (
-                          <span
+                          /* Es un <button> a proposito: react-beautiful-dnd escucha el
+                             mousedown a nivel de ventana y le hace preventDefault para
+                             iniciar su propio arrastre, lo que mata el arrastre nativo
+                             antes de empezar. Solo deja pasar elementos interactivos
+                             (button, input, a...), asi que con un button esta manija
+                             queda fuera de su radar y el arrastre HTML5 si arranca. */
+                          <button
+                            type="button"
                             draggable
                             onPointerDown={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                            onClick={(e) => e.preventDefault()}
                             onDragStart={(e) => {
                               e.stopPropagation();
                               e.dataTransfer.effectAllowed = 'copy';
@@ -439,11 +449,12 @@ export default function TodoList() {
                               // Respaldo: algunos navegadores solo dejan leer text/plain durante el dragover
                               e.dataTransfer.setData('text/plain', todo.text);
                             }}
-                            className="flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/0 group-hover:text-muted-foreground hover:!text-primary transition-colors"
+                            className="flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 group-hover:text-muted-foreground hover:!text-primary transition-colors"
                             title="Arrastrar a Mis Tareas para convertirlo en tarea"
+                            aria-label="Arrastrar a Mis Tareas"
                           >
                             <GripVertical className="h-4 w-4" />
-                          </span>
+                          </button>
                         )}
                         {!selectMode && (
                           <button

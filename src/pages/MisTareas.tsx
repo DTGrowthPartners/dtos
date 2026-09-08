@@ -14,6 +14,8 @@ import {
   MessageCircle,
   Image as ImageIcon,
   Plus,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -112,6 +114,17 @@ export default function MisTareas() {
   const [responsableOriginal, setResponsableOriginal] = useState<string>('');
   // Seccion sobre la que se esta arrastrando algo (resalta la zona)
   const [dropZone, setDropZone] = useState<string | null>(null);
+  // Completado va plegado por defecto: con decenas de tareas hechas tapaba lo
+  // pendiente. Se recuerda la preferencia.
+  const [verCompletadas, setVerCompletadas] = useState<boolean>(() => {
+    try { return localStorage.getItem('dtos_mistareas_completadas') === '1'; } catch { return false; }
+  });
+  const alternarCompletadas = () => {
+    setVerCompletadas((v) => {
+      try { localStorage.setItem('dtos_mistareas_completadas', v ? '0' : '1'); } catch { /* noop */ }
+      return !v;
+    });
+  };
   const [nueva, setNueva] = useState({
     title: '',
     description: '',
@@ -484,6 +497,9 @@ export default function MisTareas() {
           {SECCIONES.map((sec) => {
             const items = getTasksByStatus(sec.status);
             const activa = dropZone === sec.status;
+            const plegable = sec.status === TaskStatus.DONE;
+            // Mientras se arrastra algo encima, se muestra aunque este plegada
+            const abierta = !plegable || verCompletadas || activa;
             return (
               <section
                 key={sec.status}
@@ -492,12 +508,25 @@ export default function MisTareas() {
                 onDrop={(e) => { setDropZone(null); handleDrop(e, sec.status); }}
                 className={cn('rounded-lg -mx-2 px-2 transition-colors', activa && 'bg-primary/5 ring-1 ring-primary/30')}
               >
-                <div className="flex items-baseline gap-2 mb-1">
-                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sec.label}</h2>
-                  <span className="text-[11px] tabular-nums text-muted-foreground/60">{items.length}</span>
-                </div>
+                {plegable ? (
+                  <button
+                    type="button"
+                    onClick={alternarCompletadas}
+                    aria-expanded={abierta}
+                    className="flex items-center gap-1.5 mb-1 -ml-1 px-1 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {abierta ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wider">{sec.label}</h2>
+                    <span className="text-[11px] tabular-nums opacity-60">{items.length}</span>
+                  </button>
+                ) : (
+                  <div className="flex items-baseline gap-2 mb-1">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sec.label}</h2>
+                    <span className="text-[11px] tabular-nums text-muted-foreground/60">{items.length}</span>
+                  </div>
+                )}
 
-                {items.length === 0 ? (
+                {abierta && (items.length === 0 ? (
                   <div className={cn(
                     'rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground/60',
                     activa ? 'border-primary/40 text-primary/70' : 'border-border/60'
@@ -585,7 +614,7 @@ export default function MisTareas() {
                       );
                     })}
                   </div>
-                )}
+                ))}
               </section>
             );
           })}
