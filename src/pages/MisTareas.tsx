@@ -16,6 +16,7 @@ import {
   Plus,
   ChevronDown,
   ChevronRight,
+  ListTodo,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -347,6 +348,7 @@ export default function MisTareas() {
           assignee: userName,
           creator: userName,
           projectId: projects[0]?.id || '',
+          origen: 'todo', // chip "del To-Do" en la fila, para reconocerla entre muchas
         } as Omit<Task, 'id' | 'createdAt'>);
         // El To-Do escucha esto y saca el pendiente de su lista
         window.dispatchEvent(new CustomEvent('dtos:todo-convertido', { detail: { id: pendiente.id } }));
@@ -572,6 +574,14 @@ export default function MisTareas() {
                               <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{task.description}</p>
                             )}
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                              {task.origen === 'todo' && (
+                                <span
+                                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                  title="Nacio como pendiente en el To-Do"
+                                >
+                                  <ListTodo className="h-3 w-3" /> del To-Do
+                                </span>
+                              )}
                               {project && (
                                 <span className="flex items-center gap-1.5">
                                   <span className={cn('h-2 w-2 rounded-full', project.color)} />

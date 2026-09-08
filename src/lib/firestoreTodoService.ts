@@ -14,6 +14,8 @@ export interface Todo {
   completedAt?: number | null;
   order?: number; // orden manual (drag). Si falta, se usa createdAt.
   flagged?: boolean; // destacada con 🐸 (clic derecho / botón)
+  origen?: 'tarea'; // nacio arrastrando una tarea desde Mis Tareas
+  taskId?: string;  // la tarea de la que salio (para reconocerla despues)
 }
 
 // Carga los to-dos del usuario. Filtra por userId y ordena en cliente (evita índice compuesto):
@@ -31,13 +33,18 @@ export const loadTodos = async (userId: string): Promise<Todo[]> => {
     });
 };
 
-export const createTodo = async (userId: string, text: string): Promise<string> => {
+export const createTodo = async (
+  userId: string,
+  text: string,
+  extra: Partial<Pick<Todo, 'origen' | 'taskId'>> = {}
+): Promise<string> => {
   const ref = await addDoc(collection(db, COL), {
     text: text.trim(),
     done: false,
     userId,
     createdAt: Date.now(),
     completedAt: null,
+    ...extra,
   });
   return ref.id;
 };

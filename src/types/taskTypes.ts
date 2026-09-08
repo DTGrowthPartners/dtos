@@ -280,6 +280,9 @@ export interface Task {
   recurringTemplateId?: string; // ID of the original recurring task template
   // Checklist/subtasks fields
   checklist?: TaskChecklistItem[];
+  // 'todo' = nacio de un pendiente del To-Do (arrastrado o convertido). Sirve
+  // para distinguirla a simple vista cuando hay muchas tareas parecidas.
+  origen?: 'todo';
   // Posicion manual dentro de su columna (status). Sirve para drag-and-drop
   // con reordenamiento. Las tareas se ordenan por position ASC. Tareas legacy
   // sin position se ordenan al final por fallback de dueDate/prioridad.

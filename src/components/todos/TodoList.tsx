@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send, GripVertical } from 'lucide-react';
+import { ListTodo, Plus, CheckCircle2, Circle, Trash2, Loader2, Send, GripVertical, ListChecks } from 'lucide-react';
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -93,6 +93,7 @@ export default function TodoList() {
         creator: myName(),
         projectId: convForm.projectId,
         dueDate: convForm.dueDate ? new Date(convForm.dueDate + 'T12:00:00').getTime() : undefined,
+        origen: 'todo', // para reconocerla en Mis Tareas como venida del To-Do
       } as Omit<Task, 'id' | 'createdAt'>);
       const id = convertTodo.id;
       setTodos((prev) => prev.filter((t) => t.id !== id));
@@ -212,12 +213,15 @@ export default function TodoList() {
       return;
     }
     let titulo = '';
-    try { titulo = String(JSON.parse(crudo).title || '').trim(); } catch { return; }
+    let taskId = '';
+    try { const d = JSON.parse(crudo); titulo = String(d.title || '').trim(); taskId = String(d.id || ''); } catch { return; }
     if (!titulo) return;
     const tempId = `temp-${Date.now()}`;
-    setTodos((prev) => sortTodos([{ id: tempId, text: titulo, done: false, userId: user.id, createdAt: Date.now() }, ...prev]));
+    // Queda marcado como venido de Mis Tareas para reconocerlo en la lista
+    const origen = { origen: 'tarea' as const, taskId: taskId || undefined };
+    setTodos((prev) => sortTodos([{ id: tempId, text: titulo, done: false, userId: user.id, createdAt: Date.now(), ...origen }, ...prev]));
     try {
-      const id = await createTodo(user.id, titulo);
+      const id = await createTodo(user.id, titulo, origen);
       setTodos((prev) => prev.map((x) => (x.id === tempId ? { ...x, id } : x)));
       toast({ title: 'Agregado a pendientes', description: titulo });
     } catch {
@@ -424,6 +428,12 @@ export default function TodoList() {
                             </button>
                           )}
                           <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
+                            {todo.origen === 'tarea' && (
+                              <ListChecks
+                                className="inline-block h-3.5 w-3.5 mr-1.5 -mt-0.5 text-violet-500"
+                                aria-label="Viene de Mis Tareas"
+                              />
+                            )}
                             {todo.text}
                           </span>
                         </div>
