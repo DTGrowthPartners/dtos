@@ -282,6 +282,13 @@ export default function MisTareas() {
   const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
   const STATUS_ORDER: Record<string, number> = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
   const compareTasks = (a: Task, b: Task) => {
+    // Las que nacieron arrastradas desde el To-Do van de primeras: son las que
+    // uno acaba de traer y quiere ver ya, y entre muchas tareas se perdian. Entre
+    // ellas, la mas reciente arriba. El resto conserva el orden de siempre.
+    const aTodo = a.origen === 'todo';
+    const bTodo = b.origen === 'todo';
+    if (aTodo !== bTodo) return aTodo ? -1 : 1;
+    if (aTodo && bTodo) return (b.createdAt || 0) - (a.createdAt || 0);
     const aPos = (a as any).position;
     const bPos = (b as any).position;
     if (typeof aPos === 'number' && typeof bPos === 'number') return aPos - bPos;
