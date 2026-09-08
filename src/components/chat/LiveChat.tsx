@@ -187,6 +187,13 @@ export default function LiveChat() {
   const [presence, setPresence] = useState<Record<string, UserPresence>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([]);
+
+  // Avatar de un mensaje: primero la foto actual del usuario (por id), y si no,
+  // lo que trajera el mensaje (mensajes viejos que aun guardaban senderPhoto).
+  const fotoDe = (senderId?: string, enMensaje?: string | null): string | null => {
+    const actual = senderId ? teamUsers.find((u) => u.id === senderId)?.photoUrl : undefined;
+    return actual || enMensaje || null;
+  };
   const [directRooms, setDirectRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showNewChatDialog, setShowNewChatDialog] = useState(false);
@@ -336,7 +343,7 @@ export default function LiveChat() {
     // Initialize general room
     initializeGeneralRoom();
 
-    // Fetch team users
+    // Fetch team users (tambien es la fuente de los avatares en los mensajes)
     const fetchTeamUsers = async () => {
       try {
         const data = await apiClient.get<TeamUser[]>('/api/users/team');
@@ -423,7 +430,7 @@ export default function LiveChat() {
           showNotification(
             `Nuevo mensaje de ${lastMsg.senderName}`,
             lastMsg.text.length > 50 ? lastMsg.text.substring(0, 50) + '...' : lastMsg.text,
-            lastMsg.senderPhoto
+            fotoDe(lastMsg.senderId, lastMsg.senderPhoto) || undefined
           );
         }
         lastMessageIdRef.current = lastMsg.id;
@@ -1093,9 +1100,9 @@ export default function LiveChat() {
                           {/* Message */}
                           <div className={`flex gap-2 ${isMe ? 'flex-row-reverse' : ''}`}>
                             {showAvatar ? (
-                              message.senderPhoto ? (
+                              fotoDe(message.senderId, message.senderPhoto) ? (
                                 <img
-                                  src={message.senderPhoto}
+                                  src={fotoDe(message.senderId, message.senderPhoto) as string}
                                   alt={message.senderName}
                                   className="h-7 w-7 rounded-full object-cover flex-shrink-0"
                                 />

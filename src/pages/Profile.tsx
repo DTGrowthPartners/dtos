@@ -85,12 +85,34 @@ ORG:DT Growth Partners`;
         return;
       }
 
-      // Create preview
+      // La foto se reduce ANTES de guardarla: se guarda en base64 en la base y
+      // viaja en cada respuesta de usuarios y en el chat. Una original de camara
+      // (la de Dairo llego a 2.5 MB) rompia el chat y engordaba cada peticion.
+      // 256px de lado es de sobra para un avatar y pesa ~15-30 KB.
       const reader = new FileReader();
       reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setPhotoPreview(base64);
-        setPhotoUrl(base64);
+        const img = new Image();
+        img.onload = () => {
+          const LADO = 256;
+          const escala = Math.min(1, LADO / Math.max(img.width, img.height));
+          const w = Math.round(img.width * escala);
+          const h = Math.round(img.height * escala);
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          const base64 = ctx
+            ? (ctx.drawImage(img, 0, 0, w, h), canvas.toDataURL('image/jpeg', 0.85))
+            : (reader.result as string);
+          setPhotoPreview(base64);
+          setPhotoUrl(base64);
+        };
+        img.onerror = () => {
+          const base64 = reader.result as string;
+          setPhotoPreview(base64);
+          setPhotoUrl(base64);
+        };
+        img.src = reader.result as string;
       };
       reader.readAsDataURL(file);
     }

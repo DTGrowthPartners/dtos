@@ -137,11 +137,17 @@ export const sendMessage = async (
   images?: string[],
   docs?: { name: string }[]
 ): Promise<string> => {
+  // El avatar NO se guarda dentro del mensaje si es una imagen en base64: las
+  // fotos de perfil viven en Postgres como data URL y pueden pesar megas (la de
+  // Dairo, 2.5 MB), y Firestore rechaza cualquier campo de mas de ~1 MB con
+  // "The value of property senderPhoto is longer than 1048487 bytes". El chat
+  // resuelve la foto por senderId al pintar; aqui solo se conserva si es una URL.
+  const fotoSegura = senderPhoto && /^https?:\/\//i.test(senderPhoto) && senderPhoto.length < 2048 ? senderPhoto : null;
   const messageData = {
     text,
     senderId,
     senderName,
-    senderPhoto: senderPhoto || null,
+    senderPhoto: fotoSegura,
     images: images && images.length ? images : null,
     docs: docs && docs.length ? docs : null,
     createdAt: Date.now(),
