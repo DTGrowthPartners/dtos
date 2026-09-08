@@ -386,37 +386,47 @@ export default function TodoList() {
                       <div
                         ref={dragProvided.innerRef}
                         {...dragProvided.draggableProps}
-                        {...(!selectMode ? dragProvided.dragHandleProps : {})}
                         onClick={selectMode ? () => toggleSelect(todo.id) : undefined}
                         onContextMenu={selectMode ? undefined : (e) => { e.preventDefault(); toggleFlag(todo); }}
                         className={cn(
                           'group flex items-center gap-2 px-3 py-2.5 bg-card',
-                          selectMode ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
+                          selectMode && 'cursor-pointer',
                           selectMode && selected.has(todo.id) && 'bg-amber-50 dark:bg-amber-950/30',
                           todo.flagged && !todo.done && !selectMode && 'bg-emerald-50/70 dark:bg-emerald-950/20',
                           snapshot.isDragging && 'shadow-lg rounded-md ring-1 ring-amber-400'
                         )}
                       >
-                        {selectMode && (
-                          <input
-                            type="checkbox"
-                            checked={selected.has(todo.id)}
-                            readOnly
-                            className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
-                          />
-                        )}
-                        {!selectMode && (
-                          <button onPointerDown={(e) => e.stopPropagation()} onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
-                            {todo.done ? (
-                              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                            ) : (
-                              <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
-                            )}
-                          </button>
-                        )}
-                        <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
-                          {todo.text}
-                        </span>
+                        {/* Manija de REORDENAR la lista (hello-pangea): solo el circulo y el
+                            texto. Los botones de la derecha quedan FUERA de ella a proposito:
+                            el sensor de la libreria le hace preventDefault al mousedown de
+                            todo lo que este dentro de su manija, y eso mata el arrastre
+                            nativo del grip hacia Mis Tareas antes de que empiece.
+                            (Verificado con stack: dnd.esm.js -> preventDefault(mousedown).) */}
+                        <div
+                          {...(!selectMode ? dragProvided.dragHandleProps : {})}
+                          className={cn('flex items-center gap-2 flex-1 min-w-0', !selectMode && 'cursor-grab active:cursor-grabbing')}
+                        >
+                          {selectMode && (
+                            <input
+                              type="checkbox"
+                              checked={selected.has(todo.id)}
+                              readOnly
+                              className="flex-shrink-0 h-4 w-4 accent-amber-500 pointer-events-none"
+                            />
+                          )}
+                          {!selectMode && (
+                            <button onPointerDown={(e) => e.stopPropagation()} onClick={() => toggle(todo)} className="flex-shrink-0" title={todo.done ? 'Marcar pendiente' : 'Completar'}>
+                              {todo.done ? (
+                                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                              ) : (
+                                <Circle className="h-5 w-5 text-muted-foreground hover:text-foreground transition-colors" />
+                              )}
+                            </button>
+                          )}
+                          <span className={cn('flex-1 text-sm break-words', todo.done && 'line-through text-muted-foreground')}>
+                            {todo.text}
+                          </span>
+                        </div>
                         {/* El sapito solo aparece si la tarea está destacada (se activa con clic derecho). */}
                         {!selectMode && todo.flagged && (
                           <button
@@ -450,7 +460,7 @@ export default function TodoList() {
                               e.dataTransfer.setData('text/plain', todo.text);
                             }}
                             className="flex-shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 group-hover:text-muted-foreground hover:!text-primary transition-colors"
-                            title="Arrastrar a Mis Tareas para convertirlo en tarea"
+                            title="Arrastrar a Mis Tareas para convertirlo en tarea (para reordenar la lista, arrastra el texto)"
                             aria-label="Arrastrar a Mis Tareas"
                           >
                             <GripVertical className="h-4 w-4" />
