@@ -28,7 +28,66 @@ const getFirestore = () => admin.firestore();
 const BOT_API_KEY = process.env.BOT_API_KEY || 'dt-bot-secret-key-2024';
 
 // Team members válidos para el sistema de tareas
-const VALID_TEAM_MEMBERS = ['Lía', 'Dairo', 'Stiven', 'Edgardo', 'Jhonathan', 'María'];
+// Nombres canonicos historicos: son los que llevan guardados las tareas viejas
+// ('Jhonathan' aunque el usuario se llame Jhonatan) y con los que se decide quien
+// ve que. Se conservan; los usuarios nuevos de DT-OS se suman solos.
+const MIEMBROS_CANONICOS = ['Lía', 'Dairo', 'Stiven', 'Edgardo', 'Jhonathan', 'María'];
+// Cuentas que no son personas y no pueden ser responsables de una tarea
+const CUENTAS_TECNICAS = ['bot@', 'system@', 'smoke@', 'noreply@'];
+
+const sinTildes = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** ¿Dos nombres son la misma persona? Igual que en el frontend: tolera tildes,
+ *  prefijos y una letra de diferencia en nombres largos (Jhonatan/Jhonathan). */
+const esMismoMiembro = (a: string, b: string): boolean => {
+  const x = sinTildes(a); const y = sinTildes(b);
+  if (!x || !y) return false;
+  if (x === y || x.startsWith(y) || y.startsWith(x)) return true;
+  if (Math.min(x.length, y.length) < 6 || Math.abs(x.length - y.length) > 1) return false;
+  let i = 0, j = 0, fallas = 0;
+  while (i < x.length && j < y.length) {
+    if (x[i] === y[j]) { i++; j++; continue; }
+    if (++fallas > 1) return false;
+    if (x.length > y.length) i++; else if (y.length > x.length) j++; else { i++; j++; }
+  }
+  return fallas + (x.length - i) + (y.length - j) <= 1;
+};
+
+let miembrosCache: { lista: string[]; hasta: number } = { lista: MIEMBROS_CANONICOS, hasta: 0 };
+
+/**
+ * Miembros validos para asignar tareas: los canonicos mas los usuarios reales de
+ * DT-OS. Antes era una lista escrita a mano y cada persona nueva (Annie, Jose)
+ * quedaba fuera: el bot y el MCP les rechazaban las tareas con 400. Cache de 60 s.
+ */
+const miembrosValidos = async (): Promise<string[]> => {
+  if (Date.now() < miembrosCache.hasta) return miembrosCache.lista;
+  try {
+    const users = await prisma.user.findMany({ select: { firstName: true, email: true } });
+    const lista = [...MIEMBROS_CANONICOS];
+    for (const u of users) {
+      const email = (u.email || '').toLowerCase();
+      if (CUENTAS_TECNICAS.some((c) => email.startsWith(c))) continue;
+      const nombre = (u.firstName || '').trim();
+      if (!nombre) continue;
+      // Si ya hay un canonico para esta persona, se queda el canonico
+      if (!lista.some((m) => esMismoMiembro(m, nombre))) lista.push(nombre);
+    }
+    miembrosCache = { lista, hasta: Date.now() + 60_000 };
+  } catch (e) {
+    console.error('[Bot API] no se pudo leer el equipo, uso la lista fija:', (e as Error).message);
+    miembrosCache = { lista: MIEMBROS_CANONICOS, hasta: Date.now() + 10_000 };
+  }
+  return miembrosCache.lista;
+};
+
+/** Resuelve un nombre escrito de cualquier forma al nombre canonico, o null */
+const resolverMiembro = async (nombre: string): Promise<string | null> => {
+  const lista = await miembrosValidos();
+  const exacto = lista.find((m) => m.toLowerCase() === nombre.toLowerCase());
+  if (exacto) return exacto;
+  return lista.find((m) => esMismoMiembro(m, nombre)) || null;
+};
 
 // Middleware para verificar API key del bot
 const verifyBotApiKey = (req: Request, res: Response, next: Function) => {
@@ -261,10 +320,10 @@ router.post('/bot/conciliacion/run', verifyBotApiKey, async (_req: Request, res:
  *
  * Lista los miembros del equipo válidos para asignar tareas.
  */
-router.get('/bot/team', verifyBotApiKey, (req: Request, res: Response) => {
+router.get('/bot/team', verifyBotApiKey, async (_req: Request, res: Response) => {
   res.json({
     success: true,
-    members: VALID_TEAM_MEMBERS,
+    members: await miembrosValidos(),
   });
 });
 
@@ -516,19 +575,17 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
     }
 
     // Validar y normalizar assignee
-    const normalizedAssignee = VALID_TEAM_MEMBERS.find(
-      m => m.toLowerCase() === assigneeName.toLowerCase()
-    );
+    const normalizedAssignee = await resolverMiembro(assigneeName);
     if (!normalizedAssignee) {
       return res.status(400).json({
         success: false,
         error: `Asignado "${assigneeName}" no válido`,
-        validMembers: VALID_TEAM_MEMBERS,
+        validMembers: await miembrosValidos(),
       });
     }
 
     // Validar y normalizar creator
-    const normalizedCreator = VALID_TEAM_MEMBERS.find(
+    const normalizedCreator = (await miembrosValidos()).find(
       m => m.toLowerCase() === creatorName.toLowerCase()
     ) || 'Dairo';
 
@@ -713,20 +770,18 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
       return res.status(400).json({
         success: false,
         error: 'Parámetro requerido: usuario',
-        validMembers: VALID_TEAM_MEMBERS,
+        validMembers: await miembrosValidos(),
       });
     }
 
     // Normalizar nombre de usuario
-    const normalizedUser = VALID_TEAM_MEMBERS.find(
-      m => m.toLowerCase() === userName.toLowerCase()
-    );
+    const normalizedUser = await resolverMiembro(userName);
 
     if (!normalizedUser) {
       return res.status(404).json({
         success: false,
         error: `Usuario "${userName}" no encontrado`,
-        validMembers: VALID_TEAM_MEMBERS,
+        validMembers: await miembrosValidos(),
       });
     }
 
@@ -834,7 +889,8 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
 
     // Agrupar por assignee
     const tasksByUser: Record<string, any[]> = {};
-    VALID_TEAM_MEMBERS.forEach(member => {
+    const miembros = await miembrosValidos();
+    miembros.forEach(member => {
       tasksByUser[member] = [];
     });
 
@@ -874,7 +930,7 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
     });
 
     // Resumen
-    const resumen = VALID_TEAM_MEMBERS.map(member => ({
+    const resumen = miembros.map(member => ({
       usuario: member,
       tareasTodo: tasksByUser[member].filter(t => t.estado === 'TODO').length,
       tareasEnProgreso: tasksByUser[member].filter(t => t.estado === 'IN_PROGRESS').length,
