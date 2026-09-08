@@ -21,6 +21,8 @@ import { loadTodos, createTodo, updateTodo, deleteTodo, type Todo } from '@/lib/
 
 /** Formato del arrastre de un pendiente hacia el tablero de Mis Tareas. */
 export const TODO_DRAG_TYPE = 'application/dtos-todo';
+/** Formato del arrastre de una tarea de Mis Tareas hacia este To-Do (solo viaja el titulo). */
+export const TASK_DRAG_TYPE = 'application/dtos-task';
 import { createTask, loadProjects } from '@/lib/firestoreTaskService';
 import { matchTeamMember, type TeamMemberName, type Task } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
@@ -196,6 +198,34 @@ export default function TodoList() {
     return () => window.removeEventListener('dtos:todo-convertido', alConvertir);
   }, []);
 
+  // Una tarea de Mis Tareas soltada aqui se vuelve un pendiente con solo su
+  // titulo. Es una copia: la tarea sigue existiendo en Operaciones.
+  const [sobreTarea, setSobreTarea] = useState(false);
+  const soltarTarea = async (e: React.DragEvent) => {
+    const crudo = e.dataTransfer.getData(TASK_DRAG_TYPE);
+    setSobreTarea(false);
+    if (!crudo) return;
+    e.preventDefault();
+    if (!user) return;
+    if (atLimit) {
+      toast({ title: 'Pantalla llena', description: 'Completa o elimina pendientes antes de agregar mas', variant: 'destructive' });
+      return;
+    }
+    let titulo = '';
+    try { titulo = String(JSON.parse(crudo).title || '').trim(); } catch { return; }
+    if (!titulo) return;
+    const tempId = `temp-${Date.now()}`;
+    setTodos((prev) => sortTodos([{ id: tempId, text: titulo, done: false, userId: user.id, createdAt: Date.now() }, ...prev]));
+    try {
+      const id = await createTodo(user.id, titulo);
+      setTodos((prev) => prev.map((x) => (x.id === tempId ? { ...x, id } : x)));
+      toast({ title: 'Agregado a pendientes', description: titulo });
+    } catch {
+      setTodos((prev) => prev.filter((x) => x.id !== tempId));
+      toast({ title: 'Error', description: 'No se pudo agregar el pendiente', variant: 'destructive' });
+    }
+  };
+
   const remove = async (todo: Todo) => {
     setTodos((prev) => prev.filter((x) => x.id !== todo.id));
     try { await deleteTodo(todo.id); } catch { load(); }
@@ -244,7 +274,20 @@ export default function TodoList() {
   };
 
   return (
-    <div className="space-y-3" ref={containerRef}>
+    <div
+      className={cn('space-y-3 rounded-xl transition-shadow', sobreTarea && 'ring-2 ring-amber-400 ring-offset-2 ring-offset-background')}
+      ref={containerRef}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(TASK_DRAG_TYPE)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        if (!sobreTarea) setSobreTarea(true);
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) setSobreTarea(false);
+      }}
+      onDrop={soltarTarea}
+    >
       <div className="flex items-center justify-between gap-2 flex-wrap">
         {selectMode ? (
           <>

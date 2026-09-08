@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dialog';
 import {
   createTask,
+  sendHighPriorityTaskToWhatsApp,
   loadTasks,
   loadProjects,
   updateTask,
@@ -57,7 +58,8 @@ import {
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { matchTeamMember } from '@/types/taskTypes';
 import { useAuthStore } from '@/lib/auth';
-import { TODO_DRAG_TYPE } from '@/components/todos/TodoList';
+import { TODO_DRAG_TYPE, TASK_DRAG_TYPE } from '@/components/todos/TodoList';
+import { cn } from '@/lib/utils';
 import ImageModal from '@/components/ImageModal';
 import CommentsModal from '@/components/CommentsModal';
 import { useNavigate } from 'react-router-dom';
@@ -80,7 +82,15 @@ const COLUMNS = [
   { status: 'DONE', name: 'Completadas', color: 'text-emerald-400' },
 ];
 
-type ViewMode = 'simple' | 'card' | 'list' | 'compact';
+
+// Las tres secciones de la vista. El texto vacio invita a arrastrar.
+const SECCIONES = [
+  { status: TaskStatus.TODO, label: 'Pendiente', vacio: 'Nada pendiente. Arrastra un pendiente del To-Do aqui para volverlo tarea.' },
+  { status: TaskStatus.IN_PROGRESS, label: 'En progreso', vacio: 'Arrastra aqui lo que estes haciendo.' },
+  { status: TaskStatus.DONE, label: 'Completado', vacio: 'Todavia nada completado.' },
+];
+
+const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 export default function MisTareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -89,7 +99,6 @@ export default function MisTareas() {
   // Arranca en el usuario logueado. Antes estaba fijo en 'Edgardo', así que
   // todo el mundo entraba viendo las tareas de él.
   const [userName, setUserName] = useState<TeamMemberName>('');
-  const [viewMode, setViewMode] = useState<ViewMode>('simple');
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const teamMembers = useTeamMembers();
 
@@ -100,6 +109,9 @@ export default function MisTareas() {
   const [guardandoNueva, setGuardandoNueva] = useState(false);
   // Si trae id, el dialogo esta editando esa tarea; si no, creando una nueva
   const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [responsableOriginal, setResponsableOriginal] = useState<string>('');
+  // Seccion sobre la que se esta arrastrando algo (resalta la zona)
+  const [dropZone, setDropZone] = useState<string | null>(null);
   const [nueva, setNueva] = useState({
     title: '',
     description: '',
@@ -165,6 +177,7 @@ export default function MisTareas() {
 
   const abrirEdicion = (task: Task) => {
     setEditandoId(task.id);
+    setResponsableOriginal(task.assignee || '');
     setNueva({
       title: task.title || '',
       description: task.description || '',
@@ -185,6 +198,17 @@ export default function MisTareas() {
     setGuardandoNueva(true);
     // Fecha local a mediodia: con la medianoche, el desfase de UTC la corria al dia anterior
     const vence = nueva.dueDate ? new Date(`${nueva.dueDate}T12:00:00`).getTime() : undefined;
+    const responsable = nueva.assignee || userName;
+    const proyecto = projects.find((p) => p.id === nueva.projectId);
+    // Lo que se manda por WhatsApp al responsable (el backend resuelve su numero)
+    const aviso = {
+      titulo: nueva.title.trim(),
+      descripcion: nueva.description.trim(),
+      prioridad: nueva.priority === Priority.HIGH ? 'Alta' : nueva.priority === Priority.LOW ? 'Baja' : 'Media',
+      asignado: responsable,
+      proyecto: proyecto?.name || 'Sin proyecto',
+      fechaLimite: nueva.dueDate || null,
+    };
     try {
       if (editandoId) {
         await updateTask(editandoId, {
@@ -192,22 +216,28 @@ export default function MisTareas() {
           description: nueva.description.trim(),
           status: nueva.status,
           priority: nueva.priority,
-          assignee: nueva.assignee || userName,
+          assignee: responsable,
           projectId: nueva.projectId,
           dueDate: vence,
         });
+        // Solo se avisa si cambio de manos: corregir un titulo no debe sonar el celular
+        if (responsable !== responsableOriginal) {
+          const original = tasks.find((t) => t.id === editandoId);
+          sendHighPriorityTaskToWhatsApp({ ...aviso, id: editandoId, creador: original?.creator || userName, evento: 'actualizada' }).catch(() => {});
+        }
         toast({ title: 'Tarea actualizada' });
       } else {
-        await createTask({
+        const nuevoId = await createTask({
           title: nueva.title.trim(),
           description: nueva.description.trim(),
           status: nueva.status,
           priority: nueva.priority,
-          assignee: nueva.assignee || userName,
+          assignee: responsable,
           creator: userName,
           projectId: nueva.projectId,
           dueDate: vence,
         } as Omit<Task, 'id' | 'createdAt'>);
+        sendHighPriorityTaskToWhatsApp({ ...aviso, id: nuevoId, creador: userName, evento: 'creada' }).catch(() => {});
         toast({
           title: 'Tarea creada',
           description: nueva.assignee && nueva.assignee !== userName
@@ -266,11 +296,19 @@ export default function MisTareas() {
     return userTasks.filter((task) => task.status === status).sort(compareTasks);
   };
 
+  const resumen = [
+    plural(getTasksByStatus(TaskStatus.TODO).length, 'pendiente', 'pendientes'),
+    plural(getTasksByStatus(TaskStatus.IN_PROGRESS).length, 'en progreso', 'en progreso'),
+    plural(getTasksByStatus(TaskStatus.DONE).length, 'completada', 'completadas'),
+  ].join(' \u00b7 ');
+
   // Drag and Drop handlers
-  const handleDragStart = (e: React.DragEvent, taskId: string) => {
-    setDraggedTask(taskId);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('taskId', taskId);
+  const handleDragStart = (e: React.DragEvent, task: Task) => {
+    setDraggedTask(task.id);
+    e.dataTransfer.effectAllowed = 'copyMove';
+    e.dataTransfer.setData('taskId', task.id);
+    // Para soltarla en el To-Do: solo viaja el titulo
+    e.dataTransfer.setData(TASK_DRAG_TYPE, JSON.stringify({ id: task.id, title: task.title }));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -409,467 +447,155 @@ export default function MisTareas() {
     );
   }
 
-  const getViewModeLabel = () => {
-    switch (viewMode) {
-      case 'simple':
-        return 'Simple';
-      case 'card':
-        return 'Tarjetas';
-      case 'list':
-        return 'Lista';
-      case 'compact':
-        return 'Compacta';
-    }
-  };
-
-  const cycleViewMode = () => {
-    const modes: ViewMode[] = ['simple', 'card', 'list', 'compact'];
-    const currentIndex = modes.indexOf(viewMode);
-    const nextIndex = (currentIndex + 1) % modes.length;
-    setViewMode(modes[nextIndex]);
-  };
-
   return (
     <div className="space-y-6 animate-fade-in h-full flex flex-col">
       {/* Header */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Mis Tareas</h1>
-            <p className="text-muted-foreground">
-              Tareas asignadas a ti en el sistema
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={abrirNueva} className="gap-1.5">
-              <Plus className="h-4 w-4" /> Nueva tarea
-            </Button>
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <Select value={userName} onValueChange={(v) => setUserName(v as TeamMemberName)}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {teamMembers.map((member) => (
-                    <SelectItem key={member.name} value={member.name}>
-                      <div className="flex items-center gap-2">
-                        <div className={`w-3 h-3 rounded-full ${member.color}`}></div>
-                        {member.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button variant="outline" onClick={cycleViewMode}>
-              {['simple', 'card'].includes(viewMode) ? <Grid3X3 className="h-4 w-4 mr-2" /> : <List className="h-4 w-4 mr-2" />}
-              Vista: {getViewModeLabel()}
-            </Button>
-            <Button onClick={() => navigate('/tareas')}>
-              <Plus className="h-4 w-4 mr-2" />
-              Gestionar Tareas
-            </Button>
-          </div>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Mis Tareas</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{resumen}</p>
         </div>
-
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {Object.entries(STATUS_MAP).map(([status, config]) => {
-            const count = getTasksByStatus(status).length;
-            const Icon = config.icon;
-            return (
-              <div key={status} className="rounded-lg border bg-card p-4">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${config.color}`}>
-                    <Icon className="h-5 w-5" />
+        <div className="flex items-center gap-2">
+          <Select value={userName} onValueChange={(v) => setUserName(v as TeamMemberName)}>
+            <SelectTrigger className="h-9 w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {teamMembers.map((member) => (
+                <SelectItem key={member.name} value={member.name}>
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2.5 h-2.5 rounded-full ${member.color}`}></div>
+                    {member.name}
                   </div>
-                  <div>
-                    <p className="text-2xl font-bold">{count}</p>
-                    <p className="text-sm text-muted-foreground">{config.label}</p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={abrirNueva} className="h-9 gap-1.5">
+            <Plus className="h-4 w-4" /> Nueva tarea
+          </Button>
         </div>
       </div>
 
-      {/* Tasks Content */}
-      <div className="flex-1 overflow-hidden">
-        {viewMode === 'simple' ? (
-          /* Vista Simple */
-          <div className="h-full overflow-y-auto">
-            <div className="space-y-2 max-w-3xl">
-              {userTasks.length === 0 ? (
-                <div className="rounded-lg border bg-card p-8 text-center">
-                  <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                  <p className="text-muted-foreground">No tienes tareas asignadas</p>
-                  <Button variant="outline" className="mt-4" onClick={() => navigate('/tareas')}>
-                    Ir a Gestión de Tareas
-                  </Button>
+      {/* Tasks Content: tres secciones por estado. Cada una recibe arrastres:
+          un pendiente del To-Do se vuelve tarea ahi, una tarea cambia de estado. */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-3xl space-y-8 pb-10">
+          {SECCIONES.map((sec) => {
+            const items = getTasksByStatus(sec.status);
+            const activa = dropZone === sec.status;
+            return (
+              <section
+                key={sec.status}
+                onDragOver={(e) => { handleDragOver(e); if (dropZone !== sec.status) setDropZone(sec.status); }}
+                onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDropZone(null); }}
+                onDrop={(e) => { setDropZone(null); handleDrop(e, sec.status); }}
+                className={cn('rounded-lg -mx-2 px-2 transition-colors', activa && 'bg-primary/5 ring-1 ring-primary/30')}
+              >
+                <div className="flex items-baseline gap-2 mb-1">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{sec.label}</h2>
+                  <span className="text-[11px] tabular-nums text-muted-foreground/60">{items.length}</span>
                 </div>
-              ) : (
-                userTasks.map((task) => {
-                  const status = STATUS_MAP[task.status as keyof typeof STATUS_MAP];
-                  const priority = PRIORITY_MAP[task.priority as keyof typeof PRIORITY_MAP];
-                  const project = getProject(task.projectId);
-                  const StatusIcon = status?.icon || Clock;
 
-                  return (
-                    <div key={task.id} className="rounded-lg border bg-card p-4 hover:shadow-sm transition-shadow">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start gap-3 mb-2">
-                            <button
-                              onClick={() => handleToggleComplete(task)}
-                              className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
-                                task.status === TaskStatus.DONE
-                                  ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
-                                  : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
-                              }`}
-                            >
-                              {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
-                            </button>
-                            <div className="flex-1 min-w-0">
-                              <h3 className={`font-medium transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                                {task.title}
-                              </h3>
-                              {task.description && (
-                                <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
-                                  {task.description}
-                                </p>
+                {items.length === 0 ? (
+                  <div className={cn(
+                    'rounded-md border border-dashed px-3 py-3 text-xs text-muted-foreground/60',
+                    activa ? 'border-primary/40 text-primary/70' : 'border-border/60'
+                  )}>
+                    {sec.vacio}
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/60">
+                    {items.map((task) => {
+                      const project = getProject(task.projectId);
+                      const hecha = task.status === TaskStatus.DONE;
+                      const vencida = !hecha && !!task.dueDate && task.dueDate < Date.now() - 86_400_000;
+                      const nComentarios = task.comments?.length || 0;
+                      return (
+                        <div
+                          key={task.id}
+                          draggable
+                          onDragStart={(e) => handleDragStart(e, task)}
+                          onDragEnd={() => setDraggedTask(null)}
+                          className={cn(
+                            'group flex items-start gap-3 py-3 cursor-grab active:cursor-grabbing',
+                            draggedTask === task.id && 'opacity-40'
+                          )}
+                        >
+                          <button
+                            onClick={() => handleToggleComplete(task)}
+                            aria-label={hecha ? 'Marcar pendiente' : 'Completar'}
+                            className={cn(
+                              'mt-[3px] h-[18px] w-[18px] shrink-0 rounded-full border-2 flex items-center justify-center transition-colors',
+                              hecha
+                                ? 'bg-emerald-500 border-emerald-500 text-white'
+                                : 'border-muted-foreground/50 hover:border-emerald-500'
+                            )}
+                          >
+                            {hecha && <CheckCircle2 className="h-3 w-3" />}
+                          </button>
+
+                          <div className="flex-1 min-w-0">
+                            <p className={cn('text-[15px] leading-snug', hecha && 'line-through text-muted-foreground')}>
+                              {task.title}
+                            </p>
+                            {task.description && (
+                              <p className="text-sm text-muted-foreground line-clamp-1 mt-0.5">{task.description}</p>
+                            )}
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                              {project && (
+                                <span className="flex items-center gap-1.5">
+                                  <span className={cn('h-2 w-2 rounded-full', project.color)} />
+                                  {project.name}
+                                </span>
+                              )}
+                              {task.priority === Priority.HIGH && !hecha && (
+                                <span className="text-red-500 font-medium">Alta</span>
+                              )}
+                              {task.dueDate && (
+                                <span className={cn('flex items-center gap-1', vencida && 'text-red-500')}>
+                                  <Calendar className="h-3 w-3" />
+                                  {new Date(task.dueDate).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
+                                </span>
+                              )}
+                              {task.creator && task.creator !== task.assignee && (
+                                <span title="Quien la asigno">de {task.creator}</span>
+                              )}
+                              {nComentarios > 0 && (
+                                <button onClick={() => handleAddComment(task)} className="flex items-center gap-1 hover:text-foreground">
+                                  <MessageCircle className="h-3 w-3" /> {nComentarios}
+                                </button>
                               )}
                             </div>
                           </div>
 
-                          <div className="flex flex-wrap gap-2 ml-0 sm:ml-8 mt-2 sm:mt-0">
-                            {project && (
-                              <span className={`text-xs px-2 py-1 rounded-full ${project.color} text-white`}>
-                                {project.name}
-                              </span>
-                            )}
-                            {priority && (
-                              <span className={`text-xs px-2 py-1 rounded-full ${priority.color}`}>
-                                {priority.label}
-                              </span>
-                            )}
-                            {task.type && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-700">
-                                {task.type}
-                              </span>
-                            )}
-                            {task.dueDate && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">
-                                <Calendar className="h-3 w-3" />
-                                {new Date(task.dueDate).toLocaleDateString('es-ES', {
-                                  day: '2-digit',
-                                  month: 'short',
-                                })}
-                              </span>
-                            )}
-                            <span className={`text-xs px-2 py-1 rounded-full ${status?.color || 'bg-gray-100'}`}>
-                              {status?.label || task.status}
-                            </span>
+                          {/* Acciones: solo al pasar el mouse en pantalla grande; siempre en tactil */}
+                          <div className="flex shrink-0 gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-within:opacity-100 transition-opacity">
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar" onClick={() => abrirEdicion(task)}>
+                              <Edit className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Comentar" onClick={() => handleAddComment(task)}>
+                              <MessageCircle className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" title="Eliminar" onClick={() => handleDelete(task)}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </div>
-
-                        <div className="flex gap-1 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Editar tarea"
-                            onClick={() => abrirEdicion(task)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleAddComment(task)}
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            {task.comments && task.comments.length > 0 && (
-                              <span className="text-xs ml-0.5">{task.comments.length}</span>
-                            )}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive"
-                            onClick={() => handleDelete(task)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Vista Kanban (Card, List, Compact) */
-          <div className="h-full overflow-x-auto">
-            <div className="flex gap-4 h-full min-w-max pb-4">
-              {COLUMNS.map((column) => {
-                const columnTasks = getTasksByStatus(column.status);
-                const StatusIcon = STATUS_MAP[column.status as keyof typeof STATUS_MAP]?.icon || Circle;
-
-                return (
-                  <div
-                    key={column.status}
-                    className="flex-1 min-w-[320px] flex flex-col bg-muted/50 rounded-lg p-4"
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, column.status)}
-                  >
-                    {/* Column Header */}
-                    <div className="flex items-center gap-2 mb-4">
-                      <StatusIcon className={`h-5 w-5 ${column.color}`} />
-                      <h2 className="font-semibold text-lg">
-                        {column.name}
-                        <span className="ml-2 text-sm text-muted-foreground">
-                          ({columnTasks.length})
-                        </span>
-                      </h2>
-                    </div>
-
-                    {/* Tasks */}
-                    <div className={`space-y-3 flex-1 overflow-y-auto ${viewMode === 'compact' ? 'space-y-1' : ''}`}>
-                      {columnTasks.length === 0 ? (
-                        <div className="h-32 border-2 border-dashed rounded-lg flex items-center justify-center text-muted-foreground text-sm">
-                          Sin tareas
-                        </div>
-                      ) : (
-                        columnTasks.map((task) => {
-                          const project = getProject(task.projectId);
-                          const assignee = getTeamMember(task.assignee);
-                          const priority = PRIORITY_MAP[task.priority as keyof typeof PRIORITY_MAP];
-
-                          if (viewMode === 'compact') {
-                            return (
-                              <div
-                                key={task.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, task.id)}
-                                className={`p-2 bg-card rounded border-l-4 cursor-move hover:shadow transition-all ${
-                                  draggedTask === task.id ? 'opacity-50' : ''
-                                }`}
-                                style={{ borderLeftColor: project?.color.replace('bg-', '#').replace('-500', '') || '#3b82f6' }}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${priority?.color.split(' ')[0] || 'bg-gray-300'}`}></span>
-                                  <span className="text-sm flex-1 truncate">{task.title}</span>
-                                  {task.dueDate && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {new Date(task.dueDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          if (viewMode === 'list') {
-                            return (
-                              <div
-                                key={task.id}
-                                draggable
-                                onDragStart={(e) => handleDragStart(e, task.id)}
-                                className={`p-3 bg-card rounded-lg border cursor-move hover:shadow transition-all ${
-                                  draggedTask === task.id ? 'opacity-50' : ''
-                                }`}
-                              >
-                                <div className="flex items-center gap-3">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleComplete(task);
-                                    }}
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                      task.status === TaskStatus.DONE
-                                        ? 'bg-emerald-500 border-emerald-500 text-white'
-                                        : 'border-muted-foreground'
-                                    }`}
-                                  >
-                                    {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3" />}
-                                  </button>
-                                  <div className="flex-1 min-w-0">
-                                    <p className={`text-sm font-medium truncate ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                                      {task.title}
-                                    </p>
-                                    {project && (
-                                      <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
-                                        {project.name}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${priority?.color || 'bg-gray-100'}`}>
-                                    {priority?.label || task.priority}
-                                  </span>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Editar tarea" onClick={() => abrirEdicion(task)}>
-                                    <Edit className="h-3 w-3" />
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => handleDelete(task)}>
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          }
-
-                          // Card View
-                          return (
-                            <Card
-                              key={task.id}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, task.id)}
-                              className={`p-4 cursor-move hover:shadow-lg transition-all ${
-                                draggedTask === task.id ? 'opacity-50' : ''
-                              }`}
-                              style={{
-                                borderLeftWidth: '4px',
-                                borderLeftColor: project?.color.replace('bg-', '#').replace('-500', '') || '#3b82f6',
-                              }}
-                            >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex items-start gap-2 flex-1 min-w-0">
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleToggleComplete(task);
-                                    }}
-                                    className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all duration-300 ${
-                                      task.status === TaskStatus.DONE
-                                        ? 'bg-emerald-500 border-emerald-500 text-white scale-110'
-                                        : 'border-muted-foreground hover:border-emerald-500 hover:scale-110'
-                                    }`}
-                                  >
-                                    {task.status === TaskStatus.DONE && <CheckCircle2 className="h-3 w-3 animate-in zoom-in duration-200" />}
-                                  </button>
-                                  <h3 className={`font-semibold text-sm transition-all duration-300 ${task.status === TaskStatus.DONE ? 'line-through text-muted-foreground' : ''}`}>
-                                    {task.title}
-                                  </h3>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  title="Editar tarea"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    abrirEdicion(task);
-                                  }}
-                                >
-                                  <Edit className="h-3 w-3" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDelete(task);
-                                  }}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              </div>
-
-                              {task.description && (
-                                <p className="text-xs text-muted-foreground mb-2 line-clamp-2">
-                                  {task.description}
-                                </p>
-                              )}
-
-                              <div className="flex flex-wrap gap-1 mb-2">
-                                {project && (
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${project.color} text-white`}>
-                                    {project.name}
-                                  </span>
-                                )}
-                                {task.type && (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
-                                    {task.type}
-                                  </span>
-                                )}
-                              </div>
-
-                              {task.images && task.images.length > 0 && (
-                                <div className="flex gap-1 mb-2 flex-wrap">
-                                  {task.images.slice(0, 3).map((img, idx) => (
-                                    <img
-                                      key={idx}
-                                      src={img}
-                                      alt={`Image ${idx + 1}`}
-                                      className="w-10 h-10 object-cover rounded border cursor-pointer hover:scale-110 transition-transform"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedImage(img);
-                                        setImageModalOpen(true);
-                                      }}
-                                    />
-                                  ))}
-                                  {task.images.length > 3 && (
-                                    <div className="w-10 h-10 bg-muted border rounded flex items-center justify-center text-xs">
-                                      +{task.images.length - 3}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              <div className="flex items-center justify-between pt-2 border-t">
-                                <div className="flex gap-2 items-center">
-                                  <span className={`text-xs px-2 py-0.5 rounded-full ${priority?.color || 'bg-gray-100'}`}>
-                                    {priority?.label || task.priority}
-                                  </span>
-                                  {task.dueDate && (
-                                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      {new Date(task.dueDate).toLocaleDateString('es-ES', {
-                                        day: '2-digit',
-                                        month: 'short',
-                                      })}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex gap-1 items-center">
-                                  {task.images && task.images.length > 0 && (
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <ImageIcon className="h-3 w-3" />
-                                      {task.images.length}
-                                    </div>
-                                  )}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleAddComment(task);
-                                    }}
-                                  >
-                                    <MessageCircle className="h-3 w-3" />
-                                    {task.comments && task.comments.length > 0 && (
-                                      <span className="text-[10px] ml-0.5">{task.comments.length}</span>
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-                            </Card>
-                          );
-                        })
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                )}
+              </section>
+            );
+          })}
+
+          <p className="text-xs text-muted-foreground/60 px-1">
+            Arrastra un pendiente del To-Do a una seccion para volverlo tarea, o una tarea al To-Do para anotarla como pendiente.
+            {' '}
+            <button onClick={() => navigate('/tareas')} className="underline underline-offset-2 hover:text-foreground">Ver Operaciones</button>
+          </p>
+        </div>
       </div>
 
       {/* Image Modal */}
