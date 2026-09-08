@@ -113,6 +113,10 @@ export default function MisTareas() {
   // Si trae id, el dialogo esta editando esa tarea; si no, creando una nueva
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [responsableOriginal, setResponsableOriginal] = useState<string>('');
+  // Tarea rapida: escribir y Enter, como en el To-Do. Nace pendiente, para uno
+  // mismo, prioridad media y en el primer proyecto; para mas detalle esta el boton.
+  const [rapida, setRapida] = useState('');
+  const [creandoRapida, setCreandoRapida] = useState(false);
   // Seccion sobre la que se esta arrastrando algo (resalta la zona)
   const [dropZone, setDropZone] = useState<string | null>(null);
   // Completado va plegado por defecto: con decenas de tareas hechas tapaba lo
@@ -174,6 +178,30 @@ export default function MisTareas() {
     if (userName) return;
     setUserName(matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Edgardo');
   }, [teamMembers, user?.firstName, user?.email, userName]);
+
+  const crearRapida = async () => {
+    const titulo = rapida.trim();
+    if (!titulo || creandoRapida) return;
+    setCreandoRapida(true);
+    try {
+      await createTask({
+        title: titulo,
+        description: '',
+        status: TaskStatus.TODO,
+        priority: Priority.MEDIUM,
+        assignee: userName,
+        creator: userName,
+        projectId: projects[0]?.id || '',
+        origen: 'rapida', // va arriba de la seccion, como las traidas del To-Do
+      } as Omit<Task, 'id' | 'createdAt'>);
+      setRapida('');
+      await fetchData();
+    } catch {
+      toast({ title: 'Error', description: 'No se pudo crear la tarea', variant: 'destructive' });
+    } finally {
+      setCreandoRapida(false);
+    }
+  };
 
   const abrirNueva = () => {
     setEditandoId(null);
@@ -282,13 +310,13 @@ export default function MisTareas() {
   const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
   const STATUS_ORDER: Record<string, number> = { TODO: 0, IN_PROGRESS: 1, DONE: 2 };
   const compareTasks = (a: Task, b: Task) => {
-    // Las que nacieron arrastradas desde el To-Do van de primeras: son las que
-    // uno acaba de traer y quiere ver ya, y entre muchas tareas se perdian. Entre
+    // Las que uno acaba de agregar a mano (arrastradas del To-Do o escritas en
+    // el input rapido) van de primeras: entre muchas tareas se perdian. Entre
     // ellas, la mas reciente arriba. El resto conserva el orden de siempre.
-    const aTodo = a.origen === 'todo';
-    const bTodo = b.origen === 'todo';
-    if (aTodo !== bTodo) return aTodo ? -1 : 1;
-    if (aTodo && bTodo) return (b.createdAt || 0) - (a.createdAt || 0);
+    const aNueva = !!a.origen;
+    const bNueva = !!b.origen;
+    if (aNueva !== bNueva) return aNueva ? -1 : 1;
+    if (aNueva && bNueva) return (b.createdAt || 0) - (a.createdAt || 0);
     const aPos = (a as any).position;
     const bPos = (b as any).position;
     if (typeof aPos === 'number' && typeof bPos === 'number') return aPos - bPos;
@@ -498,6 +526,23 @@ export default function MisTareas() {
           </Button>
         </div>
       </div>
+
+      {/* Tarea rapida: escribir y Enter, como en el To-Do */}
+      <form
+        onSubmit={(e) => { e.preventDefault(); crearRapida(); }}
+        className="max-w-3xl flex items-center gap-2"
+      >
+        <Input
+          value={rapida}
+          onChange={(e) => setRapida(e.target.value)}
+          placeholder="Agregar una tarea y Enter…"
+          disabled={creandoRapida}
+          className="h-9"
+        />
+        <Button type="submit" size="icon" className="h-9 w-9 shrink-0" disabled={!rapida.trim() || creandoRapida} title="Agregar tarea">
+          <Plus className="h-4 w-4" />
+        </Button>
+      </form>
 
       {/* Tasks Content: tres secciones por estado. Cada una recibe arrastres:
           un pendiente del To-Do se vuelve tarea ahi, una tarea cambia de estado. */}
