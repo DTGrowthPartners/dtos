@@ -179,6 +179,24 @@ export default function MisTareas() {
     setUserName(matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Edgardo');
   }, [teamMembers, user?.firstName, user?.email, userName]);
 
+  // El To-Do avisa cuando una tarea arrastrada ya quedo como pendiente: aqui se
+  // manda a la papelera (recuperable desde Operaciones) para que no quede doble.
+  useEffect(() => {
+    const alMover = async (e: Event) => {
+      const id = (e as CustomEvent).detail?.id as string | undefined;
+      const task = id ? tasks.find((t) => t.id === id) : undefined;
+      if (!task) return;
+      try {
+        await moveTaskToDeleted(task.id, task);
+        setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      } catch {
+        toast({ title: 'Error', description: 'Quedó en pendientes pero no se pudo quitar de aquí', variant: 'destructive' });
+      }
+    };
+    window.addEventListener('dtos:tarea-movida-a-todo', alMover);
+    return () => window.removeEventListener('dtos:tarea-movida-a-todo', alMover);
+  }, [tasks]);
+
   const crearRapida = async () => {
     const titulo = rapida.trim();
     if (!titulo || creandoRapida) return;

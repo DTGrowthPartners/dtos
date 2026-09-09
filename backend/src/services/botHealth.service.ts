@@ -79,9 +79,15 @@ const CHECKS: Check[] = [
     run: async () => {
       // certbot renueva ~30 días antes de vencer: un cert con <10 días significa
       // que la renovación está fallando (como el 5/ago con os.dtgrowthpartners).
-      const dominios = ['os.dtgrowthpartners.com', 'feedback.dtgrowthpartners.com',
-        'dairo.dtgp.ai', 'maria.dtgrowthpartners.com',
-        'mcp2.dtgrowthpartners.com', 'correo.dtgrowthpartners.com'];
+      // Configurable por SSL_CHECK_DOMAINS (separados por coma). Esta lista estaba
+      // escrita a mano y cuando Maria se mudo a comercial.dtgp.ai (31/ago) el
+      // hostname viejo quedo sin certificado propio: 8 dias y 96 avisos en falso.
+      // Si un dominio se retira, se quita de aqui o del .env; no se deja morir.
+      const dominios = (process.env.SSL_CHECK_DOMAINS || [
+        'os.dtgrowthpartners.com', 'feedback.dtgrowthpartners.com',
+        'dairo.dtgp.ai', 'comercial.dtgp.ai', 'mariadtgp.dtgp.ai',
+        'mcp2.dtgrowthpartners.com', 'correo.dtgrowthpartners.com',
+      ].join(',')).split(',').map((d) => d.trim()).filter(Boolean);
       const diasCert = (host: string) => new Promise<number>((resolve, reject) => {
         const s = tls.connect({ host, port: 443, servername: host, timeout: 10_000 }, () => {
           const cert: any = s.getPeerCertificate();

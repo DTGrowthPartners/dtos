@@ -200,7 +200,9 @@ export default function TodoList() {
   }, []);
 
   // Una tarea de Mis Tareas soltada aqui se vuelve un pendiente con solo su
-  // titulo. Es una copia: la tarea sigue existiendo en Operaciones.
+  // titulo, y la tarea original se va a la papelera de Operaciones (recuperable):
+  // dejarla tambien en Mis Tareas la mostraba dos veces. Quien la quita es Mis
+  // Tareas, que tiene la tarea completa; aqui solo se avisa con el id.
   const [sobreTarea, setSobreTarea] = useState(false);
   const soltarTarea = async (e: React.DragEvent) => {
     const crudo = e.dataTransfer.getData(TASK_DRAG_TYPE);
@@ -223,7 +225,8 @@ export default function TodoList() {
     try {
       const id = await createTodo(user.id, titulo, origen);
       setTodos((prev) => prev.map((x) => (x.id === tempId ? { ...x, id } : x)));
-      toast({ title: 'Agregado a pendientes', description: titulo });
+      if (taskId) window.dispatchEvent(new CustomEvent('dtos:tarea-movida-a-todo', { detail: { id: taskId } }));
+      toast({ title: 'Movida a pendientes', description: `${titulo} · la tarea pasó a la papelera de Operaciones` });
     } catch {
       setTodos((prev) => prev.filter((x) => x.id !== tempId));
       toast({ title: 'Error', description: 'No se pudo agregar el pendiente', variant: 'destructive' });
