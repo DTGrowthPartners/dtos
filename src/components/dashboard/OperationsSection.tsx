@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { loadTasks, loadProjects } from '@/lib/firestoreTaskService';
 import type { Task, Project } from '@/types/taskTypes';
+import { responsablesDe } from '@/types/taskTypes';
 import { Activity, AlertTriangle } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
@@ -55,8 +56,8 @@ export default function OperationsSection() {
 
     // Carga por persona (activas, apiladas: todo/prog/vencida)
     const byPerson: Record<string, { todo: number; prog: number; venc: number; total: number }> = {};
-    active.forEach((t) => {
-      const p = t.assignee || 'Sin asignar';
+    // Cada tarea cuenta para cada responsable (principal y segundo)
+    active.flatMap((t) => (responsablesDe(t).length ? responsablesDe(t) : ['Sin asignar']).map((p) => ({ t, p }))).forEach(({ t, p }) => {
       if (!byPerson[p]) byPerson[p] = { todo: 0, prog: 0, venc: 0, total: 0 };
       if (t.dueDate && t.dueDate < now) byPerson[p].venc++;
       else if (isInProgress(t.status)) byPerson[p].prog++;

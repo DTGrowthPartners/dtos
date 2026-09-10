@@ -59,7 +59,7 @@ import {
   type TeamMemberName,
 } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
-import { matchTeamMember } from '@/types/taskTypes';
+import { matchTeamMember, esResponsable } from '@/types/taskTypes';
 import { useAuthStore } from '@/lib/auth';
 import { TODO_DRAG_TYPE, TASK_DRAG_TYPE } from '@/components/todos/TodoList';
 import { cn } from '@/lib/utils';
@@ -98,6 +98,10 @@ const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno
 export default function MisTareas() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  // Las tareas rapidas y las traidas del To-Do caen en INBOX (si existe ese
+  // proyecto), no en el primero de la lista: a Dairo se le iban todas a WEB DTGP.
+  const proyectoPorDefecto =
+    projects.find((p) => /^\s*inbox\s*$/i.test(p.name || ''))?.id || projects[0]?.id || '';
   const [isLoading, setIsLoading] = useState(true);
   // Arranca en el usuario logueado. Antes estaba fijo en 'Edgardo', así que
   // todo el mundo entraba viendo las tareas de él.
@@ -209,7 +213,7 @@ export default function MisTareas() {
         priority: Priority.MEDIUM,
         assignee: userName,
         creator: userName,
-        projectId: projects[0]?.id || '',
+        projectId: proyectoPorDefecto,
         origen: 'rapida', // va arriba de la seccion, como las traidas del To-Do
       } as Omit<Task, 'id' | 'createdAt'>);
       setRapida('');
@@ -226,7 +230,7 @@ export default function MisTareas() {
     setNueva({
       title: '',
       description: '',
-      projectId: projects[0]?.id || '',
+      projectId: proyectoPorDefecto,
       assignee: userName,
       priority: Priority.MEDIUM,
       status: TaskStatus.TODO,
@@ -241,7 +245,7 @@ export default function MisTareas() {
     setNueva({
       title: task.title || '',
       description: task.description || '',
-      projectId: task.projectId || projects[0]?.id || '',
+      projectId: task.projectId || proyectoPorDefecto,
       assignee: task.assignee || userName,
       priority: (task.priority as Priority) || Priority.MEDIUM,
       status: task.status || TaskStatus.TODO,
@@ -353,7 +357,7 @@ export default function MisTareas() {
 
   // Filter tasks by selected user (en la vista simple, pendientes antes que completadas)
   const userTasks = tasks
-    .filter((task) => task.assignee === userName)
+    .filter((task) => esResponsable(task, userName)) // principal o segundo responsable
     .sort((a, b) => {
       const s = (STATUS_ORDER[a.status] ?? 0) - (STATUS_ORDER[b.status] ?? 0);
       return s !== 0 ? s : compareTasks(a, b);
@@ -400,7 +404,7 @@ export default function MisTareas() {
           priority: Priority.MEDIUM,
           assignee: userName,
           creator: userName,
-          projectId: projects[0]?.id || '',
+          projectId: proyectoPorDefecto,
           origen: 'todo', // chip "del To-Do" en la fila, para reconocerla entre muchas
         } as Omit<Task, 'id' | 'createdAt'>);
         // El To-Do escucha esto y saca el pendiente de su lista
@@ -669,6 +673,9 @@ export default function MisTareas() {
                               )}
                               {task.creator && task.creator !== task.assignee && (
                                 <span title="Quien la asigno">de {task.creator}</span>
+                              )}
+                              {task.coAssignee && (
+                                <span title="La comparten dos responsables">con {task.coAssignee === userName ? task.assignee : task.coAssignee}</span>
                               )}
                               {nComentarios > 0 && (
                                 <button onClick={() => handleAddComment(task)} className="flex items-center gap-1 hover:text-foreground">

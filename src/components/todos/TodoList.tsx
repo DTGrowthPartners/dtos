@@ -76,7 +76,9 @@ export default function TodoList() {
     matchTeamMember(teamMembers, user?.firstName, user?.email) || user?.firstName || 'Stiven';
 
   const openConvert = (todo: Todo) => {
-    setConvForm({ title: todo.text, assignee: myName(), projectId: '', priority: 'MEDIUM', dueDate: '' });
+    // Convertir a tarea: proyecto INBOX por defecto (si existe), como en Mis Tareas
+    const inbox = projects.find((p) => /^\s*inbox\s*$/i.test(p.name || ''))?.id || '';
+    setConvForm({ title: todo.text, assignee: myName(), projectId: inbox, priority: 'MEDIUM', dueDate: '' });
     setConvertTodo(todo);
   };
 

@@ -78,8 +78,9 @@ export const runDailyDigest = async () => {
       if (status === 'done' || status === 'completed') continue;
       const due = taskDueMs(t.dueDate);
       if (due && due < nowMs - DAY / 2) {
-        const who = t.assignee || t.asignado || 'Sin asignar';
-        vencidasPor.set(who, (vencidasPor.get(who) || 0) + 1);
+        // Cuenta para cada responsable (principal y segundo)
+        const quienes = [t.assignee || t.asignado, t.coAssignee].filter(Boolean);
+        for (const who of (quienes.length ? quienes : ['Sin asignar'])) vencidasPor.set(who, (vencidasPor.get(who) || 0) + 1);
       }
     }
     if (vencidasPor.size) {

@@ -97,7 +97,8 @@ export class AIToolsService {
     if (args.assignee) {
       const assigneeLower = args.assignee.toLowerCase();
       tasks = tasks.filter((t: any) => {
-        const taskAssignee = (t.assignee || t.asignado || '').toLowerCase();
+        // Principal o segundo responsable
+        const taskAssignee = [t.assignee || t.asignado || '', t.coAssignee || ''].join('|').toLowerCase();
         return taskAssignee.includes(assigneeLower);
       });
     }
@@ -124,6 +125,7 @@ export class AIToolsService {
         status: t.status || 'TODO',
         priority: t.priority || 'MEDIUM',
         assignee: t.assignee || t.asignado || 'No asignado',
+        coAssignee: t.coAssignee || null,
         project: t.project || t.proyecto || '',
         dueDate: t.dueDate || t.fechaLimite || null,
         createdAt: t.createdAt || t.creadoEn || null

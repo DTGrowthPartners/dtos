@@ -26,7 +26,7 @@ import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { apiClient } from '@/lib/api';
 import { isExcludedExpenseReportCategory, isExcludedIncomeReportCategory } from '@/lib/financeFilters';
 import { loadTasks } from '@/lib/firestoreTaskService';
-import { matchTeamMember, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { matchTeamMember, esResponsable, responsablesDe, type Task, type TeamMemberName } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -185,11 +185,11 @@ export default function Dashboard() {
     if (!loggedUserName) return allTasks;
     const normalizedLoggedUser = normalizeString(loggedUserName);
     return allTasks.filter(t => {
+      // Responsable principal o segundo (exacto)...
+      if (esResponsable(t, loggedUserName)) return true;
       if (!t.assignee) return false;
       const normalizedAssignee = normalizeString(t.assignee);
-      // Perfect match
-      if (normalizedAssignee === normalizedLoggedUser) return true;
-      // Fuzzy match for common names or partial entries
+      // ...o parecido (nombres parciales o incompletos)
       return normalizedAssignee.includes(normalizedLoggedUser) ||
         normalizedLoggedUser.includes(normalizedAssignee);
     });
@@ -265,8 +265,9 @@ export default function Dashboard() {
     const workloadMap = new Map<string, { pending: number, inProgress: number, completed: number }>();
 
     allTasks.forEach(task => {
-      if (task.assignee) {
-        const current = workloadMap.get(task.assignee) || { pending: 0, inProgress: 0, completed: 0 };
+      // La tarea cuenta para cada responsable (principal y segundo)
+      responsablesDe(task).forEach((nombre) => {
+        const current = workloadMap.get(nombre) || { pending: 0, inProgress: 0, completed: 0 };
         if (task.status === 'DONE') {
           current.completed++;
         } else if (task.status === 'IN_PROGRESS') {
@@ -274,8 +275,8 @@ export default function Dashboard() {
         } else {
           current.pending++;
         }
-        workloadMap.set(task.assignee, current);
-      }
+        workloadMap.set(nombre, current);
+      });
     });
 
     return Array.from(workloadMap.entries())

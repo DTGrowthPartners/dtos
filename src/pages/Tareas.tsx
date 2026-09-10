@@ -153,6 +153,8 @@ import {
   RECURRENCE_OPTIONS,
   type TaskType,
   type TeamMemberName,
+  responsablesDe,
+  esResponsable,
 } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import NoteColumn from '@/components/notes/NoteColumn';
@@ -477,6 +479,7 @@ export default function Tareas() {
     status: TaskStatus.TODO,
     priority: Priority.MEDIUM,
     assignee: 'Stiven' as TeamMemberName,
+    coAssignee: '' as string,
     creator: 'Dairo' as TeamMemberName,
     projectId: '',
     type: '' as TaskType | '',
@@ -559,6 +562,7 @@ export default function Tareas() {
           status: task.status as TaskStatus,
           priority: task.priority,
           assignee: task.assignee,
+          coAssignee: (task.coAssignee || '') as string,
           creator: task.creator,
           projectId: task.projectId,
           type: task.type || '',
@@ -786,6 +790,8 @@ export default function Tareas() {
       status: formData.status,
       priority: formData.priority,
       assignee: formData.assignee,
+      // null (no undefined) para poder QUITAR el segundo responsable al editar
+      coAssignee: formData.coAssignee || null,
       creator: formData.creator,
       projectId: formData.projectId,
       type: formData.type || undefined,
@@ -803,6 +809,22 @@ export default function Tareas() {
       } : undefined,
     };
 
+    // Aviso por WhatsApp a un responsable (principal o segundo): mismo texto para ambos
+    const avisarWhatsApp = (id: string, asignado: string, evento?: 'actualizada') => {
+      const project = projects.find(p => p.id === taskData.projectId);
+      return sendHighPriorityTaskToWhatsApp({
+        id,
+        titulo: taskData.title,
+        descripcion: formatChecklistForWhatsApp(taskData.description || '', taskData.checklist),
+        prioridad: taskData.priority === Priority.HIGH ? 'Alta' : taskData.priority === Priority.LOW ? 'Baja' : 'Media',
+        asignado,
+        creador: taskData.creator,
+        proyecto: project?.name || 'Sin proyecto',
+        fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
+        ...(evento ? { evento } : {}),
+      });
+    };
+
     try {
       if (editingTask) {
         await updateTask(editingTask.id, taskData);
@@ -818,6 +840,17 @@ export default function Tareas() {
             senderName: user.firstName,
           });
         }
+        // Segundo responsable: se le avisa igual que al principal cuando entra nuevo
+        const coChanged = (editingTask.coAssignee || null) !== (taskData.coAssignee || null);
+        if (coChanged && taskData.coAssignee && user?.firstName && taskData.coAssignee !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_assigned',
+            taskTitle: taskData.title,
+            taskId: editingTask.id,
+            assigneeName: taskData.coAssignee,
+            senderName: user.firstName,
+          });
+        }
 
         // Avisar al responsable por WhatsApp cuando se actualiza algo relevante
         // (título, descripción, prioridad, estado, fecha límite o reasignación).
@@ -828,7 +861,7 @@ export default function Tareas() {
           editingTask.priority !== taskData.priority ||
           editingTask.status !== taskData.status ||
           (editingTask.dueDate || null) !== (taskData.dueDate || null) ||
-          assigneeChanged;
+          assigneeChanged || coChanged;
         if (meaningfulChange && formData.notifyWhatsApp && taskData.assignee && taskData.assignee !== user?.firstName) {
           const project = projects.find(p => p.id === taskData.projectId);
           sendHighPriorityTaskToWhatsApp({
@@ -842,6 +875,9 @@ export default function Tareas() {
             fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
             evento: 'actualizada',
           });
+        }
+        if (meaningfulChange && formData.notifyWhatsApp && taskData.coAssignee && taskData.coAssignee !== user?.firstName) {
+          avisarWhatsApp(editingTask.id, taskData.coAssignee, 'actualizada');
         }
 
         toast({
@@ -864,6 +900,15 @@ export default function Tareas() {
             senderName: user.firstName,
           });
         }
+        if (taskData.coAssignee && user?.firstName && taskData.coAssignee !== user.firstName) {
+          sendTaskNotification({
+            type: 'task_assigned',
+            taskTitle: taskData.title,
+            taskId: newTaskId,
+            assigneeName: taskData.coAssignee,
+            senderName: user.firstName,
+          });
+        }
 
         // Aviso por WhatsApp para TODA tarea nueva (cualquier prioridad) si el
         // usuario dejó activado el check de avisar.
@@ -879,6 +924,7 @@ export default function Tareas() {
             proyecto: project?.name || 'Sin proyecto',
             fechaLimite: taskData.dueDate ? new Date(taskData.dueDate).toISOString().split('T')[0] : null,
           });
+          if (taskData.coAssignee) avisarWhatsApp(newTaskId, taskData.coAssignee);
         }
 
         toast({
@@ -2043,6 +2089,7 @@ export default function Tareas() {
       status: task.status as TaskStatus,
       priority: task.priority,
       assignee: task.assignee,
+      coAssignee: (task.coAssignee || '') as string,
       creator: task.creator,
       projectId: task.projectId,
       type: task.type || '',
@@ -2070,6 +2117,7 @@ export default function Tareas() {
       status: TaskStatus.TODO,
       priority: task.priority,
       assignee: task.assignee,
+      coAssignee: (task.coAssignee || '') as string,
       creator: task.creator,
       projectId: task.projectId,
       type: task.type || '',
@@ -2370,6 +2418,7 @@ export default function Tareas() {
       status: TaskStatus.TODO,
       priority: Priority.MEDIUM,
       assignee: loggedUserName || 'Stiven',
+      coAssignee: '',
       creator: loggedUserName || 'Dairo',
       projectId: filterProject !== 'all' ? filterProject : '',
       type: '',
@@ -2980,6 +3029,33 @@ export default function Tareas() {
     return teamMemberStyle(name);
   };
 
+  // Avatares de los responsables (principal y segundo, si hay), solapados como en
+  // cualquier tablero. `extra` son clases del contenedor (p. ej. ocultar en movil).
+  const renderResponsables = (
+    task: { assignee?: string | null; coAssignee?: string | null },
+    size: string,
+    text: string,
+    extra = '',
+  ) => {
+    const nombres = responsablesDe(task);
+    if (!nombres.length) return null;
+    return (
+      <div className={`flex items-center -space-x-1.5 shrink-0 ${extra}`} title={nombres.join(' y ')}>
+        {nombres.map((n) => {
+          const foto = getUserPhoto(n);
+          const estilo = getTeamMember(n);
+          return foto ? (
+            <img key={n} src={foto} alt={n} className={`${size} rounded-full object-cover ring-2 ring-card`} />
+          ) : (
+            <div key={n} className={`${size} rounded-full ${estilo?.color} flex items-center justify-center text-white ${text} ring-2 ring-card`}>
+              {estilo?.initials}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   // Filter tasks - only show tasks where user is creator or assignee
   // Admins can see ALL tasks from all team members
   // Memoizado: solo recalcula cuando cambian las dependencias reales.
@@ -2995,10 +3071,9 @@ export default function Tareas() {
       //   (ej: "Jose" matcheaba con "Jose Maria"). Ahora solo exact match.
       let isUserTask = isAdmin;
       if (!isUserTask && normalizedLoggedUser) {
-        const normalizedAssignee = task.assignee ? normalizeString(task.assignee) : '';
         const normalizedCreator = task.creator ? normalizeString(task.creator) : '';
-        isUserTask = normalizedAssignee === normalizedLoggedUser ||
-          normalizedCreator === normalizedLoggedUser;
+        // Responsable principal o segundo, o quien la creo
+        isUserTask = esResponsable(task, loggedUserName) || normalizedCreator === normalizedLoggedUser;
       }
       if (!isUserTask) return false;
 
@@ -3015,7 +3090,7 @@ export default function Tareas() {
         const folderProjectIds = projects.filter((p) => p.folderId === filterFolder).map((p) => p.id);
         if (!folderProjectIds.includes(task.projectId)) return false;
       }
-      if (filterAssignee !== 'all' && task.assignee !== filterAssignee) return false;
+      if (filterAssignee !== 'all' && !responsablesDe(task).includes(filterAssignee)) return false;
       if (filterPriority !== 'all' && task.priority !== filterPriority) return false;
 
       // Date filter
@@ -3094,9 +3169,8 @@ export default function Tareas() {
       // conteo coincida con lo que el usuario ve realmente en el tablero.
       let isUserTask = isAdmin;
       if (!isUserTask && normalizedLoggedUser) {
-        const normalizedAssignee = t.assignee ? normalizeString(t.assignee) : '';
         const normalizedCreator = t.creator ? normalizeString(t.creator) : '';
-        isUserTask = normalizedAssignee === normalizedLoggedUser || normalizedCreator === normalizedLoggedUser;
+        isUserTask = esResponsable(t, loggedUserName) || normalizedCreator === normalizedLoggedUser;
       }
       if (!isUserTask) return false;
 
@@ -3111,13 +3185,13 @@ export default function Tareas() {
     const activeTasks = tasks.filter(t => {
       let isUserTask = isAdmin;
       if (!isUserTask && loggedUserName) {
-        isUserTask = (t.assignee === loggedUserName || t.creator === loggedUserName);
+        isUserTask = (esResponsable(t, loggedUserName) || t.creator === loggedUserName);
       }
 
       if (!isUserTask) return false;
 
       const matchesProject = filterProject === 'all' || t.projectId === filterProject;
-      const matchesAssignee = filterAssignee === 'all' || t.assignee === filterAssignee;
+      const matchesAssignee = filterAssignee === 'all' || responsablesDe(t).includes(filterAssignee);
       const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
       return isUserTask && t.status !== TaskStatus.DONE && matchesProject && matchesAssignee && matchesPriority;
     });
@@ -4449,17 +4523,7 @@ export default function Tareas() {
                                 >
                                   {task.title}
                                 </span>
-                                {getUserPhoto(task.assignee) ? (
-                                  <img
-                                    src={getUserPhoto(task.assignee)}
-                                    alt={task.assignee}
-                                    className="w-6 h-6 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                                    {assignee?.initials}
-                                  </div>
-                                )}
+                                {renderResponsables(task, 'w-6 h-6', 'text-xs')}
                               </div>
                             </div>
                             </Fragment>
@@ -4508,17 +4572,7 @@ export default function Tareas() {
                                   {task.priority === 'HIGH' ? 'Alta' : task.priority === 'MEDIUM' ? 'Media' : 'Baja'}
                                 </span>
                                 <div className="flex-1" />
-                                {getUserPhoto(task.assignee) ? (
-                                  <img
-                                    src={getUserPhoto(task.assignee)}
-                                    alt={task.assignee}
-                                    className="w-5 h-5 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className={`w-5 h-5 rounded-full ${assignee?.color} flex items-center justify-center text-white text-[10px]`}>
-                                    {assignee?.initials}
-                                  </div>
-                                )}
+                                {renderResponsables(task, 'w-5 h-5', 'text-[10px]')}
                               </div>
                             </div>
                             </Fragment>
@@ -4685,17 +4739,7 @@ export default function Tareas() {
                                         <span className="text-[10px] ml-0.5">{task.comments.length}</span>
                                       )}
                                     </Button>
-                                    {getUserPhoto(task.assignee) ? (
-                                      <img
-                                        src={getUserPhoto(task.assignee)}
-                                        alt={task.assignee}
-                                        className="w-6 h-6 rounded-full object-cover"
-                                      />
-                                    ) : (
-                                      <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                                        {assignee?.initials}
-                                      </div>
-                                    )}
+                                    {renderResponsables(task, 'w-6 h-6', 'text-xs')}
                                   </div>
                                 </div>
                               </Card>
@@ -4958,17 +5002,7 @@ export default function Tareas() {
                         <span>
                           Completada: {task.completedAt ? new Date(task.completedAt).toLocaleDateString('es-ES') : 'N/A'}
                         </span>
-                        {getUserPhoto(task.assignee) ? (
-                          <img
-                            src={getUserPhoto(task.assignee)}
-                            alt={task.assignee}
-                            className="w-6 h-6 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                            {assignee?.initials}
-                          </div>
-                        )}
+                        {renderResponsables(task, 'w-6 h-6', 'text-xs')}
                       </div>
                     </Card>
                   );
@@ -5043,17 +5077,7 @@ export default function Tareas() {
                         <span>
                           Eliminada: {task.deletedAt ? new Date(task.deletedAt).toLocaleDateString('es-ES') : 'N/A'}
                         </span>
-                        {getUserPhoto(task.assignee) ? (
-                          <img
-                            src={getUserPhoto(task.assignee)}
-                            alt={task.assignee}
-                            className="w-6 h-6 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className={`w-6 h-6 rounded-full ${assignee?.color} flex items-center justify-center text-white text-xs`}>
-                            {assignee?.initials}
-                          </div>
-                        )}
+                        {renderResponsables(task, 'w-6 h-6', 'text-xs')}
                       </div>
                     </Card>
                   );
@@ -5225,6 +5249,7 @@ export default function Tareas() {
                                       status: task.status,
                                       priority: task.priority,
                                       assignee: task.assignee as TeamMemberName,
+                                      coAssignee: (task.coAssignee || '') as string,
                                       creator: task.creator as TeamMemberName,
                                       projectId: task.projectId,
                                       type: task.type || '',
@@ -5256,13 +5281,7 @@ export default function Tareas() {
                                       )}
                                     </div>
                                   </div>
-                                  {getUserPhoto(task.assignee) && (
-                                    <img
-                                      src={getUserPhoto(task.assignee)}
-                                      alt={task.assignee}
-                                      className="w-4 h-4 rounded-full object-cover mt-1 hidden md:block"
-                                    />
-                                  )}
+                                  {renderResponsables(task, 'w-4 h-4', 'text-[8px]', 'mt-1 hidden md:block')}
                                 </div>
                               );
                             })}
@@ -5364,6 +5383,7 @@ export default function Tareas() {
                                           status: task.status,
                                           priority: task.priority,
                                           assignee: task.assignee as TeamMemberName,
+                                          coAssignee: (task.coAssignee || '') as string,
                                           creator: task.creator as TeamMemberName,
                                           projectId: task.projectId,
                                           type: task.type || '',
@@ -5763,7 +5783,11 @@ export default function Tareas() {
                   <Label>Asignado a</Label>
                   <Select
                     value={formData.assignee}
-                    onValueChange={(value) => setFormData({ ...formData, assignee: value as TeamMemberName })}
+                    onValueChange={(value) => setFormData({
+                      ...formData,
+                      assignee: value as TeamMemberName,
+                      coAssignee: formData.coAssignee === value ? '' : formData.coAssignee,
+                    })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -5784,6 +5808,30 @@ export default function Tareas() {
                               </div>
                             )}
                             {member.name} ({member.role})
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Segundo responsable <span className="text-muted-foreground font-normal">(opcional)</span></Label>
+                  <Select
+                    value={formData.coAssignee || '__nadie__'}
+                    onValueChange={(value) => setFormData({ ...formData, coAssignee: value === '__nadie__' ? '' : value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Nadie" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__nadie__">Nadie</SelectItem>
+                      {teamMembers.filter((m) => m.name !== formData.assignee).map((member) => (
+                        <SelectItem key={member.name} value={member.name}>
+                          <div className="flex items-center gap-2">
+                            <div className={`w-5 h-5 rounded-full ${member.color} flex items-center justify-center text-white text-[10px]`}>
+                              {member.initials}
+                            </div>
+                            {member.name}
                           </div>
                         </SelectItem>
                       ))}

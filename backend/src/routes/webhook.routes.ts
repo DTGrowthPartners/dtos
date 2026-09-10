@@ -539,6 +539,9 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
       description,
       asignado,
       assignee,
+      coAsignado,
+      coAssignee,
+      segundoResponsable,
       creador,
       creator,
       proyecto,
@@ -558,6 +561,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
     const taskTitle = titulo || title;
     const taskDescription = descripcion || description || '';
     const assigneeName = asignado || assignee || 'Stiven';
+    const coAssigneeName = coAsignado || coAssignee || segundoResponsable || '';
     const creatorName = creador || creator || 'Dairo';
     const projectName = proyecto || project;
     const taskProjectId = projectId;
@@ -582,6 +586,20 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
         error: `Asignado "${assigneeName}" no válido`,
         validMembers: await miembrosValidos(),
       });
+    }
+
+    // Segundo responsable (opcional): se valida igual y no puede ser el mismo
+    let normalizedCoAssignee: string | null = null;
+    if (coAssigneeName) {
+      normalizedCoAssignee = await resolverMiembro(String(coAssigneeName));
+      if (!normalizedCoAssignee) {
+        return res.status(400).json({
+          success: false,
+          error: `Segundo responsable "${coAssigneeName}" no válido`,
+          validMembers: await miembrosValidos(),
+        });
+      }
+      if (normalizedCoAssignee === normalizedAssignee) normalizedCoAssignee = null;
     }
 
     // Validar y normalizar creator
@@ -656,6 +674,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
       status: 'TODO',
       priority: mappedPriority,
       assignee: normalizedAssignee,
+      ...(normalizedCoAssignee ? { coAssignee: normalizedCoAssignee } : {}),
       creator: normalizedCreator,
       createdAt: Date.now(),
       images: [],
@@ -728,7 +747,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
 
     res.status(201).json({
       success: true,
-      message: `Tarea creada: "${taskTitle}" asignada a ${normalizedAssignee}`,
+      message: `Tarea creada: "${taskTitle}" asignada a ${normalizedAssignee}${normalizedCoAssignee ? ` y ${normalizedCoAssignee}` : ''}`,
       task: {
         id: docRef.id,
         title: taskTitle,
@@ -736,6 +755,7 @@ router.post('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =
         status: 'TODO',
         priority: mappedPriority,
         assignee: normalizedAssignee,
+        coAssignee: normalizedCoAssignee,
         creator: normalizedCreator,
         project: resolvedProjectId ? {
           id: resolvedProjectId,
@@ -799,13 +819,16 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
       mappedStatus = statusMap[taskStatus.toLowerCase()] || taskStatus.toUpperCase();
     }
 
-    // Consultar Firestore solo por assignee (evita necesidad de índice compuesto)
-    const snapshot = await getFirestore().collection('tasks')
-      .where('assignee', '==', normalizedUser)
-      .get();
+    // Dos consultas simples (principal y segundo responsable): sin índice compuesto
+    const col = getFirestore().collection('tasks');
+    const [comoPrincipal, comoSegundo] = await Promise.all([
+      col.where('assignee', '==', normalizedUser).get(),
+      col.where('coAssignee', '==', normalizedUser).get(),
+    ]);
+    const docs = [...comoPrincipal.docs, ...comoSegundo.docs];
 
     // Filtrar y ordenar en memoria
-    let tasks = snapshot.docs
+    let tasks = docs
       .map(doc => {
         const data = doc.data();
         return {
@@ -815,6 +838,7 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
           estado: data.status,
           prioridad: data.priority,
           proyecto: data.projectId,
+          responsables: [data.assignee, data.coAssignee].filter(Boolean),
           fechaLimite: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : null,
           creadoEn: data.createdAt,
         };
@@ -828,7 +852,7 @@ router.get('/bot/tasks', verifyBotApiKey, async (req: Request, res: Response) =>
       }));
 
     // Mensaje formateado (resumen por-usuario) para los avisos del bot.
-    const todos = snapshot.docs.map((d) => {
+    const todos = docs.map((d) => {
       const x = d.data();
       return { title: x.title as string, status: x.status as string, priority: x.priority as string, dueDate: x.dueDate };
     });
@@ -896,8 +920,8 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
 
     snapshot.docs.forEach(doc => {
       const data = doc.data();
-      const assignee = data.assignee;
-
+      // La tarea aparece en la lista de cada responsable (principal y segundo)
+      for (const assignee of [data.assignee, data.coAssignee]) {
       if (assignee && tasksByUser[assignee]) {
         tasksByUser[assignee].push({
           id: doc.id,
@@ -908,6 +932,7 @@ router.get('/bot/tasks/all', verifyBotApiKey, async (req: Request, res: Response
           fechaLimite: data.dueDate ? new Date(data.dueDate).toISOString().split('T')[0] : null,
           creadoEn: data.createdAt,
         });
+      }
       }
     });
 

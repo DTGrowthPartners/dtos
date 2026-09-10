@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { loadTasks } from '@/lib/firestoreTaskService';
 import { useAuthStore } from '@/lib/auth';
-import { matchTeamMember, type Task, type TeamMemberName } from '@/types/taskTypes';
+import { matchTeamMember, esResponsable, type Task, type TeamMemberName } from '@/types/taskTypes';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { Link } from 'react-router-dom';
 
@@ -50,7 +50,7 @@ export function TasksToday() {
   const todayTasks = tasks
     .filter((task) => {
       const isUserTask = loggedUserName
-        ? (task.assignee === loggedUserName || task.creator === loggedUserName)
+        ? (esResponsable(task, loggedUserName) || task.creator === loggedUserName)
         : true;
       return isUserTask && task.status !== 'DONE';
     })

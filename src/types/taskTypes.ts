@@ -255,6 +255,9 @@ export interface Task {
   status: string;
   priority: Priority;
   assignee: TeamMemberName;
+  // Segundo responsable (opcional). La tarea es de los dos: ambos la ven en
+  // Mis Tareas y en su tablero, a ambos se les avisa y a ambos se les cuenta.
+  coAssignee?: TeamMemberName | null;
   creator: TeamMemberName;
   projectId: string;
   type?: TaskType;
@@ -368,3 +371,25 @@ export interface NoteItem {
 
 export type NewProjectNoteColumn = Omit<ProjectNoteColumn, 'id' | 'createdAt'>;
 export type NewNoteItem = Omit<NoteItem, 'id' | 'createdAt' | 'updatedAt'>;
+
+// ---------------------------------------------------------------------------
+// Responsables: una tarea tiene un responsable principal y, opcionalmente, un
+// segundo. Todo lo que pregunte "¿de quién es esta tarea?" pasa por aquí.
+// ---------------------------------------------------------------------------
+type ConResponsables = { assignee?: string | null; coAssignee?: string | null };
+
+/** Los responsables de una tarea: el principal y, si tiene, el segundo. */
+export const responsablesDe = (t: ConResponsables): string[] =>
+  [t.assignee, t.coAssignee].filter((n): n is string => !!n && !!n.trim());
+
+const claveNombre = (v: string) =>
+  v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+
+/** ¿`nombre` es responsable (principal o segundo) de la tarea? Comparación
+ *  exacta sin tildes ni mayúsculas: el mismo criterio del filtro de seguridad
+ *  del tablero (nada de "incluye", que confundía a Jose con Jose María). */
+export const esResponsable = (t: ConResponsables, nombre: string | undefined | null): boolean => {
+  if (!nombre) return false;
+  const k = claveNombre(nombre);
+  return responsablesDe(t).some((n) => claveNombre(n) === k);
+};

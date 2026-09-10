@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthStore } from '@/lib/auth';
 import { apiClient } from '@/lib/api';
 import { loadTasks } from '@/lib/firestoreTaskService';
-import { TaskStatus, type Task } from '@/types/taskTypes';
+import { TaskStatus, esResponsable, responsablesDe, type Task } from '@/types/taskTypes';
 import { useAiTaskStore } from '@/lib/aiTaskStore';
 import { cn } from '@/lib/utils';
 
@@ -422,7 +422,7 @@ export default function ExecutiveDashboard() {
   // Tareas: stats globales para admin, personales para todos
   const tasksKPI = useMemo(() => {
     const userName = user?.firstName || '';
-    const mine = tasks.filter((t) => (t.assignee || '').toLowerCase() === userName.toLowerCase());
+    const mine = tasks.filter((t) => esResponsable(t, userName)); // principal o segundo responsable
     const myDone = mine.filter((t) => t.status === TaskStatus.DONE).length;
     const myTotal = mine.length;
     const productivity = myTotal > 0 ? Math.round((myDone / myTotal) * 100) : 0;
@@ -511,14 +511,14 @@ export default function ExecutiveDashboard() {
   // Carga de trabajo por miembro del equipo (top 6, agrupado por status)
   const teamWorkload = useMemo(() => {
     const map = new Map<string, { pending: number; inProgress: number; completed: number }>();
-    tasks.forEach((t) => {
-      if (!t.assignee) return;
-      const cur = map.get(t.assignee) || { pending: 0, inProgress: 0, completed: 0 };
+    // La tarea cuenta para cada responsable (principal y segundo)
+    tasks.forEach((t) => responsablesDe(t).forEach((nombre) => {
+      const cur = map.get(nombre) || { pending: 0, inProgress: 0, completed: 0 };
       if (t.status === TaskStatus.DONE) cur.completed++;
       else if (t.status === TaskStatus.IN_PROGRESS) cur.inProgress++;
       else cur.pending++;
-      map.set(t.assignee, cur);
-    });
+      map.set(nombre, cur);
+    }));
     return Array.from(map.entries())
       .map(([name, d]) => ({
         name,
