@@ -24,6 +24,7 @@ const pathNames: Record<string, string> = {
   '/clientes': 'Clientes',
   '/tareas': 'Operaciones',
   '/mis-tareas': 'Mis Tareas',
+  '/tareas-ia': 'Tareas IA',
   '/servicios': 'Servicios',
   '/reportes': 'Reportes',
   '/equipo': 'Equipo',
@@ -52,7 +53,7 @@ export function AppHeader() {
   const [theme, setTheme] = useState<Theme>(() => getStoredTheme());
   const currentPath = pathNames[location.pathname] || 'Dashboard';
   const user = authService.getUser();
-  const isMisTareasView = location.pathname === '/mis-tareas';
+  const isMisTareasView = location.pathname === '/mis-tareas' || location.pathname === '/tareas-ia';
 
   // Obtener el rol/cargo del equipo basado en el nombre del usuario
   const teamMember = user?.firstName ? teamMemberStyle(user.firstName) : undefined;

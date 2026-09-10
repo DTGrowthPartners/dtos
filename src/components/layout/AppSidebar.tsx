@@ -27,6 +27,7 @@ import {
   Globe,
   MonitorSmartphone,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,7 @@ const navGroups: NavGroup[] = [
     dotColor: 'bg-violet-500',
     items: [
       { title: 'Mis Tareas', path: '/mis-tareas', icon: ListChecks, permission: 'tareas' },
+      { title: 'Tareas IA', path: '/tareas-ia', icon: Sparkles, permission: 'tareas', badge: 'nuevo' },
       { title: 'Operaciones', path: '/tareas', icon: Cog, permission: 'tareas' },
       { title: 'Equipo', path: '/equipo', icon: UserCog, permission: 'equipo' },
       { title: 'Directorio', path: '/terceros', icon: BookUser, permission: 'terceros' },

@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { AppSidebar } from './AppSidebar';
@@ -16,6 +16,7 @@ const GlobalTodo = lazy(() => import('@/components/todos/GlobalTodo'));
 
 export function MainLayout() {
   const { collapsed } = useSidebar();
+  const esTareasIA = useLocation().pathname === '/tareas-ia';
 
   return (
     <div className="app-shell min-h-screen bg-background">
@@ -39,10 +40,10 @@ export function MainLayout() {
         )}
       >
         <AppHeader />
-        <main className="flex-1 p-4 md:p-6 overflow-auto">
+        <main className={cn('flex-1', esTareasIA ? 'min-w-0' : 'p-4 md:p-6 overflow-auto')}>
           <Outlet />
         </main>
-        <AppFooter />
+        {!esTareasIA && <AppFooter />}
       </div>
 
       {/* Live Chat (cargado con la app) */}

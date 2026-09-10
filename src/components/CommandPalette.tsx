@@ -131,6 +131,15 @@ export function CommandPalette() {
       keywords: ['operaciones', 'proyectos', 'tareas', 'tasks', 'pendientes', 'kanban'],
     },
     {
+      id: 'nav-tareas-ia',
+      label: 'Tareas IA',
+      description: 'Preparar tareas con IA y delegar al equipo',
+      icon: <Sparkles className="h-4 w-4" />,
+      action: () => navigate('/tareas-ia'),
+      category: 'navigation',
+      keywords: ['ia', 'asistente', 'tareas', 'delegar', 'asignar'],
+    },
+    {
       id: 'nav-finanzas',
       label: 'Finanzas',
       description: 'Dashboard financiero',

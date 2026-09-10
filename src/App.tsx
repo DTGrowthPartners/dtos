@@ -23,6 +23,7 @@ const ClientesRedesign = lazy(() => import("@/pages/ClientesRedesign"));
 const Servicios = lazy(() => import("@/pages/Servicios"));
 const Tareas = lazy(() => import("@/pages/Tareas"));
 const MisTareas = lazy(() => import("@/pages/MisTareas"));
+const TareasIA = lazy(() => import("@/pages/TareasIA"));
 const Reportes = lazy(() => import("@/pages/Reportes"));
 const Equipo = lazy(() => import("@/pages/Equipo"));
 const Productos = lazy(() => import("@/pages/Productos"));
@@ -112,6 +113,7 @@ const App = () => (
                 <Route path="/servicios" element={<ProtectedRoute requiredPermission="servicios"><Servicios /></ProtectedRoute>} />
                 <Route path="/tareas" element={<ProtectedRoute requiredPermission="tareas"><Tareas /></ProtectedRoute>} />
                 <Route path="/mis-tareas" element={<MisTareas />} />
+                <Route path="/tareas-ia" element={<ProtectedRoute requiredPermission="tareas"><TareasIA /></ProtectedRoute>} />
                 <Route path="/reportes" element={<ProtectedRoute requiredPermission="reportes"><Reportes /></ProtectedRoute>} />
                 <Route path="/equipo" element={<ProtectedRoute requiredPermission="equipo"><Equipo /></ProtectedRoute>} />
                 <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />

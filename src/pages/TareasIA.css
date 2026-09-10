@@ -1,0 +1,204 @@
+/* Espacio de enfoque: azul noche, tinta clara y bandejas de asignación. */
+.tareas-ia, .tia-dialogo {
+  --tia-fondo: #070f1e;
+  --tia-panel: #0c1728;
+  --tia-borde: #1b2b43;
+  --tia-texto: #e5edf8;
+  --tia-secundario: #95a6bd;
+  --tia-azul: #438bff;
+  color: var(--tia-texto);
+  color-scheme: dark;
+  font-family: Inter, system-ui, sans-serif;
+}
+.tareas-ia { display: grid; grid-template-columns: 310px minmax(0, 1fr); min-height: calc(100dvh - 4rem); background: var(--tia-fondo); }
+.tareas-ia button, .tareas-ia a, .tia-dialogo button { -webkit-tap-highlight-color: transparent; }
+.tareas-ia button:disabled, .tia-dialogo button:disabled { opacity: .45; cursor: not-allowed; }
+.tareas-ia :is(button, a, input, textarea, select):focus-visible, .tia-dialogo :is(button, input, textarea, select):focus-visible { outline: 2px solid #79abff; outline-offset: 3px; }
+.tareas-ia :is(input, textarea, select), .tia-dialogo :is(input, textarea, select) { min-width: 0; font: inherit; color: var(--tia-texto); }
+.tareas-ia input::placeholder, .tareas-ia textarea::placeholder { color: #7e91ad; }
+.tia-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.tia-icono { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 7px; color: var(--tia-secundario); }
+.tia-icono:hover { color: #fff; background: #17253a; }
+.tia-enlace { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: #8ebaff; font-size: 12px; white-space: nowrap; }
+.tia-enlace:hover { color: #c0d9ff; }
+.tia-boton { display: inline-flex; justify-content: center; align-items: center; gap: 7px; min-height: 36px; padding: 8px 13px; border: 1px solid #2a405e; border-radius: 7px; font-size: 12px; color: #dfebff; background: #111e32; }
+.tia-boton:hover { background: #1a2c46; }
+.tia-boton-azul { background: #246dec; border-color: #387dfa; color: white; }
+.tia-boton-azul:hover { background: #337df6; }
+.tia-lista { display: flex; flex-direction: column; min-width: 0; border-right: 1px solid #172338; background: #081120; height: calc(100dvh - 4rem); position: sticky; top: 4rem; }
+.tia-lista-cabecera { padding: 23px 19px 0; }
+.tia-lista-cabecera h1 { font-size: 20px; font-weight: 600; letter-spacing: -.6px; }
+.tia-lista-cabecera p { margin-top: 3px; color: var(--tia-secundario); font-size: 11px; }
+.tia-rapida { display: flex; gap: 7px; margin: 21px 0 17px; }
+.tia-rapida input { width: 100%; padding: 8px 10px; border: 1px solid var(--tia-borde); border-radius: 6px; background: #0b1526; font-size: 11px; }
+.tia-rapida .tia-icono { height: 34px; }
+.tia-busqueda { display: flex; align-items: center; gap: 8px; color: #7e91ad; }
+.tia-busqueda input { width: 100%; border: 0; background: transparent; padding: 8px 0; font-size: 11px; }
+.tia-pestanas { display: flex; gap: 12px; margin: 12px 19px 0; border-bottom: 1px solid var(--tia-borde); }
+.tia-pestanas button { display: flex; align-items: center; gap: 4px; padding: 10px 0; font-size: 10px; white-space: nowrap; color: var(--tia-secundario); border-bottom: 2px solid transparent; }
+.tia-pestanas button[aria-selected='true'] { color: #b9d5ff; border-color: var(--tia-azul); }
+.tia-pestanas span { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 9px; opacity: .8; }
+.tia-resultados { flex: 1; overflow: auto; padding: 6px 12px 16px; scrollbar-width: thin; scrollbar-color: #25354f transparent; }
+.tia-tarea { display: flex; align-items: center; gap: 10px; padding: 11px 7px; border-bottom: 1px solid #162136; border-radius: 5px; }
+.tia-tarea:hover, .tia-tarea-seleccionada { background: #101f34; }
+.tia-tarea-arrastrada { opacity: .45; }
+.tia-completar { display: grid; place-items: center; flex: 0 0 24px; height: 30px; color: #536a87; }
+.tia-completar:hover { color: #82adff; }
+.tia-completada { color: #64d1a4; }
+.tia-tarea-contenido { flex: 1; min-width: 0; text-align: left; }
+.tia-tarea-contenido[draggable='true'] { cursor: grab; }
+.tia-tarea-contenido[draggable='true']:active { cursor: grabbing; }
+.tia-tarea-titulo { display: block; font-size: 11.5px; line-height: 1.55; overflow-wrap: anywhere; }
+.tia-tachada { text-decoration: line-through; color: var(--tia-secundario); }
+.tia-tarea-meta { display: flex; align-items: center; gap: 5px; color: var(--tia-secundario); font-size: 10px; margin-top: 4px; }
+.tia-tarea-meta > span:first-of-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 133px; }
+.tia-punto { display: inline-block; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.tia-tarea-meta .tia-vencida { color: #f2a293; margin-left: auto; font-size: 9px; }
+.tia-prioridad-alta { color: #e6bb79; margin-left: auto; font-size: 9px; }
+.tia-agarre { color: #425775; opacity: 0; flex-shrink: 0; }
+.tia-tarea:hover .tia-agarre { opacity: 1; }
+.tia-lista-pie { display: flex; align-items: center; gap: 6px; padding: 15px 19px; border-top: 1px solid #162136; color: #8a9bb3; font-size: 9px; }
+.tia-vacio { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 13px; text-align: center; color: var(--tia-secundario); padding: 35px 16px; font-size: 12px; line-height: 1.7; }
+.tia-espacio { display: flex; flex-direction: column; min-width: 0; padding: 0 clamp(20px, 3vw, 54px) 24px; background: radial-gradient(ellipse at 50% 26%, #10214166, transparent 65%); }
+.tia-espacio-cabecera { display: flex; justify-content: space-between; align-items: center; min-height: 65px; gap: 12px; font-size: 11px; color: var(--tia-secundario); }
+.tia-espacio-cabecera > span, .tia-espacio-cabecera a { display: flex; align-items: center; gap: 8px; }
+.tia-espacio-cabecera > span > svg { color: var(--tia-azul); }
+.tia-espacio-cabecera a:hover { color: #bfdaff; }
+.tia-etiqueta { font-size: 8px; letter-spacing: 1.2px; padding: 3px 6px; border-radius: 4px; border: 1px solid #263852; color: #8eb3ea; }
+.tia-asistente { display: flex; flex: 1; flex-direction: column; width: 100%; max-width: 760px; align-self: center; justify-content: center; padding: 20px 0 24px; }
+.tia-bienvenida { padding: 12px 0 25px; text-align: center; }
+.tia-emblema { display: grid; place-items: center; width: 58px; height: 62px; margin: 0 auto 22px; color: #438bff; border: 1px solid #203a62; border-radius: 16px; background: linear-gradient(145deg, #122443, #0a1527); box-shadow: 0 0 45px #1d5ed014, inset 0 1px #6b9cff10; transform: rotate(-5deg); }
+.tia-emblema svg { transform: rotate(5deg); }
+.tia-bienvenida h2 { font-family: Inter, system-ui, sans-serif; font-size: clamp(23px, 2.4vw, 35px); line-height: 1.25; letter-spacing: -1.15px; font-weight: 550; }
+.tia-bienvenida h2 > span { color: #518fff; }
+.tia-bienvenida > p { color: var(--tia-secundario); font-size: 12px; margin-top: 11px; }
+.tia-atajos { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 25px; }
+.tia-atajos button { display: flex; align-items: center; gap: 7px; padding: 8px 11px; border: 1px solid #21314a; border-radius: 7px; font-size: 10px; color: #acbad0; background: #0c1727; }
+.tia-atajos button:hover { color: #d4e5ff; border-color: #3f659c; background: #10213a; }
+.tia-atajos svg { color: #72a6f5; }
+.tia-compositor { margin-top: 8px; border: 1px solid #294060; border-radius: 13px; background: linear-gradient(120deg, #102039, #0c1729); box-shadow: 0 8px 35px #00000012, inset 0 1px #7da9ff0b; }
+.tia-compositor:focus-within { border-color: #477fc9; box-shadow: 0 0 0 3px #438bff0c; }
+.tia-compositor textarea { display: block; width: 100%; resize: vertical; min-height: 76px; max-height: 180px; border: 0; background: transparent; padding: 17px 18px 8px; font-size: 12px; line-height: 1.7; border-radius: 13px; }
+.tia-compositor textarea:focus-visible { outline-offset: -3px; }
+.tia-compositor-pie { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px 11px 18px; }
+.tia-compositor-pie > span { display: flex; align-items: center; gap: 6px; color: #95a9c6; font-size: 10px; }
+.tia-compositor-pie > span svg { color: #72a1ff; flex-shrink: 0; }
+.tia-enviar { display: grid; place-items: center; flex: 0 0 31px; height: 31px; border-radius: 8px; color: white; background: #2d78f3; box-shadow: inset 0 1px #ffffff25; }
+.tia-enviar:disabled { background: #27416b; }
+.tia-ayuda-compositor { margin-top: 9px; color: #7f93ae; font-size: 9px; text-align: center; }
+.tia-ayuda-compositor > span { margin: 0 5px; }
+.tia-equipo { width: 100%; max-width: 1040px; align-self: center; border: 1px solid #1b304d; border-radius: 15px; background: linear-gradient(135deg, #0c192c, #0a1321); box-shadow: inset 0 1px #719deb08; }
+.tia-equipo-cabecera { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 20px; border-bottom: 1px solid #1a2a41; }
+.tia-equipo-titulo { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.tia-equipo-titulo > svg { color: #448aff; flex-shrink: 0; }
+.tia-equipo-titulo > div { min-width: 0; }
+.tia-equipo h2 { font-size: 15px; font-weight: 550; letter-spacing: -.3px; }
+.tia-equipo-titulo p { margin-top: 5px; color: var(--tia-secundario); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tia-equipo-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; padding: 15px; }
+.tia-miembro { min-width: 0; border: 1px solid #24344c; border-radius: 11px; padding: 14px 12px 10px; background: linear-gradient(145deg, #122036, #0c1626); box-shadow: 0 4px 12px #00000015; }
+.tia-miembro:hover { border-color: #36577f; }
+.tia-miembro-destino { border-color: #4c8fff !important; background: linear-gradient(145deg, #132c53, #10213b); box-shadow: 0 0 0 1px #438bff50, 0 0 22px #2572ec24; }
+.tia-miembro-identidad { display: flex; align-items: center; gap: 9px; position: relative; min-width: 0; }
+.tia-avatar { display: grid; place-items: center; flex: 0 0 33px; height: 33px; border-radius: 50%; font-size: 12px; font-weight: 500; color: white; box-shadow: inset 0 2px 4px #ffffff28, 0 2px 5px #00000030; }
+.tia-miembro-identidad > div { min-width: 0; }
+.tia-miembro h3 { font-size: 11px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tia-miembro h3 small { color: #8098b6; font-size: 9px; font-weight: 400; }
+.tia-miembro-identidad p { margin-top: 3px; color: var(--tia-secundario); font-size: 9px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.tia-miembro-nueva { display: grid; place-items: center; flex: 0 0 22px; height: 25px; margin-left: auto; color: #89a6cd; border-radius: 4px; }
+.tia-miembro-nueva:hover { background: #263f63; color: white; }
+.tia-carga { display: flex; align-items: baseline; gap: 5px; margin: 17px 1px 3px; }
+.tia-carga > strong { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 23px; font-weight: 400; line-height: 1; letter-spacing: -1px; }
+.tia-carga > span { color: #8a9bb5; font-size: 9px; }
+.tia-barra { height: 4px; flex: 1; min-width: 12px; margin-left: 5px; align-self: center; background: #21334e; border-radius: 6px; overflow: hidden; }
+.tia-barra > i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5662f5, #3785ff); }
+.tia-bandeja { display: block; width: 100%; position: relative; margin-top: 5px; padding-top: 24px; text-align: center; }
+.tia-papeles { position: absolute; top: 8px; height: 30px; left: 12px; right: 12px; perspective: 130px; }
+.tia-papeles i { position: absolute; height: 27px; left: 10px; right: 10px; top: 0; border: 1px solid #60799b70; border-radius: 5px 5px 1px 1px; background: linear-gradient(#607792, #344a67); transform: rotateX(38deg); box-shadow: 0 -1px 0 #a2b2c630; }
+.tia-papeles i:nth-child(2) { top: 5px; left: 5px; right: 5px; background: linear-gradient(#677d99, #3b4e6a); }
+.tia-papeles i:nth-child(3) { top: 10px; left: 0; right: 0; background: linear-gradient(#7083a1, #425878); }
+.tia-bandeja-frente { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; min-height: 71px; border: 1px solid #2b4160; border-top: 2px solid #496587; border-radius: 3px 3px 8px 8px; background: linear-gradient(125deg, #203451, #17263c); box-shadow: 0 5px 7px #00000019; }
+.tia-bandeja-frente > svg { display: none; }
+.tia-bandeja-frente strong { color: #d1def1; font-size: 10px; font-weight: 500; }
+.tia-bandeja-frente small { color: #9fb3ce; font-size: 9px; }
+.tia-bandeja:hover .tia-papeles i, .tia-miembro-destino .tia-papeles i { background: linear-gradient(#929aff, #5a66eb); border-color: #9fa7ff; }
+.tia-bandeja:hover .tia-bandeja-frente, .tia-miembro-destino .tia-bandeja-frente { border-color: #4b83d3; background: linear-gradient(125deg, #234476, #1a335c); }
+.tia-equipo > footer { display: flex; align-items: center; justify-content: center; gap: 6px; color: #8396b2; font-size: 9px; padding: 0 12px 13px; }
+.tia-asistente-con-contenido { padding-top: 12px; }
+.tia-detalle, .tia-prioridades, .tia-propuestas { margin-bottom: 14px; }
+.tia-detalle h2, .tia-prioridades h2 { font-size: 22px; line-height: 1.4; letter-spacing: -.6px; font-weight: 550; margin-top: 8px; overflow-wrap: anywhere; }
+.tia-descripcion { margin-top: 12px; color: #aab9cf; font-size: 12px; white-space: pre-wrap; line-height: 1.8; max-height: 160px; overflow: auto; overflow-wrap: anywhere; }
+.tia-sobretitulo { color: #819bbf; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 9px; letter-spacing: 1.2px; }
+.tia-detalle-meta { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0; }
+.tia-detalle-meta > span { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 5px; background: #142239; color: #a8bedc; font-size: 10px; }
+.tia-detalle-acciones { display: flex; gap: 13px; align-items: center; flex-wrap: wrap; }
+.tia-detalle-acciones > label { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--tia-secundario); }
+.tia-detalle-acciones select { background: #142239; border: 1px solid #304666; border-radius: 5px; padding: 7px; font-size: 11px; }
+.tia-detalle-acciones p { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #90a7c5; }
+.tia-prioridades > p { font-size: 11px; color: var(--tia-secundario); margin: 9px 0 17px; }
+.tia-prioridad-fila { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 0; border-bottom: 1px solid var(--tia-borde); text-align: left; }
+.tia-prioridad-fila > span { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; color: #648cc7; }
+.tia-prioridad-fila strong { font-size: 12px; font-weight: 450; flex: 1; overflow-wrap: anywhere; }
+.tia-prioridad-fila small { color: var(--tia-secundario); font-size: 10px; white-space: nowrap; }
+.tia-prioridad-fila:hover { color: #9dc3ff; }
+.tia-peticion { background: #162740; margin: 0 0 20px 15%; padding: 12px 15px; border: 1px solid #253c5e; border-radius: 12px 12px 3px 12px; font-size: 12px; line-height: 1.7; white-space: pre-wrap; max-height: 140px; overflow: auto; overflow-wrap: anywhere; }
+.tia-propuestas > .tia-fila { margin-bottom: 12px; }
+.tia-propuestas > .tia-fila > span { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #b4c9e6; }
+.tia-propuesta { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 15px; margin: 9px 0; border-radius: 10px; border: 1px solid var(--tia-borde); background: #0f1c30; }
+.tia-propuesta > div { min-width: 0; }
+.tia-propuesta h3 { font-size: 13px; margin: 7px 0; font-weight: 500; overflow-wrap: anywhere; }
+.tia-propuesta p { font-size: 10px; color: var(--tia-secundario); }
+.tia-propuesta .tia-boton { flex-shrink: 0; }
+.tia-error { display: flex; flex-wrap: wrap; gap: 10px; padding: 10px 13px; border: 1px solid #8b494c70; background: #4a242b40; color: #ffb7b5; font-size: 11px; border-radius: 7px; margin-top: 10px; }
+.tia-movil-nav { display: none; }
+.tia-dialogo { background: #0c1728; border-color: #294060; max-height: 90dvh; overflow-y: auto; }
+.tia-dialogo :is(h2, p) { color: inherit; }
+.tia-dialogo [id^='radix-'][class*='text-muted'] { color: #95a6bd; }
+.tia-formulario fieldset { display: flex; flex-direction: column; gap: 14px; }
+.tia-formulario label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: #b5c6df; }
+.tia-formulario :is(input, textarea, select) { width: 100%; background: #111f34; border: 1px solid #304664; border-radius: 6px; padding: 9px 10px; font-size: 13px; }
+.tia-form-dos { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.tia-form-pie { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
+.tia-selector-tareas { max-height: 310px; overflow-y: auto; }
+.tia-selector-tareas > button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 4px; text-align: left; border-bottom: 1px solid #263650; font-size: 12px; }
+.tia-selector-tareas > button:hover { color: #96beff; }
+.tia-selector-tareas small { color: #839ab9; font-size: 10px; white-space: nowrap; }
+@media (min-width: 1600px) { .tareas-ia { grid-template-columns: 355px minmax(0, 1fr); } .tia-tarea-titulo { font-size: 12px; } .tia-equipo-grid { gap: 15px; padding: 18px; } .tia-miembro { padding: 17px 15px 12px; } .tia-miembro h3 { font-size: 12px; } .tia-avatar { flex-basis: 39px; height: 39px; } }
+@media (max-width: 1279px) { .tareas-ia { grid-template-columns: 275px minmax(0, 1fr); } .tia-espacio { padding-inline: 20px; } .tia-equipo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .tia-bienvenida { padding-top: 2px; } .tia-equipo-cabecera { padding: 15px; } .tia-carga { margin-top: 13px; } .tia-miembro { padding-top: 12px; } .tia-bandeja { padding-top: 19px; } .tia-bandeja-frente { min-height: 56px; } .tia-lista-cabecera { padding-inline: 14px; } .tia-pestanas { margin-inline: 14px; gap: 10px; } }
+@media (max-width: 767px) {
+  .tareas-ia { display: flex; flex-direction: column; min-height: calc(100dvh - 4rem); }
+  .tia-movil-nav { display: flex; padding: 10px 16px; gap: 8px; border-bottom: 1px solid var(--tia-borde); }
+  .tia-movil-nav button { display: flex; align-items: center; justify-content: center; gap: 8px; width: 50%; padding: 9px; border-radius: 7px; color: var(--tia-secundario); font-size: 12px; }
+  .tia-movil-nav button[aria-pressed='true'] { background: #142642; color: #adceff; }
+  .tia-movil-nav span { color: #7f9dc6; font-size: 10px; }
+  .tia-lista, .tia-espacio { display: none; }
+  .tia-panel-visible { display: flex; }
+  .tia-lista { position: static; height: calc(100dvh - 8rem); border-right: 0; }
+  .tia-espacio { padding: 0 16px 25px; }
+  .tia-espacio-cabecera { min-height: 54px; font-size: 10px; }
+  .tia-etiqueta { display: none; }
+  .tia-asistente { padding-top: 6px; }
+  .tia-emblema { width: 48px; height: 51px; margin-bottom: 20px; }
+  .tia-bienvenida { padding: 17px 0 19px; }
+  .tia-bienvenida h2 { font-size: 25px; letter-spacing: -.9px; }
+  .tia-bienvenida > p { font-size: 11px; }
+  .tia-atajos { gap: 6px; margin-top: 20px; }
+  .tia-atajos button { padding: 8px; font-size: 9px; gap: 5px; }
+  .tia-equipo-titulo { gap: 9px; }
+  .tia-equipo h2 { font-size: 13px; }
+  .tia-equipo-titulo p { font-size: 9px; max-width: 190px; }
+  .tia-equipo-cabecera { padding: 14px 12px; gap: 8px; }
+  .tia-equipo-cabecera .tia-enlace { font-size: 10px; }
+  .tia-equipo-grid { padding: 10px; gap: 9px; }
+  .tia-miembro { padding: 12px 10px 9px; }
+  .tia-tarea-titulo { font-size: 13px; }
+  .tia-tarea-meta { font-size: 11px; }
+  .tia-pestanas button { font-size: 12px; padding: 13px 0; }
+  .tia-pestanas { gap: 22px; }
+  .tia-tarea { padding: 12px 8px; }
+  .tia-completar { flex-basis: 30px; height: 38px; }
+  .tia-propuesta { flex-direction: column; align-items: stretch; gap: 12px; }
+  .tia-propuesta .tia-boton { align-self: flex-start; }
+  .tia-dialogo { max-width: calc(100vw - 24px); border-radius: 12px; padding: 22px; }
+  .tia-detalle-acciones { align-items: flex-start; flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .tareas-ia *, .tia-dialogo * { animation: none !important; scroll-behavior: auto !important; } }
