@@ -5,6 +5,15 @@ const NAVY = '031D33', BLUE = '0065A7', INK = '071A2E', PALE = 'EBF2F8';
 const MONEY = '"$" #,##0.00;[Red]("$" #,##0.00);"$" 0.00';
 type Value = string | number;
 
+function documentDetail(row: CarteraFacturaRow): string {
+  const description = row.description || 'Sin descripción registrada';
+  const payments = (row.payments || []).map((payment) => {
+    const detail = [payment.notes || 'Sin descripción registrada', payment.method, payment.reference].filter(Boolean).join(' · ');
+    return `${payment.fecha || 'Fecha no registrada'} | $ ${payment.amount.toLocaleString('es-CO', { maximumFractionDigits: 2 })} | ${detail}`;
+  });
+  return payments.length ? `${description}\n\nABONOS APLICADOS\n${payments.join('\n')}` : description;
+}
+
 export function buildCarteraWorkbook(data: CarteraExportData) {
   const workbook = XLSX.utils.book_new();
   workbook.Props = { Title: 'Estado de cartera', Author: 'DT Growth Partners', Company: 'DT Growth Partners' };
@@ -51,7 +60,7 @@ export function buildCarteraWorkbook(data: CarteraExportData) {
   for(const rows of groups.values()){
     const client=rows[0].clientName||(data.vista==='cliente'?data.clientName:'Cliente'),nit=rows[0].clientNit||(data.vista==='cliente'?data.clientNit:'');
     const total=rows.reduce((s,r)=>s+r.totalAmount,0),paid=rows.reduce((s,r)=>s+r.paidAmount,0),balance=rows.reduce((s,r)=>s+r.saldo,0);
-    createSheet(client,client,nit,['Documento / Tipo','Fecha','Descripción','Valor','Abonado','Saldo','Estado'],rows.map(r=>[r.invoiceNumber+'\n'+r.tipoDocumento,r.fecha,r.description||'Sin descripción registrada',r.totalAmount,r.paidAmount,r.saldo,r.statusLabel]),[30,18,62,23,23,23,23],[3,4,5],['TOTALES','','',total,paid,balance,''],[total,paid,balance,paid>0?'Parcial':'Pendiente']);
+    createSheet(client,client,nit,['Documento / Tipo','Fecha','Descripción','Valor','Abonado','Saldo','Estado'],rows.map(r=>[r.invoiceNumber+'\n'+r.tipoDocumento,r.fecha,documentDetail(r),r.totalAmount,r.paidAmount,r.saldo,r.statusLabel]),[30,18,62,23,23,23,23],[3,4,5],['TOTALES','','',total,paid,balance,''],[total,paid,balance,paid>0?'Parcial':'Pendiente']);
   }
   if(!documents.length&&data.vista==='cliente')createSheet('Cartera',data.clientName,data.clientNit,['Documento / Tipo','Fecha','Descripción','Valor','Abonado','Saldo','Estado'],[],[30,18,62,23,23,23,23],[3,4,5],['SIN SALDO PENDIENTE','','',0,0,0,''],[0,0,0,'Sin saldo']);
   const payments=documents.flatMap(r=>(r.payments||[]).map(p=>[r.clientName||(data.vista==='cliente'?data.clientName:''),r.invoiceNumber,p.fecha,p.amount,p.method,p.reference,p.notes]));

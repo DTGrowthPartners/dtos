@@ -22,6 +22,15 @@ async function logoData() {
   } catch { return null; }
 }
 
+function documentDetail(row: CarteraFacturaRow): string {
+  const description = row.description || 'Sin descripción registrada';
+  const payments = (row.payments || []).map((payment) => {
+    const detail = [payment.notes || 'Sin descripción registrada', payment.method, payment.reference].filter(Boolean).join(' · ');
+    return `${payment.fecha || 'Fecha no registrada'} | $ ${payment.amount.toLocaleString('es-CO', { maximumFractionDigits: 2 })} | ${detail}`;
+  });
+  return payments.length ? `${description}\n\nABONOS APLICADOS\n${payments.join('\n')}` : description;
+}
+
 export async function renderCarteraPdf(data: CarteraExportData) {
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const width = doc.internal.pageSize.getWidth();
@@ -53,7 +62,7 @@ export async function renderCarteraPdf(data: CarteraExportData) {
   };
   const table = (head: string[][], body: (string | number)[][], startY: number, foot?: (string | number)[][], detail = false) => {
     autoTable(doc, {
-      startY, head, body, foot, theme: 'grid', showFoot: 'lastPage',
+      startY, head, body, foot, rowPageBreak: 'avoid', theme: 'grid', showFoot: 'lastPage',
       margin: { left: margin, right: margin, top: 73, bottom: 44 },
       styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 3, valign: 'top', overflow: 'linebreak', textColor: INK, lineColor: [215,225,236], lineWidth: 0.15, minCellHeight: 14 },
       headStyles: { fillColor: BLUE, textColor: [255,255,255], fontStyle: 'bold', minCellHeight: 16, valign: 'middle' },
@@ -101,16 +110,9 @@ export async function renderCarteraPdf(data: CarteraExportData) {
     if (data.vista === 'general' || index++) doc.addPage();
     client = rows[0].clientName || client; nit = rows[0].clientNit || nit; header();
     const total=rows.reduce((s,r)=>s+r.totalAmount,0), paid=rows.reduce((s,r)=>s+r.paidAmount,0), balance=rows.reduce((s,r)=>s+r.saldo,0);
-    const y = table([['Documento / Tipo','Fecha','Descripción','Valor','Abonado','Saldo','Estado']], rows.map((row)=>[`${row.invoiceNumber}\n${row.tipoDocumento}`,row.fecha,row.description||'Sin descripción registrada',money(row.totalAmount),money(row.paidAmount),money(row.saldo),row.statusLabel]),73,
+    const y = table([['Documento / Tipo','Fecha','Descripción','Valor','Abonado','Saldo','Estado']], rows.map((row)=>[`${row.invoiceNumber}\n${row.tipoDocumento}`,row.fecha,documentDetail(row),money(row.totalAmount),money(row.paidAmount),money(row.saldo),row.statusLabel]),73,
       [['TOTALES','','',money(total),money(paid),money(balance),'']],true);
-    let bottom = cards(y,total,paid,balance,paid > 0 ? 'Parcial' : 'Pendiente');
-    const payments=rows.flatMap((row)=>(row.payments||[]).map((p)=>[row.invoiceNumber,p.fecha,money(p.amount),p.method||'-',p.reference||'-',p.notes||'-']));
-    if(payments.length){
-      bottom += 10;
-      if(bottom + 31 > height-44){doc.addPage();header();bottom=73;}
-      doc.setTextColor(...BLUE);doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text('ABONOS APLICADOS',margin,bottom);
-      table([['Documento','Fecha de abono','Valor aplicado','Medio de pago','Referencia','Observaciones']],payments,bottom+4);
-    }
+    cards(y,total,paid,balance,paid > 0 ? 'Parcial' : 'Pendiente');
   }
   if (!documents.length && data.vista === 'cliente') { header();doc.setFontSize(11);doc.text('No hay documentos con saldo pendiente.',margin,80); }
   const pages=doc.getNumberOfPages();
