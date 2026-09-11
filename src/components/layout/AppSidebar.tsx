@@ -85,6 +85,7 @@ const navGroups: NavGroup[] = [
     items: [
       { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
       { title: 'Cartera', path: '/cartera', icon: Wallet, permission: 'finanzas' },
+      { title: 'Buscar documentos', path: '/buscar-documentos', icon: FileText, permission: 'cuentas-cobro' },
       { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'cuentas-cobro' },
       { title: 'Facturas Electrónicas', path: '/facturas', icon: ShieldCheck, permission: 'cuentas-cobro' },
       { title: 'Reporte de gastos', path: '/finanzas?tab=reportes', icon: FileBarChart, permission: 'finanzas' },

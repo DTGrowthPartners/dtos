@@ -31,6 +31,7 @@ const Cartera = lazy(() => import('./components/finance/CarteraPanel'));
 const Finanzas = lazy(() => import("@/pages/Finanzas"));
 const CRM = lazy(() => import("@/pages/CRM"));
 const Terceros = lazy(() => import("@/pages/Terceros"));
+const BuscarDocumentos = lazy(() => import("@/pages/BuscarDocumentos"));
 const CuentasCobro = lazy(() => import("@/pages/CuentasCobro"));
 const Facturas = lazy(() => import("@/pages/Facturas"));
 const Apps = lazy(() => import("@/pages/Apps"));
@@ -120,6 +121,7 @@ const App = () => (
                 <Route path="/productos" element={<ProtectedRoute requiredPermission="productos"><Productos /></ProtectedRoute>} />
                 <Route path="/finanzas" element={<ProtectedRoute requiredPermission="finanzas"><Finanzas /></ProtectedRoute>} />
                 <Route path="/cartera" element={<ProtectedRoute requiredPermission="finanzas"><Cartera /></ProtectedRoute>} />
+                <Route path="/buscar-documentos" element={<ProtectedRoute requiredPermission="cuentas-cobro"><BuscarDocumentos /></ProtectedRoute>} />
                 <Route path="/cuentas-cobro" element={<ProtectedRoute requiredPermission="cuentas-cobro"><CuentasCobro /></ProtectedRoute>} />
                 <Route path="/facturas" element={<ProtectedRoute requiredPermission="cuentas-cobro"><Facturas /></ProtectedRoute>} />
                 <Route path="/crm" element={<ProtectedRoute requiredPermission="crm"><CRM /></ProtectedRoute>} />
