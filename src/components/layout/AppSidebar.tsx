@@ -7,6 +7,7 @@ import {
   ListChecks,
   UserCog,
   DollarSign,
+  Wallet,
   ChevronLeft,
   ChevronRight,
   Briefcase,
@@ -83,6 +84,7 @@ const navGroups: NavGroup[] = [
     dotColor: 'bg-amber-500',
     items: [
       { title: 'Finanzas', path: '/finanzas', icon: DollarSign, permission: 'finanzas' },
+      { title: 'Cartera', path: '/cartera', icon: Wallet, permission: 'finanzas' },
       { title: 'Cuentas de Cobro', path: '/cuentas-cobro', icon: FileText, permission: 'cuentas-cobro' },
       { title: 'Facturas Electrónicas', path: '/facturas', icon: ShieldCheck, permission: 'cuentas-cobro' },
       { title: 'Reporte de gastos', path: '/finanzas?tab=reportes', icon: FileBarChart, permission: 'finanzas' },
