@@ -4,6 +4,7 @@ import { ArrowDown, ArrowRight, ArrowUp, Check, CheckCheck, ChevronDown, Chevron
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTareasIA } from '@/hooks/useTareasIA';
 import FiltrosTareasIA from '@/components/tasks/FiltrosTareasIA';
+import FiltrosRapidosTareasIA from '@/components/tasks/FiltrosRapidosTareasIA';
 import { useAuthStore } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
@@ -77,6 +78,7 @@ export default function TareasIA() {
   const hayFiltros = Object.keys(FILTROS_TAREAS_INICIALES).some((clave) => filtros[clave] !== FILTROS_TAREAS_INICIALES[clave]);
   const tituloLista = filtros.responsable === 'mias' ? 'Mis tareas' : 'Tareas';
   const limpiarFiltros = () => { setFiltros({ ...FILTROS_TAREAS_INICIALES }); setBusqueda(''); setSeleccionada(null); };
+  const cambiarFiltros = (nuevos: typeof filtros) => { setFiltros(nuevos); setSeleccionada(null); };
   const proyectoPorDefecto = proyectos.find((p) => !p.archived && /^\s*inbox\s*$/i.test(p.name))?.id || '';
   const equipoConCarga = equipo.map((miembro) => ({ ...miembro, carga: tareas.filter((t) => t.status !== TaskStatus.DONE && esResponsable(t, miembro.name)).length }));
   const maxCarga = Math.max(1, ...equipoConCarga.map((m) => m.carga));
@@ -173,7 +175,7 @@ export default function TareasIA() {
             <button type="submit" className="tia-boton-azul tia-icono" disabled={!rapida.trim() || deshabilitado} aria-label="Crear tarea rápida">{ocupado === 'crear' ? <Loader2 size={18} className="animate-spin" /> : <Plus size={19} />}</button>
           </form>
           <div className="tia-busqueda"><Search size={14} /><input aria-label="Buscar en mis tareas" placeholder="Buscar tareas…" value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setSeleccionada(null); }} /></div>
-          <FiltrosTareasIA filtros={filtros} cambiar={(nuevos) => { setFiltros(nuevos); setSeleccionada(null); }} proyectos={proyectos} carpetas={carpetas} equipo={equipo} total={visibles.length} deshabilitado={cargando || !!error} />
+          <FiltrosTareasIA filtros={filtros} cambiar={cambiarFiltros} proyectos={proyectos} carpetas={carpetas} equipo={equipo} total={visibles.length} deshabilitado={cargando || !!error} />
         </div>
         <div className="tia-pestanas" role="tablist" aria-label="Estado de las tareas">
           {ESTADOS.map((opcion, indice) => <button key={opcion.valor} role="tab" id={`tia-tab-${opcion.valor}`} tabIndex={estado === opcion.valor ? 0 : -1} aria-selected={estado === opcion.valor} aria-controls="tia-resultados" onClick={() => setEstado(opcion.valor)}
@@ -210,7 +212,11 @@ export default function TareasIA() {
       </aside>
 
       <div className={cn('tia-espacio', panelMovil === 'asistente' && 'tia-panel-visible')}>
-        <header className="tia-espacio-cabecera"><span><Sparkles size={15} /> Tareas IA <span className="tia-etiqueta">ASISTENTE</span></span><Link to="/tareas"><LayoutGrid size={14} /> Operaciones <ArrowRight size={14} /></Link></header>
+        <header className="tia-espacio-cabecera">
+          <span><Sparkles size={15} /> Tareas IA <span className="tia-etiqueta">ASISTENTE</span></span>
+          <FiltrosRapidosTareasIA filtros={filtros} cambiar={cambiarFiltros} proyectos={proyectos} equipo={equipo} deshabilitado={cargando || !!error} hayFiltros={hayFiltros} />
+          <Link to="/tareas"><LayoutGrid size={14} /> Operaciones <ArrowRight size={14} /></Link>
+        </header>
         {error && <div className="tia-error" role="alert">{error} <button className="tia-enlace" onClick={reintentar}>Reintentar</button></div>}
 
         <section className={cn('tia-asistente', hayContenido && 'tia-asistente-con-contenido')} aria-label="Asistente de tareas">
