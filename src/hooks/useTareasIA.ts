@@ -4,9 +4,9 @@ import { db } from '@/lib/firebase';
 import { useAuthStore } from '@/lib/auth';
 import { useTeamMembers } from '@/hooks/useTeamMembers';
 import { useToast } from '@/hooks/use-toast';
-import { createTask, loadProjects, sendHighPriorityTaskToWhatsApp, sendTaskNotification } from '@/lib/firestoreTaskService';
+import { createTask, loadProjects, loadProjectFolders, sendHighPriorityTaskToWhatsApp, sendTaskNotification } from '@/lib/firestoreTaskService';
 import { etiquetaFecha } from '@/lib/tareasIA';
-import { esMismoMiembro, esResponsable, matchTeamMember, Priority, TaskStatus, type Project, type Task } from '@/types/taskTypes';
+import { esMismoMiembro, esResponsable, matchTeamMember, Priority, TaskStatus, type Project, type ProjectFolder, type Task } from '@/types/taskTypes';
 
 export function useTareasIA() {
   const { user } = useAuthStore();
@@ -20,6 +20,7 @@ export function useTareasIA() {
   const [intento, setIntento] = useState(0);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const bloqueo = useRef(false);
+  const [carpetas, setCarpetas] = useState<ProjectFolder[]>([]);
 
   useEffect(() => {
     let activo = true;
@@ -38,14 +39,15 @@ export function useTareasIA() {
       setError('No se pudieron cargar las tareas. Revisa tu conexión y vuelve a intentar.');
       setCargando(false);
     });
-    loadProjects().then((datos) => {
+    Promise.all([loadProjects(), loadProjectFolders()]).then(([datos, grupos]) => {
       if (!activo) return;
       setProyectos(datos);
+      setCarpetas(grupos);
       proyectosListos = true;
       terminar();
     }).catch(() => {
       if (!activo) return;
-      setError('No se pudieron cargar los proyectos. Vuelve a intentar.');
+      setError('No se pudieron cargar los proyectos y las carpetas. Vuelve a intentar.');
       setCargando(false);
     });
     return () => { activo = false; cancelar(); };
@@ -144,5 +146,5 @@ export function useTareasIA() {
     toast({ title: estado === TaskStatus.DONE ? 'Tarea completada' : 'Estado actualizado', description: resultado.siguiente ? `Próxima repetición: ${etiquetaFecha(resultado.siguiente)}.` : undefined });
   });
 
-  return { tareas, proyectos, equipo, nombre, cargando, error, ocupado, crear, asignar, cambiarEstado, reintentar: () => setIntento((v) => v + 1) };
+  return { tareas, proyectos, carpetas, equipo, nombre, cargando, error, ocupado, crear, asignar, cambiarEstado, reintentar: () => setIntento((v) => v + 1) };
 }

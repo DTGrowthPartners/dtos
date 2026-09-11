@@ -67,6 +67,7 @@ function preparar(datos = tareasIniciales(), fallar = false) {
     '@/lib/firestoreTaskService': {
       createTask: async (valor) => { almacen.nueva = valor; return 'nueva'; },
       loadProjects: async () => [],
+      loadProjectFolders: async () => [],
       sendTaskNotification: async (valor) => avisos.push(valor),
       sendHighPriorityTaskToWhatsApp: async (valor) => avisos.push(valor),
     },
@@ -86,6 +87,37 @@ function preparar(datos = tareasIniciales(), fallar = false) {
   const vencida = { ...muestra, priority: 'LOW', dueDate: Date.now() - 86400_000 };
   const futura = { ...muestra, priority: 'HIGH', dueDate: Date.now() + 86400_000 };
   assert.ok(fechas.ordenarPorUrgencia(vencida, futura) < 0);
+
+  const ahora = Date.parse('2026-09-12T02:00:00Z'); // Viernes 11 en Colombia.
+  const proyectos = [{ id: 'web', folderId: 'clientes' }, { id: 'inbox', folderId: 'interno' }];
+  const casos = [
+    { ...muestra, id: 'hoy', projectId: 'web', dueDate: Date.parse('2026-09-12T04:59:00Z') },
+    { ...muestra, id: 'vencida', projectId: 'web', priority: 'LOW', dueDate: Date.parse('2026-09-10T17:00:00Z') },
+    { ...muestra, id: 'hecha', status: 'DONE', dueDate: Date.parse('2026-09-10T17:00:00Z') },
+    { ...muestra, id: 'sabado', dueDate: Date.parse('2026-09-13T04:59:00Z') },
+    { ...muestra, id: 'domingo', dueDate: Date.parse('2026-09-13T05:00:00Z') },
+    { ...muestra, id: 'mes-siguiente', dueDate: Date.parse('2026-10-01T05:00:00Z') },
+    { ...muestra, id: 'sin-fecha', title: 'Revisión editorial', description: 'Diseño de campaña', projectId: 'inbox' },
+    { ...muestra, id: 'delegada', assignee: 'Dairo', coAssignee: null, creator: 'Stiven' },
+    { ...muestra, id: 'borrada', deletedAt: ahora },
+    tareasIniciales().ajena,
+  ];
+  const filtrar = (cambios = {}, admin = false, busqueda = '') => Array.from(fechas.filtrarTareasIA(casos, proyectos, 'Stiven', admin, { ...fechas.FILTROS_TAREAS_INICIALES, ...cambios }, busqueda, ahora), (t) => t.id);
+  assert.deepEqual(filtrar({ fecha: 'hoy' }), ['hoy']);
+  assert.deepEqual(filtrar({ fecha: 'vencidas' }), ['vencida']);
+  assert.deepEqual(filtrar({ fecha: 'sin-fecha' }), ['sin-fecha']);
+  assert.ok(filtrar({ fecha: 'semana' }).includes('sabado'));
+  assert.ok(!filtrar({ fecha: 'semana' }).includes('domingo'));
+  assert.ok(!filtrar({ fecha: 'mes' }).includes('mes-siguiente'));
+  assert.deepEqual(filtrar({ carpeta: 'clientes', proyecto: 'web', prioridad: 'HIGH', fecha: 'hoy' }), ['hoy']);
+  assert.deepEqual(filtrar({}, false, ' diseno de campana '), ['sin-fecha']);
+  assert.deepEqual(filtrar({ responsable: 'Dairo' }), ['delegada']);
+  assert.ok(filtrar({ responsable: 'todos' }).includes('delegada'));
+  assert.ok(!filtrar({ responsable: 'todos' }).includes('ajena'));
+  assert.ok(filtrar({ responsable: 'todos' }, true).includes('ajena'));
+  assert.ok(!filtrar({ responsable: 'todos' }, true).includes('borrada'));
+  assert.ok(filtrar({ responsable: 'Jhonathan' }).includes('hoy')); // Segundo responsable.
+  assert.equal(fechas.puedeVerTareaIA({ ...muestra, assignee: 'Jose Maria', coAssignee: null }, 'Jose', false), false);
 
   let prueba = preparar();
   assert.equal(await prueba.hook.asignar('propia', 'Jhonathan'), true);
@@ -136,5 +168,5 @@ function preparar(datos = tareasIniciales(), fallar = false) {
   assert.equal(prueba.almacen.propia.status, 'TODO');
   assert.equal(prueba.avisos.length, 0);
 
-  console.log('Tareas IA: fechas, prioridades, delegación, permisos, historial, recurrencia y fallos verificados sin red.');
+  console.log('Tareas IA: filtros combinados, fechas colombianas, responsables y permisos, delegación, historial, recurrencia y fallos verificados sin red.');
 })().catch((error) => { console.error(error); process.exitCode = 1; });

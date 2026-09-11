@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { ArrowDown, ArrowRight, ArrowUp, Check, CheckCheck, ChevronDown, ChevronRight, Circle, Clock3, GripVertical, Inbox, LayoutGrid, ListTodo, Loader2, Plus, Search, Sparkles, Users, X, Zap } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTareasIA } from '@/hooks/useTareasIA';
+import FiltrosTareasIA from '@/components/tasks/FiltrosTareasIA';
+import { useAuthStore } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { etiquetaFecha, fechaColombia, fechaDeFormulario, ordenarPorUrgencia } from '@/lib/tareasIA';
+import { etiquetaFecha, fechaColombia, fechaDeFormulario, ordenarPorUrgencia, FILTROS_TAREAS_INICIALES, filtrarTareasIA, puedeVerTareaIA } from '@/lib/tareasIA';
 import { esMismoMiembro, esResponsable, Priority, TASK_TYPES, TaskStatus, type TaskType } from '@/types/taskTypes';
 import './TareasIA.css';
 
@@ -39,7 +41,10 @@ interface Borrador {
 }
 
 export default function TareasIA() {
-  const { tareas, proyectos, equipo, nombre, cargando, error, ocupado, crear, asignar, cambiarEstado, reintentar } = useTareasIA();
+  const { tareas, proyectos, carpetas, equipo, nombre, cargando, error, ocupado, crear, asignar, cambiarEstado, reintentar } = useTareasIA();
+  const { user } = useAuthStore();
+  const esAdmin = user?.role?.toLowerCase() === 'admin';
+  const [filtros, setFiltros] = useState({ ...FILTROS_TAREAS_INICIALES });
   const { toast } = useToast();
   const [busqueda, setBusqueda] = useState('');
   const [estado, setEstado] = useState(TaskStatus.TODO);
@@ -64,8 +69,14 @@ export default function TareasIA() {
 
   const propias = useMemo(() => tareas.filter((t) => esResponsable(t, nombre)), [tareas, nombre]);
   const activas = propias.filter((t) => t.status !== TaskStatus.DONE);
-  const visibles = propias.filter((t) => t.status === estado && `${t.title} ${t.description || ''}`.toLocaleLowerCase('es').includes(busqueda.toLocaleLowerCase('es'))).sort(ordenarPorUrgencia);
-  const tarea = propias.find((t) => t.id === seleccionada);
+  const accesibles = tareas.filter((t) => puedeVerTareaIA(t, nombre, esAdmin));
+  const filtradas = filtrarTareasIA(tareas, proyectos, nombre, esAdmin, filtros, busqueda);
+  const visibles = filtradas.filter((t) => t.status === estado).sort(ordenarPorUrgencia);
+  const asignables = filtradas.filter((t) => t.status !== TaskStatus.DONE);
+  const tarea = accesibles.find((t) => t.id === seleccionada);
+  const hayFiltros = Object.keys(FILTROS_TAREAS_INICIALES).some((clave) => filtros[clave] !== FILTROS_TAREAS_INICIALES[clave]);
+  const tituloLista = filtros.responsable === 'mias' ? 'Mis tareas' : 'Tareas';
+  const limpiarFiltros = () => { setFiltros({ ...FILTROS_TAREAS_INICIALES }); setBusqueda(''); setSeleccionada(null); };
   const proyectoPorDefecto = proyectos.find((p) => !p.archived && /^\s*inbox\s*$/i.test(p.name))?.id || '';
   const equipoConCarga = equipo.map((miembro) => ({ ...miembro, carga: tareas.filter((t) => t.status !== TaskStatus.DONE && esResponsable(t, miembro.name)).length }));
   const maxCarga = Math.max(1, ...equipoConCarga.map((m) => m.carga));
@@ -149,19 +160,20 @@ export default function TareasIA() {
   return (
     <div className="tareas-ia">
       <nav className="tia-movil-nav" aria-label="Panel de Tareas IA">
-        <button aria-pressed={panelMovil === 'tareas'} onClick={() => setPanelMovil('tareas')}><ListTodo size={16} /> Mis tareas <span>{propias.length}</span></button>
+        <button aria-pressed={panelMovil === 'tareas'} onClick={() => setPanelMovil('tareas')}><ListTodo size={16} /> {tituloLista} <span>{filtradas.length}</span></button>
         <button aria-pressed={panelMovil === 'asistente'} onClick={() => setPanelMovil('asistente')}><Sparkles size={16} /> Asistente</button>
       </nav>
 
-      <aside className={cn('tia-lista', panelMovil === 'tareas' && 'tia-panel-visible')} aria-label="Mis tareas">
+      <aside className={cn('tia-lista', panelMovil === 'tareas' && 'tia-panel-visible')} aria-label={tituloLista}>
         <div className="tia-lista-cabecera">
-          <div className="tia-fila"><h1>Mis tareas</h1><Link to="/mis-tareas" className="tia-icono" aria-label="Abrir la vista Mis tareas" title="Abrir Mis tareas"><ArrowRight size={17} /></Link></div>
-          <p>{cargando ? 'Cargando tu espacio…' : `${activas.length} activas · ${propias.filter((t) => t.status === TaskStatus.DONE).length} completadas`}</p>
+          <div className="tia-fila"><h1>{tituloLista}</h1><Link to="/mis-tareas" className="tia-icono" aria-label="Abrir la vista Mis tareas" title="Abrir Mis tareas"><ArrowRight size={17} /></Link></div>
+          <p aria-live="polite">{cargando ? 'Cargando tu espacio…' : `${asignables.length} activas · ${filtradas.filter((t) => t.status === TaskStatus.DONE).length} completadas`}</p>
           <form className="tia-rapida" onSubmit={crearRapida}>
             <input aria-label="Título de una tarea rápida" placeholder="Agregar una tarea y Enter…" value={rapida} maxLength={300} onChange={(e) => setRapida(e.target.value)} disabled={deshabilitado} />
             <button type="submit" className="tia-boton-azul tia-icono" disabled={!rapida.trim() || deshabilitado} aria-label="Crear tarea rápida">{ocupado === 'crear' ? <Loader2 size={18} className="animate-spin" /> : <Plus size={19} />}</button>
           </form>
-          <div className="tia-busqueda"><Search size={14} /><input aria-label="Buscar en mis tareas" placeholder="Buscar en mis tareas" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} /></div>
+          <div className="tia-busqueda"><Search size={14} /><input aria-label="Buscar en mis tareas" placeholder="Buscar tareas…" value={busqueda} onChange={(e) => { setBusqueda(e.target.value); setSeleccionada(null); }} /></div>
+          <FiltrosTareasIA filtros={filtros} cambiar={(nuevos) => { setFiltros(nuevos); setSeleccionada(null); }} proyectos={proyectos} carpetas={carpetas} equipo={equipo} total={visibles.length} deshabilitado={cargando || !!error} />
         </div>
         <div className="tia-pestanas" role="tablist" aria-label="Estado de las tareas">
           {ESTADOS.map((opcion, indice) => <button key={opcion.valor} role="tab" id={`tia-tab-${opcion.valor}`} tabIndex={estado === opcion.valor ? 0 : -1} aria-selected={estado === opcion.valor} aria-controls="tia-resultados" onClick={() => setEstado(opcion.valor)}
@@ -170,12 +182,12 @@ export default function TareasIA() {
               if (siguiente < 0) return;
               e.preventDefault(); setEstado(ESTADOS[siguiente].valor);
               document.getElementById(`tia-tab-${ESTADOS[siguiente].valor}`)?.focus();
-            }}>{opcion.texto}<span>{propias.filter((t) => t.status === opcion.valor).length}</span></button>)}
+            }}>{opcion.texto}<span>{filtradas.filter((t) => t.status === opcion.valor).length}</span></button>)}
         </div>
         <div className="tia-resultados" id="tia-resultados" role="tabpanel" aria-labelledby={`tia-tab-${estado}`} aria-busy={cargando}>
           {cargando ? <div className="tia-vacio" role="status"><Loader2 className="animate-spin" size={22} /><p>Cargando tus tareas…</p></div>
             : error ? <div className="tia-vacio" role="alert"><Inbox size={25} /><p>{error}</p><button className="tia-boton" onClick={reintentar}>Volver a intentar</button></div>
-            : visibles.length === 0 ? <div className="tia-vacio"><CheckCheck size={28} /><p>{busqueda ? 'No hay tareas con esa búsqueda.' : estado === TaskStatus.DONE ? 'Tus tareas completadas aparecerán aquí.' : 'Todo despejado por aquí.'}</p>{!busqueda && estado === TaskStatus.TODO && <button className="tia-enlace" onClick={() => abrirNueva()}>Crear una tarea <Plus size={14} /></button>}</div>
+            : visibles.length === 0 ? <div className="tia-vacio"><CheckCheck size={28} /><p>{hayFiltros || busqueda ? `No hay tareas con estos filtros en ${ESTADOS.find((s) => s.valor === estado)?.texto.toLowerCase()}.` : estado === TaskStatus.DONE ? 'Tus tareas completadas aparecerán aquí.' : 'Todo despejado por aquí.'}</p>{hayFiltros || busqueda ? <button className="tia-enlace" onClick={limpiarFiltros}>Limpiar filtros y búsqueda</button> : estado === TaskStatus.TODO && <button className="tia-enlace" onClick={() => abrirNueva()}>Crear una tarea <Plus size={14} /></button>}</div>
             : visibles.map((item) => {
               const proyecto = proyectos.find((p) => p.id === item.projectId);
               const vencida = item.status !== TaskStatus.DONE && !!item.dueDate && fechaColombia(item.dueDate) < fechaColombia();
@@ -188,6 +200,7 @@ export default function TareasIA() {
                   onClick={() => { setSeleccionada(item.id); setPrioridades(false); setPanelMovil('asistente'); }}>
                   <span className={cn('tia-tarea-titulo', item.status === TaskStatus.DONE && 'tia-tachada')}>{item.title}</span>
                   <span className="tia-tarea-meta"><i className={cn('tia-punto', proyecto?.color || 'bg-blue-500')} /><span>{proyecto?.name || item.type || 'Sin proyecto'}</span>{vencida && <span className="tia-vencida">Vencida</span>}{!vencida && item.priority === Priority.HIGH && <span className="tia-prioridad-alta">Alta</span>}</span>
+                  {filtros.responsable !== 'mias' && <span className="tia-tarea-responsables">{[item.assignee, item.coAssignee].filter(Boolean).join(' · ')}</span>}
                 </button>
                 <GripVertical size={13} className="tia-agarre" aria-hidden="true" />
               </div>;
@@ -247,7 +260,7 @@ export default function TareasIA() {
             {equipoVisible.map((miembro) => <article key={miembro.name} className={cn('tia-miembro', destino === miembro.name && 'tia-miembro-destino')}
               onDragOver={(e) => { if (!deshabilitado && e.dataTransfer.types.includes(TIPO_ARRASTRE)) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDestino(miembro.name); } }}
               onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDestino(null); }}
-              onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData(TIPO_ARRASTRE); if (id && propias.some((t) => t.id === id) && !deshabilitado) void delegar(id, miembro.name); }}>
+              onDrop={(e) => { e.preventDefault(); const id = e.dataTransfer.getData(TIPO_ARRASTRE); if (id && accesibles.some((t) => t.id === id) && !deshabilitado) void delegar(id, miembro.name); }}>
               <div className="tia-miembro-identidad"><span className={cn('tia-avatar', miembro.color)}>{miembro.initials}</span><div><h3>{miembro.name}{esMismoMiembro(miembro.name, nombre) && <small> tú</small>}</h3><p>{miembro.role}</p></div><button className="tia-miembro-nueva" aria-label={`Crear tarea para ${miembro.name}`} title="Crear una tarea" disabled={deshabilitado} onClick={() => abrirNueva(miembro.name)}><Plus size={15} /></button></div>
               <div className="tia-carga"><strong>{cargando || error ? '—' : miembro.carga}</strong><span>activas</span><div className="tia-barra" title={`${miembro.carga} tareas activas`}><i style={{ width: `${cargando || error ? 0 : miembro.carga / maxCarga * 100}%` }} /></div></div>
               <button className="tia-bandeja" disabled={deshabilitado} onClick={() => elegirAsignacion(miembro.name)} aria-label={`Asignar tarea a ${miembro.name}`}>
@@ -273,7 +286,7 @@ export default function TareasIA() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!asignarA} onOpenChange={(abierto) => { if (!abierto && !ocupado) setAsignarA(null); }}><DialogContent className="tia-dialogo"><DialogHeader><DialogTitle>Asignar a {asignarA}</DialogTitle><DialogDescription>Elige una de tus tareas activas para delegarla.</DialogDescription></DialogHeader><div className="tia-busqueda"><Search size={16} /><input aria-label="Buscar tarea para asignar" placeholder="Buscar una tarea…" value={buscarAsignacion} onChange={(e) => setBuscarAsignacion(e.target.value)} /></div><div className="tia-selector-tareas">{activas.filter((t) => t.title.toLocaleLowerCase('es').includes(buscarAsignacion.toLocaleLowerCase('es'))).map((item) => <button disabled={deshabilitado || esMismoMiembro(item.assignee, asignarA)} key={item.id} onClick={() => void delegar(item.id, asignarA)}><span>{item.title}</span>{esMismoMiembro(item.assignee, asignarA) ? <small>Ya asignada</small> : <ArrowRight size={15} />}</button>)}{!activas.some((t) => t.title.toLocaleLowerCase('es').includes(buscarAsignacion.toLocaleLowerCase('es'))) && <p className="tia-vacio">No hay tareas activas con esa búsqueda.</p>}</div><button className="tia-boton tia-boton-azul" disabled={deshabilitado} onClick={() => { const responsable = asignarA; setAsignarA(null); setTimeout(() => abrirNueva(responsable), 0); }}><Plus size={16} /> Crear una nueva para {asignarA}</button></DialogContent></Dialog>
+      <Dialog open={!!asignarA} onOpenChange={(abierto) => { if (!abierto && !ocupado) setAsignarA(null); }}><DialogContent className="tia-dialogo"><DialogHeader><DialogTitle>Asignar a {asignarA}</DialogTitle><DialogDescription>Elige una tarea activa de la lista filtrada para delegarla.</DialogDescription></DialogHeader><div className="tia-busqueda"><Search size={16} /><input aria-label="Buscar tarea para asignar" placeholder="Buscar una tarea…" value={buscarAsignacion} onChange={(e) => setBuscarAsignacion(e.target.value)} /></div><div className="tia-selector-tareas">{asignables.filter((t) => t.title.toLocaleLowerCase('es').includes(buscarAsignacion.toLocaleLowerCase('es'))).map((item) => <button disabled={deshabilitado || esMismoMiembro(item.assignee, asignarA)} key={item.id} onClick={() => void delegar(item.id, asignarA)}><span>{item.title}</span>{esMismoMiembro(item.assignee, asignarA) ? <small>Ya asignada</small> : <ArrowRight size={15} />}</button>)}{!asignables.some((t) => t.title.toLocaleLowerCase('es').includes(buscarAsignacion.toLocaleLowerCase('es'))) && <p className="tia-vacio">No hay tareas activas con esa búsqueda.</p>}</div><button className="tia-boton tia-boton-azul" disabled={deshabilitado} onClick={() => { const responsable = asignarA; setAsignarA(null); setTimeout(() => abrirNueva(responsable), 0); }}><Plus size={16} /> Crear una nueva para {asignarA}</button></DialogContent></Dialog>
     </div>
   );
 }

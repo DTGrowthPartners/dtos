@@ -1,4 +1,60 @@
-import { Priority, type Task } from '@/types/taskTypes';
+import { esResponsable, Priority, TaskStatus, type Project, type Task } from '@/types/taskTypes';
+
+export const FECHAS_FILTRO = [
+  { valor: 'todas', texto: 'Cualquier fecha' },
+  { valor: 'hoy', texto: 'Hoy' },
+  { valor: 'semana', texto: 'Esta semana' },
+  { valor: 'mes', texto: 'Este mes' },
+  { valor: 'vencidas', texto: 'Vencidas' },
+  { valor: 'sin-fecha', texto: 'Sin fecha' },
+] as const;
+
+export interface FiltrosTareasIA {
+  responsable: string;
+  proyecto: string;
+  carpeta: string;
+  prioridad: string;
+  fecha: typeof FECHAS_FILTRO[number]['valor'];
+}
+
+export const FILTROS_TAREAS_INICIALES: FiltrosTareasIA = {
+  responsable: 'mias', proyecto: 'todos', carpeta: 'todas', prioridad: 'todas', fecha: 'todas',
+};
+
+/** El filtro de responsable nunca amplía los permisos de Operaciones. */
+export const puedeVerTareaIA = (tarea: Task, nombre: string, esAdmin: boolean): boolean =>
+  !!nombre && !tarea.deletedAt && (esAdmin || esResponsable(tarea, nombre) || esResponsable({ assignee: tarea.creator }, nombre));
+
+export const filtrarTareasIA = (tareas: Task[], proyectos: Project[], nombre: string, esAdmin: boolean, filtros: FiltrosTareasIA, busqueda = '', ahora = Date.now()): Task[] => {
+  const hoy = fechaColombia(ahora);
+  // Misma semana de domingo a sábado que Operaciones, en calendario colombiano.
+  const inicio = new Date(`${hoy}T12:00:00-05:00`);
+  inicio.setUTCDate(inicio.getUTCDate() - inicio.getUTCDay());
+  const fin = new Date(inicio.getTime() + 7 * 86400_000);
+  const inicioSemana = fechaColombia(inicio.getTime());
+  const finSemana = fechaColombia(fin.getTime());
+  const normalizar = (valor: string) => valor.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
+  const texto = normalizar(busqueda);
+  const proyectosPorId = new Map(proyectos.map((p) => [p.id, p]));
+  return tareas.filter((tarea) => {
+    if (!puedeVerTareaIA(tarea, nombre, esAdmin)) return false;
+    const responsable = filtros.responsable === 'mias' ? nombre : filtros.responsable;
+    if (responsable !== 'todos' && !esResponsable(tarea, responsable)) return false;
+    if (filtros.proyecto === 'sin-proyecto' ? !!tarea.projectId : filtros.proyecto !== 'todos' && tarea.projectId !== filtros.proyecto) return false;
+    if (filtros.carpeta !== 'todas' && proyectosPorId.get(tarea.projectId)?.folderId !== filtros.carpeta) return false;
+    if (filtros.prioridad !== 'todas' && tarea.priority !== filtros.prioridad) return false;
+    if (texto && !normalizar(`${tarea.title} ${tarea.description || ''}`).includes(texto)) return false;
+    const fecha = tarea.dueDate ? fechaColombia(tarea.dueDate) : '';
+    switch (filtros.fecha) {
+      case 'hoy': return fecha === hoy;
+      case 'semana': return !!fecha && fecha >= inicioSemana && fecha < finSemana;
+      case 'mes': return !!fecha && fecha.slice(0, 7) === hoy.slice(0, 7);
+      case 'vencidas': return !!fecha && fecha < hoy && tarea.status !== TaskStatus.DONE;
+      case 'sin-fecha': return !fecha;
+      default: return true;
+    }
+  });
+};
 
 /** Las fechas de esta vista son fechas de calendario de Colombia. */
 export const fechaColombia = (valor: number = Date.now()): string => {
