@@ -1,3 +1,4 @@
+import { groupCarteraClients } from '../utils/cartera-clients';
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import path from 'path';
@@ -39,16 +40,17 @@ const transporter = () => nodemailer.createTransport({
   auth: { user: process.env.SMTP_USER || '', pass: process.env.SMTP_PASS || '' },
 });
 
-async function enviar(subject: string, html: string) {
+async function enviar(subject: string, html: string, recipients = { to: TO, cc: CC }) {
   const user = process.env.SMTP_USER || '';
-  await transporter().sendMail({
+  const result = await transporter().sendMail({
     from: `"DT Growth Partners" <${user}>`,
-    to: TO,
-    cc: CC,
+    to: recipients.to,
+    cc: recipients.cc,
     subject,
     text: 'Reporte DT Growth Partners. Active la vista HTML para ver el detalle.',
     html,
   });
+  if (result.rejected?.length) throw new Error('El servidor de correo rechazó uno o más destinatarios.');
 }
 
 // ==================== Estado de Resultados ====================
@@ -225,29 +227,13 @@ export async function reporteEstadoResultados(): Promise<{ subject: string; html
 
 // ==================== Estado de Cartera ====================
 
-// Alias: el mismo cliente llega con NITs inconsistentes → agrupar por nombre
-const NAME_ALIASES: Record<string, string> = {
-  'TENIS CARTAGENA': 'Tennis Cartagena',
-  'TENNIS CARTAGENA': 'Tennis Cartagena',
-};
-const NIT_ALIAS: Record<string, string> = {
-  '9018834468': '901883468', // Caribe Fest: NIT con dígito extra
-};
-
 interface InvRow {
-  numero: string; cliente: string; nit: string | null; total: number;
+  key: string; numero: string; cliente: string; nit: string; total: number;
   abonado: number; saldo: number; estado: string; fecha: string;
   concepto: string | null; servicio: string | null;
 }
 
-const groupKey = (i: InvRow) => {
-  const nombreNorm = norm(i.cliente);
-  if (NAME_ALIASES[nombreNorm]) return 'NOM:' + NAME_ALIASES[nombreNorm].toUpperCase();
-  let nit = (i.nit || '').replace(/\D/g, '');
-  nit = NIT_ALIAS[nit] || nit;
-  if (nit.length >= 9 && !/^0+$/.test(nit)) return 'NIT:' + nit;
-  return 'NOM:' + nombreNorm;
-};
+const escapeHtml = (value: string) => value.replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 
 const diasMora = (fecha: string, hoy: Date): number | null => {
   const m = fecha?.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})/) || fecha?.slice(0, 10).match(/^(\d{2})\/(\d{2})\/(\d{4})/);
@@ -273,32 +259,31 @@ export async function reporteCartera(): Promise<{ subject: string; html: string;
   const corte = `${String(hoy.getDate()).padStart(2, '0')}/${String(hoy.getMonth() + 1).padStart(2, '0')}/${hoy.getFullYear()}`;
 
   const raw = await prisma.invoice.findMany({
-    where: { status: { not: 'pagada' } },
     orderBy: { createdAt: 'desc' },
-    take: 200,
   });
-  const invs: InvRow[] = raw.map((inv) => ({
+  const grouped = groupCarteraClients(raw.filter((inv) => inv.factusStatus !== 'anulada'));
+  const names = new Map(grouped.clients.map((client) => [client.key, client.name]));
+  const invs: InvRow[] = grouped.invoices.map((inv) => ({
+    key: inv.clientKey,
     numero: inv.invoiceNumber,
-    cliente: inv.clientName,
-    nit: inv.clientNit,
+    cliente: names.get(inv.clientKey) || inv.clientName,
+    nit: inv.canonicalNit,
     total: inv.totalAmount,
     abonado: inv.paidAmount || 0,
-    saldo: inv.totalAmount - (inv.paidAmount || 0),
+    saldo: Math.round((inv.totalAmount - (inv.paidAmount || 0)) * 100) / 100,
     estado: inv.status,
     fecha: inv.fecha.toISOString().split('T')[0],
     concepto: inv.concepto,
     servicio: inv.servicio,
-  }));
+  })).filter((inv) => inv.saldo > 0.5);
 
   const groups = new Map<string, InvRow[]>();
   const disp = new Map<string, string>();
   for (const i of invs) {
-    const k = groupKey(i);
+    const k = i.key;
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k)!.push(i);
-    const nombreNorm = norm(i.cliente);
-    if (NAME_ALIASES[nombreNorm]) disp.set(k, NAME_ALIASES[nombreNorm]);
-    else if (!disp.has(k)) disp.set(k, (i.cliente || '').trim());
+    disp.set(k, i.cliente);
   }
   const total = invs.reduce((a, i) => a + i.saldo, 0);
   const facturado = invs.reduce((a, i) => a + i.total, 0);
@@ -321,16 +306,16 @@ export async function reporteCartera(): Promise<{ subject: string; html: string;
         const dm = diasMora(f.fecha, hoy);
         const [mcl, mbg] = moraStyle(dm);
         filas +=
-          `<tr><td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#52525b">${f.numero}</td>` +
+          `<tr><td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#52525b">${escapeHtml(f.numero)}</td>` +
           `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#52525b">${f.fecha}</td>` +
-          `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#18181b">${c}${extra}</td>` +
-          `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0"><span style="background:${BGC[f.estado] || '#f4f4f5'};color:${CLR[f.estado] || '#52525b'};font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">${LBL[f.estado] || f.estado}</span></td>` +
+          `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;color:#18181b">${escapeHtml(c)}${extra}</td>` +
+          `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0"><span style="background:${BGC[f.estado] || '#f4f4f5'};color:${CLR[f.estado] || '#52525b'};font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">${escapeHtml(LBL[f.estado] || f.estado)}</span></td>` +
           `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0"><span style="background:${mbg};color:${mcl};font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px">${dm !== null ? dm + ' dias' : '-'}</span></td>` +
           `<td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;text-align:right;font-weight:700;color:#b45309">${money(f.saldo)}</td></tr>`;
       }
       cuerpo +=
         `<tr><td style="padding:18px 24px 4px"><table width="100%" cellpadding="0" cellspacing="0"><tr>` +
-        `<td style="font-size:15px;font-weight:800;color:#18181b">${disp.get(k)}</td>` +
+        `<td style="font-size:15px;font-weight:800;color:#18181b">${escapeHtml(disp.get(k) || '')}${facs[0].nit ? ` &middot; NIT ${escapeHtml(facs[0].nit)}` : ''}</td>` +
         `<td style="text-align:right;font-size:15px;font-weight:800;color:#b45309">${money(sub)}</td></tr></table></td></tr>` +
         `<tr><td style="padding:0 24px 8px"><table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">` +
         `<tr style="background:#fafafa">` +
@@ -391,4 +376,11 @@ export async function enviarReportesDiarios(opts: { dryRun?: boolean } = {}) {
     }
   }
   return resultados;
+}
+
+export async function enviarCarteraCorregida() {
+  const { subject, html, resumen } = await reporteCartera();
+  const recipients = { to: 'Dairotras@gmail.com', cc: 'jhonpm07@gmail.com' };
+  await enviar(subject, html, recipients);
+  return { success: true, recipients: [recipients.to, recipients.cc], resumen };
 }

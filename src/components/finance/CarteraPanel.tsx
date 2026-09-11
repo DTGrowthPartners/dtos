@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Mail } from 'lucide-react';
 import { Wallet, AlertCircle, FileDown, FileSpreadsheet, Check, ChevronsUpDown, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +12,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
+import { groupCarteraClients, normalizeClientSearch } from '@/lib/cartera-clients';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -69,6 +71,24 @@ export default function CarteraPanel() {
   const [clientQuery, setClientQuery] = useState('');
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
 
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const emailInFlight = useRef(false);
+
+  const sendCarteraEmail = async () => {
+    if (emailInFlight.current) return;
+    emailInFlight.current = true;
+    setSendingEmail(true);
+    try {
+      await apiClient.post('/api/invoices/cartera/send-email');
+      toast({ title: 'Correo enviado', description: 'Cartera completa enviada a Dairotras@gmail.com y jhonpm07@gmail.com.' });
+    } catch (error) {
+      toast({ title: 'Error al enviar', description: error instanceof Error ? error.message : 'No se pudo confirmar el envío del correo.', variant: 'destructive' });
+    } finally {
+      emailInFlight.current = false;
+      setSendingEmail(false);
+    }
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -88,41 +108,41 @@ export default function CarteraPanel() {
   // Las facturas anuladas por nota crédito quedaron en $0: no hacen parte de la cartera.
   const facturasVigentes = useMemo(() => invoices.filter((inv) => inv.factusStatus !== 'anulada'), [invoices]);
 
-  const clientNames = useMemo(
-    () => Array.from(new Set(facturasVigentes.map((inv) => inv.clientName).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [facturasVigentes]
-  );
+  const { invoices: groupedInvoices, clients } = useMemo(() => groupCarteraClients(facturasVigentes), [facturasVigentes]);
+  const selectedClientInfo = clients.find((client) => client.key === selectedClient);
 
-  const filteredClientNames = useMemo(() => {
-    if (!clientQuery.trim()) return clientNames;
-    const q = clientQuery.toLowerCase();
-    return clientNames.filter((n) => n.toLowerCase().includes(q));
-  }, [clientNames, clientQuery]);
+  const filteredClients = useMemo(() => {
+    const q = normalizeClientSearch(clientQuery);
+    const digits = clientQuery.replace(/\D/g, '');
+    return clients.filter((client) => client.aliases.some((alias) => normalizeClientSearch(alias).includes(q))
+      || (digits.length > 0 && client.nit.includes(digits)));
+  }, [clients, clientQuery]);
 
   // Solo lo pendiente (saldo > 0), para la vista general y la antigüedad de cartera.
   const pendientes = useMemo(
-    () => facturasVigentes
+    () => groupedInvoices
       .map((inv) => ({ ...inv, saldo: Math.round((inv.totalAmount - (inv.paidAmount || 0)) * 100) / 100 }))
       .filter((inv) => inv.saldo > 0.5),
-    [facturasVigentes]
+    [groupedInvoices]
   );
 
   const carteraPorCliente = useMemo(() => {
     const map = new Map<string, { nit: string; total: number; count: number; oldest: string }>();
     pendientes.forEach((inv) => {
-      const cur = map.get(inv.clientName) || { nit: inv.clientNit, total: 0, count: 0, oldest: inv.fecha };
+      const cur = map.get(inv.clientKey) || { nit: inv.canonicalNit, total: 0, count: 0, oldest: inv.fecha };
       cur.total += inv.saldo;
       cur.count += 1;
       if (new Date(inv.fecha) < new Date(cur.oldest)) cur.oldest = inv.fecha;
-      map.set(inv.clientName, cur);
+      map.set(inv.clientKey, cur);
     });
     return Array.from(map.entries())
-      .map(([clientName, v]) => {
+      .map(([key, v]) => {
+        const clientName = clients.find((client) => client.key === key)?.name || key;
         const dias = diasDesde(v.oldest);
-        return { clientName, nit: v.nit, saldo: Math.round(v.total * 100) / 100, count: v.count, dias, bucket: bucketFor(dias) };
+        return { key, clientName, nit: v.nit, saldo: Math.round(v.total * 100) / 100, count: v.count, dias, bucket: bucketFor(dias) };
       })
       .sort((a, b) => b.saldo - a.saldo);
-  }, [pendientes]);
+  }, [pendientes, clients]);
 
   const totalCartera = useMemo(() => pendientes.reduce((s, inv) => s + inv.saldo, 0), [pendientes]);
 
@@ -135,11 +155,11 @@ export default function CarteraPanel() {
   // Vista por cliente: TODO su historial (no solo lo pendiente), para ver el estado completo de la cuenta.
   const facturasCliente = useMemo(() => {
     if (!selectedClient) return [];
-    return facturasVigentes
-      .filter((inv) => inv.clientName === selectedClient)
+    return groupedInvoices
+      .filter((inv) => inv.clientKey === selectedClient)
       .map((inv) => ({ ...inv, saldo: Math.round((inv.totalAmount - (inv.paidAmount || 0)) * 100) / 100 }))
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  }, [facturasVigentes, selectedClient]);
+  }, [groupedInvoices, selectedClient]);
 
   const clienteTotales = useMemo(() => ({
     facturado: facturasCliente.reduce((s, f) => s + f.totalAmount, 0),
@@ -169,8 +189,8 @@ export default function CarteraPanel() {
         const payload = {
           vista: 'cliente' as const,
           periodLabel,
-          clientName: selectedClient,
-          clientNit: facturasCliente[0]?.clientNit || '',
+          clientName: selectedClientInfo?.name || '',
+          clientNit: selectedClientInfo?.nit || '',
           facturas: facturasCliente.map((f) => ({
             invoiceNumber: f.invoiceNumber,
             tipoDocumento: TIPO_DOC_LABELS[f.tipoDocumento || 'cuenta_cobro'] || f.tipoDocumento || '',
@@ -210,7 +230,13 @@ export default function CarteraPanel() {
           </h2>
           <p className="text-sm text-muted-foreground">Estado de cartera por cliente y general — corte al {periodLabel}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={sendCarteraEmail} disabled={sendingEmail}
+            title="Envía toda la cartera pendiente a Dairotras@gmail.com y jhonpm07@gmail.com, sin aplicar los filtros de esta vista">
+            {sendingEmail ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
+            {sendingEmail ? 'Enviando...' : 'Enviar cartera completa'}
+          </Button>
+
           <Button variant="outline" size="sm" onClick={() => handleExport('pdf')} disabled={exporting !== null}>
             {exporting === 'pdf' ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileDown className="h-4 w-4 mr-2" />}
             PDF
@@ -227,13 +253,13 @@ export default function CarteraPanel() {
         <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
           <PopoverTrigger asChild>
             <Button variant="outline" role="combobox" className="w-full justify-between">
-              {selectedClient || 'Todos los clientes (vista general)'}
+              {selectedClientInfo ? `${selectedClientInfo.name}${selectedClientInfo.nit ? ` · ${selectedClientInfo.nit}` : ''}` : 'Todos los clientes (vista general)'}
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
             <Command shouldFilter={false}>
-              <CommandInput placeholder="Buscar cliente..." value={clientQuery} onValueChange={setClientQuery} />
+              <CommandInput placeholder="Buscar por nombre o NIT..." value={clientQuery} onValueChange={setClientQuery} />
               <CommandList>
                 <CommandEmpty>Sin resultados</CommandEmpty>
                 <CommandGroup>
@@ -241,10 +267,10 @@ export default function CarteraPanel() {
                     <Check className={cn('mr-2 h-4 w-4', !selectedClient ? 'opacity-100' : 'opacity-0')} />
                     Todos los clientes (vista general)
                   </CommandItem>
-                  {filteredClientNames.map((name) => (
-                    <CommandItem key={name} value={name} onSelect={() => { setSelectedClient(name); setClientPickerOpen(false); }}>
-                      <Check className={cn('mr-2 h-4 w-4', selectedClient === name ? 'opacity-100' : 'opacity-0')} />
-                      {name}
+                  {filteredClients.map((client) => (
+                    <CommandItem key={client.key} value={client.key} onSelect={() => { setSelectedClient(client.key); setClientPickerOpen(false); }}>
+                      <Check className={cn('mr-2 h-4 w-4', selectedClient === client.key ? 'opacity-100' : 'opacity-0')} />
+                      {client.name}{client.nit ? ` · ${client.nit}` : ''}
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -307,7 +333,7 @@ export default function CarteraPanel() {
                     </TableHeader>
                     <TableBody>
                       {carteraPorCliente.map((c) => (
-                        <TableRow key={c.clientName}>
+                        <TableRow key={c.key}>
                           <TableCell className="font-medium break-words">{c.clientName}</TableCell>
                           <TableCell className="whitespace-nowrap">{c.nit || '—'}</TableCell>
                           <TableCell className="text-center">{c.count}</TableCell>
@@ -316,7 +342,7 @@ export default function CarteraPanel() {
                           </TableCell>
                           <TableCell className="text-right font-semibold whitespace-nowrap">{fmt(c.saldo)}</TableCell>
                           <TableCell className="text-right">
-                            <Button variant="ghost" size="sm" onClick={() => setSelectedClient(c.clientName)}>Ver estado</Button>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedClient(c.key)}>Ver estado</Button>
                           </TableCell>
                         </TableRow>
                       ))}
