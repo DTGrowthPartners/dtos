@@ -611,91 +611,9 @@ const carteraFileSuffix = (data: CarteraExportData) =>
 
 // ---------- PDF ----------
 
-const fmtCarteraNum = (value: number) => value.toLocaleString('es-CO', { maximumFractionDigits: 2 });
-
 export async function exportCarteraPDF(data: CarteraExportData) {
-  const { jsPDF, autoTable } = await loadPdf();
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
-
-  const subtitle = data.vista === 'cliente'
-    ? `${data.clientName}${data.clientNit ? ` · NIT ${data.clientNit}` : ''} — Corte al ${data.periodLabel}`
-    : `Todos los clientes — Corte al ${data.periodLabel}`;
-  await drawHeader(doc, 'ESTADO DE CARTERA', subtitle);
-
-  if (data.vista === 'general') {
-    autoTable(doc, {
-      startY: 48,
-      head: [['Cliente', 'NIT', 'Facturas', 'Antigüedad', 'Saldo Pendiente']],
-      body: data.clientes.map((c) => [
-        c.clientName, c.nit || '—', String(c.facturas), c.bucketLabel, fmtCarteraNum(c.saldo),
-      ]),
-      foot: [[{ content: 'TOTAL CARTERA', colSpan: 4, styles: { fontStyle: 'bold', halign: 'right' as const } }, { content: fmtCarteraNum(data.totalCartera), styles: { fontStyle: 'bold', halign: 'right' as const } }]],
-      theme: 'plain',
-      styles: { fontSize: 8.5, cellPadding: { top: 2.2, bottom: 2.2, left: 4, right: 4 }, lineColor: LINE_COLOR, lineWidth: 0.1, textColor: DARK },
-      headStyles: { fillColor: BRAND_BLUE, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
-      footStyles: { fillColor: LIGHT_BG, textColor: DARK, lineWidth: 0.1, lineColor: LINE_COLOR },
-      columnStyles: { 2: { halign: 'right' as const }, 3: { halign: 'center' as const }, 4: { halign: 'right' as const } },
-      alternateRowStyles: { fillColor: [252, 252, 254] },
-    });
-
-    const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-    let y = finalY + 10;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(35, 35, 35);
-    doc.text('Antigüedad de cartera', 14, y);
-    y += 6;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    data.bucketTotals.forEach((b) => {
-      doc.text(`${b.label}:`, 14, y);
-      doc.text(`$ ${fmtCarteraNum(b.total)}`, 70, y, { align: 'right' as const });
-      y += 5.5;
-    });
-  }
-
-  const documents = data.facturas || [];
-  const byClient = new Map<string, CarteraFacturaRow[]>();
-  documents.forEach((row) => {
-    const name = row.clientName || (data.vista === 'cliente' ? data.clientName : 'Cliente');
-    const key = `${name} - ${row.clientNit || ''}`;
-    byClient.set(key, [...(byClient.get(key) || []), row]);
-  });
-  let sectionIndex = 0;
-  for (const [client, rows] of byClient) {
-    if (data.vista === 'general' || sectionIndex > 0) {
-      doc.addPage();
-      await drawHeader(doc, 'ESTADO DE CARTERA', `${client} | Corte al ${data.periodLabel}`);
-    }
-    sectionIndex++;
-    autoTable(doc, {
-      startY: 48,
-      head: [['Documento / Tipo', 'Fecha', 'Descripción', 'Valor', 'Abonado', 'Saldo', 'Estado']],
-      body: rows.map((row) => [ `${row.invoiceNumber}\n${row.tipoDocumento}`, row.fecha,
-        row.description || 'Sin descripción registrada', fmtCarteraNum(row.totalAmount), fmtCarteraNum(row.paidAmount), fmtCarteraNum(row.saldo), row.statusLabel ]),
-      foot: [[{ content: 'TOTALES', colSpan: 3 }, fmtCarteraNum(rows.reduce((sum, row) => sum + row.totalAmount, 0)),
-        fmtCarteraNum(rows.reduce((sum, row) => sum + row.paidAmount, 0)), fmtCarteraNum(rows.reduce((sum, row) => sum + row.saldo, 0)), '']],
-      theme: 'grid', styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', valign: 'top', textColor: DARK, lineColor: LINE_COLOR },
-      headStyles: { fillColor: BRAND_BLUE, textColor: [255,255,255] },
-      footStyles: { fillColor: ACCENT_BG, textColor: DARK, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 38 }, 1: { cellWidth: 21 }, 2: { cellWidth: 75 }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' }, 6: { cellWidth: 20 } },
-      alternateRowStyles: { fillColor: [247,249,252] },
-      showFoot: 'lastPage', margin: { left: 14, right: 14, top: 18, bottom: 16 },
-    });
-    const payments = rows.flatMap((row) => (row.payments || []).map((payment) => [row.invoiceNumber, payment.fecha,
-      fmtCarteraNum(payment.amount), payment.method || '-', payment.reference || '-', payment.notes || '-']));
-    if (payments.length) {
-      let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-      if (y > doc.internal.pageSize.getHeight() - 45) { doc.addPage(); y = 22; }
-      doc.setFontSize(11); doc.setTextColor(...BRAND_BLUE); doc.text('Abonos aplicados a los documentos pendientes', 14, y);
-      autoTable(doc, { startY: y + 5, head: [['Documento', 'Fecha abono', 'Valor aplicado', 'Medio', 'Referencia', 'Observaciones']], body: payments,
-        theme: 'grid', styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak', valign: 'top' },
-        headStyles: { fillColor: BRAND_BLUE, textColor: [255,255,255] }, columnStyles: { 2: { halign: 'right' }, 5: { cellWidth: 75 } },
-        alternateRowStyles: { fillColor: [247,249,252] }, margin: { left: 14, right: 14, top: 18, bottom: 16 } });
-    }
-  }
-
-  doc.save(`Cartera_${carteraFileSuffix(data)}.pdf`);
+  const { renderCarteraPdf } = await import('./cartera-pdf');
+  await renderCarteraPdf(data);
 }
 
 // ---------- Excel ----------
