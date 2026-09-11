@@ -111,12 +111,15 @@ export default function CarteraPanel() {
   const selectedClientInfo = clients.find((client) => client.key === selectedClient);
   const filteredClients = useMemo(() => clients.filter((client) => matchesCarteraClient(client, clientQuery)), [clients, clientQuery]);
 
+  const matchingClientKeys = useMemo(() => new Set(filteredClients.map((client) => client.key)), [filteredClients]);
+
   // Solo lo pendiente (saldo > 0), para la vista general y la antigüedad de cartera.
   const pendientes = useMemo(
     () => groupedInvoices
+      .filter((invoice) => matchingClientKeys.has(invoice.clientKey))
       .map((inv) => ({ ...inv, saldo: Math.round((inv.totalAmount - (inv.paidAmount || 0)) * 100) / 100 }))
       .filter((inv) => inv.saldo > 0),
-    [groupedInvoices]
+    [groupedInvoices, matchingClientKeys]
   );
 
   const carteraPorCliente = useMemo(() => {
@@ -160,7 +163,7 @@ export default function CarteraPanel() {
     saldo: facturasCliente.reduce((s, f) => s + f.saldo, 0),
   }), [facturasCliente]);
 
-  const periodLabel = fmtDate(new Date().toISOString());
+  const periodLabel = fmtDate(new Date().toISOString()) + (clientQuery.trim() ? ` | Filtro: ${clientQuery.trim()}` : '');
 
   const handleExport = async (formato: 'pdf' | 'excel') => {
     setExporting(formato);
@@ -248,7 +251,7 @@ export default function CarteraPanel() {
         <div className="space-y-2">
           <label htmlFor="cartera-search" className="text-sm font-medium">Buscar cliente por nombre o NIT</label>
           <Input id="cartera-search" placeholder="Escribe el nombre o NIT..." value={clientQuery}
-            onChange={(event) => setClientQuery(event.target.value)} />
+            onChange={(event) => { setClientQuery(event.target.value); setSelectedClient(null); }} />
         </div>
         <div className="space-y-2">
           <label htmlFor="cartera-client" className="text-sm font-medium">Cliente</label>
@@ -265,7 +268,7 @@ export default function CarteraPanel() {
           </select>
           {filteredClients.length === 0 && <p role="status" className="text-sm text-muted-foreground">No hay clientes con saldo pendiente que coincidan.</p>}
         </div>
-        <p className="text-xs text-muted-foreground sm:col-span-2">El PDF incluye solo documentos pendientes y parciales del cliente seleccionado, con su saldo por pagar.</p>
+        <p className="text-xs text-muted-foreground sm:col-span-2">La búsqueda filtra la cartera, los totales, el PDF y el Excel. Selecciona un cliente para ver sus documentos pendientes y parciales.</p>
       </div>
 
       {!selectedClient ? (

@@ -60,6 +60,11 @@ const pdfButton = (tree) => find(tree, (node) => node.type === 'Button' && react
   find(tree, (node) => node.props?.id === 'cartera-search').props.onChange({ target: { value: 'ACBFIT' } });
   tree = render();
   assert.equal(options(tree).length, 2);
+  await pdfButton(tree).props.onClick();
+  assert.equal(exported.totalCartera, 160);
+  assert.equal(exported.clientes.length, 1);
+  assert.equal(exported.facturas.length, 2);
+  assert.match(exported.periodLabel, /ACBFIT/);
   const key = options(tree)[1].props.value;
   selector(tree).props.onChange({ target: { value: key } });
   tree = render();
@@ -77,6 +82,16 @@ const pdfButton = (tree) => find(tree, (node) => node.type === 'Button' && react
   selector(tree).props.onChange({ target: { value: '' } });
   await pdfButton(render()).props.onClick();
   assert.equal(exported.vista, 'general');
+  assert.equal(exported.totalCartera, 260);
+  find(render(), (node) => node.props?.id === 'cartera-search').props.onChange({target:{value:'no-existe'}});
+  await pdfButton(render()).props.onClick();
+  assert.equal(exported.totalCartera, 0);
+  assert.equal(exported.facturas.length, 0);
+  find(render(), (node) => node.props?.id === 'cartera-search').props.onChange({target:{value:'901.725.973'}});
+  await pdfButton(render()).props.onClick();
+  assert.equal(exported.totalCartera, 160);
+  find(render(), (node) => node.props?.id === 'cartera-search').props.onChange({target:{value:''}});
+  await pdfButton(render()).props.onClick();
   assert.equal(exported.totalCartera, 260);
   console.log('PASS: client search, deduplication, selection, reset, general and client PDF payloads, unpaid and partial balances.');
 })().catch((error) => { console.error(error); process.exitCode = 1; });
