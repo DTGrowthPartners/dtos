@@ -37,6 +37,29 @@ const invoice = (id, nit, overrides = {}) => ({
 });
 (async () => {
   assert.equal(grouping.groupCarteraClients([invoice('legacy', '9018834468'), invoice('canonical', '901883468')]).clients.length, 1);
+  const identities = grouping.groupCarteraClients([
+    invoice('a', '901725973', { clientId: 'acb', clientName: 'ACB Fit' }),
+    invoice('b', '900123456-7', { clientId: 'acb', clientName: 'ACBFIT SAS' }),
+    invoice('c', 'Ana Elisa', { clientId: 'acb', clientName: 'ACBFIT' }),
+    invoice('d', '901725973', { clientId: 'acb', clientName: 'Gimnasio ACBFIT' }),
+    invoice('e', '', { clientId: '', clientName: 'ACBFIT SAS' }),
+    invoice('f', '123456789', { clientId: 'other', clientName: 'ACB Fit' }),
+    invoice('g', '00000', { clientId: 'zero-a', clientName: 'Cliente Uno' }),
+    invoice('h', '000000', { clientId: 'zero-b', clientName: 'Cliente Dos' }),
+  ]);
+  assert.equal(identities.clients.length, 5); // ambiguous no-ID name stays separate
+  assert.equal(identities.invoices[0].clientKey, identities.invoices[1].clientKey);
+  assert.equal(identities.invoices[0].clientKey, identities.invoices[2].clientKey);
+  assert.notEqual(identities.invoices[0].clientKey, identities.invoices[5].clientKey);
+  assert.notEqual(identities.invoices[6].clientKey, identities.invoices[7].clientKey);
+  const acb = identities.clients.find((client) => client.nit === '901725973');
+  assert.ok(grouping.matchesCarteraClient(acb, 'ACBFIT'));
+  assert.ok(grouping.matchesCarteraClient(acb, 'ACB 901.725.973'));
+  assert.ok(grouping.matchesCarteraClient(acb, '900123456-7'));
+  assert.equal(grouping.matchesCarteraClient(acb, 'no existe'), false);
+  assert.equal(grouping.isPendingCarteraInvoice(invoice('partial', '1', {status:'parcial',paidAmount:40})), true);
+  assert.equal(grouping.isPendingCarteraInvoice(invoice('pending', '1', {status:'pendiente',paidAmount:0})), true);
+  assert.equal(grouping.isPendingCarteraInvoice(invoice('small', '1', {status:'pendiente',totalAmount:0.25,paidAmount:0})), true);
   rows = Array.from({ length: 201 }, (_, i) => invoice(String(i), i % 2 ? '900123456' : '900.123.456-7'));
   rows.push(invoice('paid-stale-account', '800123456', { status: 'pagada', paidAmount: 0, tipoDocumento: 'cuenta_cobro' }));
   rows.push(invoice('paid-stale-electronic', '800123456', { status: 'pagada', paidAmount: 0, tipoDocumento: 'factura_electronica' }));

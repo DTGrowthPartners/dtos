@@ -275,7 +275,7 @@ export async function reporteCartera(): Promise<{ subject: string; html: string;
     fecha: inv.fecha.toISOString().split('T')[0],
     concepto: inv.concepto,
     servicio: inv.servicio,
-  })).filter((inv) => inv.saldo > 0.5);
+  })).filter((inv) => inv.saldo > 0);
 
   const groups = new Map<string, InvRow[]>();
   const disp = new Map<string, string>();

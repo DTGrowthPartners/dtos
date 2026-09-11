@@ -13,6 +13,7 @@ function parseNit(value = '') {
   if (!/^[\d.\s,\-–—]+$/.test(cleaned)) return { base: '', full: '' };
   const explicit = cleaned.match(/^([\d.\s,]+)\s*[-–—]\s*(\d)$/);
   const full = cleaned.replace(/\D/g, '');
+  if (/^0+$/.test(full)) return { base: '', full: '' };
   return { base: explicit ? explicit[1].replace(/\D/g, '') : full, full };
 }
 
@@ -35,18 +36,43 @@ export function groupCarteraClients<T extends ClientInvoice>(source: T[]) {
     // Preserve the documented Caribe Fest correction from the existing report.
     return normalized === '9018834468' ? '901883468' : normalized;
   });
-  const byId = new Map<string, Set<string>>();
+  const byId = new Map<string, Map<string, number>>();
   source.forEach((invoice, index) => {
     if (!invoice.clientId || !nits[index]) return;
-    const values = byId.get(invoice.clientId) || new Set<string>();
-    values.add(nits[index]);
+    const values = byId.get(invoice.clientId) || new Map<string, number>();
+    values.set(nits[index], (values.get(nits[index]) || 0) + 1);
     byId.set(invoice.clientId, values);
   });
+  // A stable client ID links historical names and mistyped NITs. Use its most
+  // frequent NIT for display, without modifying the original invoice data.
+  const canonicalById = new Map([...byId].map(([id, counts]) => [id,
+    [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0],
+  ]));
+  const nameKey = (name: string) => normalizeClientSearch(name.replace(/\bS\.?\s*A\.?\s*S\.?\s*$/i, ''));
+  const knownByName = new Map<string, Set<string>>();
+  const knownByNit = new Map<string, Set<string>>();
+  const initialKeys = source.map((invoice, index) => {
+    const nit = (invoice.clientId && canonicalById.get(invoice.clientId)) || nits[index];
+    return nit ? `nit:${nit}` : invoice.clientId ? `id:${invoice.clientId}` : '';
+  });
+  source.forEach((invoice, index) => {
+    const key = initialKeys[index];
+    if (!key) return;
+    for (const [map, value] of [[knownByName, nameKey(invoice.clientName || '')], [knownByNit, nits[index]]] as const) {
+      if (!value) continue;
+      const keys = map.get(value) || new Set<string>();
+      keys.add(key);
+      map.set(value, keys);
+    }
+  });
+  const unique = (keys?: Set<string>) => keys?.size === 1 ? [...keys][0] : '';
   const groups = new Map<string, { key: string; name: string; nit: string; aliases: string[] }>();
   const invoices = source.map((invoice, index) => {
-    const known = invoice.clientId ? byId.get(invoice.clientId) : undefined;
-    const nit = nits[index] || (known?.size === 1 ? [...known][0] : '');
-    const key = nit ? `nit:${nit}` : invoice.clientId ? `id:${invoice.clientId}` : `invoice:${invoice.id}`;
+    const normalizedName = nameKey(invoice.clientName || '');
+    const key = invoice.clientId ? initialKeys[index]
+      : unique(knownByNit.get(nits[index])) || initialKeys[index]
+        || unique(knownByName.get(normalizedName)) || (normalizedName ? `name:${normalizedName}` : `invoice:${invoice.id}`);
+    const nit = key.startsWith('nit:') ? key.slice(4) : '';
     const name = invoice.clientName?.trim() || nit || 'Sin nombre';
     let group = groups.get(key);
     if (!group) {
@@ -60,10 +86,16 @@ export function groupCarteraClients<T extends ClientInvoice>(source: T[]) {
   return { invoices, clients: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'es') || a.key.localeCompare(b.key)) };
 }
 
+export function matchesCarteraClient(client: { name: string; nit: string; aliases: string[] }, query: string) {
+  const haystack = normalizeClientSearch([client.name, client.nit, ...client.aliases].join(' '));
+  return query.trim().split(/\s+/).map(normalizeClientSearch).filter(Boolean)
+    .every((term) => haystack.includes(term));
+}
+
 // Paid status takes precedence over stale payment totals in imported documents.
 export function isPendingCarteraInvoice(invoice: {
   status: string; factusStatus?: string | null; totalAmount: number; paidAmount?: number | null;
 }) {
   return invoice.status !== 'pagada' && invoice.factusStatus !== 'anulada'
-    && Math.round((invoice.totalAmount - (invoice.paidAmount || 0)) * 100) / 100 > 0.5;
+    && Math.round((invoice.totalAmount - (invoice.paidAmount || 0)) * 100) / 100 > 0;
 }

@@ -1,18 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Mail } from 'lucide-react';
-import { Wallet, AlertCircle, FileDown, FileSpreadsheet, Check, ChevronsUpDown, Loader2, Users } from 'lucide-react';
+import { Wallet, AlertCircle, FileDown, FileSpreadsheet, Loader2, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import {
-  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
-} from '@/components/ui/command';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { isPendingCarteraInvoice, groupCarteraClients, normalizeClientSearch } from '@/lib/cartera-clients';
+import { isPendingCarteraInvoice, groupCarteraClients, matchesCarteraClient } from '@/lib/cartera-clients';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -67,7 +64,6 @@ export default function CarteraPanel() {
   const [invoices, setInvoices] = useState<InvoiceLite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedClient, setSelectedClient] = useState<string | null>(null); // null = vista general
-  const [clientPickerOpen, setClientPickerOpen] = useState(false);
   const [clientQuery, setClientQuery] = useState('');
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
 
@@ -105,24 +101,20 @@ export default function CarteraPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Las facturas anuladas por nota crédito quedaron en $0: no hacen parte de la cartera.
-  const facturasVigentes = useMemo(() => invoices.filter(isPendingCarteraInvoice), [invoices]);
-
-  const { invoices: groupedInvoices, clients } = useMemo(() => groupCarteraClients(facturasVigentes), [facturasVigentes]);
+  const { invoices: groupedInvoices, clients } = useMemo(() => {
+    const grouped = groupCarteraClients(invoices.filter((invoice) => invoice.factusStatus !== 'anulada'));
+    const pending = grouped.invoices.filter(isPendingCarteraInvoice);
+    const keys = new Set(pending.map((invoice) => invoice.clientKey));
+    return { invoices: pending, clients: grouped.clients.filter((client) => keys.has(client.key)) };
+  }, [invoices]);
   const selectedClientInfo = clients.find((client) => client.key === selectedClient);
-
-  const filteredClients = useMemo(() => {
-    const q = normalizeClientSearch(clientQuery);
-    const digits = clientQuery.replace(/\D/g, '');
-    return clients.filter((client) => client.aliases.some((alias) => normalizeClientSearch(alias).includes(q))
-      || (digits.length > 0 && client.nit.includes(digits)));
-  }, [clients, clientQuery]);
+  const filteredClients = useMemo(() => clients.filter((client) => matchesCarteraClient(client, clientQuery)), [clients, clientQuery]);
 
   // Solo lo pendiente (saldo > 0), para la vista general y la antigüedad de cartera.
   const pendientes = useMemo(
     () => groupedInvoices
       .map((inv) => ({ ...inv, saldo: Math.round((inv.totalAmount - (inv.paidAmount || 0)) * 100) / 100 }))
-      .filter((inv) => inv.saldo > 0.5),
+      .filter((inv) => inv.saldo > 0),
     [groupedInvoices]
   );
 
@@ -248,36 +240,28 @@ export default function CarteraPanel() {
         </div>
       </div>
 
-      {/* Filtro por cliente */}
-      <div className="max-w-sm">
-        <Popover open={clientPickerOpen} onOpenChange={setClientPickerOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" role="combobox" className="w-full justify-between">
-              {selectedClientInfo ? `${selectedClientInfo.name}${selectedClientInfo.nit ? ` · ${selectedClientInfo.nit}` : ''}` : 'Todos los clientes (vista general)'}
-              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
-            <Command shouldFilter={false}>
-              <CommandInput placeholder="Buscar por nombre o NIT..." value={clientQuery} onValueChange={setClientQuery} />
-              <CommandList>
-                <CommandEmpty>Sin resultados</CommandEmpty>
-                <CommandGroup>
-                  <CommandItem value="__todos__" onSelect={() => { setSelectedClient(null); setClientPickerOpen(false); }}>
-                    <Check className={cn('mr-2 h-4 w-4', !selectedClient ? 'opacity-100' : 'opacity-0')} />
-                    Todos los clientes (vista general)
-                  </CommandItem>
-                  {filteredClients.map((client) => (
-                    <CommandItem key={client.key} value={client.key} onSelect={() => { setSelectedClient(client.key); setClientPickerOpen(false); }}>
-                      <Check className={cn('mr-2 h-4 w-4', selectedClient === client.key ? 'opacity-100' : 'opacity-0')} />
-                      {client.name}{client.nit ? ` · ${client.nit}` : ''}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
+      <div className="grid gap-3 sm:grid-cols-2 rounded-lg border p-4">
+        <div className="space-y-2">
+          <label htmlFor="cartera-search" className="text-sm font-medium">Buscar cliente por nombre o NIT</label>
+          <Input id="cartera-search" placeholder="Escribe el nombre o NIT..." value={clientQuery}
+            onChange={(event) => setClientQuery(event.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <label htmlFor="cartera-client" className="text-sm font-medium">Cliente</label>
+          <select id="cartera-client" aria-label="Cliente" value={selectedClient || ''}
+            onChange={(event) => { setSelectedClient(event.target.value || null); setClientQuery(''); }}
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+            <option value="">Todos los clientes con saldo pendiente</option>
+            {selectedClientInfo && !filteredClients.some((client) => client.key === selectedClient) && (
+              <option value={selectedClientInfo.key}>{selectedClientInfo.name} (seleccionado)</option>
+            )}
+            {filteredClients.map((client) => (
+              <option key={client.key} value={client.key}>{client.name}{client.nit ? ` - ${client.nit}` : ''}</option>
+            ))}
+          </select>
+          {filteredClients.length === 0 && <p role="status" className="text-sm text-muted-foreground">No hay clientes con saldo pendiente que coincidan.</p>}
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2">El PDF incluye solo documentos pendientes y parciales del cliente seleccionado, con su saldo por pagar.</p>
       </div>
 
       {!selectedClient ? (
