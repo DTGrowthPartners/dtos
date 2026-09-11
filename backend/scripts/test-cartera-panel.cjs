@@ -18,7 +18,7 @@ const invoice = (id, clientName, clientNit, status, paidAmount, clientId = 'acb'
 });
 const fixtures = [
   invoice('pending', 'ACB Fit', '901725973', 'pendiente', 0),
-  invoice('partial', 'ACBFIT SAS', '900123456-7', 'parcial', 40),
+  { ...invoice('partial', 'ACBFIT SAS', '900123456-7', 'parcial', 40), concepto: 'Servicio mensual', items: [{descripcion:'Campanas digitales'}], payments: [{amount:40,paidAt:'2026-09-05',paymentMethod:'Transferencia',reference:'REF-01'}] },
   invoice('paid', 'ACBFIT', '901725973', 'pagada', 0),
   invoice('paid2', 'ACBFIT', 'Ana Elisa', 'pagada', 100),
   invoice('other', 'Otro Cliente', '12345678', 'pendiente', 0, 'other'),
@@ -32,6 +32,7 @@ const component = compile('src/components/finance/CarteraPanel.tsx', (name) => {
     if (!(index in states)) states[index] = initial;
     return [states[index], (value) => { states[index] = value; }];
   }, useMemo: (fn) => fn(), useEffect: () => {}, useRef: (value) => ({ current: value }) };
+  if (name === '@/lib/cartera-document-data') return compile('src/lib/cartera-document-data.ts', require);
   if (name === '@/lib/cartera-clients') return helper;
   if (name === '@/lib/utils') return { cn: (...values) => values.join(' ') };
   if (name === '@/hooks/use-toast') return { useToast: () => ({ toast: (message) => { if (message.variant === 'destructive') throw Error(message.description); } }) };
@@ -68,6 +69,11 @@ const pdfButton = (tree) => find(tree, (node) => node.type === 'Button' && react
   assert.deepEqual(exported.facturas.map((row) => row.invoiceNumber).sort(), ['partial', 'pending']);
   assert.equal(exported.totalSaldo, 160);
   assert.equal(exported.totalPagado, 40);
+  const partial = exported.facturas.find((row) => row.invoiceNumber === 'partial');
+  assert.match(partial.description, /Servicio mensual/);
+  assert.match(partial.description, /Campanas digitales/);
+  assert.equal(partial.payments[0].amount,40);
+  assert.equal(partial.payments[0].reference,'REF-01');
   selector(tree).props.onChange({ target: { value: '' } });
   await pdfButton(render()).props.onClick();
   assert.equal(exported.vista, 'general');

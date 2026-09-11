@@ -1,3 +1,4 @@
+import { invoiceDescription, invoicePayments, type InvoiceExportSource } from '@/lib/cartera-document-data';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Mail } from 'lucide-react';
 import { Wallet, AlertCircle, FileDown, FileSpreadsheet, Loader2, Users } from 'lucide-react';
@@ -13,7 +14,7 @@ import { isPendingCarteraInvoice, groupCarteraClients, matchesCarteraClient } fr
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
-interface InvoiceLite {
+interface InvoiceLite extends InvoiceExportSource {
   id: string;
   invoiceNumber: string;
   clientId: string;
@@ -165,11 +166,22 @@ export default function CarteraPanel() {
     setExporting(formato);
     try {
       const mod = await import('@/lib/finance-exports');
+      const exportRows = (selectedClient ? facturasCliente : pendientes).map((f) => ({
+        invoiceNumber: f.invoiceNumber,
+        clientName: clients.find((client) => client.key === f.clientKey)?.name || f.clientName,
+        clientNit: f.canonicalNit,
+        description: invoiceDescription(f),
+        payments: invoicePayments(f, fmtDate),
+        tipoDocumento: TIPO_DOC_LABELS[f.tipoDocumento || 'cuenta_cobro'] || f.tipoDocumento || '',
+        fecha: fmtDate(f.fecha), totalAmount: f.totalAmount, paidAmount: f.paidAmount || 0,
+        saldo: f.saldo, statusLabel: STATUS_LABELS[f.status]?.label || f.status,
+      }));
       if (!selectedClient) {
         const payload = {
           vista: 'general' as const,
           periodLabel,
           totalCartera,
+          facturas: exportRows,
           clientes: carteraPorCliente.map((c) => ({
             clientName: c.clientName, nit: c.nit, facturas: c.count, saldo: c.saldo,
             diasAntiguedad: c.dias, bucketLabel: BUCKET_LABEL[c.bucket],
@@ -183,15 +195,7 @@ export default function CarteraPanel() {
           periodLabel,
           clientName: selectedClientInfo?.name || '',
           clientNit: selectedClientInfo?.nit || '',
-          facturas: facturasCliente.map((f) => ({
-            invoiceNumber: f.invoiceNumber,
-            tipoDocumento: TIPO_DOC_LABELS[f.tipoDocumento || 'cuenta_cobro'] || f.tipoDocumento || '',
-            fecha: fmtDate(f.fecha),
-            totalAmount: f.totalAmount,
-            paidAmount: f.paidAmount || 0,
-            saldo: f.saldo,
-            statusLabel: STATUS_LABELS[f.status]?.label || f.status,
-          })),
+          facturas: exportRows,
           totalFacturado: clienteTotales.facturado,
           totalPagado: clienteTotales.pagado,
           totalSaldo: clienteTotales.saldo,
