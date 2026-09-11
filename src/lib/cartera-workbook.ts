@@ -19,7 +19,7 @@ export function buildCarteraWorkbook(data: CarteraExportData) {
   workbook.Props = { Title: 'Estado de cartera', Author: 'DT Growth Partners', Company: 'DT Growth Partners' };
   function createSheet(name: string, client: string, nit: string, headers: string[], rows: Value[][], widths: number[], numericCols: number[], totals?: Value[], cards?: [number,number,number,string]) {
     const count=headers.length,last=count-1;
-    const values: Value[][]=[['DT GROWTH PARTNERS'],['ESTRATEGIA · TECNOLOGÍA · RESULTADOS'],['IMPULSAMOS NEGOCIOS QUE CRECEN'],[],['ESTADO DE CARTERA'],['C U E N T A S   P O R   C O B R A R'],[`CLIENTE: ${client}`],[nit ? `NIT ${nit}` : 'Cartera consolidada'],[`CORTE AL: ${data.periodLabel}`],[],headers,...rows];
+    const values: Value[][]=[['DT GROWTH PARTNERS'],['ESTRATEGIA · TECNOLOGÍA · RESULTADOS'],[],[],['ESTADO DE CARTERA'],['C U E N T A S   P O R   C O B R A R'],[`CLIENTE: ${client}`],[nit ? `NIT ${nit}` : 'Cartera consolidada'],[`CORTE AL: ${data.periodLabel}`],[],headers,...rows];
     const totalRow=values.length;
     if(totals)values.push(totals);
     let cardRow=-1;

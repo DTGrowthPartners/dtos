@@ -48,8 +48,6 @@ export async function renderCarteraPdf(data: CarteraExportData) {
     else { doc.setFont('helvetica', 'bold'); doc.setFontSize(23); doc.setTextColor(255,255,255); doc.text('DT GROWTH PARTNERS', 10, 19); }
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(200,216,232);
     doc.text('E S T R A T E G I A   ·   T E C N O L O G I A   ·   R E S U L T A D O S', 11, 31);
-    doc.setDrawColor(...BLUE); doc.line(191, 8, 191, 28);
-    doc.setFontSize(11); doc.setTextColor(255,255,255); doc.text(['I M P U L S A M O S', 'N E G O C I O S', 'Q U E  C R E C E N'], 202, 12, { lineHeightFactor: 1.35 });
     doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(...INK); doc.text('ESTADO DE', margin, 49);
     doc.setTextColor(...BLUE); doc.text('CARTERA', 61, 49);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(91,116,146); doc.text('C U E N T A S   P O R   C O B R A R', margin + 1, 56);
