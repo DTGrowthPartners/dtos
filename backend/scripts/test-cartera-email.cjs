@@ -38,6 +38,9 @@ const invoice = (id, nit, overrides = {}) => ({
 (async () => {
   assert.equal(grouping.groupCarteraClients([invoice('legacy', '9018834468'), invoice('canonical', '901883468')]).clients.length, 1);
   rows = Array.from({ length: 201 }, (_, i) => invoice(String(i), i % 2 ? '900123456' : '900.123.456-7'));
+  rows.push(invoice('paid-stale-account', '800123456', { status: 'pagada', paidAmount: 0, tipoDocumento: 'cuenta_cobro' }));
+  rows.push(invoice('paid-stale-electronic', '800123456', { status: 'pagada', paidAmount: 0, tipoDocumento: 'factura_electronica' }));
+  assert.equal(grouping.isPendingCarteraInvoice(invoice('paid-helper', '800123456', {status:'pagada',paidAmount:0})), false);
   rows.push(invoice('paid', '800123456', { paidAmount: 100 }));
   rows.push(invoice('void', '800123456', { factusStatus: 'anulada' }));
   const result = await service.enviarCarteraCorregida();

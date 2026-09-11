@@ -1,4 +1,4 @@
-import { groupCarteraClients } from '../utils/cartera-clients';
+import { isPendingCarteraInvoice, groupCarteraClients } from '../utils/cartera-clients';
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
 import path from 'path';
@@ -263,7 +263,7 @@ export async function reporteCartera(): Promise<{ subject: string; html: string;
   });
   const grouped = groupCarteraClients(raw.filter((inv) => inv.factusStatus !== 'anulada'));
   const names = new Map(grouped.clients.map((client) => [client.key, client.name]));
-  const invs: InvRow[] = grouped.invoices.map((inv) => ({
+  const invs: InvRow[] = grouped.invoices.filter(isPendingCarteraInvoice).map((inv) => ({
     key: inv.clientKey,
     numero: inv.invoiceNumber,
     cliente: names.get(inv.clientKey) || inv.clientName,

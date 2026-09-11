@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { groupCarteraClients, normalizeClientSearch } from '@/lib/cartera-clients';
+import { isPendingCarteraInvoice, groupCarteraClients, normalizeClientSearch } from '@/lib/cartera-clients';
 import { apiClient } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
@@ -106,7 +106,7 @@ export default function CarteraPanel() {
   }, []);
 
   // Las facturas anuladas por nota crédito quedaron en $0: no hacen parte de la cartera.
-  const facturasVigentes = useMemo(() => invoices.filter((inv) => inv.factusStatus !== 'anulada'), [invoices]);
+  const facturasVigentes = useMemo(() => invoices.filter(isPendingCarteraInvoice), [invoices]);
 
   const { invoices: groupedInvoices, clients } = useMemo(() => groupCarteraClients(facturasVigentes), [facturasVigentes]);
   const selectedClientInfo = clients.find((client) => client.key === selectedClient);
@@ -152,7 +152,7 @@ export default function CarteraPanel() {
     return totals;
   }, [pendientes]);
 
-  // Vista por cliente: TODO su historial (no solo lo pendiente), para ver el estado completo de la cuenta.
+  // Vista por cliente: solo documentos pendientes de pago.
   const facturasCliente = useMemo(() => {
     if (!selectedClient) return [];
     return groupedInvoices

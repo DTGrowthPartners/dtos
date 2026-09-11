@@ -59,3 +59,11 @@ export function groupCarteraClients<T extends ClientInvoice>(source: T[]) {
   });
   return { invoices, clients: [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'es') || a.key.localeCompare(b.key)) };
 }
+
+// Paid status takes precedence over stale payment totals in imported documents.
+export function isPendingCarteraInvoice(invoice: {
+  status: string; factusStatus?: string | null; totalAmount: number; paidAmount?: number | null;
+}) {
+  return invoice.status !== 'pagada' && invoice.factusStatus !== 'anulada'
+    && Math.round((invoice.totalAmount - (invoice.paidAmount || 0)) * 100) / 100 > 0.5;
+}
