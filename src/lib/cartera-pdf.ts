@@ -49,7 +49,7 @@ export async function renderCarteraPdf(data: CarteraExportData) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(6.5); doc.setTextColor(200,216,232);
     doc.text('E S T R A T E G I A   ·   T E C N O L O G I A   ·   R E S U L T A D O S', 11, 31);
     doc.setFont('helvetica', 'bold'); doc.setFontSize(22); doc.setTextColor(...INK); doc.text('ESTADO DE', margin, 49);
-    doc.setTextColor(...BLUE); doc.text('CARTERA', 61, 49);
+    doc.setTextColor(...BLUE); doc.text('CARTERA', margin + doc.getTextWidth('ESTADO DE '), 49);
     doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(91,116,146); doc.text('C U E N T A S   P O R   C O B R A R', margin + 1, 56);
     doc.setFillColor(...PALE); doc.roundedRect(147, 41, width - 155, 24, 2, 2, 'F');
     doc.setFontSize(7); doc.text('CLIENTE', 152, 46); doc.text('CORTE AL', 234, 46);
